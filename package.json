@@ -10,5 +10,8 @@
   "dependencies": {
     "ts-node": "^10.9.2",
     "tsx": "^4.20.5"
+  },
+  "devDependencies": {
+    "vitest": "^1.6.1"
   }
 }
