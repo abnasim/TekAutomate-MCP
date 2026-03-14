@@ -246,7 +246,7 @@ ${req.userMessage}`,
   return parts.filter(Boolean).join('\n');
 }
 
-async function runOpenAiToolLoop(req: McpChatRequest, maxCalls = 6): Promise<string> {
+async function runOpenAiToolLoop(req: McpChatRequest, maxCalls = 12): Promise<string> {
   const policies = await loadPolicyBundle([
     'response_format',
     'backend_taxonomy',
@@ -324,7 +324,7 @@ async function runOpenAiToolLoop(req: McpChatRequest, maxCalls = 6): Promise<str
   return 'Tool call limit reached. ACTIONS_JSON: {"summary":"Failed to complete within tool budget.","findings":[],"suggestedFixes":[],"actions":[]}';
 }
 
-async function runAnthropicToolLoop(req: McpChatRequest, maxCalls = 6): Promise<string> {
+async function runAnthropicToolLoop(req: McpChatRequest, maxCalls = 12): Promise<string> {
   const policies = await loadPolicyBundle([
     'response_format',
     'backend_taxonomy',
