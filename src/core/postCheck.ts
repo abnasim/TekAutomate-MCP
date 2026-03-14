@@ -1,5 +1,6 @@
 import { validateActionPayload } from '../tools/validateActionPayload';
 import { verifyScpiCommands } from '../tools/verifyScpiCommands';
+import { extractReplaceFlowSteps } from './schemas';
 
 export interface PostCheckResult {
   ok: boolean;
@@ -35,7 +36,8 @@ function collectCommandsFromActions(actionsJson: Record<string, unknown>): strin
     const flow = (action.flow && typeof action.flow === 'object')
       ? (action.flow as Record<string, unknown>)
       : {};
-    if (actionType === 'replace_flow' && Array.isArray(payload.steps)) {
+    const replaceFlowSteps = actionType === 'replace_flow' ? extractReplaceFlowSteps(action) : null;
+    if (actionType === 'replace_flow' && Array.isArray(replaceFlowSteps)) {
       const walk = (steps: Array<Record<string, unknown>>) => {
         steps.forEach((step) => {
           const params = (step.params || {}) as Record<string, unknown>;
@@ -44,30 +46,7 @@ function collectCommandsFromActions(actionsJson: Record<string, unknown>): strin
           if (Array.isArray(step.children)) walk(step.children as Array<Record<string, unknown>>);
         });
       };
-      walk(payload.steps as Array<Record<string, unknown>>);
-    }
-    if (actionType === 'replace_flow' && Array.isArray(flow.steps)) {
-      const walk = (steps: Array<Record<string, unknown>>) => {
-        steps.forEach((step) => {
-          const params = (step.params || {}) as Record<string, unknown>;
-          if (typeof params.command === 'string' && params.command.trim()) out.push(params.command);
-          if (typeof params.code === 'string' && params.code.trim()) out.push(params.code);
-          if (Array.isArray(step.children)) walk(step.children as Array<Record<string, unknown>>);
-        });
-      };
-      walk(flow.steps as Array<Record<string, unknown>>);
-    }
-    if (actionType === 'replace_flow' && Array.isArray(action.steps)) {
-      // Direct action.steps shape
-      const walk = (steps: Array<Record<string, unknown>>) => {
-        steps.forEach((step) => {
-          const params = (step.params || {}) as Record<string, unknown>;
-          if (typeof params.command === 'string' && params.command.trim()) out.push(params.command);
-          if (typeof params.code === 'string' && params.code.trim()) out.push(params.code);
-          if (Array.isArray(step.children)) walk(step.children as Array<Record<string, unknown>>);
-        });
-      };
-      walk(action.steps as Array<Record<string, unknown>>);
+      walk(replaceFlowSteps);
     }
     if (newStep) {
       const params = (newStep.params || {}) as Record<string, unknown>;
@@ -83,10 +62,12 @@ export async function postCheckResponse(
   flowContext?: { backend?: string; modelFamily?: string; originalSteps?: Array<Record<string, unknown>> }
 ): Promise<PostCheckResult> {
   const errors: string[] = [];
-  const actionsJson = extractActionsJson(text);
+  let finalText = text;
+  let verificationRows: Array<Record<string, unknown>> = [];
+  const actionsJson = extractActionsJson(finalText);
   if (!actionsJson) {
     errors.push('ACTIONS_JSON parse failed');
-    return { ok: false, text, errors };
+    return { ok: false, text: finalText, errors };
   }
   const payloadValidation = await validateActionPayload({
     actionsJson,
@@ -101,21 +82,38 @@ export async function postCheckResponse(
       commands,
       modelFamily: flowContext?.modelFamily,
     });
-    const failures = (verification.data as Array<Record<string, unknown>>).filter(
+    verificationRows = verification.data as Array<Record<string, unknown>>;
+    const failures = verificationRows.filter(
       (item) => item.verified !== true
     );
     failures.forEach((f) => errors.push(`Unverified command: ${String(f.command || '')}`));
   }
 
-  const prose = text.replace(/ACTIONS_JSON:[\s\S]*$/i, '').trim();
+  const prose = finalText.replace(/ACTIONS_JSON:[\s\S]*$/i, '').trim();
   if (prose.length > 400) {
-    errors.push('Response prose exceeds 400 characters');
+    const actionsBlockMatch = finalText.match(/ACTIONS_JSON:[\s\S]*$/i);
+    const actionsBlock = actionsBlockMatch?.[0] || '';
+    const truncated = prose.slice(0, 400);
+    const lastBoundary = Math.max(
+      truncated.lastIndexOf('. '),
+      truncated.lastIndexOf('.\n')
+    );
+    const proseFixed =
+      lastBoundary > 200 ? truncated.slice(0, lastBoundary + 1).trim() : `${truncated.trim()}...`;
+    finalText = actionsBlock ? `${proseFixed}\n\n${actionsBlock.trim()}` : proseFixed;
   }
   if (
     (flowContext?.backend || '').toLowerCase() !== 'tekhsi' &&
-    /tekhsi/i.test(text)
+    /tekhsi/i.test(finalText)
   ) {
     errors.push('Unexpected TekHSI reference for non-TekHSI backend');
   }
-  return { ok: errors.length === 0, text, errors };
+  const verifiedCount = verificationRows.filter((r) => r.verified === true).length;
+  const totalCount = verificationRows.length;
+  // eslint-disable-next-line no-console
+  console.log(
+    `[MCP] postCheck verification: ${verifiedCount}/${totalCount} commands verified` +
+      (errors.length ? ` | errors: ${errors.join(', ')}` : ' | clean')
+  );
+  return { ok: errors.length === 0, text: finalText, errors };
 }

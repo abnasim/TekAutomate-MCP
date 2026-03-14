@@ -1,4 +1,5 @@
 import type { ToolResult } from '../core/schemas';
+import { extractReplaceFlowSteps } from '../core/schemas';
 
 interface ValidateActionPayloadInput {
   actionsJson: Record<string, unknown>;
@@ -97,19 +98,7 @@ export async function validateActionPayload(
     }
     const type = String(action.action_type || action.type || '');
     if (type === 'replace_flow') {
-      const payload = (action.payload || {}) as Record<string, unknown>;
-      const flow = (action.flow && typeof action.flow === 'object')
-        ? (action.flow as Record<string, unknown>)
-        : {};
-      const steps = Array.isArray(flow.steps)
-        ? (flow.steps as Array<Record<string, unknown>>)
-        : Array.isArray((payload.flow as Record<string, unknown> | undefined)?.steps)
-          ? (((payload.flow as Record<string, unknown>).steps) as Array<Record<string, unknown>>)
-        : Array.isArray(payload.steps)
-          ? (payload.steps as Array<Record<string, unknown>>)
-        : Array.isArray(action.steps)
-          ? (action.steps as Array<Record<string, unknown>>)
-          : [];
+      const steps = extractReplaceFlowSteps(action) || [];
       if (!steps.length) {
         errors.push(`actions[${i}]: replace_flow missing steps`);
         continue;

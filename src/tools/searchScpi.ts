@@ -8,6 +8,17 @@ interface SearchScpiInput {
   commandType?: CommandType;
 }
 
+function headerCandidates(raw: string): string[] {
+  const q = raw.trim();
+  if (!q) return [];
+  const candidates = new Set<string>([q]);
+  candidates.add(q.replace(/\?$/, ''));
+  candidates.add(q.replace(/:MEAS\d+/gi, ':MEAS<x>'));
+  candidates.add(q.replace(/:SOURCE\d+/gi, ':SOURCE'));
+  candidates.add(q.replace(/:RESUlts\d+/gi, ':RESUlts'));
+  return Array.from(candidates).filter(Boolean);
+}
+
 function thinResult(entry: {
   commandId: string;
   sourceFile: string;
@@ -24,6 +35,10 @@ function thinResult(entry: {
   notes: string[];
 }) {
   const ex = entry.codeExamples?.[0];
+  const firstValidValues = entry.arguments?.[0]?.validValues as Record<string, unknown> | undefined;
+  const normalizedValues =
+    (Array.isArray(firstValidValues?.values) ? (firstValidValues.values as unknown[]) : undefined) ||
+    (Array.isArray(firstValidValues?.options) ? (firstValidValues.options as unknown[]) : undefined);
   return {
     commandId: entry.commandId,
     sourceFile: entry.sourceFile,
@@ -38,7 +53,10 @@ function thinResult(entry: {
           tm_devices: ex.tm_devices?.code,
         }
       : undefined,
-    validValues: entry.arguments?.[0]?.validValues || undefined,
+    validValues: normalizedValues
+      ? normalizedValues.filter((v): v is string => typeof v === 'string')
+      : undefined,
+    validValuesRaw: firstValidValues,
     notes: entry.notes?.length ? entry.notes : undefined,
   };
 }
@@ -49,15 +67,34 @@ export async function searchScpi(input: SearchScpiInput): Promise<ToolResult<unk
     return { ok: true, data: [], sourceMeta: [], warnings: ['Empty query'] };
   }
   const index = await getCommandIndex();
-  const entries = index.searchByQuery(q, input.modelFamily, input.limit || 10, input.commandType);
+  const limit = input.limit || 10;
+  const searchEntries = index.searchByQuery(q, input.modelFamily, limit, input.commandType);
+
+  const headerLike = q.includes(':') || q.startsWith('*');
+  const directEntries = headerLike
+    ? headerCandidates(q)
+        .map((h) => index.getByHeader(h, input.modelFamily))
+        .filter((v): v is NonNullable<typeof v> => Boolean(v))
+    : [];
+
+  const merged: typeof searchEntries = [];
+  const seen = new Set<string>();
+  for (const entry of [...directEntries, ...searchEntries]) {
+    const key = `${entry.sourceFile}:${entry.commandId}`;
+    if (seen.has(key)) continue;
+    seen.add(key);
+    merged.push(entry);
+    if (merged.length >= limit) break;
+  }
+
   return {
     ok: true,
-    data: entries.map((e) => thinResult(e)),
-    sourceMeta: entries.map((e) => ({
+    data: merged.map((e) => thinResult(e)),
+    sourceMeta: merged.map((e) => ({
       file: e.sourceFile,
       commandId: e.commandId,
       section: e.group,
     })),
-    warnings: entries.length ? [] : ['No commands matched query'],
+    warnings: merged.length ? [] : ['No commands matched query'],
   };
 }

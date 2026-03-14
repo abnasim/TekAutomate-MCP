@@ -31,3 +31,48 @@ If search returns empty or ok:false:
 - FastFrame enable: HORizontal:FASTframe:STATE ON
 - FastFrame captures ALL active channels — no per-channel enable needed
 - Channel scale on MSO4/5/6/7: DISplay:WAVEView1:CH<x>:VERTical:SCAle (NOT CH<x>:SCAle)
+
+## Standard Measurements — Modern MSO5/6 (MANDATORY)
+Use ADDMEAS pattern for basic measurements on MSO5/6:
+- `MEASUrement:ADDMEAS FREQ`
+- `MEASUrement:ADDMEAS AMP`
+- `MEASUrement:MEAS1:SOURCE1 CH1`
+- `MEASUrement:MEAS1:RESUlts:CURRentacq:MEAN?` (saveAs freq_result)
+- `MEASUrement:MEAS2:RESUlts:CURRentacq:MEAN?` (saveAs amp_result)
+
+Wrong for this context:
+- `CH1:FREQuency` (not a valid basic command pattern)
+- `DPOJET:ADDMEAS` (DPOJET app, not standard measurement flow)
+- `MEASUrement:IMMed` (legacy pattern for 5k/7k/70k class scopes)
+
+Disambiguation rule:
+- If user asks standard frequency/amplitude measurements on MSO5/6, do NOT use DPOJET commands.
+- Only use `DPOJET:*` when the user explicitly asks for DPOJET.
+- For standard measurements, always use `MEASUrement:ADDMEAS` + `MEASUrement:MEASx:SOURCE1` + `...:RESUlts:CURRentacq:MEAN?`.
+
+Search hint: call `search_scpi` with `MEASUrement:ADDMEAS`.
+
+## MEASUrement:ADDMEAS Argument Rule (MANDATORY)
+Use only documented enum values from command-library `arguments[].validValues`.
+Do NOT invent friendly aliases.
+
+Preferred standard measurement enums for this workflow:
+- `FREQ`
+- `AMP`
+
+Wrong:
+- `FREQUENCY` (unless explicitly listed for the selected model command entry)
+- `AMPLITUDE` (unless explicitly listed for the selected model command entry)
+- `FREQ_CH1`
+
+Always verify the exact enum in the returned command result before emitting `MEASUrement:ADDMEAS ...`.
+
+## Search Strategy (MANDATORY)
+Use specific operation-focused queries, not generic feature names.
+Examples:
+- `FastFrame enable` (not just `FastFrame`)
+- `FastFrame count frames number` (not just `FastFrame`)
+- `measurement frequency add` (not just `measurement`)
+- `trigger edge slope` (not just `trigger`)
+
+When results are mixed, refine and call `search_scpi` again with a more specific query before generating steps.

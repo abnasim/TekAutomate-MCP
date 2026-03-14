@@ -1,6 +1,7 @@
 import { promises as fs } from 'fs';
 import * as path from 'path';
 import { resolveCommandsDir } from './paths';
+import { GROUP_DESCRIPTIONS } from './commandGroups';
 
 export type CommandType = 'set' | 'query' | 'both';
 
@@ -107,6 +108,27 @@ function tokenizeHeader(header: string): string[] {
     .split(/[:\s]+/g)
     .map((t) => t.trim())
     .filter(Boolean);
+}
+
+function stripPlaceholdersFromKey(key: string): string {
+  return key
+    .split(':')
+    .map((t) => stripPlaceholders(t))
+    .filter(Boolean)
+    .join(':');
+}
+
+function stripTrailingDigitsFromKey(key: string): string {
+  return key
+    .split(':')
+    .map((t) => t.replace(/\d+$/g, ''))
+    .filter(Boolean)
+    .join(':');
+}
+
+function rootTokenForSafety(header: string): string {
+  const root = tokenizeHeader(header)[0] || '';
+  return normalizeToken(root.replace(/\d+$/g, ''));
 }
 
 function normalizeHeaderKey(header: string): string {
@@ -498,7 +520,17 @@ export class CommandIndex {
   constructor(entries: CommandRecord[]) {
     this.entries = entries;
     const docs = entries.map((entry) =>
-      [entry.header, entry.description, entry.category, entry.tags.join(' ')].join(' ')
+      [
+        entry.header,
+        entry.shortDescription,
+        entry.shortDescription, // weight semantic intent heavier in BM25 ranking
+        GROUP_DESCRIPTIONS[entry.group] || '',
+        entry.description,
+        entry.category,
+        entry.tags.join(' '),
+      ]
+        .filter(Boolean)
+        .join(' ')
     );
     this.bm25 = new Bm25(docs);
     entries.forEach((entry, idx) => {
@@ -518,27 +550,37 @@ export class CommandIndex {
   }
 
   getByHeader(header: string, family?: string): CommandRecord | null {
-    const key = normalizeHeaderKey(header);
-    let matchIndexes = this.byHeaderKey.get(key) || [];
+    const selectCandidate = (indexes: number[]): CommandRecord | null => {
+      const candidates = indexes
+        .map((idx) => this.entries[idx])
+        .filter((entry) => familyMatches(entry, family))
+        .sort((a, b) => `${a.sourceFile}:${a.commandId}`.localeCompare(`${b.sourceFile}:${b.commandId}`));
+      return candidates[0] || null;
+    };
 
-    // Fallback: strip trailing digits from tokens (e.g. "OUTPut1" → "OUTPUT", "CH1" → "CH")
-    if (!matchIndexes.length) {
-      const strippedKey = tokenizeHeader(header)
-        .map((t) => normalizeToken(t.replace(/\d+$/, '')))
-        .filter(Boolean)
-        .join(':');
-      if (strippedKey && strippedKey !== key) {
-        matchIndexes = this.byHeaderKey.get(strippedKey) || [];
-      }
+    const exactKey = normalizeHeaderKey(header);
+    const exact = selectCandidate(this.byHeaderKey.get(exactKey) || []);
+    if (exact) return exact;
+
+    const placeholderKey = stripPlaceholdersFromKey(exactKey);
+    if (placeholderKey && placeholderKey !== exactKey) {
+      const placeholder = selectCandidate(this.byHeaderKey.get(placeholderKey) || []);
+      if (placeholder) return placeholder;
     }
 
-    const candidates = matchIndexes
-      .map((idx) => this.entries[idx])
-      .filter((entry) => familyMatches(entry, family))
-      .sort((a, b) => `${a.sourceFile}:${a.commandId}`.localeCompare(`${b.sourceFile}:${b.commandId}`));
-    return candidates[0] || null;
-  }
+    const digitKey = stripTrailingDigitsFromKey(placeholderKey || exactKey);
+    if (digitKey && digitKey !== exactKey && digitKey !== placeholderKey) {
+      const digitCandidates = (this.byHeaderKey.get(digitKey) || [])
+        .map((idx) => this.entries[idx])
+        .filter((entry) => familyMatches(entry, family))
+        .sort((a, b) => `${a.sourceFile}:${a.commandId}`.localeCompare(`${b.sourceFile}:${b.commandId}`));
+      const inputRoot = rootTokenForSafety(header);
+      const safe = digitCandidates.find((candidate) => rootTokenForSafety(candidate.header) === inputRoot);
+      if (safe) return safe;
+    }
 
+    return null;
+  }
   searchByQuery(query: string, family?: string, limit = 10, commandType?: CommandType): CommandRecord[] {
     const scored = this.bm25.search(query, Math.max(limit * 4, 25));
     const q = query.toLowerCase();
@@ -742,3 +784,4 @@ export function initCommandIndex(options?: {
 export async function getCommandIndex(): Promise<CommandIndex> {
   return initCommandIndex();
 }
+

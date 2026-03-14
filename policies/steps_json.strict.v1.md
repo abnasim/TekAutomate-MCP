@@ -57,3 +57,24 @@ set_step_param:
 - NEVER output steps as fenced JSON code blocks in prose
 - NEVER output raw Python unless explicitly requested
 - NEVER use deprecated `sweep` step type
+
+## Screenshot Rule (MANDATORY)
+ALWAYS use `save_screenshot` step type for screenshots. NEVER use raw `write` steps for screenshot capture.
+
+If user asks for a screenshot on MSO5/6:
+- MUST emit `{"type":"save_screenshot","params":{"filename":"...","scopeType":"modern"}}`
+- MUST NOT emit raw SCPI `write` screenshot commands.
+
+CORRECT:
+`{"type":"save_screenshot","params":{"filename":"screenshot.png","scopeType":"modern"}}`
+
+scopeType:
+- `"modern"` for MSO5/6 class scopes
+- `"legacy"` for 5k/7k/70k class scopes
+
+FORBIDDEN as raw write steps:
+- `HARDCopy`
+- `HARDCopy:PORT`
+- `SAVE:IMAGe`
+
+Rationale: `save_screenshot` handles capture + transfer pipeline; raw write often only triggers capture without proper PC transfer handling.

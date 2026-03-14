@@ -1,4 +1,5 @@
 import { getCommandByHeader } from './getCommandByHeader';
+import { getCommandGroup } from './getCommandGroup';
 import { getEnvironment } from './getEnvironment';
 import { getInstrumentState } from './getInstrumentState';
 import { getPolicy } from './getPolicy';
@@ -14,9 +15,11 @@ import { searchTmDevices } from './searchTmDevices';
 import { validateActionPayload } from './validateActionPayload';
 import { validateDeviceContext } from './validateDeviceContext';
 import { verifyScpiCommands } from './verifyScpiCommands';
+import { GROUP_NAMES } from '../core/commandGroups';
 
 export const TOOL_HANDLERS = {
   search_scpi: searchScpi,
+  get_command_group: getCommandGroup,
   get_command_by_header: getCommandByHeader,
   verify_scpi_commands: verifyScpiCommands,
   search_tm_devices: searchTmDevices,
@@ -50,6 +53,23 @@ export function getToolDefinitions() {
           commandType: { type: 'string', enum: ['set', 'query', 'both'], description: 'Optional command type filter.' },
         },
         required: ['query'],
+        additionalProperties: false,
+      },
+    },
+    {
+      name: 'get_command_group',
+      description:
+        'Get all commands in a named group with group description. Use when user asks about a feature area, not a specific command.',
+      parameters: {
+        type: 'object',
+        properties: {
+          groupName: {
+            type: 'string',
+            enum: GROUP_NAMES,
+            description: 'The command group to retrieve.',
+          },
+        },
+        required: ['groupName'],
         additionalProperties: false,
       },
     },

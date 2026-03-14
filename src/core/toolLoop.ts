@@ -8,6 +8,14 @@ interface ToolLoopResult {
   errors: string[];
 }
 
+const SCPI_ARG_TYPES = `
+SCPI argument types:
+<NR1>=integer  <NR2>=decimal  <NR3>=scientific  <QString>="quoted string"
+{A|B|C}=choose one  [arg]=optional  <x>=numeric index(1,2,3...)
+NaN response: 9.91E+37 means not-a-number/unavailable
+Example: CH<x>:SCAle <NR3> -> CH1:SCAle 1.0E-1
+`.trim();
+
 function clipString(value: unknown, max = 280): unknown {
   if (typeof value !== 'string') return value;
   return value.length > max ? `${value.slice(0, max)}...` : value;
@@ -63,6 +71,19 @@ function slimToolResultForModel(name: string, result: unknown): unknown {
         availableForModel: obj.availableForModel,
       };
     }
+    if (name === 'get_command_group') {
+      const headers = Array.isArray(obj.commandHeaders) ? (obj.commandHeaders as unknown[]) : [];
+      const trimmedHeaders = headers
+        .filter((h): h is string => typeof h === 'string')
+        .slice(0, 80);
+      return {
+        groupName: obj.groupName,
+        description: clipString(obj.description, 280),
+        commandCount: obj.commandCount,
+        commandHeaders: trimmedHeaders,
+        truncated: headers.length > trimmedHeaders.length,
+      };
+    }
     return obj;
   });
 
@@ -105,6 +126,8 @@ function logToolResult(name: string, result: unknown) {
 
 function buildSystemPrompt(policies: Record<string, string>): string {
   return [
+    SCPI_ARG_TYPES,
+    '',
     '# TekAutomate Flow Builder',
     '',
     'You are an expert assistant for building Tektronix instrument automation workflows.',

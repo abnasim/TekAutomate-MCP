@@ -48,3 +48,24 @@ export interface McpChatError {
   message: string;
   details?: string[];
 }
+
+export function extractReplaceFlowSteps(
+  action: Record<string, unknown>
+): Array<Record<string, unknown>> | null {
+  if (Array.isArray(action.steps)) {
+    return action.steps as Array<Record<string, unknown>>;
+  }
+  const flow = action.flow as Record<string, unknown> | undefined;
+  if (flow && Array.isArray(flow.steps)) {
+    return flow.steps as Array<Record<string, unknown>>;
+  }
+  const payload = action.payload as Record<string, unknown> | undefined;
+  if (payload && Array.isArray(payload.steps)) {
+    return payload.steps as Array<Record<string, unknown>>;
+  }
+  const payloadFlow = payload?.flow as Record<string, unknown> | undefined;
+  if (payloadFlow && Array.isArray(payloadFlow.steps)) {
+    return payloadFlow.steps as Array<Record<string, unknown>>;
+  }
+  return null;
+}
