@@ -57,6 +57,18 @@ function collectCommandsFromActions(actionsJson: Record<string, unknown>): strin
       };
       walk(flow.steps as Array<Record<string, unknown>>);
     }
+    if (actionType === 'replace_flow' && Array.isArray(action.steps)) {
+      // Direct action.steps shape
+      const walk = (steps: Array<Record<string, unknown>>) => {
+        steps.forEach((step) => {
+          const params = (step.params || {}) as Record<string, unknown>;
+          if (typeof params.command === 'string' && params.command.trim()) out.push(params.command);
+          if (typeof params.code === 'string' && params.code.trim()) out.push(params.code);
+          if (Array.isArray(step.children)) walk(step.children as Array<Record<string, unknown>>);
+        });
+      };
+      walk(action.steps as Array<Record<string, unknown>>);
+    }
     if (newStep) {
       const params = (newStep.params || {}) as Record<string, unknown>;
       if (typeof params.command === 'string' && params.command.trim()) out.push(params.command);

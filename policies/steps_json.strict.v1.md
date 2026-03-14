@@ -1,65 +1,59 @@
 # Steps JSON Strict Policy v1
 
 ## Role
-Generate structurally correct TekAutomate Steps UI JSON. Do not output XML or Python script bodies unless explicitly requested.
+Generate structurally correct TekAutomate Steps UI JSON only.
 
-## Required Root Shape
+## Valid Step Types
+connect, disconnect, query, write, set_and_query, recall, sleep, python,
+save_waveform, save_screenshot, error_check, comment, group, tm_device_command
+
+## Required Flow Shape
 ```json
-{"name":"Workflow","description":"...","backend":"pyvisa","deviceType":"SCOPE","steps":[...]}
+{"type":"replace_flow","flow":{"name":"...","backend":"pyvisa","steps":[...]}}
 ```
-
-## Allowed Step Types
-- `connect`
-- `disconnect`
-- `query`
-- `write`
-- `set_and_query`
-- `recall`
-- `sleep`
-- `python`
-- `save_waveform`
-- `save_screenshot`
-- `error_check`
-- `comment`
-- `group`
-- `tm_device_command`
 
 ## Structural Rules
-- IDs must be unique strings.
-- Query steps must include `params.saveAs`.
-- Group steps must include both:
-  - `params:{}`
-  - `children:[]`
-- Prefer full workflows that start with `connect` and end with `disconnect`.
+- IDs must be unique strings (use "1", "2", "3"... or descriptive like "connect_1")
+- Flows MUST start with `connect` and end with `disconnect`
+- Query steps MUST include `params.saveAs` (string variable name)
+- Group steps MUST include both `params:{}` AND `children:[]`
+- write steps: `params.command` = SCPI set command string
+- query steps: `params.command` = SCPI query command string (ends with ?)
+- set_and_query: `params.command` = SCPI set string, `params.queryCommand` = query string
+- sleep steps: `params.duration` = seconds (number)
+- comment steps: `params.text` = comment string
+- python steps: `params.code` = Python code string (ONLY when user explicitly requests Python)
 
 ## Recall Rules
-- `recallType` must be one of `FACTORY | SETUP | SESSION | WAVEFORM`.
-- File extension constraints:
-  - `SETUP -> .set`
-  - `SESSION -> .tss`
-  - `WAVEFORM -> .wfm`
+- `params.recallType`: FACTORY | SETUP | SESSION | WAVEFORM
+- File extensions: SETUP→.set, SESSION→.tss, WAVEFORM→.wfm
 
 ## Backend Rules
-- `tm_devices` backend should not emit raw `write/query` command steps by default.
-- Use `tm_device_command` when backend is `tm_devices`.
+- Default backend is `pyvisa` for all standard SCPI
+- `tm_devices` backend: use `tm_device_command` step type, NOT write/query
+- Never mix raw SCPI write/query with tm_devices backend
+- Socket connection NOT supported for tm_devices
 
-## Command Verification Gate
-Before emitting any SCPI command:
-1. Search command library.
-2. Verify exact syntax and command family.
-3. If not verified, do not emit the command.
-4. Return exact failure text:
-   - `I could not verify this command in the uploaded sources.`
-
-## Example Pattern
-```json
-{
-  "name": "IDN Check",
-  "backend": "pyvisa",
-  "steps": [
-    {"id":"1","type":"connect","label":"Connect","params":{"printIdn":true}},
-    {"id":"2","type":"query","label":"Get IDN","params":{"command":"*IDN?","saveAs":"idn"}},
-    {"id":"3","type":"disconnect","label":"Disconnect","params":{}}
-  ]
-}
+## ACTIONS_JSON Output Format
+Always output exactly:
 ```
+One or two sentences.
+ACTIONS_JSON:
+{"summary":"...","findings":[],"suggestedFixes":[],"actions":[...]}
+```
+
+## Correct Action Shapes
+insert_step_after:
+{"type":"insert_step_after","targetStepId":null,"newStep":{"id":"2","type":"write","label":"Enable FastFrame","params":{"command":"HORizontal:FASTframe:STATE ON"}}}
+
+replace_flow:
+{"type":"replace_flow","flow":{"name":"Fast Frame Capture","backend":"pyvisa","steps":[{"id":"1","type":"connect","label":"Connect","params":{"printIdn":true}},{"id":"2","type":"write","label":"Enable FastFrame","params":{"command":"HORizontal:FASTframe:STATE ON"}},{"id":"3","type":"disconnect","label":"Disconnect","params":{}}]}}
+
+set_step_param:
+{"type":"set_step_param","targetStepId":"3","param":"command","value":"HORizontal:FASTframe:COUNt 50"}
+
+## Rules
+- targetStepId: null is VALID for insert_step_after (means insert at beginning)
+- NEVER output steps as fenced JSON code blocks in prose
+- NEVER output raw Python unless explicitly requested
+- NEVER use deprecated `sweep` step type

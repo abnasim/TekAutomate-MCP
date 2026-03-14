@@ -1,22 +1,35 @@
 # Backend Taxonomy Policy v1
 
-## Backend Defaults
-- Default backend is `pyvisa` unless user explicitly requests another backend.
-- Preserve backend already present in flow context when available.
+## Decision Tree
+1. Default: pyvisa (works with all instruments, all SCPI commands)
+2. tm_devices: ONLY when user explicitly requests tm_devices or flow already uses it
+3. TekHSI: ONLY when user explicitly says "tekhsi" or "grpc" — for high-speed waveform capture only
+4. TekExpress: pyvisa with SOCKET (port 5000), TEKEXP:* commands, no *OPC? → use TEKEXP:STATE? polling
 
-## TekHSI Containment
-- TekHSI is explicit opt-in only.
-- Do not switch to TekHSI for waveform/fastframe requests unless user says `tekhsi` or `grpc`.
-- If backend is non-TekHSI, avoid TekHSI-only advice/steps.
+## pyvisa (default)
+- Standard SCPI commands via write/query steps
+- Works with ALL Tektronix instruments
+- Connection types: TCP/IP (INSTR), Socket, USB, GPIB
+- VXI-11 used automatically with ::INSTR suffix
 
-## tm_devices Rules
-- Prefer `tm_device_command` and `tm_devices_*` block families.
-- Avoid raw `write/query/save_screenshot/save_waveform` in tm_devices mode by default.
-- Socket backend is not valid for tm_devices workflows.
+## tm_devices
+- Use tm_device_command step type ONLY — never raw write/query
+- Python object API: device.commands.<subsystem>.<method>(value)
+- Socket connection NOT supported
+- Requires known device model for command tree validation
+- Supports: MSO4/5/6, DPO5K/7K, AWG, AFG, SMU
 
-## Hybrid Semantics
-- `hybrid` is multi-backend orchestration mode, not an independent command API.
+## TekHSI
+- gRPC-based high-speed waveform transfer (10x faster than SCPI)
+- ONLY for waveform acquisition — NOT for measurements, search, histogram, general SCPI
+- Requires MSO 4/5/6/7 with specific firmware
+- Do NOT suggest TekHSI unless user explicitly requests it
 
-## Probe/Executor Context
-- Live probing uses existing `code_executor` endpoint (`POST /run`, `action: run_python`).
-- Treat executor output as buffered stdout/stderr (non-streaming).
+## Hybrid
+- Multi-backend orchestration (e.g., pyvisa for control + TekHSI for data)
+- NOT a standalone command API
+- Rare — only suggest when user explicitly needs mixed backends
+
+## Preserve Context
+- If flow already specifies a backend, preserve it unless user asks to change
+- Do not switch backends without explicit user request

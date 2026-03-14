@@ -105,12 +105,24 @@ function logToolResult(name: string, result: unknown) {
 
 function buildSystemPrompt(policies: Record<string, string>): string {
   return [
-    'You are TekAutomate Flow Builder.',
-    'You must produce safe, verified output for TekAutomate workflows.',
+    '# TekAutomate Flow Builder',
+    '',
+    'You are an expert assistant for building Tektronix instrument automation workflows.',
+    'You have access to tools that search a verified SCPI command library (8400+ commands across 8 instrument families).',
+    'You MUST use these tools to verify every SCPI command before emitting it.',
+    '',
+    '## Critical Rules',
+    '- ALWAYS call search_scpi or get_command_by_header before emitting ANY SCPI command',
+    '- Use EXACT syntax from tool results — never invent commands',
+    '- Start flows with connect, end with disconnect',
+    '- Query steps MUST have saveAs parameter',
+    '- Output: 1-2 sentences then ACTIONS_JSON block',
+    '- NEVER output Python unless explicitly requested',
+    '',
     policies.response_format || '',
-    policies.backend_taxonomy || '',
-    policies.scpi_verification || '',
     policies.steps_json || '',
+    policies.scpi_verification || '',
+    policies.backend_taxonomy || '',
     policies.blockly_xml || '',
   ]
     .filter(Boolean)
@@ -118,15 +130,42 @@ function buildSystemPrompt(policies: Record<string, string>): string {
 }
 
 function buildUserPrompt(req: McpChatRequest): string {
-  return [
-    `User message: ${req.userMessage}`,
-    `Output mode: ${req.outputMode}`,
-    `Flow context: ${JSON.stringify(req.flowContext)}`,
-    `Run context: ${JSON.stringify(req.runContext)}`,
-    req.instrumentEndpoint
-      ? `Instrument endpoint: ${JSON.stringify(req.instrumentEndpoint)}`
-      : 'Instrument endpoint: unavailable',
-  ].join('\n');
+  const fc = req.flowContext;
+  const rc = req.runContext;
+  const stepsSummary = Array.isArray(fc.steps) && fc.steps.length
+    ? fc.steps.map((s: Record<string, unknown>) =>
+        `  [${s.id}] ${s.type}${s.label ? ` "${s.label}"` : ''}${s.command ? ` → ${s.command}` : ''}`
+      ).join('\n')
+    : '  (empty flow)';
+
+  const parts = [
+    `## User Request\n${req.userMessage}`,
+    `## Output Mode\n${req.outputMode}`,
+    `## Device Context\nBackend: ${fc.backend || 'pyvisa'}\nModel: ${fc.modelFamily || '(unknown)'}\nHost: ${fc.host || '(unknown)'}\nConnection: ${fc.connectionType || 'tcpip'}`,
+    `## Current Flow (${Array.isArray(fc.steps) ? fc.steps.length : 0} steps)\n${stepsSummary}`,
+  ];
+
+  if (fc.selectedStepId) {
+    parts.push(`## Selected Step\n${fc.selectedStepId}`);
+  }
+
+  if (rc.runStatus !== 'idle') {
+    parts.push(`## Run Status: ${rc.runStatus}${rc.exitCode !== null ? ` (exit ${rc.exitCode})` : ''}`);
+    if (rc.logTail) {
+      const tail = rc.logTail.length > 800 ? `...${rc.logTail.slice(-800)}` : rc.logTail;
+      parts.push(`## Run Log (tail)\n${tail}`);
+    }
+    if (rc.auditOutput) {
+      const audit = rc.auditOutput.length > 600 ? `...${rc.auditOutput.slice(-600)}` : rc.auditOutput;
+      parts.push(`## Audit Output\n${audit}`);
+    }
+  }
+
+  if (req.instrumentEndpoint) {
+    parts.push(`## Live Instrument\nExecutor: ${req.instrumentEndpoint.executorUrl}\nVISA: ${req.instrumentEndpoint.visaResource}`);
+  }
+
+  return parts.join('\n\n');
 }
 
 async function runOpenAiToolLoop(req: McpChatRequest, maxCalls = 6): Promise<string> {

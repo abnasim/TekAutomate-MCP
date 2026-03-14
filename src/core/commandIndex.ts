@@ -80,12 +80,18 @@ const SOURCE_FILE_FAMILY_HINTS: Record<string, string[]> = {
   'tekexpress.json': ['TEKEXPRESS'],
 };
 
+function stripPlaceholders(token: string): string {
+  // Remove {ch}, {n}, <x>, <y> etc from tokens
+  return token.replace(/\{[^}]*\}/g, '').replace(/<[^>]*>/g, '');
+}
+
 function normalizeToken(raw: string): string {
-  return raw.replace(/[^A-Za-z0-9_*]/g, '').toUpperCase().trim();
+  const stripped = stripPlaceholders(raw);
+  return stripped.replace(/[^A-Za-z0-9_*]/g, '').toUpperCase().trim();
 }
 
 function shortToken(raw: string): string {
-  const cleaned = raw.replace(/[^A-Za-z0-9_*]/g, '');
+  const cleaned = stripPlaceholders(raw).replace(/[^A-Za-z0-9_*]/g, '');
   if (!cleaned) return '';
   const star = cleaned.startsWith('*') ? '*' : '';
   const body = star ? cleaned.slice(1) : cleaned;
@@ -286,7 +292,7 @@ function extractCodeExamples(raw: Record<string, unknown>): CommandCodeExample[]
       ? raw.codeExamples
       : [];
   if (!Array.isArray(examplesRaw)) return [];
-  return examplesRaw
+  const result = examplesRaw
     .filter((ex): ex is Record<string, unknown> => !!ex && typeof ex === 'object')
     .map((ex) => {
       const nested =
@@ -311,6 +317,34 @@ function extractCodeExamples(raw: Record<string, unknown>): CommandCodeExample[]
       return out;
     })
     .filter((ex) => Boolean(ex.scpi?.code || ex.python?.code || ex.tm_devices?.code));
+
+  // If no code examples extracted, try top-level example/examples
+  if (result.length === 0) {
+    // Try raw.examples array (MSO format: [{scpi: "CMD", description: "..."}])
+    if (Array.isArray(raw.examples)) {
+      raw.examples.forEach((ex: unknown) => {
+        if (ex && typeof ex === 'object') {
+          const exObj = ex as Record<string, unknown>;
+          const scpiCode = typeof exObj.scpi === 'string' ? exObj.scpi.trim() : '';
+          if (scpiCode) {
+            result.push({
+              description: typeof exObj.description === 'string' ? exObj.description : '',
+              scpi: { code: scpiCode },
+            });
+          }
+        }
+      });
+    }
+    // Try raw.example string
+    if (result.length === 0 && typeof raw.example === 'string' && raw.example.trim()) {
+      result.push({
+        description: '',
+        scpi: { code: raw.example.trim() },
+      });
+    }
+  }
+
+  return result;
 }
 
 function extractStringArray(raw: unknown): string[] {
@@ -485,7 +519,19 @@ export class CommandIndex {
 
   getByHeader(header: string, family?: string): CommandRecord | null {
     const key = normalizeHeaderKey(header);
-    const matchIndexes = this.byHeaderKey.get(key) || [];
+    let matchIndexes = this.byHeaderKey.get(key) || [];
+
+    // Fallback: strip trailing digits from tokens (e.g. "OUTPut1" → "OUTPUT", "CH1" → "CH")
+    if (!matchIndexes.length) {
+      const strippedKey = tokenizeHeader(header)
+        .map((t) => normalizeToken(t.replace(/\d+$/, '')))
+        .filter(Boolean)
+        .join(':');
+      if (strippedKey && strippedKey !== key) {
+        matchIndexes = this.byHeaderKey.get(strippedKey) || [];
+      }
+    }
+
     const candidates = matchIndexes
       .map((idx) => this.entries[idx])
       .filter((entry) => familyMatches(entry, family))

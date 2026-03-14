@@ -1,60 +1,33 @@
 # SCPI Verification Policy v1
 
-## Source of Truth Rule
-Use only uploaded command-library JSON and referenced examples as source of truth.
+## Source of Truth
+The command library JSON files are the ONLY source of truth for SCPI commands.
 Do not infer commands from naming patterns, conventions, or memory.
 
-## Strict Requirements
-- Every emitted SCPI command must map to:
-  - `commandId`
-  - `sourceFile`
-- No unsourced corrections.
-- No synthetic SAVE/STORE/MMEMory variants.
-- No legacy variant substitution unless explicitly present in source library.
-
-## Using Verified Tool Results
-- When `search_scpi` or `get_command_by_header` returns `ok:true` with non-empty data, those returned entries are verified source.
-- HARD REQUIREMENT: if verified results exist, you MUST use exact command strings from those results.
-- HARD REQUIREMENT: you MUST NOT generate your own SCPI syntax when verified results are present.
-- HARD REQUIREMENT: using commands not present in verified tool results is a policy violation.
-- Do not say "I could not verify" if verified tool results are present.
-- Use `syntax.set` for write steps and `syntax.query` for query steps.
-- Prefer `codeExamples[].scpi.code` as the exact emitted SCPI string.
-- For `tm_devices` backend, prefer `codeExamples[].tm_devices.code`.
-- For python steps (only when allowed), prefer `codeExamples[].python.code`.
-- Use `arguments[]` to enforce valid parameter ranges/defaults.
-- Surface `notes[]` as brief warnings when relevant.
-- Include `commandId`/`sourceFile` provenance in tool-grounded reasoning.
-- Use "I could not verify this command in the uploaded sources." only when tool result is `ok:true` and `data` is empty (or lookup is `ok:false`).
-
 ## Verification Pipeline
-1. Search command-library JSON.
-2. Locate exact command/header entry.
-3. Copy exact syntax pattern.
-4. Substitute parameters safely.
-5. Re-check generated command against index.
+1. Call search_scpi or get_command_by_header tool
+2. If tool returns ok:true with non-empty data → commands ARE verified
+3. Use EXACT syntax from tool results:
+   - syntax.set for write steps
+   - syntax.query for query steps
+   - codeExamples[].scpi.code as the exact command string
+4. For tm_devices backend: use codeExamples[].tm_devices.code
+5. Include commandId + sourceFile as provenance
 
-## Failure Text (mandatory)
-If command cannot be mapped:
-- `I could not verify this command in the uploaded sources.`
+## HARD RULES
+- When verified results exist, you MUST use exact command strings from those results
+- You MUST NOT generate your own SCPI syntax when verified results are present
+- Using commands not present in verified tool results is a POLICY VIOLATION
+- Do not say "I could not verify" when verified tool results ARE present
+- Use arguments[] to enforce valid parameter ranges and defaults
+- Surface notes[] as brief warnings when relevant
 
-If behavior is undocumented:
-- `This is not documented in the uploaded sources.`
+## Failure Text
+If search returns empty or ok:false:
+→ "I could not verify this command in the uploaded sources."
 
-## Pseudocode Contract
-```python
-allowed = set(load_command_library_headers())
-for cmd in generated_scpi:
-    if normalize(cmd) not in allowed:
-        raise InvalidSCPI(cmd)
-```
-
-## tm_devices
-- Verify tm_devices method paths against `tm_devices_full_tree.json`.
-- Treat unavailable method/model combinations as invalid.
-
-## FastFrame Count Disambiguation
-- To set FastFrame frame count, use: `HORizontal:FASTframe:COUNt <NR1>`.
-- Example: `HORizontal:FASTframe:COUNt 50`.
-- Do NOT use `HORizontal:FASTframe:SIXteenbit` for frame count.
-- `SIXteenbit` controls bit depth, not frame count.
+## Key Disambiguations
+- FastFrame frame count: HORizontal:FASTframe:COUNt <NR1> (NOT SIXteenbit)
+- FastFrame enable: HORizontal:FASTframe:STATE ON
+- FastFrame captures ALL active channels — no per-channel enable needed
+- Channel scale on MSO4/5/6/7: DISplay:WAVEView1:CH<x>:VERTical:SCAle (NOT CH<x>:SCAle)
