@@ -26,3 +26,31 @@ ACTIONS_JSON:
 - remove_step: delete a step
 - replace_flow: rebuild entire flow (only when user asks for full rebuild)
 - add_error_check_after_step: add error check after target step
+
+## Python → JSON Rule
+If the user shares Python code, convert it to TekAutomate Steps JSON.
+Do NOT output Python scripts unless the user explicitly says "python" or "script".
+
+## Concrete ACTIONS_JSON Example (all 4 keys populated)
+```
+Connecting to the scope and querying the IDN string.
+ACTIONS_JSON:
+{
+  "summary": "Added connect, IDN query, and disconnect steps.",
+  "findings": ["Flow was empty"],
+  "suggestedFixes": ["Add connect step before any SCPI operations"],
+  "actions": [
+    {"type":"replace_flow","flow":{
+      "name":"IDN Check",
+      "description":"Connect to scope and read identification string",
+      "backend":"pyvisa",
+      "deviceType":"SCOPE",
+      "steps":[
+        {"id":"1","type":"connect","label":"Connect","params":{"printIdn":true}},
+        {"id":"2","type":"query","label":"Read IDN","params":{"command":"*IDN?","saveAs":"idn"}},
+        {"id":"3","type":"disconnect","label":"Disconnect","params":{}}
+      ]
+    }}
+  ]
+}
+```

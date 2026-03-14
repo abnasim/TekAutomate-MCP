@@ -1,5 +1,18 @@
 # SCPI Verification Policy v1
 
+## Knowledge Base Files (Background Context)
+The following uploaded files back the `search_scpi` and `get_command_by_header` tools:
+- `mso_2_4_5_6_7.json` — MSO 2/4/5/6/7 series scopes
+- `MSO_DPO_5k_7k_70K.json` — Legacy 5k/7k/70k scopes
+- `afg.json` — AFG function generators
+- `awg.json` — AWG arbitrary waveform generators
+- `smu.json` — Source Measure Units
+- `dpojet.json` — DPOJET jitter analysis app
+- `tekexpress.json` — TekExpress automation app
+- `tm_devices_full_tree.json` — tm_devices method tree
+- `TM_DEVICES_USAGE_PATTERNS.json` — tm_devices usage examples
+- `TM_DEVICES_ARGUMENTS.json` — tm_devices method arguments
+
 ## Source of Truth
 The command library JSON files are the ONLY source of truth for SCPI commands.
 Do not infer commands from naming patterns, conventions, or memory.
@@ -76,3 +89,9 @@ Examples:
 - `trigger edge slope` (not just `trigger`)
 
 When results are mixed, refine and call `search_scpi` again with a more specific query before generating steps.
+
+## Post-Generation Verification Check (MANDATORY)
+After building all steps, scan every SCPI command string in the generated output.
+Each command must have been returned in a tool result during this session.
+If any command was NOT returned by a tool call, call `search_scpi` before finalizing.
+Do NOT emit a command that cannot be traced to a tool result from this session.

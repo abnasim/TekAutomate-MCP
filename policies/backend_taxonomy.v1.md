@@ -12,6 +12,11 @@
 - Connection types: TCP/IP (INSTR), Socket, USB, GPIB
 - VXI-11 used automatically with ::INSTR suffix
 
+## vxi11
+- vxi11 is used automatically by pyvisa when the resource string ends with `::INSTR` suffix
+- Rarely needs explicit selection by the user — pyvisa handles it transparently
+- Valid backend value; accept it if user requests it explicitly
+
 ## tm_devices
 - Use tm_device_command step type ONLY — never raw write/query
 - Python object API: device.commands.<subsystem>.<method>(value)
