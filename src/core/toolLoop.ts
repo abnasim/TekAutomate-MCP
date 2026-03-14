@@ -8,25 +8,9 @@ interface ToolLoopResult {
   errors: string[];
 }
 
-const SCPI_ARG_TYPES = `
-SCPI argument types:
-<NR1>=integer  <NR2>=decimal  <NR3>=scientific  <QString>="quoted string"
-{A|B|C}=choose one  [arg]=optional  <x>=numeric index(1,2,3...)
-NaN response: 9.91E+37 means not-a-number/unavailable
-Example: CH<x>:SCAle <NR3> -> CH1:SCAle 1.0E-1
-`.trim();
-
-const GROUP_ROUTING = `
-When user asks about a feature area, call get_command_group FIRST:
-  bus protocols (CAN, I2C, SPI, UART, USB, ARINC) -> get_command_group("Bus")
-  measurements (freq, amp, rise, overshoot) -> get_command_group("Measurement")
-  triggering -> get_command_group("Trigger")
-  acquisition modes -> get_command_group("Acquisition")
-  waveform transfer -> get_command_group("Waveform Transfer")
-  search/mark -> get_command_group("Search and Mark")
-  save/recall -> get_command_group("Save and Recall")
-Then call search_scpi within that context.
-`.trim();
+// Condensed SCPI arg-type reference (injected into user prompt, not system prompt,
+// to reduce static system prompt token usage — Fix 5).
+const SCPI_ARG_TYPES_BRIEF = '<NR1>=int <NR2>=dec <NR3>=sci <QString>="str" {A|B}=choose [x]=opt NaN=9.91E+37';
 
 function clipString(value: unknown, max = 280): unknown {
   if (typeof value !== 'string') return value;
@@ -136,117 +120,74 @@ function logToolResult(name: string, result: unknown) {
   }
 }
 
-function buildSystemPrompt(policies: Record<string, string>): string {
-  return [
-    SCPI_ARG_TYPES,
-    GROUP_ROUTING,
-    '',
+function buildSystemPrompt(policies: Record<string, string>, outputMode?: string): string {
+  // Fix 5: reduced system prompt. SCPI_ARG_TYPES moved to user prompt. blockly_xml only
+  // included when output mode is blockly_xml (saves ~800 tokens on every other request).
+  const parts = [
     '# TekAutomate Flow Builder',
-    '',
-    'You are an expert assistant for building Tektronix instrument automation workflows.',
-    'You have access to tools that search a verified SCPI command library (8400+ commands across 8 instrument families).',
-    'You MUST use these tools to verify every SCPI command before emitting it.',
-    '',
-    '## Critical Rules',
-    '- ALWAYS call search_scpi or get_command_by_header before emitting ANY SCPI command',
-    '- Use EXACT syntax from tool results — never invent commands',
-    '- Start flows with connect, end with disconnect',
+    'Expert assistant for Tektronix instrument automation. Use tools to verify every SCPI command.',
+    '## Rules',
+    '- Call search_scpi or get_command_by_header BEFORE emitting any SCPI command',
+    '- Use EXACT syntax from tool results only — never invent commands',
+    '- Flows MUST start with connect, end with disconnect',
     '- Query steps MUST have saveAs parameter',
     '- Output: 1-2 sentences then ACTIONS_JSON block',
-    '- NEVER output Python unless explicitly requested',
+    '- NEVER output Python unless user explicitly requests it',
     '',
     policies.response_format || '',
     policies.steps_json || '',
     policies.scpi_verification || '',
     policies.backend_taxonomy || '',
-    policies.blockly_xml || '',
-  ]
-    .filter(Boolean)
-    .join('\n\n');
-}
-
-function buildWorkspaceSummary(req: McpChatRequest): string {
-  const fc = req.flowContext;
-  const connect = Array.isArray(fc.steps)
-    ? (fc.steps.find((s: Record<string, unknown>) => String(s.type || '') === 'connect') as
-        | Record<string, unknown>
-        | undefined)
-    : undefined;
-  const p = ((connect?.params || {}) as Record<string, unknown>) || {};
-  const lines = [
-    'Workspace context:',
-    `- Backend: ${fc.backend || 'pyvisa'}`,
-    `- Host: ${fc.host || '(unknown)'}`,
-    `- Connection type: ${fc.connectionType || '(unknown)'}`,
-    `- Model family: ${fc.modelFamily || '(unknown)'}`,
-    connect ? `- Device alias: ${(p.alias as string) || (p.device as string) || 'scope'}` : '',
-    connect ? `- VISA backend: ${(p.visaBackend as string) || (p.backend as string) || 'default'}` : '',
-    connect ? `- Timeout: ${String(p.timeout || 5000)}ms` : '',
-    `- Step count: ${Array.isArray(fc.steps) ? fc.steps.length : 0}`,
-    `- Execution source: ${fc.executionSource}`,
-  ].filter(Boolean);
-  return lines.join('\n');
+  ];
+  if (outputMode === 'blockly_xml') {
+    parts.push(policies.blockly_xml || '');
+  }
+  return parts.filter(Boolean).join('\n\n');
 }
 
 function buildUserPrompt(req: McpChatRequest): string {
   const fc = req.flowContext;
   const rc = req.runContext;
-  const currentStepsJson = JSON.stringify(
-    {
-      name: 'Current Workflow',
-      backend: fc.backend || 'pyvisa',
-      steps: Array.isArray(fc.steps) ? fc.steps : [],
-    },
-    null,
-    2
-  );
+  const stepsSummary = Array.isArray(fc.steps) && fc.steps.length
+    ? fc.steps.map((s: Record<string, unknown>) =>
+        `  [${s.id}] ${s.type}${s.label ? ` "${s.label}"` : ''}${s.command ? ` → ${s.command}` : ''}`
+      ).join('\n')
+    : '  (empty flow)';
 
   const parts = [
-    'Here is the current workspace state:',
-    '',
-    '--- CURRENT STEPS JSON ---',
-    currentStepsJson,
-    '--- END JSON ---',
-    '',
-    buildWorkspaceSummary(req),
-    '',
-    `User request:
-${req.userMessage}`,
-    '',
-    'Instructions:',
-    `- Generate valid TekAutomate ${req.outputMode === 'blockly_xml' ? 'Blockly XML and matching flow-safe logic' : 'Steps UI JSON'}`,
-    '- Preserve existing steps when possible',
-    '- Fix errors if present',
-    '- Add missing steps if needed',
-    '- Output only apply-ready result content',
+    // Fix 5: SCPI arg types moved here from system prompt (only paid once per call, not multiplied by tool rounds)
+    `SCPI types: ${SCPI_ARG_TYPES_BRIEF}`,
+    `## User Request\n${req.userMessage}`,
+    `## Output Mode\n${req.outputMode}`,
+    `## Device Context\nBackend: ${fc.backend || 'pyvisa'}\nModel: ${fc.modelFamily || '(unknown)'}\nHost: ${fc.host || '(unknown)'}\nConnection: ${fc.connectionType || 'tcpip'}`,
+    `## Current Flow (${Array.isArray(fc.steps) ? fc.steps.length : 0} steps)\n${stepsSummary}`,
   ];
 
   if (fc.selectedStepId) {
-    parts.push('', `Selected step: ${fc.selectedStepId}`);
+    parts.push(`## Selected Step\n${fc.selectedStepId}`);
   }
 
-  parts.push('', `Run status: ${rc.runStatus}${rc.exitCode !== null ? ` (exit ${rc.exitCode})` : ''}`);
-  if (rc.logTail) {
-    const tail = rc.logTail.length > 1400 ? `...${rc.logTail.slice(-1400)}` : rc.logTail;
-    parts.push('', 'Run log:', tail);
+  if (rc.runStatus !== 'idle') {
+    parts.push(`## Run Status: ${rc.runStatus}${rc.exitCode !== null ? ` (exit ${rc.exitCode})` : ''}`);
+    if (rc.logTail) {
+      const tail = rc.logTail.length > 800 ? `...${rc.logTail.slice(-800)}` : rc.logTail;
+      parts.push(`## Run Log (tail)\n${tail}`);
+    }
+    if (rc.auditOutput) {
+      const audit = rc.auditOutput.length > 600 ? `...${rc.auditOutput.slice(-600)}` : rc.auditOutput;
+      parts.push(`## Audit Output\n${audit}`);
+    }
   }
-  if (rc.auditOutput) {
-    const audit = rc.auditOutput.length > 900 ? `...${rc.auditOutput.slice(-900)}` : rc.auditOutput;
-    parts.push('', 'Audit:', audit);
-  }
+
   if (req.instrumentEndpoint) {
-    parts.push(
-      '',
-      `Live instrument:
-- Executor: ${req.instrumentEndpoint.executorUrl}
-- VISA: ${req.instrumentEndpoint.visaResource}
-- Backend: ${req.instrumentEndpoint.backend}`
-    );
+    parts.push(`## Live Instrument\nExecutor: ${req.instrumentEndpoint.executorUrl}\nVISA: ${req.instrumentEndpoint.visaResource}`);
   }
-  return parts.filter(Boolean).join('\n');
+
+  return parts.join('\n\n');
 }
 
-async function runOpenAiToolLoop(req: McpChatRequest, maxCalls = 12): Promise<string> {
+async function runOpenAiToolLoop(req: McpChatRequest, maxCalls = 4): Promise<string> {
+  // Fix 5: default maxCalls reduced from 6 to 4 to limit token burn per request.
   const policies = await loadPolicyBundle([
     'response_format',
     'backend_taxonomy',
@@ -264,7 +205,7 @@ async function runOpenAiToolLoop(req: McpChatRequest, maxCalls = 12): Promise<st
   }));
 
   const messages: Array<Record<string, unknown>> = [
-    { role: 'system', content: buildSystemPrompt(policies) },
+    { role: 'system', content: buildSystemPrompt(policies, req.outputMode) },
     { role: 'user', content: buildUserPrompt(req) },
   ];
 
@@ -324,7 +265,8 @@ async function runOpenAiToolLoop(req: McpChatRequest, maxCalls = 12): Promise<st
   return 'Tool call limit reached. ACTIONS_JSON: {"summary":"Failed to complete within tool budget.","findings":[],"suggestedFixes":[],"actions":[]}';
 }
 
-async function runAnthropicToolLoop(req: McpChatRequest, maxCalls = 12): Promise<string> {
+async function runAnthropicToolLoop(req: McpChatRequest, maxCalls = 4): Promise<string> {
+  // Fix 5: default maxCalls reduced from 6 to 4 to limit token burn per request.
   const policies = await loadPolicyBundle([
     'response_format',
     'backend_taxonomy',
@@ -351,7 +293,7 @@ async function runAnthropicToolLoop(req: McpChatRequest, maxCalls = 12): Promise
       },
       body: JSON.stringify({
         model: req.model,
-        system: buildSystemPrompt(policies),
+        system: buildSystemPrompt(policies, req.outputMode),
         max_tokens: 2000,
         tools,
         messages,

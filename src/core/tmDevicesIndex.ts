@@ -74,21 +74,42 @@ export async function initTmDevicesIndex(options?: {
       docstrings = {};
     }
 
+    // Build a lookup map from model short name (e.g. 'MSO6B') to its docstrings dict.
+    // The docstrings file is keyed by short model name at the top level, with nested
+    // paths as sub-keys (e.g. { 'MSO6B': { 'acquire.fastacq.palette': {...} } }).
+    // We also pre-compute the model short name from the tree root key, e.g.
+    // 'mso6b_commands.MSO6BCommands' -> 'MSO6B'.
+    function rootToShortName(root: string): string {
+      // Take the class name after the dot, strip trailing 'Commands'
+      const cls = root.split('.')[1] || root;
+      return cls.replace(/Commands$/, '');
+    }
+
     const docs: TmMethodDoc[] = [];
     for (const [root, rootNode] of Object.entries(tree)) {
       const methods: string[] = [];
       walk(rootNode, [], methods);
+      const shortName = rootToShortName(root);
+      const modelDocstrings = (docstrings[shortName] || {}) as Record<string, unknown>;
       methods.forEach((methodPath) => {
+        // Docstrings are keyed by the parent path (strip leaf verb .query/.write/.verify)
+        // e.g. methodPath='acquire.fastacq.palette.query' -> parentPath='acquire.fastacq.palette'
+        const parts = methodPath.split('.');
+        const parentPath = parts.length > 1 ? parts.slice(0, -1).join('.') : methodPath;
+        const ds = modelDocstrings[parentPath];
+        const dsEntry = ds && typeof ds === 'object' ? (ds as Record<string, unknown>) : null;
+        const description = dsEntry ? String(dsEntry.description || '') : '';
+        const usageArr = Array.isArray(dsEntry?.usage) ? (dsEntry!.usage as string[]) : [];
+        const usageExample = usageArr.slice(0, 2).join(' ');
+        const text = `${shortName} ${methodPath} ${description} ${usageExample}`.trim();
         const docKey = `${root}.${methodPath}`;
-        const ds = docstrings[docKey];
-        const usageExample = typeof ds === 'string' ? ds : '';
         docs.push({
           id: docKey.toLowerCase(),
           modelRoot: root,
           methodPath,
           signature: `${methodPath}()`,
-          usageExample,
-          text: `${root} ${methodPath} ${usageExample}`,
+          usageExample: usageExample || description,
+          text,
         });
       });
     }
