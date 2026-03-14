@@ -16,6 +16,18 @@ NaN response: 9.91E+37 means not-a-number/unavailable
 Example: CH<x>:SCAle <NR3> -> CH1:SCAle 1.0E-1
 `.trim();
 
+const GROUP_ROUTING = `
+When user asks about a feature area, call get_command_group FIRST:
+  bus protocols (CAN, I2C, SPI, UART, USB, ARINC) -> get_command_group("Bus")
+  measurements (freq, amp, rise, overshoot) -> get_command_group("Measurement")
+  triggering -> get_command_group("Trigger")
+  acquisition modes -> get_command_group("Acquisition")
+  waveform transfer -> get_command_group("Waveform Transfer")
+  search/mark -> get_command_group("Search and Mark")
+  save/recall -> get_command_group("Save and Recall")
+Then call search_scpi within that context.
+`.trim();
+
 function clipString(value: unknown, max = 280): unknown {
   if (typeof value !== 'string') return value;
   return value.length > max ? `${value.slice(0, max)}...` : value;
@@ -127,6 +139,7 @@ function logToolResult(name: string, result: unknown) {
 function buildSystemPrompt(policies: Record<string, string>): string {
   return [
     SCPI_ARG_TYPES,
+    GROUP_ROUTING,
     '',
     '# TekAutomate Flow Builder',
     '',
