@@ -52,3 +52,9 @@ for cmd in generated_scpi:
 ## tm_devices
 - Verify tm_devices method paths against `tm_devices_full_tree.json`.
 - Treat unavailable method/model combinations as invalid.
+
+## FastFrame Count Disambiguation
+- To set FastFrame frame count, use: `HORizontal:FASTframe:COUNt <NR1>`.
+- Example: `HORizontal:FASTframe:COUNt 50`.
+- Do NOT use `HORizontal:FASTframe:SIXteenbit` for frame count.
+- `SIXteenbit` controls bit depth, not frame count.

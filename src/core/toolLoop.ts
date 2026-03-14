@@ -14,21 +14,35 @@ function clipString(value: unknown, max = 280): unknown {
 }
 
 function slimScpiEntry(entry: Record<string, unknown>): Record<string, unknown> {
+  const directExample =
+    entry.example && typeof entry.example === 'object'
+      ? (entry.example as Record<string, unknown>)
+      : null;
   const examples = Array.isArray(entry.codeExamples)
     ? (entry.codeExamples as Array<Record<string, unknown>>)
     : [];
   const firstExample = examples[0] && typeof examples[0] === 'object'
     ? (examples[0] as Record<string, unknown>)
     : null;
+  const resolvedExample = directExample || firstExample;
   return {
     commandId: entry.commandId,
     sourceFile: entry.sourceFile,
     header: entry.header,
     commandType: entry.commandType,
+    shortDescription: clipString(entry.shortDescription, 200),
     syntax: entry.syntax,
-    scpiExample: firstExample?.scpi,
+    example: resolvedExample
+      ? {
+          scpi: (resolvedExample.scpi as Record<string, unknown> | undefined)?.code || resolvedExample.scpi,
+          python: (resolvedExample.python as Record<string, unknown> | undefined)?.code || resolvedExample.python,
+          tm_devices:
+            (resolvedExample.tm_devices as Record<string, unknown> | undefined)?.code ||
+            resolvedExample.tm_devices,
+        }
+      : undefined,
     notes: Array.isArray(entry.notes) ? (entry.notes as unknown[]).slice(0, 2).map((n) => clipString(n, 180)) : [],
-    description: clipString(entry.description, 220),
+    validValues: entry.validValues,
   };
 }
 
@@ -82,7 +96,11 @@ function logToolResult(name: string, result: unknown) {
     return (d as Record<string, unknown>).verified === true;
   }).length;
   // eslint-disable-next-line no-console
-  console.log(`[MCP] tool result: ${name} ok=${ok} count=${data.length} verified=${verifiedCount}`);
+  if (name === 'verify_scpi_commands') {
+    console.log(`[MCP] tool result: ${name} ok=${ok} count=${data.length} verified=${verifiedCount}`);
+  } else {
+    console.log(`[MCP] tool result: ${name} ok=${ok} count=${data.length}`);
+  }
 }
 
 function buildSystemPrompt(policies: Record<string, string>): string {

@@ -262,6 +262,22 @@ function extractArguments(raw: Record<string, unknown>): CommandArgument[] {
     .filter((arg) => arg.name || arg.type || Object.keys(arg.validValues).length > 0);
 }
 
+function argumentHint(arg?: CommandArgument): string {
+  if (!arg) return '<value>';
+  const values = Array.isArray(arg.validValues?.values) ? (arg.validValues.values as unknown[]) : [];
+  if (values.length) {
+    const enums = values
+      .filter((v): v is string => typeof v === 'string')
+      .map((v) => v.trim())
+      .filter(Boolean);
+    if (enums.length) return `{${enums.join('|')}}`;
+  }
+  const t = (arg.type || '').toLowerCase();
+  if (t.includes('int') || t.includes('nr1') || t.includes('integer')) return '<NR1>';
+  if (t.includes('float') || t.includes('nrf') || t.includes('number')) return '<NRf>';
+  return '<value>';
+}
+
 function extractCodeExamples(raw: Record<string, unknown>): CommandCodeExample[] {
   const manual = raw._manualEntry as Record<string, unknown> | undefined;
   const examplesRaw = Array.isArray(manual?.examples)
@@ -479,9 +495,25 @@ export class CommandIndex {
 
   searchByQuery(query: string, family?: string, limit = 10, commandType?: CommandType): CommandRecord[] {
     const scored = this.bm25.search(query, Math.max(limit * 4, 25));
+    const q = query.toLowerCase();
+    const wantsFastframeCount =
+      q.includes('fastframe') && /(count|frames|frame|number)/.test(q);
+    const reranked = scored
+      .map((item) => {
+        const entry = this.entries[item.index];
+        if (!entry) return item;
+        let bonus = 0;
+        if (wantsFastframeCount) {
+          const h = entry.header.toLowerCase();
+          if (h.includes('fastframe:count')) bonus += 50;
+          if (h.includes('sixteenbit')) bonus -= 8;
+        }
+        return { ...item, score: item.score + bonus };
+      })
+      .sort((a, b) => b.score - a.score);
     const results: CommandRecord[] = [];
     const seen = new Set<string>();
-    for (const item of scored) {
+    for (const item of reranked) {
       const entry = this.entries[item.index];
       if (!entry) continue;
       if (!familyMatches(entry, family)) continue;
@@ -523,14 +555,19 @@ function toCommandRecord(
     header;
   const { families, models } = extractFamilyModel(raw, sourceFile);
   const syntax = extractSyntax(raw);
+  const args = extractArguments(raw);
   if (!syntax.set && !syntax.query) {
     const scpi = (typeof raw.scpi === 'string' && raw.scpi.trim()) || header;
+    const hint = argumentHint(args[0]);
     if (scpi.endsWith('?')) {
       syntax.query = scpi;
     } else {
-      syntax.set = scpi;
+      syntax.set = args.length ? `${scpi} ${hint}` : scpi;
       syntax.query = `${scpi}?`;
     }
+  }
+  if (syntax.set && !/\s/.test(syntax.set) && args.length) {
+    syntax.set = `${syntax.set} ${argumentHint(args[0])}`;
   }
   if (!header.includes(':')) {
     const candidate = (syntax.set || syntax.query || '')
@@ -554,7 +591,7 @@ function toCommandRecord(
     families,
     models,
     syntax,
-    arguments: extractArguments(raw),
+    arguments: args,
     queryResponse: typeof raw.queryResponse === 'string' ? raw.queryResponse : undefined,
     codeExamples: extractCodeExamples(raw),
     relatedCommands: extractStringArray(manual?.relatedCommands || raw.relatedCommands),
