@@ -165,43 +165,85 @@ function buildSystemPrompt(policies: Record<string, string>): string {
     .join('\n\n');
 }
 
+function buildWorkspaceSummary(req: McpChatRequest): string {
+  const fc = req.flowContext;
+  const connect = Array.isArray(fc.steps)
+    ? (fc.steps.find((s: Record<string, unknown>) => String(s.type || '') === 'connect') as
+        | Record<string, unknown>
+        | undefined)
+    : undefined;
+  const p = ((connect?.params || {}) as Record<string, unknown>) || {};
+  const lines = [
+    'Workspace context:',
+    `- Backend: ${fc.backend || 'pyvisa'}`,
+    `- Host: ${fc.host || '(unknown)'}`,
+    `- Connection type: ${fc.connectionType || '(unknown)'}`,
+    `- Model family: ${fc.modelFamily || '(unknown)'}`,
+    connect ? `- Device alias: ${(p.alias as string) || (p.device as string) || 'scope'}` : '',
+    connect ? `- VISA backend: ${(p.visaBackend as string) || (p.backend as string) || 'default'}` : '',
+    connect ? `- Timeout: ${String(p.timeout || 5000)}ms` : '',
+    `- Step count: ${Array.isArray(fc.steps) ? fc.steps.length : 0}`,
+    `- Execution source: ${fc.executionSource}`,
+  ].filter(Boolean);
+  return lines.join('\n');
+}
+
 function buildUserPrompt(req: McpChatRequest): string {
   const fc = req.flowContext;
   const rc = req.runContext;
-  const stepsSummary = Array.isArray(fc.steps) && fc.steps.length
-    ? fc.steps.map((s: Record<string, unknown>) =>
-        `  [${s.id}] ${s.type}${s.label ? ` "${s.label}"` : ''}${s.command ? ` → ${s.command}` : ''}`
-      ).join('\n')
-    : '  (empty flow)';
+  const currentStepsJson = JSON.stringify(
+    {
+      name: 'Current Workflow',
+      backend: fc.backend || 'pyvisa',
+      steps: Array.isArray(fc.steps) ? fc.steps : [],
+    },
+    null,
+    2
+  );
 
   const parts = [
-    `## User Request\n${req.userMessage}`,
-    `## Output Mode\n${req.outputMode}`,
-    `## Device Context\nBackend: ${fc.backend || 'pyvisa'}\nModel: ${fc.modelFamily || '(unknown)'}\nHost: ${fc.host || '(unknown)'}\nConnection: ${fc.connectionType || 'tcpip'}`,
-    `## Current Flow (${Array.isArray(fc.steps) ? fc.steps.length : 0} steps)\n${stepsSummary}`,
+    'Here is the current workspace state:',
+    '',
+    '--- CURRENT STEPS JSON ---',
+    currentStepsJson,
+    '--- END JSON ---',
+    '',
+    buildWorkspaceSummary(req),
+    '',
+    `User request:
+${req.userMessage}`,
+    '',
+    'Instructions:',
+    `- Generate valid TekAutomate ${req.outputMode === 'blockly_xml' ? 'Blockly XML and matching flow-safe logic' : 'Steps UI JSON'}`,
+    '- Preserve existing steps when possible',
+    '- Fix errors if present',
+    '- Add missing steps if needed',
+    '- Output only apply-ready result content',
   ];
 
   if (fc.selectedStepId) {
-    parts.push(`## Selected Step\n${fc.selectedStepId}`);
+    parts.push('', `Selected step: ${fc.selectedStepId}`);
   }
 
-  if (rc.runStatus !== 'idle') {
-    parts.push(`## Run Status: ${rc.runStatus}${rc.exitCode !== null ? ` (exit ${rc.exitCode})` : ''}`);
-    if (rc.logTail) {
-      const tail = rc.logTail.length > 800 ? `...${rc.logTail.slice(-800)}` : rc.logTail;
-      parts.push(`## Run Log (tail)\n${tail}`);
-    }
-    if (rc.auditOutput) {
-      const audit = rc.auditOutput.length > 600 ? `...${rc.auditOutput.slice(-600)}` : rc.auditOutput;
-      parts.push(`## Audit Output\n${audit}`);
-    }
+  parts.push('', `Run status: ${rc.runStatus}${rc.exitCode !== null ? ` (exit ${rc.exitCode})` : ''}`);
+  if (rc.logTail) {
+    const tail = rc.logTail.length > 1400 ? `...${rc.logTail.slice(-1400)}` : rc.logTail;
+    parts.push('', 'Run log:', tail);
   }
-
+  if (rc.auditOutput) {
+    const audit = rc.auditOutput.length > 900 ? `...${rc.auditOutput.slice(-900)}` : rc.auditOutput;
+    parts.push('', 'Audit:', audit);
+  }
   if (req.instrumentEndpoint) {
-    parts.push(`## Live Instrument\nExecutor: ${req.instrumentEndpoint.executorUrl}\nVISA: ${req.instrumentEndpoint.visaResource}`);
+    parts.push(
+      '',
+      `Live instrument:
+- Executor: ${req.instrumentEndpoint.executorUrl}
+- VISA: ${req.instrumentEndpoint.visaResource}
+- Backend: ${req.instrumentEndpoint.backend}`
+    );
   }
-
-  return parts.join('\n\n');
+  return parts.filter(Boolean).join('\n');
 }
 
 async function runOpenAiToolLoop(req: McpChatRequest, maxCalls = 6): Promise<string> {
