@@ -107,6 +107,8 @@ export async function validateActionPayload(
           ? (((payload.flow as Record<string, unknown>).steps) as Array<Record<string, unknown>>)
         : Array.isArray(payload.steps)
           ? (payload.steps as Array<Record<string, unknown>>)
+        : Array.isArray(action.steps)
+          ? (action.steps as Array<Record<string, unknown>>)
           : [];
       if (!steps.length) {
         errors.push(`actions[${i}]: replace_flow missing steps`);
