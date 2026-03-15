@@ -59,6 +59,78 @@ export async function createServer(port = 8787): Promise<http.Server> {
       return;
     }
 
+    if (req.method === 'POST' && req.url === '/ai/responses-proxy') {
+      let sseStarted = false;
+      try {
+        const body = (await readJsonBody(req)) as {
+          apiKey?: string;
+          model?: string;
+          input?: unknown[];
+          systemPrompt?: string;
+        };
+        const serverKey = process.env.OPENAI_SERVER_API_KEY;
+        const vectorStoreId = process.env.COMMAND_VECTOR_STORE_ID;
+        if (!serverKey) {
+          sendJson(res, 500, { ok: false, error: 'OPENAI_SERVER_API_KEY not configured on server' });
+          return;
+        }
+        if (!body?.input) {
+          sendJson(res, 400, { ok: false, error: 'Missing input' });
+          return;
+        }
+        const requestBody: Record<string, unknown> = {
+          model: body.model || 'gpt-4o',
+          input: body.input,
+          stream: true,
+        };
+        if (vectorStoreId) {
+          requestBody.tools = [{ type: 'file_search', vector_store_ids: [vectorStoreId] }];
+        }
+        // Use server key — owns the vector store. User's apiKey is for authentication
+        // to this service only; OpenAI is billed to the server account.
+        const openaiRes = await fetch('https://api.openai.com/v1/responses', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            Authorization: `Bearer ${serverKey}`,
+          },
+          body: JSON.stringify(requestBody),
+        });
+        if (!openaiRes.ok) {
+          const errText = await openaiRes.text();
+          sendJson(res, openaiRes.status, { ok: false, error: `OpenAI error ${openaiRes.status}: ${errText}` });
+          return;
+        }
+        // Proxy the SSE stream directly to the client
+        sendSseStart(res);
+        sseStarted = true;
+        const reader = openaiRes.body?.getReader();
+        if (!reader) {
+          sseWrite(res, 'error', { ok: false, error: 'No response body' });
+          sseWrite(res, 'done', '[DONE]');
+          res.end();
+          return;
+        }
+        const decoder = new TextDecoder();
+        while (true) {
+          const { value, done } = await reader.read();
+          if (done) break;
+          const chunk = decoder.decode(value, { stream: true });
+          // Write raw SSE chunks through — client parser handles them
+          res.write(chunk);
+        }
+        res.end();
+      } catch (err) {
+        if (sseStarted) {
+          sseWrite(res, 'error', { ok: false, error: err instanceof Error ? err.message : 'Server error' });
+          res.end();
+        } else {
+          sendJson(res, 500, { ok: false, error: err instanceof Error ? err.message : 'Server error' });
+        }
+      }
+      return;
+    }
+
     if (req.method === 'POST' && req.url === '/ai/chat') {
       let sseStarted = false;
       try {

@@ -1,3 +1,11 @@
+import { config } from 'dotenv';
+import { resolve, dirname } from 'path';
+import { fileURLToPath } from 'url';
+
+// Load .env from mcp-server directory
+const __dirname = dirname(fileURLToPath(import.meta.url));
+config({ path: resolve(__dirname, '..', '.env') });
+
 import { createServer } from './server';
 
 const port = Number(process.env.MCP_PORT || 8787);
