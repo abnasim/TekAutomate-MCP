@@ -658,15 +658,7 @@ async function runOpenAiResponses(
   const toolTrace: NonNullable<ToolLoopResult['debug']>['toolTrace'] = [];
 
   const openAiBase = process.env.OPENAI_BASE_URL || 'https://api.openai.com';
-  const tools =
-    process.env.COMMAND_VECTOR_STORE_ID && process.env.COMMAND_VECTOR_STORE_ID.trim().length > 0
-      ? [
-          {
-            type: 'file_search',
-            vector_store_ids: [process.env.COMMAND_VECTOR_STORE_ID],
-          },
-        ]
-      : undefined;
+  const tools = undefined; // Temporarily disable file_search to benchmark latency
   const modelStartedAt = Date.now();
   let res: Response;
   try {
@@ -677,7 +669,9 @@ async function runOpenAiResponses(
         'Content-Type': 'application/json',
       },
       body: JSON.stringify({
-        model: req.model || 'gpt-5-mini',
+        model: req.model || 'gpt-4o-mini',
+        max_output_tokens: 900,
+        temperature: 0,
         instructions,
         input: [
           scpiContext
@@ -803,7 +797,7 @@ async function runOpenAiToolLoop(
       'Content-Type': 'application/json',
     },
     body: JSON.stringify({
-      model: req.model || 'gpt-5-mini',
+      model: req.model || 'gpt-4o-mini',
       instructions: systemPrompt,
       input: [{ role: 'user', content: userPrompt }],
       stream: false,
@@ -946,6 +940,9 @@ export async function runToolLoop(req: McpChatRequest): Promise<ToolLoopResult> 
     modelFamily: req.flowContext.modelFamily,
     originalSteps: req.flowContext.steps,
   });
+  if (checked.errors.length) {
+    console.log('[MCP] postCheck errors:', checked.errors);
+  }
   return {
     text: checked.text,
     errors: checked.errors,
