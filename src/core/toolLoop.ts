@@ -386,6 +386,9 @@ function buildSystemPrompt(policies: Record<string, string>, outputMode?: string
     '- A blocker must be something that will prevent build, apply, or execution. Hidden/internal params, backend normalization, or style cleanup are NOT blockers by themselves.',
     '- If execution succeeded, backend mismatch or internal-param mismatches are warnings or optional autofixes only.',
     '- Do not rebuild or replace a successful flow just to normalize backend labels or add inferred params.',
+    '- In a single-instrument workspace, connect steps do NOT need instrumentIds/printIdn to count as valid if the active device can be resolved from workspace context.',
+    '- save_screenshot steps do NOT need to be called invalid just because filename, scopeType, or method can be inferred or were already proven to work at runtime.',
+    '- Treat executor/runtime success as stronger evidence than schema preferences.',
     '',
     GOLDEN_EXAMPLES_PYVISA,
     '',
@@ -452,6 +455,9 @@ function buildUserPrompt(req: McpChatRequest): string {
     validateMode
       ? '- Treat backend/style/internal-param mismatches as warnings or optional autofixes unless execution failed'
       : '- Add missing steps if needed',
+    validateMode
+      ? '- In single-instrument flows, do not treat missing connect instrumentIds/printIdn or inferred screenshot defaults as blockers'
+      : '- Use full live step params and workspace context as the source of truth',
     req.outputMode === 'steps_json'
       ? validateMode
         ? '- Only include ACTIONS_JSON if a real fix is needed'
