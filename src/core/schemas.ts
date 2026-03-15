@@ -30,6 +30,18 @@ export interface McpChatRequest {
     selectedStepId: string | null;
     executionSource: 'steps' | 'blockly';
     deviceType?: string;
+    deviceDriver?: string;
+    visaBackend?: string;
+    alias?: string;
+    instrumentMap?: Array<{
+      alias: string;
+      backend: string;
+      host?: string;
+      connectionType?: string;
+      deviceType?: string;
+      deviceDriver?: string;
+      visaBackend?: string;
+    }>;
     selectedStep?: Record<string, unknown> | null;
     validationErrors?: string[];
   };

@@ -404,6 +404,10 @@ function buildSystemPrompt(policies: Record<string, string>, outputMode?: string
     '- If user asks for screenshot, add save_screenshot without asking when placement is inferable.',
     '- tm_devices + measurement: build immediately with tm_device_command steps. Never ask about command style.',
     '- For MSO5/6 tm_devices, use addmeas-style creation and mean.query(). Never fall back to legacy MEAS<x>:TYPE.',
+    '- Treat backend, device driver, visa backend, alias, and instrument map as authoritative routing truth.',
+    '- If backend is pyvisa, vxi11, or tekhsi, prefer SCPI-oriented steps unless the user explicitly asks to convert.',
+    '- If backend is tm_devices, prefer tm_device_command steps unless the user explicitly asks to convert.',
+    '- If the user asks to convert SCPI to tm_devices or tm_devices to SCPI, preserve behavior and change only the command representation.',
     '- If part of a request is fully pre-verified, build that part now. Isolate only uncertain portions in findings.',
     '- Only call verify_scpi_commands for multi-command flows (3+ novel commands).',
     '- Only call validate_action_payload for complex/grouped flows.',
@@ -435,6 +439,13 @@ function buildUserPrompt(req: McpChatRequest): string {
     : '  (empty flow)';
 
   const instrumentLine = `  - scope1: ${fc.deviceType || 'SCOPE'}, ${fc.backend || 'pyvisa'} @ ${fc.host || 'localhost'}`;
+  const instrumentMapLines = Array.isArray(fc.instrumentMap) && fc.instrumentMap.length
+    ? fc.instrumentMap
+        .map((device) =>
+          `  - ${String(device.alias || 'device')}: ${String(device.deviceType || 'SCOPE')}, ${String(device.backend || 'pyvisa')}${device.deviceDriver ? `, driver ${String(device.deviceDriver)}` : ''}${device.visaBackend ? `, visa ${String(device.visaBackend)}` : ''}${device.host ? ` @ ${String(device.host)}` : ''}`
+        )
+        .join('\n')
+    : instrumentLine;
   const parts = [
     `SCPI types: ${SCPI_ARG_TYPES_BRIEF}`,
     `Known patterns:\n- ${KNOWN_PATTERN_HINTS}`,
@@ -447,8 +458,11 @@ function buildUserPrompt(req: McpChatRequest): string {
     `- Model Family: ${fc.modelFamily || '(unknown)'}`,
     `- Connection: ${fc.connectionType || 'tcpip'}`,
     `- Device Type: ${fc.deviceType || 'SCOPE'}`,
+    `- Device Driver: ${fc.deviceDriver || '(unknown)'}`,
+    `- VISA Backend: ${fc.visaBackend || '(unknown)'}`,
+    `- Alias: ${fc.alias || 'scope1'}`,
     '- Instruments in workspace:',
-    instrumentLine,
+    instrumentMapLines,
     '',
     'User request:',
     req.userMessage,
