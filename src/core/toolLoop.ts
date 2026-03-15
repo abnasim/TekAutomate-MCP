@@ -8,6 +8,134 @@ interface ToolLoopResult {
   errors: string[];
 }
 
+function escapeJsonString(value: string): string {
+  return value.replace(/\\/g, '\\\\').replace(/"/g, '\\"');
+}
+
+function detectMeasurementRequest(req: McpChatRequest): string[] {
+  const text = req.userMessage.toLowerCase();
+  const found: string[] = [];
+  if (/\bfrequency\b|\bfreq\b/.test(text)) found.push('FREQUENCY');
+  if (/\bamplitude\b|\bamp\b/.test(text)) found.push('AMPLITUDE');
+  if (/\bpositive overshoot\b|\bpos(?:itive)?\s*overshoot\b|\bpovershoot\b/.test(text)) {
+    found.push('POVERSHOOT');
+  }
+  return found;
+}
+
+function detectMeasurementChannel(req: McpChatRequest): string | null {
+  const text = req.userMessage.toUpperCase();
+  const match = text.match(/\bCH([1-8])\b/);
+  return match ? `CH${match[1]}` : null;
+}
+
+function buildTmDevicesMeasurementShortcut(req: McpChatRequest): string | null {
+  if ((req.outputMode || '') !== 'steps_json') return null;
+  if ((req.flowContext.backend || '').toLowerCase() !== 'tm_devices') return null;
+  if ((req.flowContext.deviceType || '').toUpperCase() !== 'SCOPE') return null;
+
+  const measurements = detectMeasurementRequest(req);
+  const channel = detectMeasurementChannel(req);
+  if (!measurements.length || !channel) return null;
+
+  const model = req.flowContext.modelFamily || 'MSO6B';
+  const existingSteps = Array.isArray(req.flowContext.steps) ? req.flowContext.steps : [];
+  const hasScreenshot = /\bscreenshot\b|\bscreen shot\b|\bcapture screen\b/.test(req.userMessage.toLowerCase());
+  const insertAfterId =
+    (req.flowContext.selectedStepId && String(req.flowContext.selectedStepId)) ||
+    (existingSteps.find((step) => String(step.type || '') === 'connect')?.id as string | undefined) ||
+    null;
+
+  const measurementSteps = measurements.flatMap((measurement, index) => {
+    const slot = index + 1;
+    const baseId = `m${slot}`;
+    const sourceField = 'source1';
+    const resultVar =
+      measurement === 'FREQUENCY'
+        ? 'frequency_ch1'
+        : measurement === 'AMPLITUDE'
+          ? 'amplitude_ch1'
+          : 'positive_overshoot_ch1';
+    return [
+      {
+        id: `${baseId}a`,
+        type: 'tm_device_command',
+        label: `Add ${measurement} measurement`,
+        params: {
+          code: `scope.commands.measurement.addmeas.write("${measurement}")`,
+          model,
+          description: `Add ${measurement} measurement`,
+        },
+      },
+      {
+        id: `${baseId}b`,
+        type: 'tm_device_command',
+        label: `Set ${measurement} source to ${channel}`,
+        params: {
+          code: `scope.commands.measurement.meas[${slot}].${sourceField}.write("${channel}")`,
+          model,
+          description: `Set ${measurement} source to ${channel}`,
+        },
+      },
+      {
+        id: `${baseId}c`,
+        type: 'tm_device_command',
+        label: `Read ${measurement} value`,
+        params: {
+          code: `${resultVar} = scope.commands.measurement.meas[${slot}].results.currentacq.mean.query()`,
+          model,
+          description: `Read ${measurement} value`,
+        },
+      },
+    ];
+  });
+
+  const extraSteps = hasScreenshot
+    ? [
+        {
+          id: 'ss1',
+          type: 'comment',
+          label: 'Screenshot requested',
+          params: {
+            text: 'tm_devices backend does not support save_screenshot step directly; add a Python or platform-specific capture step if needed.',
+          },
+        },
+      ]
+    : [];
+
+  const actions =
+    existingSteps.length && insertAfterId
+      ? [...measurementSteps, ...extraSteps].map((step) => ({
+          type: 'insert_step_after',
+          targetStepId: insertAfterId,
+          newStep: step,
+        }))
+      : [
+          {
+            type: 'replace_flow',
+            flow: {
+              name: 'Measurement Flow',
+              description: `Add ${measurements.join(', ')} measurements on ${channel}`,
+              backend: 'tm_devices',
+              deviceType: req.flowContext.deviceType || 'SCOPE',
+              steps: [
+                { id: '1', type: 'connect', label: 'Connect to Scope', params: { printIdn: true } },
+                ...measurementSteps,
+                ...extraSteps,
+                { id: '99', type: 'disconnect', label: 'Disconnect', params: {} },
+              ],
+            },
+          },
+        ];
+
+  const findings =
+    hasScreenshot
+      ? ['Added measurement steps. Screenshot on tm_devices backend may require a Python or backend-specific capture step.']
+      : [];
+
+  return `ACTIONS_JSON: {"summary":"Added ${escapeJsonString(measurements.join(', '))} measurements on ${escapeJsonString(channel)}.","findings":[${findings.map((f) => `"${escapeJsonString(f)}"`).join(',')}],"suggestedFixes":[],"actions":${JSON.stringify(actions)}}`;
+}
+
 // Condensed SCPI arg-type reference (injected into user prompt, not system prompt,
 // to reduce static system prompt token usage — Fix 5).
 const SCPI_ARG_TYPES_BRIEF = '<NR1>=int <NR2>=dec <NR3>=sci <QString>="str" {A|B}=choose [x]=opt NaN=9.91E+37';
@@ -379,6 +507,18 @@ async function runAnthropicToolLoop(req: McpChatRequest, maxCalls = 6): Promise<
 }
 
 export async function runToolLoop(req: McpChatRequest): Promise<ToolLoopResult> {
+  const shortcut = buildTmDevicesMeasurementShortcut(req);
+  if (shortcut) {
+    const checked = await postCheckResponse(shortcut, {
+      backend: req.flowContext.backend,
+      modelFamily: req.flowContext.modelFamily,
+      originalSteps: req.flowContext.steps,
+    });
+    return {
+      text: checked.text,
+      errors: checked.errors,
+    };
+  }
   const text =
     req.provider === 'anthropic'
       ? await runAnthropicToolLoop(req)
