@@ -454,7 +454,7 @@ function buildUserPrompt(req: McpChatRequest): string {
   const currentStepsJson = JSON.stringify(fc.steps || [], null, 2);
   const stepsSummary = Array.isArray(fc.steps) && fc.steps.length
     ? fc.steps.map((s: Record<string, unknown>) =>
-        `  [${s.id}] ${s.type}${s.label ? ` "${s.label}"` : ''}${s.command ? ` → ${s.command}` : ''}`
+        `  [${s.id}] ${s.type}${s.label ? ` "${s.label}"` : ''}${typeof (s.params as Record<string, unknown> | undefined)?.command === 'string' ? ` -> ${String((s.params as Record<string, unknown>).command)}` : ''}`
       ).join('\n')
     : '  (empty flow)';
 
