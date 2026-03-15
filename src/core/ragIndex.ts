@@ -74,7 +74,8 @@ export async function initRagIndexes(options?: {
         body: String(c.body || ''),
         source: typeof c.source === 'string' ? c.source : undefined,
         pathHint: typeof c.pathHint === 'string' ? c.pathHint : undefined,
-        text: `${String(c.title || '')} ${String(c.body || '')} ${String((c.tags || []).join(' ') || '')}`,
+        text: `${String(c.title || '')} ${String(c.body || '')} ${String((Array.isArray((c as Record<string,unknown>).tags) ? ((c as Record<string,unknown>).tags as unknown[]) : []).join(' '))}`,
+
       }));
       docsByCorpus[corpus as RagCorpus] = docs;
       byCorpus[corpus as RagCorpus] = new Bm25Index<RagChunkDoc>(docs);

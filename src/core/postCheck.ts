@@ -33,9 +33,6 @@ function collectCommandsFromActions(actionsJson: Record<string, unknown>): strin
       | Record<string, unknown>
       | undefined;
     const actionType = String(action.action_type || action.type || '');
-    const flow = (action.flow && typeof action.flow === 'object')
-      ? (action.flow as Record<string, unknown>)
-      : {};
     const replaceFlowSteps = actionType === 'replace_flow' ? extractReplaceFlowSteps(action) : null;
     if (actionType === 'replace_flow' && Array.isArray(replaceFlowSteps)) {
       const walk = (steps: Array<Record<string, unknown>>) => {

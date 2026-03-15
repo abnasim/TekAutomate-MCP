@@ -6,6 +6,7 @@ import { fileURLToPath } from 'url';
 const __dirname = dirname(fileURLToPath(import.meta.url));
 config({ path: resolve(__dirname, '..', '.env') });
 
+// eslint-disable-next-line import/first
 import { createServer } from './server';
 
 const port = Number(process.env.MCP_PORT || 8787);

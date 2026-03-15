@@ -10,7 +10,7 @@ export async function getCommandGroup(input: GetCommandGroupInput): Promise<Tool
   if (!requested) {
     return {
       ok: false,
-      data: null,
+      data: {} as Record<string, unknown>,
       sourceMeta: [],
       warnings: ['groupName is required'],
     };
@@ -20,7 +20,7 @@ export async function getCommandGroup(input: GetCommandGroupInput): Promise<Tool
   if (!resolved) {
     return {
       ok: false,
-      data: null,
+      data: {} as Record<string, unknown>,
       sourceMeta: [],
       warnings: [`Unknown command group: ${requested}`],
     };

@@ -286,7 +286,7 @@ export function getToolDefinitions() {
 }
 
 export async function runTool(name: string, args: Record<string, unknown>) {
-  const fn = (TOOL_HANDLERS as Record<string, (a: Record<string, unknown>) => Promise<unknown>>)[name];
+  const fn = (TOOL_HANDLERS as unknown as Record<string, (a: Record<string, unknown>) => Promise<unknown>>)[name];
   if (!fn) {
     return { ok: false, data: null, sourceMeta: [], warnings: [`Unknown tool: ${name}`] };
   }
