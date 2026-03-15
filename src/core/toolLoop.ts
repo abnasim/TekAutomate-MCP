@@ -1,32 +1,140 @@
 import { loadPromptText } from './promptLoader';
 import type { McpChatRequest } from './schemas';
-import { getToolDefinitions, runTool } from '../tools';
 import { postCheckResponse } from './postCheck';
+import { buildScpiContext } from './contextBuilder';
+import { getToolDefinitions, runTool } from '../tools';
 
 interface ToolLoopResult {
   text: string;
   errors: string[];
+  metrics?: {
+    totalMs: number;
+    usedShortcut: boolean;
+    provider?: 'openai' | 'anthropic';
+    iterations?: number;
+    toolCalls?: number;
+    toolMs?: number;
+    modelMs?: number;
+    promptChars?: {
+      system: number;
+      user: number;
+    };
+  };
+  debug?: {
+    promptFileText?: string;
+    systemPrompt?: string;
+    userPrompt?: string;
+    toolDefinitions?: Array<{ name: string; description: string }>;
+    toolTrace?: Array<{
+      name: string;
+      args: Record<string, unknown>;
+      startedAt: string;
+      durationMs?: number;
+      resultSummary?: {
+        ok?: boolean;
+        count?: number;
+        warnings?: string[];
+      };
+      rawResult?: unknown;
+    }>;
+    shortcutResponse?: string;
+  };
 }
 
 function escapeJsonString(value: string): string {
   return value.replace(/\\/g, '\\\\').replace(/"/g, '\\"');
 }
 
+const STANDARD_MEASUREMENT_PATTERNS: Array<{ type: string; pattern: RegExp }> = [
+  { type: 'FREQUENCY', pattern: /\bfrequency\b|\bfreq\b/i },
+  { type: 'AMPLITUDE', pattern: /\bamplitude\b|\bamp\b/i },
+  { type: 'POVERSHOOT', pattern: /\bpositive overshoot\b|\bpos(?:itive)?\s*overshoot\b|\bpovershoot\b/i },
+  { type: 'NOVERSHOOT', pattern: /\bnegative overshoot\b|\bneg(?:ative)?\s*overshoot\b|\bnovershoot\b/i },
+  { type: 'RISETIME', pattern: /\brise\s*time\b|\brisetime\b/i },
+  { type: 'FALLTIME', pattern: /\bfall\s*time\b|\bfalltime\b/i },
+  { type: 'PERIOD', pattern: /\bperiod\b/i },
+  { type: 'PK2PK', pattern: /\bpk2pk\b|\bpeak[-\s]*to[-\s]*peak\b|\bpeak to peak\b/i },
+  { type: 'MEAN', pattern: /\bmean\b|\baverage\b/i },
+  { type: 'RMS', pattern: /\brms\b/i },
+  { type: 'HIGH', pattern: /\bhigh\b/i },
+  { type: 'LOW', pattern: /\blow\b/i },
+  { type: 'MAXIMUM', pattern: /\bmaximum\b|\bmax\b/i },
+  { type: 'MINIMUM', pattern: /\bminimum\b|\bmin\b/i },
+];
+
+const DEFAULT_MEASUREMENT_SET = [
+  'FREQUENCY',
+  'AMPLITUDE',
+  'PK2PK',
+  'MEAN',
+  'RMS',
+  'POVERSHOOT',
+];
+
 function detectMeasurementRequest(req: McpChatRequest): string[] {
   const text = req.userMessage.toLowerCase();
-  const found: string[] = [];
-  if (/\bfrequency\b|\bfreq\b/.test(text)) found.push('FREQUENCY');
-  if (/\bamplitude\b|\bamp\b/.test(text)) found.push('AMPLITUDE');
-  if (/\bpositive overshoot\b|\bpos(?:itive)?\s*overshoot\b|\bpovershoot\b/.test(text)) {
-    found.push('POVERSHOOT');
+  const found = STANDARD_MEASUREMENT_PATTERNS
+    .filter(({ pattern }) => pattern.test(text))
+    .map(({ type }) => type);
+
+  if (found.length > 0) {
+    return Array.from(new Set(found));
   }
-  return found;
+
+  if (!/\bmeas(?:urement)?s?\b/i.test(text)) {
+    return [];
+  }
+
+  const countMatch =
+    text.match(/\b([4-6])\s+meas(?:urement)?s?\b/i) ||
+    text.match(/\b(four|five|six)\s+meas(?:urement)?s?\b/i);
+  if (!countMatch) {
+    return [];
+  }
+
+  const countToken = countMatch[1].toLowerCase();
+  const requestedCount =
+    countToken === 'four'
+      ? 4
+      : countToken === 'five'
+        ? 5
+        : countToken === 'six'
+          ? 6
+          : Number(countToken);
+
+  return DEFAULT_MEASUREMENT_SET.slice(0, Math.max(1, requestedCount));
 }
 
 function detectMeasurementChannel(req: McpChatRequest): string | null {
   const text = req.userMessage.toUpperCase();
-  const match = text.match(/\bCH([1-8])\b/);
+  const match = text.match(/\bCH([1-8])\b/) || text.match(/\bCHANNEL\s*([1-8])\b/);
   return match ? `CH${match[1]}` : null;
+}
+
+function shouldQueryMeasurementResults(req: McpChatRequest): boolean {
+  return /\b(query|read|result|results|save result|save results|mean\?|value|values)\b/i.test(
+    req.userMessage
+  );
+}
+
+function isMeasurementAppendRequest(req: McpChatRequest): boolean {
+  return /\b(append|add|keep|preserve|existing|overwrite|overwritten)\b/i.test(req.userMessage);
+}
+
+function flattenSteps(steps: unknown[]): Array<Record<string, unknown>> {
+  const flat: Array<Record<string, unknown>> = [];
+  const walk = (items: unknown[]) => {
+    items.forEach((item) => {
+      if (!item || typeof item !== 'object') return;
+      const step = item as Record<string, unknown>;
+      flat.push(step);
+      if (Array.isArray(step.children)) {
+        walk(step.children);
+      }
+    });
+  };
+  walk(steps);
+  return flat;
 }
 
 function isFastFrameRequest(req: McpChatRequest): boolean {
@@ -64,10 +172,14 @@ function buildPyvisaMeasurementShortcut(req: McpChatRequest): string | null {
   if (!measurements.length || !channel) return null;
 
   const existingSteps = Array.isArray(req.flowContext.steps) ? req.flowContext.steps : [];
+  const flatSteps = flattenSteps(existingSteps);
   const hasScreenshot = /\bscreenshot\b|\bscreen shot\b|\bcapture screen\b/.test(req.userMessage.toLowerCase());
+  const wantsQueries = shouldQueryMeasurementResults(req);
   const isBuildNew = existingSteps.length === 0;
 
-  // Build write+query triples for each measurement
+  // ADDMEAS appends to the scope's existing measurement table. Only emit
+  // result queries when the user explicitly asked for values; otherwise avoid
+  // guessing slot numbers against pre-existing scope measurements.
   const measurementSlots = measurements.map((measurement, index) => {
     const slot = index + 1;
     const saveAsName = (
@@ -95,15 +207,17 @@ function buildPyvisaMeasurementShortcut(req: McpChatRequest): string | null {
     },
   ]);
 
-  const queryGroup: Record<string, unknown>[] = measurementSlots.map(({ measurement, slot, saveAsName }) => ({
-    id: `q${slot}`,
-    type: 'query',
-    label: `Query ${measurement.toLowerCase()} result`,
-    params: {
-      command: `MEASUrement:MEAS${slot}:RESUlts:CURRentacq:MEAN?`,
-      saveAs: saveAsName,
-    },
-  }));
+  const queryGroup: Record<string, unknown>[] = wantsQueries
+    ? measurementSlots.map(({ measurement, slot, saveAsName }) => ({
+        id: `q${slot}`,
+        type: 'query',
+        label: `Query ${measurement.toLowerCase()} result`,
+        params: {
+          command: `MEASUrement:MEAS${slot}:RESUlts:CURRentacq:MEAN?`,
+          saveAs: saveAsName,
+        },
+      }))
+    : [];
 
   const screenshotStep = hasScreenshot ? [{
     id: 'ss1',
@@ -124,32 +238,46 @@ function buildPyvisaMeasurementShortcut(req: McpChatRequest): string | null {
           id: 'g1', type: 'group', label: `Add ${channel} measurements`, params: {}, collapsed: false,
           children: addGroup,
         },
-        {
-          id: 'g2', type: 'group', label: 'Read measurement results', params: {}, collapsed: false,
-          children: queryGroup,
-        },
+        ...(queryGroup.length
+          ? [{
+              id: 'g2', type: 'group', label: 'Read measurement results', params: {}, collapsed: false,
+              children: queryGroup,
+            }]
+          : []),
         ...screenshotStep,
         { id: '99', type: 'disconnect', label: 'Disconnect', params: {} },
       ],
     };
     const summaryParts = [`Added ${measurements.join(', ')} measurements on ${channel}.`];
+    if (!wantsQueries) {
+      summaryParts.push('Used ADDMEAS so the scope appends new measurements without replacing existing ones.');
+    }
     if (hasScreenshot) summaryParts.push('Screenshot step included.');
     const actions = [{ type: 'replace_flow', flow }];
     return `ACTIONS_JSON: ${JSON.stringify({ summary: summaryParts.join(' '), findings: [], suggestedFixes: [], actions })}`;
   }
 
-  // Existing flow — insert steps
+  // Existing flow — insert steps just after connect or the selected step.
   const insertAfterId =
     (req.flowContext.selectedStepId && String(req.flowContext.selectedStepId)) ||
-    (existingSteps.find((step) => String(step.type || '') === 'connect')?.id as string | undefined) ||
+    (flatSteps.find((step) => String(step.type || '') === 'connect')?.id as string | undefined) ||
     null;
+  let previousId = insertAfterId;
   const allNewSteps = [...addGroup, ...queryGroup, ...screenshotStep];
-  const insertActions = allNewSteps.map((step) => ({
-    type: 'insert_step_after',
-    targetStepId: insertAfterId,
-    newStep: step,
-  }));
-  return `ACTIONS_JSON: ${JSON.stringify({ summary: `Added ${measurements.join(', ')} measurement steps on ${channel}.`, findings: [], suggestedFixes: [], actions: insertActions })}`;
+  const insertActions = allNewSteps.map((step) => {
+    const action = {
+      type: 'insert_step_after',
+      targetStepId: previousId,
+      newStep: step,
+    };
+    previousId = String(step.id || previousId || '');
+    return action;
+  });
+  const findings = [];
+  if (!wantsQueries && isMeasurementAppendRequest(req)) {
+    findings.push('Used ADDMEAS-only steps so new CH1 measurements append on the scope and do not rely on existing measurement slot numbers.');
+  }
+  return `ACTIONS_JSON: ${JSON.stringify({ summary: `Added ${measurements.join(', ')} measurement steps on ${channel}.`, findings, suggestedFixes: [], actions: insertActions })}`;
 }
 
 function buildPyvisaFastFrameShortcut(req: McpChatRequest): string | null {
@@ -316,32 +444,6 @@ function buildTmDevicesMeasurementShortcut(req: McpChatRequest): string | null {
   return `ACTIONS_JSON: {"summary":"Added ${escapeJsonString(measurements.join(', '))} measurements on ${escapeJsonString(channel)}.","findings":[${findings.map((f) => `"${escapeJsonString(f)}"`).join(',')}],"suggestedFixes":[],"actions":${JSON.stringify(actions)}}`;
 }
 
-// Condensed SCPI arg-type reference (injected into user prompt, not system prompt,
-// to reduce static system prompt token usage — Fix 5).
-const SCPI_ARG_TYPES_BRIEF = '<NR1>=int <NR2>=dec <NR3>=sci <QString>="str" {A|B}=choose [x]=opt NaN=9.91E+37';
-const KNOWN_PATTERN_HINTS = [
-  'Measurements on modern scopes: use MEASUrement:ADDMEAS <TYPE>, set SOUrce1 to the requested channel, then query MEASUrement:MEAS<x>:RESUlts:CURRentacq:MEAN?.',
-  'FastFrame on modern scopes: use HORizontal:FASTframe:STATE ON and HORizontal:FASTframe:COUNt <N>.',
-  'Screenshots on pyvisa scopes: prefer save_screenshot step type (scopeType:modern, method:pc_transfer) instead of raw HARDCOPY or SAVE:IMAGe commands.',
-  'tm_devices backend: prefer tm_device_command steps, not raw write/query SCPI steps.',
-  'Standard measurement enums are pre-verified: FREQUENCY, AMPLITUDE, POVERSHOOT, NOVERSHOOT, RISETIME, FALLTIME, PERIOD, PK2PK, MEAN, RMS. No search_scpi needed for these.',
-  'Do not use search_tm_devices for normal scope SCPI requests. Use it only when backend is tm_devices or the user explicitly asks for tm_devices conversion.',
-  'For scope command routing, use only 2 coarse families: modern MSO 2/4/5/6/7 or legacy 5k/7k/70k. Do not waste tool calls on exact submodel variants like MSO56 vs MSO6B.',
-].join('\n- ');
-
-// Golden flow examples injected inline — gives the model a direct pattern to match
-// without requiring a getTemplateExamples tool call.
-const GOLDEN_EXAMPLES_PYVISA = `## Golden Flow Examples
-
-### Measurement + Screenshot (pyvisa, MSO5/6)
-Request: "Add CH1 frequency, amplitude, positive overshoot measurements, query results, save screenshot"
-ACTIONS_JSON: {"summary":"Connected, added 3 CH1 measurements, queried results, screenshot, disconnected.","findings":[],"suggestedFixes":[],"actions":[{"type":"replace_flow","flow":{"name":"CH1 Measurements","description":"Frequency, amplitude, positive overshoot on CH1 with screenshot","backend":"pyvisa","deviceType":"SCOPE","steps":[{"id":"1","type":"connect","label":"Connect to scope","params":{"instrumentIds":["scope1"],"printIdn":true}},{"id":"g1","type":"group","label":"Add CH1 measurements","params":{},"collapsed":false,"children":[{"id":"2","type":"write","label":"Add frequency measurement","params":{"command":"MEASUrement:ADDMEAS FREQUENCY"}},{"id":"3","type":"write","label":"Set frequency source to CH1","params":{"command":"MEASUrement:MEAS1:SOUrce1 CH1"}},{"id":"4","type":"write","label":"Add amplitude measurement","params":{"command":"MEASUrement:ADDMEAS AMPLITUDE"}},{"id":"5","type":"write","label":"Set amplitude source to CH1","params":{"command":"MEASUrement:MEAS2:SOUrce1 CH1"}},{"id":"6","type":"write","label":"Add positive overshoot measurement","params":{"command":"MEASUrement:ADDMEAS POVERSHOOT"}},{"id":"7","type":"write","label":"Set positive overshoot source to CH1","params":{"command":"MEASUrement:MEAS3:SOUrce1 CH1"}}]},{"id":"g2","type":"group","label":"Read measurement results","params":{},"collapsed":false,"children":[{"id":"8","type":"query","label":"Query frequency result","params":{"command":"MEASUrement:MEAS1:RESUlts:CURRentacq:MEAN?","saveAs":"ch1_frequency"}},{"id":"9","type":"query","label":"Query amplitude result","params":{"command":"MEASUrement:MEAS2:RESUlts:CURRentacq:MEAN?","saveAs":"ch1_amplitude"}},{"id":"10","type":"query","label":"Query positive overshoot result","params":{"command":"MEASUrement:MEAS3:RESUlts:CURRentacq:MEAN?","saveAs":"ch1_positive_overshoot"}}]},{"id":"11","type":"save_screenshot","label":"Save Screenshot","params":{"filename":"screenshot.png","scopeType":"modern","method":"pc_transfer"}},{"id":"12","type":"disconnect","label":"Disconnect","params":{}}]}}]}
-
-### Single Measurement (pyvisa, MSO5/6)
-Request: "Add frequency measurement on CH1"
-ACTIONS_JSON: {"summary":"Added frequency measurement on CH1.","findings":[],"suggestedFixes":[],"actions":[{"type":"insert_step_after","targetStepId":null,"newStep":{"id":"m1","type":"write","label":"Add frequency measurement","params":{"command":"MEASUrement:ADDMEAS FREQUENCY"}}},{"type":"insert_step_after","targetStepId":"m1","newStep":{"id":"m2","type":"write","label":"Set frequency source to CH1","params":{"command":"MEASUrement:MEAS1:SOUrce1 CH1"}}},{"type":"insert_step_after","targetStepId":"m2","newStep":{"id":"m3","type":"query","label":"Query frequency result","params":{"command":"MEASUrement:MEAS1:RESUlts:CURRentacq:MEAN?","saveAs":"ch1_frequency"}}}]}
-`;
-
 function clipString(value: unknown, max = 280): unknown {
   if (typeof value !== 'string') return value;
   return value.length > max ? `${value.slice(0, max)}...` : value;
@@ -462,12 +564,20 @@ function buildUserPrompt(req: McpChatRequest): string {
   const rc = req.runContext;
   const validateMode = isValidationRequest(req);
   const executionSucceeded = runLooksSuccessful(rc);
-  const currentStepsJson = JSON.stringify(fc.steps || [], null, 2);
-  const stepsSummary = Array.isArray(fc.steps) && fc.steps.length
-    ? fc.steps.map((s: Record<string, unknown>) =>
-        `  [${s.id}] ${s.type}${s.label ? ` "${s.label}"` : ''}${typeof (s.params as Record<string, unknown> | undefined)?.command === 'string' ? ` -> ${String((s.params as Record<string, unknown>).command)}` : ''}`
-      ).join('\n')
+  const flatSteps = flattenSteps(Array.isArray(fc.steps) ? fc.steps : []);
+  const stepsSummary = flatSteps.length
+    ? flatSteps
+        .slice(0, 18)
+        .map((s) =>
+          `  [${s.id}] ${s.type}${s.label ? ` "${s.label}"` : ''}${typeof (s.params as Record<string, unknown> | undefined)?.command === 'string' ? ` -> ${String((s.params as Record<string, unknown>).command)}` : ''}`
+        )
+        .join('\n')
     : '  (empty flow)';
+  const compactStepsJson = JSON.stringify(fc.steps || []);
+  const stepsJsonPreview =
+    compactStepsJson.length > 1600
+      ? `${compactStepsJson.slice(0, 1600)}...[truncated ${compactStepsJson.length - 1600} chars]`
+      : compactStepsJson;
 
   const instrumentLine = `  - scope1: ${fc.deviceType || 'SCOPE'}, ${fc.backend || 'pyvisa'} @ ${fc.host || 'localhost'}`;
   const instrumentMapLines = Array.isArray(fc.instrumentMap) && fc.instrumentMap.length
@@ -478,48 +588,26 @@ function buildUserPrompt(req: McpChatRequest): string {
         .join('\n')
     : instrumentLine;
   const parts = [
-    `SCPI types: ${SCPI_ARG_TYPES_BRIEF}`,
-    `Known patterns:\n- ${KNOWN_PATTERN_HINTS}`,
-    '--- CURRENT STEPS JSON ---',
-    currentStepsJson,
-    '--- END JSON ---',
-    '',
-    'Workspace context:',
-    `- Current editor mode: ${fc.executionSource === 'blockly' ? 'Blockly' : 'Steps'}`,
-    `- Backend: ${fc.backend || 'pyvisa'}`,
-    `- Model Family: ${fc.modelFamily || '(unknown)'}`,
-    `- Connection: ${fc.connectionType || 'tcpip'}`,
-    `- Device Type: ${fc.deviceType || 'SCOPE'}`,
-    `- Device Driver: ${fc.deviceDriver || '(unknown)'}`,
-    `- VISA Backend: ${fc.visaBackend || '(unknown)'}`,
-    `- Alias: ${fc.alias || 'scope1'}`,
-    '- Instruments in workspace:',
+    'Live workspace context:',
+    `- editor: ${fc.executionSource === 'blockly' ? 'Blockly' : 'Steps'}`,
+    `- backend: ${fc.backend || 'pyvisa'}`,
+    `- modelFamily: ${fc.modelFamily || '(unknown)'}`,
+    `- connection: ${fc.connectionType || 'tcpip'}`,
+    `- deviceType: ${fc.deviceType || 'SCOPE'}`,
+    `- deviceDriver: ${fc.deviceDriver || '(unknown)'}`,
+    `- visaBackend: ${fc.visaBackend || '(unknown)'}`,
+    `- alias: ${fc.alias || 'scope1'}`,
+    '- instruments:',
     instrumentMapLines,
+    '',
+    `Current flow (${flatSteps.length} flattened steps):`,
+    `${stepsSummary}${flatSteps.length > 18 ? '\n  ...more steps omitted' : ''}`,
+    '',
+    'Current steps JSON preview:',
+    stepsJsonPreview || '[]',
     '',
     'User request:',
     req.userMessage,
-    '',
-    'Instructions:',
-    validateMode
-      ? '- Validate from the user perspective. If the flow is already usable, say "Flow looks good."'
-      : '- Generate valid TekAutomate Steps UI JSON',
-    '- Preserve existing steps when possible',
-    validateMode
-      ? '- Only call out blockers that would actually prevent apply or execution'
-      : '- Fix errors if present',
-    validateMode
-      ? '- Treat backend/style/internal-param mismatches as warnings or optional autofixes unless execution failed'
-      : '- Add missing steps if needed',
-    validateMode
-      ? '- In single-instrument flows, do not treat missing connect instrumentIds/printIdn or inferred screenshot defaults as blockers'
-      : '- Use full live step params and workspace context as the source of truth',
-    req.outputMode === 'steps_json'
-      ? validateMode
-        ? '- Only include ACTIONS_JSON if a real fix is needed'
-        : '- End with ACTIONS_JSON so the app can apply changes'
-      : '- Return valid blockly_xml output',
-    '',
-    `## Current Flow (${Array.isArray(fc.steps) ? fc.steps.length : 0} steps)\n${stepsSummary}`,
   ];
 
   if (fc.selectedStep) {
@@ -529,170 +617,298 @@ function buildUserPrompt(req: McpChatRequest): string {
   }
 
   if (fc.validationErrors && (fc.validationErrors as string[]).length > 0) {
-    parts.push(`## Current Flow Validation Errors\n${(fc.validationErrors as string[]).map((e: string) => `- ${e}`).join('\n')}\n(Address these if relevant to the user's request)`);
+    parts.push(`Current flow validation errors:\n${(fc.validationErrors as string[]).map((e: string) => `- ${e}`).join('\n')}`);
   }
 
   if (rc.runStatus !== 'idle') {
-    parts.push(`## Run Status: ${rc.runStatus}${rc.exitCode !== null ? ` (exit ${rc.exitCode})` : ''}`);
+    parts.push(`Run status: ${rc.runStatus}${rc.exitCode !== null ? ` (exit ${rc.exitCode})` : ''}`);
     if (rc.logTail) {
       const tail = rc.logTail.length > 800 ? `...${rc.logTail.slice(-800)}` : rc.logTail;
-      parts.push(`## Run Log (tail)\n${tail}`);
+      parts.push(`Run log tail:\n${tail}`);
     }
     if (rc.auditOutput) {
       const audit = rc.auditOutput.length > 600 ? `...${rc.auditOutput.slice(-600)}` : rc.auditOutput;
-      parts.push(`## Audit Output\n${audit}`);
+      parts.push(`Audit output:\n${audit}`);
     }
   }
 
   if (validateMode && executionSucceeded) {
-    parts.push('## Validation Priority\nExecution evidence indicates this flow already worked. Default to "Flow looks good." unless you can point to a concrete failure or safety issue.');
+    parts.push('Execution evidence indicates this flow already worked.');
   }
 
   if (req.instrumentEndpoint) {
-    parts.push(`## Live Instrument\nExecutor: ${req.instrumentEndpoint.executorUrl}\nVISA: ${req.instrumentEndpoint.visaResource}`);
+    parts.push(`Live instrument:\n- executor: ${req.instrumentEndpoint.executorUrl}\n- visa: ${req.instrumentEndpoint.visaResource}`);
   }
 
   return parts.join('\n\n');
 }
 
-async function runOpenAiSingleCall(req: McpChatRequest): Promise<string> {
-  // Phase 1: single LLM call with tools available.
-  // Model either returns ACTIONS_JSON directly (0 tool calls) or calls ONE tool.
-  // Phase 2: if a tool was called, run it, inject result, one final call with tool_choice:none.
-  // Hard cap: 2 LLM calls, 1 tool execution. No loop.
-  const modePrompt = loadPromptText(req.outputMode);
-  const tools = getToolDefinitions().map((t) => ({
-    type: 'function',
-    function: { name: t.name, description: t.description, parameters: t.parameters },
-  }));
-
-  const historyMessages = (req.history || [])
-    .slice(-4)
-    .map((h) => ({ role: h.role as 'user' | 'assistant', content: h.content.slice(0, 600) }));
-
-  const messages: Array<Record<string, unknown>> = [
-    { role: 'system', content: buildSystemPrompt(modePrompt, req.outputMode) },
-    ...historyMessages,
-    { role: 'user', content: buildUserPrompt(req) },
-  ];
+async function runOpenAiResponses(
+  req: McpChatRequest
+): Promise<{
+  text: string;
+  metrics: NonNullable<ToolLoopResult['metrics']>;
+  debug: NonNullable<ToolLoopResult['debug']>;
+}> {
+  const instructionsBase = loadPromptText(req.outputMode);
+  const instructions = `${instructionsBase}\n\n# Output Override\nRespond with exactly:\nACTIONS_JSON: {\"summary\":\"...\",\"findings\":[],\"suggestedFixes\":[],\"actions\":[...]}\nNo prose. No code fences. Nothing else.`;
+  const userPrompt = buildUserPrompt(req);
+  const scpiContext = await buildScpiContext(req);
+  const toolDefinitions: Array<{ name: string; description: string }> = [];
+  const toolTrace: NonNullable<ToolLoopResult['debug']>['toolTrace'] = [];
 
   const openAiBase = process.env.OPENAI_BASE_URL || 'https://api.openai.com';
-
-  // --- Phase 1 ---
-  const res1 = await fetch(`${openAiBase}/v1/chat/completions`, {
-    method: 'POST',
-    headers: { Authorization: `Bearer ${req.apiKey}`, 'Content-Type': 'application/json' },
-    body: JSON.stringify({ model: req.model, messages, tools, tool_choice: 'auto' }),
-  });
-  if (!res1.ok) throw new Error(`OpenAI error ${res1.status}: ${await res1.text()}`);
-
-  const json1 = (await res1.json()) as Record<string, unknown>;
-  const choice1 = ((json1.choices as unknown[]) || [])[0] as Record<string, unknown>;
-  const msg1 = (choice1?.message || {}) as Record<string, unknown>;
-  const toolCalls = Array.isArray(msg1.tool_calls) ? (msg1.tool_calls as Array<Record<string, unknown>>) : [];
-  const content1 = typeof msg1.content === 'string' ? msg1.content : '';
-
-  // No tool calls — done in one.
-  if (!toolCalls.length) return content1 || '';
-
-  // --- Phase 2: run tools, one final call ---
-  messages.push({ role: 'assistant', content: content1 || '', tool_calls: toolCalls });
-
-  // Run all tool calls from phase 1 (usually just one)
-  for (const tc of toolCalls) {
-    const id = String(tc.id || '');
-    const fn = (tc.function || {}) as Record<string, unknown>;
-    const name = String(fn.name || '');
-    let args: Record<string, unknown> = {};
-    try { args = JSON.parse(String(fn.arguments || '{}')) as Record<string, unknown>; } catch { args = {}; }
-    if (req.instrumentEndpoint && ['get_instrument_state', 'probe_command', 'get_visa_resources', 'get_environment'].includes(name)) {
-      args = { ...req.instrumentEndpoint, ...args };
-    }
-    logToolCall(name, args);
-    const result = await runTool(name, args);
-    logToolResult(name, result);
-    messages.push({ role: 'tool', tool_call_id: id, content: JSON.stringify(result) });
+  const tools =
+    process.env.COMMAND_VECTOR_STORE_ID && process.env.COMMAND_VECTOR_STORE_ID.trim().length > 0
+      ? [
+          {
+            type: 'file_search',
+            vector_store_ids: [process.env.COMMAND_VECTOR_STORE_ID],
+          },
+        ]
+      : undefined;
+  const modelStartedAt = Date.now();
+  let res: Response;
+  try {
+    res = await fetch(`${openAiBase}/v1/responses`, {
+      method: 'POST',
+      headers: {
+        Authorization: `Bearer ${req.apiKey}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        model: req.model || 'gpt-5-mini',
+        instructions,
+        input: [
+          scpiContext
+            ? {
+                role: 'developer',
+                content: [
+                  `MATCHED COMMANDS FROM INDEX:\n${scpiContext}`,
+                  'OUTPUT RULE: Your entire response must be exactly:',
+                  'ACTIONS_JSON: {"summary":"...","findings":[],"suggestedFixes":[],"actions":[...]}',
+                  'Nothing before it. Nothing after it. No code fences. No prose.',
+                ].join('\n\n'),
+              }
+            : {
+                role: 'developer',
+                content: [
+                  'OUTPUT RULE: Your entire response must be exactly:',
+                  'ACTIONS_JSON: {"summary":"...","findings":[],"suggestedFixes":[],"actions":[...]}',
+                  'Nothing before it. Nothing after it. No code fences. No prose.',
+                ].join('\n\n'),
+              },
+          { role: 'user', content: userPrompt },
+        ],
+        stream: false,
+        tools,
+        store: false,
+      }),
+    });
+  } catch (err) {
+    console.log('[MCP] responses.create error:', JSON.stringify(err));
+    throw err;
   }
+  if (!res.ok) {
+    throw new Error(`OpenAI error ${res.status}: ${await res.text()}`);
+  }
+  const json = (await res.json()) as Record<string, unknown>;
+  console.log('[MCP] raw output:', JSON.stringify(json.output || json));
+  let content = '';
+  if (typeof json.output_text === 'string' && json.output_text.trim().length > 0) {
+    content = json.output_text;
+  } else if (Array.isArray(json.output)) {
+    content = (json.output as Array<Record<string, unknown>>)
+      .map((item) => {
+        if (item.type === 'message' && Array.isArray(item.content)) {
+          return (item.content as Array<Record<string, unknown>>)
+            .map((c) => (typeof c.text === 'string' ? c.text : ''))
+            .join('');
+        }
+        if (typeof item.text === 'string') return item.text;
+        return '';
+      })
+      .join('');
+  }
+  const modelMs = Date.now() - modelStartedAt;
 
-  // Final call — no tools, just generate
-  const res2 = await fetch(`${openAiBase}/v1/chat/completions`, {
-    method: 'POST',
-    headers: { Authorization: `Bearer ${req.apiKey}`, 'Content-Type': 'application/json' },
-    body: JSON.stringify({ model: req.model, messages, tool_choice: 'none' }),
-  });
-  if (!res2.ok) throw new Error(`OpenAI error ${res2.status}: ${await res2.text()}`);
-
-  const json2 = (await res2.json()) as Record<string, unknown>;
-  const choice2 = ((json2.choices as unknown[]) || [])[0] as Record<string, unknown>;
-  const msg2 = (choice2?.message || {}) as Record<string, unknown>;
-  return typeof msg2.content === 'string' ? msg2.content : '';
+  return {
+    text: content,
+    metrics: {
+      totalMs: 0,
+      usedShortcut: false,
+      provider: 'openai',
+      iterations: 1,
+      toolCalls: 0,
+      toolMs: 0,
+      modelMs,
+      promptChars: {
+        system: instructions.length,
+        user: userPrompt.length,
+      },
+    },
+    debug: {
+      systemPrompt: instructions,
+      developerPrompt: scpiContext
+        ? [
+            `MATCHED COMMANDS FROM INDEX:\n${scpiContext}`,
+            'OUTPUT RULE: Your entire response must be exactly:',
+            'ACTIONS_JSON: {"summary":"...","findings":[],"suggestedFixes":[],"actions":[...]}',
+            'Nothing before it. Nothing after it. No code fences. No prose.',
+          ].join('\n\n')
+        : [
+            'OUTPUT RULE: Your entire response must be exactly:',
+            'ACTIONS_JSON: {"summary":"...","findings":[],"suggestedFixes":[],"actions":[...]}',
+            'Nothing before it. Nothing after it. No code fences. No prose.',
+          ].join('\n\n'),
+      userPrompt,
+      rawOutput: json,
+      toolDefinitions,
+      toolTrace,
+    },
+  };
 }
 
-async function runAnthropicSingleCall(req: McpChatRequest): Promise<string> {
-  // Same 2-phase pattern as OpenAI: one call, optional single tool, one final call.
+function shouldUseTools(req: McpChatRequest): boolean {
+  const msg = req.userMessage.toLowerCase();
+  return (
+    msg.includes('verify') ||
+    msg.includes('search scpi') ||
+    msg.includes('look up') ||
+    msg.includes('lookup') ||
+    msg.includes('check docs') ||
+    msg.includes('exact syntax')
+  );
+}
+
+async function runOpenAiToolLoop(
+  req: McpChatRequest,
+  _maxCalls = 8
+): Promise<{
+  text: string;
+  metrics: NonNullable<ToolLoopResult['metrics']>;
+  debug: NonNullable<ToolLoopResult['debug']>;
+}> {
   const modePrompt = loadPromptText(req.outputMode);
-  const tools = getToolDefinitions().map((t) => ({
-    name: t.name,
-    description: t.description,
-    input_schema: t.parameters,
-  }));
-  const historyMessages = (req.history || [])
-    .slice(-4)
-    .map((h) => ({ role: h.role as 'user' | 'assistant', content: h.content.slice(0, 600) }));
-
-  const messages: Array<Record<string, unknown>> = [
-    ...historyMessages,
-    { role: 'user', content: buildUserPrompt(req) },
-  ];
   const systemPrompt = buildSystemPrompt(modePrompt, req.outputMode);
+  const userPrompt = buildUserPrompt(req);
+  const toolDefinitions: Array<{ name: string; description: string }> = [];
+  const toolTrace: NonNullable<ToolLoopResult['debug']>['toolTrace'] = [];
 
-  // --- Phase 1 ---
-  const res1 = await fetch('https://api.anthropic.com/v1/messages', {
+  const openAiBase = process.env.OPENAI_BASE_URL || 'https://api.openai.com';
+  const res = await fetch(`${openAiBase}/v1/responses`, {
     method: 'POST',
-    headers: { 'x-api-key': req.apiKey, 'anthropic-version': '2023-06-01', 'content-type': 'application/json' },
-    body: JSON.stringify({ model: req.model, system: systemPrompt, max_tokens: 2000, tools, messages }),
+    headers: {
+      Authorization: `Bearer ${req.apiKey}`,
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify({
+      model: req.model || 'gpt-5-mini',
+      instructions: systemPrompt,
+      input: [{ role: 'user', content: userPrompt }],
+      stream: false,
+      tools: undefined,
+    }),
   });
-  if (!res1.ok) throw new Error(`Anthropic error ${res1.status}: ${await res1.text()}`);
-
-  const json1 = (await res1.json()) as Record<string, unknown>;
-  const content1 = Array.isArray(json1.content) ? (json1.content as Array<Record<string, unknown>>) : [];
-  const toolUse1 = content1.filter((c) => c.type === 'tool_use');
-  const text1 = content1.filter((c) => c.type === 'text').map((c) => String(c.text || '')).join('\n');
-
-  // No tool calls — done in one.
-  if (!toolUse1.length) return text1;
-
-  // --- Phase 2: run tools, one final call ---
-  messages.push({ role: 'assistant', content: content1 });
-  const toolResults: Array<Record<string, unknown>> = [];
-  for (const use of toolUse1) {
-    const name = String(use.name || '');
-    const id = String(use.id || '');
-    let args = (use.input || {}) as Record<string, unknown>;
-    if (req.instrumentEndpoint && ['get_instrument_state', 'probe_command', 'get_visa_resources', 'get_environment'].includes(name)) {
-      args = { ...req.instrumentEndpoint, ...args };
-    }
-    logToolCall(name, args);
-    const result = await runTool(name, args);
-    logToolResult(name, result);
-    toolResults.push({ type: 'tool_result', tool_use_id: id, content: JSON.stringify(result) });
+  if (!res.ok) {
+    throw new Error(`OpenAI error ${res.status}: ${await res.text()}`);
   }
-  messages.push({ role: 'user', content: toolResults });
+  const json = (await res.json()) as Record<string, unknown>;
+  const output = (json.output_text as unknown[]) || [];
+  const content = output.length ? String(output.join('')) : '';
 
-  // Final call — no tools
-  const res2 = await fetch('https://api.anthropic.com/v1/messages', {
+  return {
+    text: content,
+    metrics: {
+      totalMs: 0,
+      usedShortcut: false,
+      provider: 'openai',
+      iterations: 1,
+      toolCalls: 0,
+      toolMs: 0,
+      modelMs: 0,
+      promptChars: {
+        system: systemPrompt.length,
+        user: userPrompt.length,
+      },
+    },
+    debug: {
+      promptFileText: modePrompt,
+      systemPrompt,
+      userPrompt,
+      toolDefinitions,
+      toolTrace,
+    },
+  };
+}
+
+async function runAnthropicToolLoop(
+  req: McpChatRequest,
+  maxCalls = 6
+): Promise<{
+  text: string;
+  metrics: NonNullable<ToolLoopResult['metrics']>;
+  debug: NonNullable<ToolLoopResult['debug']>;
+}> {
+  const modePrompt = loadPromptText(req.outputMode);
+  const systemPrompt = buildSystemPrompt(modePrompt, req.outputMode);
+  const userPrompt = buildUserPrompt(req);
+  const res = await fetch('https://api.anthropic.com/v1/messages', {
     method: 'POST',
-    headers: { 'x-api-key': req.apiKey, 'anthropic-version': '2023-06-01', 'content-type': 'application/json' },
-    body: JSON.stringify({ model: req.model, system: systemPrompt, max_tokens: 2000, messages }),
+    headers: {
+      'x-api-key': req.apiKey,
+      'anthropic-version': '2023-06-01',
+      'content-type': 'application/json',
+    },
+    body: JSON.stringify({
+      model: req.model,
+      system: systemPrompt,
+      max_tokens: 2000,
+      messages: [
+        ...(req.history || [])
+          .slice(-6)
+          .map((h) => ({ role: h.role as 'user' | 'assistant', content: h.content.slice(0, 800) })),
+        { role: 'user', content: userPrompt },
+      ],
+    }),
   });
-  if (!res2.ok) throw new Error(`Anthropic error ${res2.status}: ${await res2.text()}`);
-
-  const json2 = (await res2.json()) as Record<string, unknown>;
-  const content2 = Array.isArray(json2.content) ? (json2.content as Array<Record<string, unknown>>) : [];
-  return content2.filter((c) => c.type === 'text').map((c) => String(c.text || '')).join('\n');
+  if (!res.ok) {
+    throw new Error(`Anthropic error ${res.status}: ${await res.text()}`);
+  }
+  const json = (await res.json()) as Record<string, unknown>;
+  const text = Array.isArray(json.content)
+    ? (json.content as Array<Record<string, unknown>>)
+        .filter((c) => c.type === 'text')
+        .map((c) => String(c.text || ''))
+        .join('\\n')
+    : '';
+  return {
+    text,
+    metrics: {
+      totalMs: 0,
+      usedShortcut: false,
+      provider: 'anthropic',
+      iterations: 1,
+      toolCalls: 0,
+      toolMs: 0,
+      modelMs: 0,
+      promptChars: {
+        system: systemPrompt.length,
+        user: userPrompt.length,
+      },
+    },
+    debug: {
+      promptFileText: modePrompt,
+      systemPrompt,
+      userPrompt,
+      toolDefinitions: [],
+      toolTrace,
+    },
+  };
 }
 
 export async function runToolLoop(req: McpChatRequest): Promise<ToolLoopResult> {
+  const startedAt = Date.now();
   const shortcut = buildPyvisaMeasurementShortcut(req) || buildTmDevicesMeasurementShortcut(req) || buildPyvisaFastFrameShortcut(req);
   if (shortcut) {
     const checked = await postCheckResponse(shortcut, {
@@ -703,13 +919,29 @@ export async function runToolLoop(req: McpChatRequest): Promise<ToolLoopResult> 
     return {
       text: checked.text,
       errors: checked.errors,
+      metrics: {
+        totalMs: Date.now() - startedAt,
+        usedShortcut: true,
+        provider: req.provider,
+        iterations: 0,
+        toolCalls: 0,
+        toolMs: 0,
+        modelMs: 0,
+        promptChars: {
+          system: 0,
+          user: 0,
+        },
+      },
+      debug: {
+        shortcutResponse: shortcut,
+        toolTrace: [],
+      },
     };
   }
-  const text =
-    req.provider === 'anthropic'
-      ? await runAnthropicSingleCall(req)
-      : await runOpenAiSingleCall(req);
-  const checked = await postCheckResponse(text, {
+  const loopResult = shouldUseTools(req)
+    ? await runOpenAiToolLoop(req, 3)
+    : await runOpenAiResponses(req);
+  const checked = await postCheckResponse(loopResult.text, {
     backend: req.flowContext.backend,
     modelFamily: req.flowContext.modelFamily,
     originalSteps: req.flowContext.steps,
@@ -717,6 +949,11 @@ export async function runToolLoop(req: McpChatRequest): Promise<ToolLoopResult> 
   return {
     text: checked.text,
     errors: checked.errors,
+    metrics: {
+      ...loopResult.metrics,
+      totalMs: Date.now() - startedAt,
+    },
+    debug: loopResult.debug,
   };
 }
 

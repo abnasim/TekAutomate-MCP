@@ -68,6 +68,7 @@ export async function createServer(port = 8787): Promise<http.Server> {
 
     if (req.method === 'POST' && req.url === '/ai/responses-proxy') {
       let sseStarted = false;
+      const startedAt = Date.now();
       try {
         const body = (await readJsonBody(req)) as {
           apiKey?: string;
@@ -108,6 +109,17 @@ export async function createServer(port = 8787): Promise<http.Server> {
           sendJson(res, openaiRes.status, { ok: false, error: `OpenAI error ${openaiRes.status}: ${errText}` });
           return;
         }
+        lastAiDebug = {
+          timestamp: new Date().toISOString(),
+          route: '/ai/responses-proxy',
+          request: {
+            model: body.model || 'gpt-4o',
+            inputCount: Array.isArray(body.input) ? body.input.length : 0,
+          },
+          timings: {
+            totalMs: Date.now() - startedAt,
+          },
+        };
         // Proxy the SSE stream directly to the client
         sendSseStart(res);
         sseStarted = true;
@@ -128,6 +140,14 @@ export async function createServer(port = 8787): Promise<http.Server> {
         }
         res.end();
       } catch (err) {
+        lastAiDebug = {
+          timestamp: new Date().toISOString(),
+          route: '/ai/responses-proxy',
+          error: err instanceof Error ? err.message : 'Server error',
+          timings: {
+            totalMs: Date.now() - startedAt,
+          },
+        };
         if (sseStarted) {
           sseWrite(res, 'error', { ok: false, error: err instanceof Error ? err.message : 'Server error' });
           res.end();
@@ -139,19 +159,17 @@ export async function createServer(port = 8787): Promise<http.Server> {
     }
 
     if (req.method === 'POST' && req.url === '/ai/chat') {
-      let sseStarted = false;
+      const startedAt = Date.now();
       try {
         const body = (await readJsonBody(req)) as unknown as McpChatRequest;
         if (!body?.userMessage || !body?.provider || !body?.apiKey || !body?.model) {
           sendJson(res, 400, { ok: false, error: 'Invalid request payload' });
           return;
         }
-        sendSseStart(res);
-        sseStarted = true;
-        sseWrite(res, 'status', { phase: 'processing' });
         const result = await runToolLoop(body);
         lastAiDebug = {
           timestamp: new Date().toISOString(),
+          route: '/ai/chat',
           request: {
             ...body,
             apiKey: '[redacted]',
@@ -166,31 +184,44 @@ export async function createServer(port = 8787): Promise<http.Server> {
             text: result.text,
             errors: result.errors,
           },
+          prompts: result.debug
+            ? {
+                promptFileText: result.debug.promptFileText,
+                systemPrompt: result.debug.systemPrompt,
+                userPrompt: result.debug.userPrompt,
+                shortcutResponse: result.debug.shortcutResponse,
+              }
+            : undefined,
+          tools: result.debug
+            ? {
+                available: result.debug.toolDefinitions,
+                trace: result.debug.toolTrace,
+              }
+            : undefined,
+          timings: {
+            totalMs: Date.now() - startedAt,
+            ...(result.metrics || {}),
+          },
         };
-        sseWrite(res, 'chunk', result.text);
-        if (result.errors.length) {
-          sseWrite(res, 'warnings', result.errors);
-        }
-        sseWrite(res, 'done', '[DONE]');
-        res.end();
+        sendJson(res, 200, {
+          ok: true,
+          text: result.text,
+          errors: result.errors,
+          metrics: result.metrics,
+        });
       } catch (err) {
         lastAiDebug = {
           timestamp: new Date().toISOString(),
+          route: '/ai/chat',
           error: err instanceof Error ? err.message : 'Server error',
+          timings: {
+            totalMs: Date.now() - startedAt,
+          },
         };
-        if (sseStarted) {
-          sseWrite(res, 'error', {
-            ok: false,
-            error: err instanceof Error ? err.message : 'Server error',
-          });
-          sseWrite(res, 'done', '[DONE]');
-          res.end();
-        } else {
-          sendJson(res, 500, {
-            ok: false,
-            error: err instanceof Error ? err.message : 'Server error',
-          });
-        }
+        sendJson(res, 500, {
+          ok: false,
+          error: err instanceof Error ? err.message : 'Server error',
+        });
       }
       return;
     }
