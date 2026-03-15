@@ -12,8 +12,38 @@ export interface TmMethodDoc {
   text: string;
 }
 
-function normalizeModelFilter(model?: string): string {
-  return (model || '').trim().toLowerCase();
+/**
+ * Fuzzy model filter: normalise both sides (lowercase, strip non-alphanumeric)
+ * and check for substring inclusion.
+ *
+ * Also handles "combined" shorthand like "MSO56" which should match both the
+ * MSO5 and MSO6 families.  When the normalised filter ends with multiple digits
+ * (e.g. "mso56") we additionally try matching the alpha-prefix + each individual
+ * digit ("mso5", "mso6") so that users can reference whole product lines at once.
+ *
+ * Examples:
+ *   modelMatches("mso6b_commands.MSO6BCommands", "MSO6B")  → true
+ *   modelMatches("mso5b_commands.MSO5BCommands", "MSO56")  → true (mso5 match)
+ *   modelMatches("mso6_commands.MSO6Commands",   "MSO56")  → true (mso6 match)
+ *   modelMatches("afg3k_commands.AFG3KCommands",  "MSO56")  → false
+ */
+function modelMatches(modelRoot: string, filter?: string): boolean {
+  if (!filter) return true;
+  const root = modelRoot.toLowerCase().replace(/[^a-z0-9]/g, '');
+  const f = filter.toLowerCase().replace(/[^a-z0-9]/g, '');
+  if (!f) return true;
+  // Direct substring match (handles MSO6B → mso6b_commands.MSO6BCommands)
+  if (root.includes(f)) return true;
+  // Expanded digit match: "mso56" → try "mso5" and "mso6" individually
+  const m = f.match(/^([a-z]+)(\d{2,})$/);
+  if (m) {
+    const alpha = m[1];
+    const digits = m[2];
+    for (const d of digits) {
+      if (root.includes(alpha + d)) return true;
+    }
+  }
+  return false;
 }
 
 function walk(node: unknown, prefix: string[], out: string[]): void {
@@ -38,12 +68,30 @@ export class TmDevicesIndex {
   }
 
   search(query: string, model?: string, limit = 10): Array<TmMethodDoc & { availableForModel: boolean }> {
-    const results = this.bm25.search(query, Math.max(limit * 3, 20));
-    const modelFilter = normalizeModelFilter(model);
+    // When a model filter is supplied we run BM25 only over that model's docs so that
+    // the results are not crowded out by identical methods from the other 60+ models.
+    // Without this pre-filter, any specific model has only a ~43 % chance of appearing
+    // in the top-30 BM25 candidates drawn from 242 k documents, effectively returning
+    // 0 model-matching results even when many relevant methods exist.
+    let pool: TmMethodDoc[];
+    if (model) {
+      pool = this.docs.filter((d) => modelMatches(d.modelRoot, model));
+    } else {
+      pool = this.docs;
+    }
+
+    // If the model filter matched nothing fall back to the full corpus so the caller
+    // still gets useful results (marked as not available for the requested model).
+    const usingFilteredPool = pool.length > 0;
+    if (!usingFilteredPool) pool = this.docs;
+
+    const poolIndex = new Bm25Index<TmMethodDoc>(pool);
+    const results = poolIndex.search(query, Math.max(limit * 3, 20));
     const out: Array<TmMethodDoc & { availableForModel: boolean }> = [];
     for (const r of results) {
-      const availableForModel =
-        !modelFilter || r.doc.modelRoot.toLowerCase().includes(modelFilter);
+      const availableForModel = usingFilteredPool
+        ? modelMatches(r.doc.modelRoot, model)
+        : false;
       out.push({ ...r.doc, availableForModel });
       if (out.length >= limit) break;
     }
