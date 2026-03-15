@@ -427,19 +427,41 @@ function buildSystemPrompt(policies: Record<string, string>, outputMode?: string
 function buildUserPrompt(req: McpChatRequest): string {
   const fc = req.flowContext;
   const rc = req.runContext;
+  const currentStepsJson = JSON.stringify(fc.steps || [], null, 2);
   const stepsSummary = Array.isArray(fc.steps) && fc.steps.length
     ? fc.steps.map((s: Record<string, unknown>) =>
         `  [${s.id}] ${s.type}${s.label ? ` "${s.label}"` : ''}${s.command ? ` → ${s.command}` : ''}`
       ).join('\n')
     : '  (empty flow)';
 
+  const instrumentLine = `  - scope1: ${fc.deviceType || 'SCOPE'}, ${fc.backend || 'pyvisa'} @ ${fc.host || 'localhost'}`;
   const parts = [
-    // Fix 5: SCPI arg types moved here from system prompt (only paid once per call, not multiplied by tool rounds)
     `SCPI types: ${SCPI_ARG_TYPES_BRIEF}`,
     `Known patterns:\n- ${KNOWN_PATTERN_HINTS}`,
-    `## User Request\n${req.userMessage}`,
-    `## Output Mode\n${req.outputMode}`,
-    `## Device Context\nBackend: ${fc.backend || 'pyvisa'}\nModel: ${fc.modelFamily || '(unknown)'}\nHost: ${fc.host || '(unknown)'}\nConnection: ${fc.connectionType || 'tcpip'}${fc.deviceType ? `\nDevice Type: ${fc.deviceType}` : ''}`,
+    '--- CURRENT STEPS JSON ---',
+    currentStepsJson,
+    '--- END JSON ---',
+    '',
+    'Workspace context:',
+    `- Backend: ${fc.backend || 'pyvisa'}`,
+    `- Model Family: ${fc.modelFamily || '(unknown)'}`,
+    `- Connection: ${fc.connectionType || 'tcpip'}`,
+    `- Device Type: ${fc.deviceType || 'SCOPE'}`,
+    '- Instruments in workspace:',
+    instrumentLine,
+    '',
+    'User request:',
+    req.userMessage,
+    '',
+    'Instructions:',
+    '- Generate valid TekAutomate Steps UI JSON',
+    '- Preserve existing steps when possible',
+    '- Fix errors if present',
+    '- Add missing steps if needed',
+    req.outputMode === 'steps_json'
+      ? '- End with ACTIONS_JSON so the app can apply changes'
+      : '- Return valid blockly_xml output',
+    '',
     `## Current Flow (${Array.isArray(fc.steps) ? fc.steps.length : 0} steps)\n${stepsSummary}`,
   ];
 
