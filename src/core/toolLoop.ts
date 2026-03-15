@@ -555,21 +555,20 @@ function buildUserPrompt(req: McpChatRequest): string {
   return parts.join('\n\n');
 }
 
-async function runOpenAiToolLoop(req: McpChatRequest, maxCalls = 8): Promise<string> {
-  // Default maxCalls raised slightly to avoid premature failure on tm_devices measurement setup.
+async function runOpenAiSingleCall(req: McpChatRequest): Promise<string> {
+  // Phase 1: single LLM call with tools available.
+  // Model either returns ACTIONS_JSON directly (0 tool calls) or calls ONE tool.
+  // Phase 2: if a tool was called, run it, inject result, one final call with tool_choice:none.
+  // Hard cap: 2 LLM calls, 1 tool execution. No loop.
   const modePrompt = loadPromptText(req.outputMode);
   const tools = getToolDefinitions().map((t) => ({
     type: 'function',
-    function: {
-      name: t.name,
-      description: t.description,
-      parameters: t.parameters,
-    },
+    function: { name: t.name, description: t.description, parameters: t.parameters },
   }));
 
   const historyMessages = (req.history || [])
-    .slice(-6)
-    .map((h) => ({ role: h.role as 'user' | 'assistant', content: h.content.slice(0, 800) }));
+    .slice(-4)
+    .map((h) => ({ role: h.role as 'user' | 'assistant', content: h.content.slice(0, 600) }));
 
   const messages: Array<Record<string, unknown>> = [
     { role: 'system', content: buildSystemPrompt(modePrompt, req.outputMode) },
@@ -577,126 +576,120 @@ async function runOpenAiToolLoop(req: McpChatRequest, maxCalls = 8): Promise<str
     { role: 'user', content: buildUserPrompt(req) },
   ];
 
-  for (let i = 0; i < maxCalls; i += 1) {
-    const openAiBase = process.env.OPENAI_BASE_URL || 'https://api.openai.com';
-    const forceFinalResponse = i === maxCalls - 1;
-    const res = await fetch(`${openAiBase}/v1/chat/completions`, {
-      method: 'POST',
-      headers: {
-        Authorization: `Bearer ${req.apiKey}`,
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({
-        model: req.model,
-        messages,
-        tools,
-        tool_choice: forceFinalResponse ? 'none' : 'auto',
-      }),
-    });
-    if (!res.ok) {
-      throw new Error(`OpenAI error ${res.status}: ${await res.text()}`);
-    }
-    const json = (await res.json()) as Record<string, unknown>;
-    const choice = ((json.choices as unknown[]) || [])[0] as Record<string, unknown>;
-    const message = (choice?.message || {}) as Record<string, unknown>;
-    const toolCalls = Array.isArray(message.tool_calls) ? (message.tool_calls as Array<Record<string, unknown>>) : [];
-    const content = typeof message.content === 'string' ? message.content : '';
-    if (!toolCalls.length) return content || '';
+  const openAiBase = process.env.OPENAI_BASE_URL || 'https://api.openai.com';
 
-    messages.push({
-      role: 'assistant',
-      content: content || '',
-      tool_calls: toolCalls,
-    });
-    for (const tc of toolCalls) {
-      const id = String(tc.id || '');
-      const fn = (tc.function || {}) as Record<string, unknown>;
-      const name = String(fn.name || '');
-      let args: Record<string, unknown> = {};
-      try {
-        args = JSON.parse(String(fn.arguments || '{}')) as Record<string, unknown>;
-      } catch {
-        args = {};
-      }
-      if (req.instrumentEndpoint && ['get_instrument_state', 'probe_command', 'get_visa_resources', 'get_environment'].includes(name)) {
-        args = { ...req.instrumentEndpoint, ...args };
-      }
-      logToolCall(name, args);
-      const result = await runTool(name, args);
-      logToolResult(name, result);
-      messages.push({
-        role: 'tool',
-        tool_call_id: id,
-        content: JSON.stringify(result),
-      });
+  // --- Phase 1 ---
+  const res1 = await fetch(`${openAiBase}/v1/chat/completions`, {
+    method: 'POST',
+    headers: { Authorization: `Bearer ${req.apiKey}`, 'Content-Type': 'application/json' },
+    body: JSON.stringify({ model: req.model, messages, tools, tool_choice: 'auto' }),
+  });
+  if (!res1.ok) throw new Error(`OpenAI error ${res1.status}: ${await res1.text()}`);
+
+  const json1 = (await res1.json()) as Record<string, unknown>;
+  const choice1 = ((json1.choices as unknown[]) || [])[0] as Record<string, unknown>;
+  const msg1 = (choice1?.message || {}) as Record<string, unknown>;
+  const toolCalls = Array.isArray(msg1.tool_calls) ? (msg1.tool_calls as Array<Record<string, unknown>>) : [];
+  const content1 = typeof msg1.content === 'string' ? msg1.content : '';
+
+  // No tool calls — done in one.
+  if (!toolCalls.length) return content1 || '';
+
+  // --- Phase 2: run tools, one final call ---
+  messages.push({ role: 'assistant', content: content1 || '', tool_calls: toolCalls });
+
+  // Run all tool calls from phase 1 (usually just one)
+  for (const tc of toolCalls) {
+    const id = String(tc.id || '');
+    const fn = (tc.function || {}) as Record<string, unknown>;
+    const name = String(fn.name || '');
+    let args: Record<string, unknown> = {};
+    try { args = JSON.parse(String(fn.arguments || '{}')) as Record<string, unknown>; } catch { args = {}; }
+    if (req.instrumentEndpoint && ['get_instrument_state', 'probe_command', 'get_visa_resources', 'get_environment'].includes(name)) {
+      args = { ...req.instrumentEndpoint, ...args };
     }
+    logToolCall(name, args);
+    const result = await runTool(name, args);
+    logToolResult(name, result);
+    messages.push({ role: 'tool', tool_call_id: id, content: JSON.stringify(result) });
   }
-  return 'ACTIONS_JSON: {"summary":"Failed to complete within tool budget.","findings":["Tool call limit reached before the flow could be finalized."],"suggestedFixes":["Retry with a more specific request or reduce the requested scope."],"actions":[]}';
+
+  // Final call — no tools, just generate
+  const res2 = await fetch(`${openAiBase}/v1/chat/completions`, {
+    method: 'POST',
+    headers: { Authorization: `Bearer ${req.apiKey}`, 'Content-Type': 'application/json' },
+    body: JSON.stringify({ model: req.model, messages, tool_choice: 'none' }),
+  });
+  if (!res2.ok) throw new Error(`OpenAI error ${res2.status}: ${await res2.text()}`);
+
+  const json2 = (await res2.json()) as Record<string, unknown>;
+  const choice2 = ((json2.choices as unknown[]) || [])[0] as Record<string, unknown>;
+  const msg2 = (choice2?.message || {}) as Record<string, unknown>;
+  return typeof msg2.content === 'string' ? msg2.content : '';
 }
 
-async function runAnthropicToolLoop(req: McpChatRequest, maxCalls = 6): Promise<string> {
+async function runAnthropicSingleCall(req: McpChatRequest): Promise<string> {
+  // Same 2-phase pattern as OpenAI: one call, optional single tool, one final call.
   const modePrompt = loadPromptText(req.outputMode);
   const tools = getToolDefinitions().map((t) => ({
     name: t.name,
     description: t.description,
     input_schema: t.parameters,
   }));
-  const anthropicHistoryMessages = (req.history || [])
-    .slice(-6)
-    .map((h) => ({ role: h.role as 'user' | 'assistant', content: h.content.slice(0, 800) }));
+  const historyMessages = (req.history || [])
+    .slice(-4)
+    .map((h) => ({ role: h.role as 'user' | 'assistant', content: h.content.slice(0, 600) }));
 
   const messages: Array<Record<string, unknown>> = [
-    ...anthropicHistoryMessages,
+    ...historyMessages,
     { role: 'user', content: buildUserPrompt(req) },
   ];
+  const systemPrompt = buildSystemPrompt(modePrompt, req.outputMode);
 
-  for (let i = 0; i < maxCalls; i += 1) {
-    const res = await fetch('https://api.anthropic.com/v1/messages', {
-      method: 'POST',
-      headers: {
-        'x-api-key': req.apiKey,
-        'anthropic-version': '2023-06-01',
-        'content-type': 'application/json',
-      },
-      body: JSON.stringify({
-        model: req.model,
-        system: buildSystemPrompt(modePrompt, req.outputMode),
-        max_tokens: 2000,
-        tools,
-        messages,
-      }),
-    });
-    if (!res.ok) {
-      throw new Error(`Anthropic error ${res.status}: ${await res.text()}`);
-    }
-    const json = (await res.json()) as Record<string, unknown>;
-    const content = Array.isArray(json.content) ? (json.content as Array<Record<string, unknown>>) : [];
-    const toolUse = content.filter((c) => c.type === 'tool_use');
-    const text = content.filter((c) => c.type === 'text').map((c) => String(c.text || '')).join('\n');
-    if (!toolUse.length) return text;
+  // --- Phase 1 ---
+  const res1 = await fetch('https://api.anthropic.com/v1/messages', {
+    method: 'POST',
+    headers: { 'x-api-key': req.apiKey, 'anthropic-version': '2023-06-01', 'content-type': 'application/json' },
+    body: JSON.stringify({ model: req.model, system: systemPrompt, max_tokens: 2000, tools, messages }),
+  });
+  if (!res1.ok) throw new Error(`Anthropic error ${res1.status}: ${await res1.text()}`);
 
-    messages.push({ role: 'assistant', content });
-    const toolResults: Array<Record<string, unknown>> = [];
-    for (const use of toolUse) {
-      const name = String(use.name || '');
-      const id = String(use.id || '');
-      let args = (use.input || {}) as Record<string, unknown>;
-      if (req.instrumentEndpoint && ['get_instrument_state', 'probe_command', 'get_visa_resources', 'get_environment'].includes(name)) {
-        args = { ...req.instrumentEndpoint, ...args };
-      }
-      logToolCall(name, args);
-      const result = await runTool(name, args);
-      logToolResult(name, result);
-      toolResults.push({
-        type: 'tool_result',
-        tool_use_id: id,
-        content: JSON.stringify(result),
-      });
+  const json1 = (await res1.json()) as Record<string, unknown>;
+  const content1 = Array.isArray(json1.content) ? (json1.content as Array<Record<string, unknown>>) : [];
+  const toolUse1 = content1.filter((c) => c.type === 'tool_use');
+  const text1 = content1.filter((c) => c.type === 'text').map((c) => String(c.text || '')).join('\n');
+
+  // No tool calls — done in one.
+  if (!toolUse1.length) return text1;
+
+  // --- Phase 2: run tools, one final call ---
+  messages.push({ role: 'assistant', content: content1 });
+  const toolResults: Array<Record<string, unknown>> = [];
+  for (const use of toolUse1) {
+    const name = String(use.name || '');
+    const id = String(use.id || '');
+    let args = (use.input || {}) as Record<string, unknown>;
+    if (req.instrumentEndpoint && ['get_instrument_state', 'probe_command', 'get_visa_resources', 'get_environment'].includes(name)) {
+      args = { ...req.instrumentEndpoint, ...args };
     }
-    messages.push({ role: 'user', content: toolResults });
+    logToolCall(name, args);
+    const result = await runTool(name, args);
+    logToolResult(name, result);
+    toolResults.push({ type: 'tool_result', tool_use_id: id, content: JSON.stringify(result) });
   }
+  messages.push({ role: 'user', content: toolResults });
 
-  return 'ACTIONS_JSON: {"summary":"Failed to complete within tool budget.","findings":["Tool call limit reached before the flow could be finalized."],"suggestedFixes":["Retry with a more specific request or reduce the requested scope."],"actions":[]}';
+  // Final call — no tools
+  const res2 = await fetch('https://api.anthropic.com/v1/messages', {
+    method: 'POST',
+    headers: { 'x-api-key': req.apiKey, 'anthropic-version': '2023-06-01', 'content-type': 'application/json' },
+    body: JSON.stringify({ model: req.model, system: systemPrompt, max_tokens: 2000, messages }),
+  });
+  if (!res2.ok) throw new Error(`Anthropic error ${res2.status}: ${await res2.text()}`);
+
+  const json2 = (await res2.json()) as Record<string, unknown>;
+  const content2 = Array.isArray(json2.content) ? (json2.content as Array<Record<string, unknown>>) : [];
+  return content2.filter((c) => c.type === 'text').map((c) => String(c.text || '')).join('\n');
 }
 
 export async function runToolLoop(req: McpChatRequest): Promise<ToolLoopResult> {
@@ -714,8 +707,8 @@ export async function runToolLoop(req: McpChatRequest): Promise<ToolLoopResult> 
   }
   const text =
     req.provider === 'anthropic'
-      ? await runAnthropicToolLoop(req)
-      : await runOpenAiToolLoop(req);
+      ? await runAnthropicSingleCall(req)
+      : await runOpenAiSingleCall(req);
   const checked = await postCheckResponse(text, {
     backend: req.flowContext.backend,
     modelFamily: req.flowContext.modelFamily,
