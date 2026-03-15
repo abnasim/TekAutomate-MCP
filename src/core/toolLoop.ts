@@ -287,9 +287,10 @@ function buildSystemPrompt(policies: Record<string, string>, outputMode?: string
     '- tm_devices backend + measurement request: build immediately using tm_device_command steps. Never ask about command style.',
     '- For MSO5/6 tm_devices measurements, prefer addmeas-style measurement creation and value query methods. Do NOT fall back to legacy MEASurement:MEAS<x>:TYPE patterns unless the model family is explicitly legacy 5k/7k/70k.',
     '- If part of a request is fully verified, build that part now and isolate only the uncertain portion in findings. Do not stall the whole flow.',
+    '- Use only the tool calls actually needed for the request. For simple requests, do not force every verification tool if the command/payload is already sufficiently grounded.',
     '- Output: 1-2 sentences then ACTIONS_JSON block',
     '- NEVER output Python unless user explicitly requests it',
-    '- Call validate_action_payload as the FINAL tool call before outputting ACTIONS_JSON',
+    '- Prefer validate_action_payload as the final tool call when the payload is complex or structurally risky; do not waste extra tool calls on trivial flows.',
     '',
     policies.response_format || '',
     policies.steps_json || '',
@@ -349,7 +350,7 @@ function buildUserPrompt(req: McpChatRequest): string {
   return parts.join('\n\n');
 }
 
-async function runOpenAiToolLoop(req: McpChatRequest, maxCalls = 6): Promise<string> {
+async function runOpenAiToolLoop(req: McpChatRequest, maxCalls = 8): Promise<string> {
   // Default maxCalls raised slightly to avoid premature failure on tm_devices measurement setup.
   const policies = await loadPolicyBundle([
     'response_format',
@@ -379,6 +380,7 @@ async function runOpenAiToolLoop(req: McpChatRequest, maxCalls = 6): Promise<str
 
   for (let i = 0; i < maxCalls; i += 1) {
     const openAiBase = process.env.OPENAI_BASE_URL || 'https://api.openai.com';
+    const forceFinalResponse = i === maxCalls - 1;
     const res = await fetch(`${openAiBase}/v1/chat/completions`, {
       method: 'POST',
       headers: {
@@ -389,7 +391,7 @@ async function runOpenAiToolLoop(req: McpChatRequest, maxCalls = 6): Promise<str
         model: req.model,
         messages,
         tools,
-        tool_choice: 'auto',
+        tool_choice: forceFinalResponse ? 'none' : 'auto',
       }),
     });
     if (!res.ok) {
