@@ -1,4 +1,4 @@
-import { loadPolicyBundle } from './policyLoader';
+import { loadPromptText } from './promptLoader';
 import type { McpChatRequest } from './schemas';
 import { getToolDefinitions, runTool } from '../tools';
 import { postCheckResponse } from './postCheck';
@@ -424,63 +424,37 @@ function logToolResult(name: string, result: unknown) {
   }
 }
 
-function buildSystemPrompt(policies: Record<string, string>, outputMode?: string): string {
-  const parts = [
-    '# TekAutomate Flow Builder',
-    'Expert assistant for Tektronix instrument automation.',
-    '## Core Rules',
-    '- Standard pre-verified commands (IEEE 488.2, MEASUrement:ADDMEAS, CH<x>:*, TRIGger:A:*, HORizontal:*, ACQuire:*, FastFrame) need NO tool call — build immediately.',
-    '- Call search_scpi ONLY for commands outside the pre-verified set (novel, app-specific, or unfamiliar commands).',
-    '- Use EXACT syntax from tool results when you DO call a tool.',
-    '- Flows MUST start with connect, end with disconnect.',
-    '- Query steps MUST have saveAs parameter.',
-    '- set_step_param actions MUST update one param at a time. NEVER use param="params".',
-    '- Emit separate set_step_param actions for scopeType, method, filename, etc.',
-    '- If user provides channel/confirmation after a clarification, build immediately — no repeat questions.',
-    '- If user asks for screenshot, add save_screenshot without asking when placement is inferable.',
-    '- If the user says "add these commands", "apply that", "do it", or similar after a command lookup/explanation, treat it as a mutation request and return ACTIONS_JSON, not prose.',
-    '- tm_devices + measurement: build immediately with tm_device_command steps. Never ask about command style.',
-    '- For MSO5/6 tm_devices, use addmeas-style creation and mean.query(). Never fall back to legacy MEAS<x>:TYPE.',
-    '- Treat backend, device driver, visa backend, alias, and instrument map as authoritative routing truth.',
-    '- If backend is pyvisa, vxi11, or tekhsi, prefer SCPI-oriented steps unless the user explicitly asks to convert.',
-    '- If backend is tm_devices, prefer tm_device_command steps unless the user explicitly asks to convert.',
-    '- Never call search_tm_devices for normal scope SCPI tasks such as screenshot, FastFrame, trigger, horizontal, or basic measurements.',
-    '- Built-in TekAutomate step types are already preferred patterns: save_screenshot for screenshots, save_waveform for waveform saves, connect/disconnect for connection handling.',
-    '- Standard screenshot, FastFrame, trigger, horizontal, and measurement requests should usually complete in zero tool calls.',
-    '- Model routing is coarse, not exact: modern scopes use the MSO 2/4/5/6/7 corpus; legacy scopes use 5k/7k/70k. Do not spend tool calls on exact model variant names.',
-    '- If the user asks to convert SCPI to tm_devices or tm_devices to SCPI, preserve behavior and change only the command representation.',
-    '- If part of a request is fully pre-verified, build that part now. Isolate only uncertain portions in findings.',
-    '- Only call verify_scpi_commands for multi-command flows (3+ novel commands).',
-    '- Only call validate_action_payload for complex/grouped flows.',
-    '- For standard requests: match the golden flow examples below, output ACTIONS_JSON directly, no tool calls.',
-    '- Output: 1-2 sentences then ACTIONS_JSON block.',
-    '- NEVER output Python unless user explicitly requests it.',
-    '- Mutation requests MUST return actionable ACTIONS_JSON, not promises like "I will add..." or "I can insert...".',
-    '- If the user says add, insert, apply, update, fix, remove, replace, move, convert, or do it, return ACTIONS_JSON in the same response.',
-    '- ACTIONS_JSON may use only these action types: set_step_param, insert_step_after, remove_step, add_error_check_after_step, replace_sleep_with_opc_query, move_step, replace_step, replace_flow.',
-    '- Use insert_step_after for incremental additions near existing steps. Use replace_flow only when rebuilding the whole flow is clearly better or the user asked for a rebuild.',
-    '- set_step_param changes exactly one param at a time. Never replace the whole params object.',
-    '- New steps may use these supported step types: connect, disconnect, query, write, set_and_query, sleep, comment, python, save_waveform, save_screenshot, error_check, group, tm_device_command, recall.',
-    '- For follow-up requests after a command explanation, convert the explained command into concrete write/query steps immediately.',
-    '- Validation is user-truth first: if the flow already runs or audit/logs show success, say "Flow looks good." unless there is a concrete blocker.',
-    '- A blocker must be something that will prevent build, apply, or execution. Hidden/internal params, backend normalization, or style cleanup are NOT blockers by themselves.',
-    '- If execution succeeded, backend mismatch or internal-param mismatches are warnings or optional autofixes only.',
-    '- Do not rebuild or replace a successful flow just to normalize backend labels or add inferred params.',
-    '- In a single-instrument workspace, connect steps do NOT need instrumentIds/printIdn to count as valid if the active device can be resolved from workspace context.',
-    '- save_screenshot steps do NOT need to be called invalid just because filename, scopeType, or method can be inferred or were already proven to work at runtime.',
-    '- Treat executor/runtime success as stronger evidence than schema preferences.',
+function buildSystemPrompt(modePrompt: string, outputMode: 'steps_json' | 'blockly_xml'): string {
+  const modeLabel = outputMode === 'blockly_xml' ? 'Blockly XML' : 'Steps UI JSON';
+  return [
+    '# TekAutomate MCP Runtime',
+    'You are the live TekAutomate assistant inside the app. Build, edit, validate, and explain the current workspace.',
     '',
-    GOLDEN_EXAMPLES_PYVISA,
+    '## Runtime Contract',
+    `- Current target mode: ${modeLabel}. Respect that mode exactly.`,
+    '- The live workspace context is authoritative: backend, device map, editor mode, current steps, selected step, logs, and audit output outrank generic preferences.',
+    '- Build directly when the request is clear. Do not stall in confirmation loops for normal edits.',
+    '- Use MCP tools only when you need exact command syntax, tm_devices API paths, block schema details, runtime state, or known-failure context.',
+    '- Prefer one focused tool call over serial tool chains. Zero tool calls is fine when the workspace and prompt already give enough context.',
+    '- If the user asks to add, insert, update, fix, move, remove, replace, convert, apply, or "do it", return actionable changes in this response, not promises.',
+    '- Never claim a change is already applied. You are proposing actions for the app to apply.',
+    '- Never output Python unless the user explicitly asks for Python.',
     '',
-    policies.response_format || '',
-    policies.steps_json || '',
-    policies.scpi_verification || '',
-    policies.backend_taxonomy || '',
-  ];
-  if (outputMode === 'blockly_xml') {
-    parts.push(policies.blockly_xml || '');
-  }
-  return parts.filter(Boolean).join('\n\n');
+    '## MCP Tools',
+    '- search_scpi / get_command_by_header: use when exact SCPI syntax is genuinely uncertain.',
+    '- search_tm_devices: use only for tm_devices backend or explicit SCPI <-> tm_devices conversion.',
+    '- retrieve_rag_chunks: use for TekAutomate app logic, backend behavior, templates, Blockly behavior, and known patterns.',
+    '- list_valid_step_types / get_block_schema: use when you are unsure which step or block shape TekAutomate supports.',
+    '- validate_action_payload: optional final sanity check for complex grouped edits; not required for every simple edit.',
+    '- get_instrument_state / probe_command: use only when live executor context is available and runtime probing is necessary.',
+    '',
+    '## Validation Priority',
+    '- User-visible truth comes first. If a flow already runs or logs prove success, do not invent blocker-level schema complaints.',
+    '- A blocker must prevent apply, generation, or execution. Style cleanup, inferred defaults, and backend normalization are warnings at most.',
+    '',
+    '## Mode Builder Contract',
+    modePrompt,
+  ].join('\n');
 }
 
 function buildUserPrompt(req: McpChatRequest): string {
@@ -511,6 +485,7 @@ function buildUserPrompt(req: McpChatRequest): string {
     '--- END JSON ---',
     '',
     'Workspace context:',
+    `- Current editor mode: ${fc.executionSource === 'blockly' ? 'Blockly' : 'Steps'}`,
     `- Backend: ${fc.backend || 'pyvisa'}`,
     `- Model Family: ${fc.modelFamily || '(unknown)'}`,
     `- Connection: ${fc.connectionType || 'tcpip'}`,
@@ -582,13 +557,7 @@ function buildUserPrompt(req: McpChatRequest): string {
 
 async function runOpenAiToolLoop(req: McpChatRequest, maxCalls = 8): Promise<string> {
   // Default maxCalls raised slightly to avoid premature failure on tm_devices measurement setup.
-  const policies = await loadPolicyBundle([
-    'response_format',
-    'backend_taxonomy',
-    'scpi_verification',
-    'steps_json',
-    'blockly_xml',
-  ]);
+  const modePrompt = loadPromptText(req.outputMode);
   const tools = getToolDefinitions().map((t) => ({
     type: 'function',
     function: {
@@ -603,7 +572,7 @@ async function runOpenAiToolLoop(req: McpChatRequest, maxCalls = 8): Promise<str
     .map((h) => ({ role: h.role as 'user' | 'assistant', content: h.content.slice(0, 800) }));
 
   const messages: Array<Record<string, unknown>> = [
-    { role: 'system', content: buildSystemPrompt(policies, req.outputMode) },
+    { role: 'system', content: buildSystemPrompt(modePrompt, req.outputMode) },
     ...historyMessages,
     { role: 'user', content: buildUserPrompt(req) },
   ];
@@ -666,13 +635,7 @@ async function runOpenAiToolLoop(req: McpChatRequest, maxCalls = 8): Promise<str
 }
 
 async function runAnthropicToolLoop(req: McpChatRequest, maxCalls = 6): Promise<string> {
-  const policies = await loadPolicyBundle([
-    'response_format',
-    'backend_taxonomy',
-    'scpi_verification',
-    'steps_json',
-    'blockly_xml',
-  ]);
+  const modePrompt = loadPromptText(req.outputMode);
   const tools = getToolDefinitions().map((t) => ({
     name: t.name,
     description: t.description,
@@ -697,7 +660,7 @@ async function runAnthropicToolLoop(req: McpChatRequest, maxCalls = 6): Promise<
       },
       body: JSON.stringify({
         model: req.model,
-        system: buildSystemPrompt(policies, req.outputMode),
+        system: buildSystemPrompt(modePrompt, req.outputMode),
         max_tokens: 2000,
         tools,
         messages,
@@ -763,3 +726,4 @@ export async function runToolLoop(req: McpChatRequest): Promise<ToolLoopResult> 
     errors: checked.errors,
   };
 }
+
