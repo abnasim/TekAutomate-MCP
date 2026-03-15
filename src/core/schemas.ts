@@ -18,6 +18,7 @@ export interface McpChatRequest {
   provider: 'openai' | 'anthropic';
   apiKey: string;
   model: string;
+  history?: Array<{ role: 'user' | 'assistant'; content: string }>;
   flowContext: {
     backend: string;
     host: string;
@@ -28,6 +29,9 @@ export interface McpChatRequest {
     steps: Array<Record<string, unknown>>;
     selectedStepId: string | null;
     executionSource: 'steps' | 'blockly';
+    deviceType?: string;
+    selectedStep?: Record<string, unknown> | null;
+    validationErrors?: string[];
   };
   runContext: {
     runStatus: 'idle' | 'running' | 'done' | 'error' | 'connecting';

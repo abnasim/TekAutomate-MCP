@@ -64,6 +64,8 @@ function slimToolResultForModel(name: string, result: unknown): unknown {
         modelRoot: obj.modelRoot,
         methodPath: obj.methodPath,
         signature: clipString(obj.signature, 180),
+        description: clipString(obj.description || obj.shortDescription, 200),
+        usageExample: clipString(obj.usageExample || obj.example, 200),
         availableForModel: obj.availableForModel,
       };
     }
@@ -133,6 +135,7 @@ function buildSystemPrompt(policies: Record<string, string>, outputMode?: string
     '- Query steps MUST have saveAs parameter',
     '- Output: 1-2 sentences then ACTIONS_JSON block',
     '- NEVER output Python unless user explicitly requests it',
+    '- Call validate_action_payload as the FINAL tool call before outputting ACTIONS_JSON',
     '',
     policies.response_format || '',
     policies.steps_json || '',
@@ -159,12 +162,18 @@ function buildUserPrompt(req: McpChatRequest): string {
     `SCPI types: ${SCPI_ARG_TYPES_BRIEF}`,
     `## User Request\n${req.userMessage}`,
     `## Output Mode\n${req.outputMode}`,
-    `## Device Context\nBackend: ${fc.backend || 'pyvisa'}\nModel: ${fc.modelFamily || '(unknown)'}\nHost: ${fc.host || '(unknown)'}\nConnection: ${fc.connectionType || 'tcpip'}`,
+    `## Device Context\nBackend: ${fc.backend || 'pyvisa'}\nModel: ${fc.modelFamily || '(unknown)'}\nHost: ${fc.host || '(unknown)'}\nConnection: ${fc.connectionType || 'tcpip'}${fc.deviceType ? `\nDevice Type: ${fc.deviceType}` : ''}`,
     `## Current Flow (${Array.isArray(fc.steps) ? fc.steps.length : 0} steps)\n${stepsSummary}`,
   ];
 
-  if (fc.selectedStepId) {
-    parts.push(`## Selected Step\n${fc.selectedStepId}`);
+  if (fc.selectedStep) {
+    parts.push(`## Selected Step (user is focused on this)\n${JSON.stringify(fc.selectedStep, null, 2)}`);
+  } else if (fc.selectedStepId) {
+    parts.push(`## Selected Step ID\n${fc.selectedStepId}`);
+  }
+
+  if (fc.validationErrors && (fc.validationErrors as string[]).length > 0) {
+    parts.push(`## Current Flow Validation Errors\n${(fc.validationErrors as string[]).map((e: string) => `- ${e}`).join('\n')}\n(Address these if relevant to the user's request)`);
   }
 
   if (rc.runStatus !== 'idle') {
@@ -204,8 +213,13 @@ async function runOpenAiToolLoop(req: McpChatRequest, maxCalls = 4): Promise<str
     },
   }));
 
+  const historyMessages = (req.history || [])
+    .slice(-6)
+    .map((h) => ({ role: h.role as 'user' | 'assistant', content: h.content.slice(0, 800) }));
+
   const messages: Array<Record<string, unknown>> = [
     { role: 'system', content: buildSystemPrompt(policies, req.outputMode) },
+    ...historyMessages,
     { role: 'user', content: buildUserPrompt(req) },
   ];
 
@@ -279,7 +293,12 @@ async function runAnthropicToolLoop(req: McpChatRequest, maxCalls = 4): Promise<
     description: t.description,
     input_schema: t.parameters,
   }));
+  const anthropicHistoryMessages = (req.history || [])
+    .slice(-6)
+    .map((h) => ({ role: h.role as 'user' | 'assistant', content: h.content.slice(0, 800) }));
+
   const messages: Array<Record<string, unknown>> = [
+    ...anthropicHistoryMessages,
     { role: 'user', content: buildUserPrompt(req) },
   ];
 

@@ -43,7 +43,7 @@ export function getToolDefinitions() {
   return [
     {
       name: 'search_scpi',
-      description: 'Search the verified SCPI command library. Call this before emitting any SCPI command.',
+      description: 'Search the SCPI command library by feature or keyword (e.g. "FastFrame", "trigger edge", "measurement frequency"). Use this when you know what you want to DO but not the exact command header. Returns syntax, examples, and commandId.',
       parameters: {
         type: 'object',
         properties: {
@@ -75,7 +75,7 @@ export function getToolDefinitions() {
     },
     {
       name: 'get_command_by_header',
-      description: 'Exact deterministic lookup of a SCPI command by header.',
+      description: 'Exact lookup by known SCPI header (e.g. "HORizontal:FASTframe:STATE"). Use this instead of search_scpi when you already know the header. Faster and more precise than search.',
       parameters: {
         type: 'object',
         properties: {
@@ -88,7 +88,7 @@ export function getToolDefinitions() {
     },
     {
       name: 'verify_scpi_commands',
-      description: 'Batch-verify SCPI commands against the command library.',
+      description: 'Batch-verify multiple SCPI command strings at once. Use AFTER generating a full set of steps to confirm every command is valid before returning ACTIONS_JSON. Returns verified:true/false per command.',
       parameters: {
         type: 'object',
         properties: {
@@ -119,7 +119,7 @@ export function getToolDefinitions() {
     },
     {
       name: 'retrieve_rag_chunks',
-      description: 'Retrieve RAG chunks by corpus and query.',
+      description: 'Retrieve documentation chunks from local knowledge base. corpus options: "scpi" | "tmdevices" | "templates" | "pyvisa_tekhsi" | "app_logic" | "error_patterns". Use for architecture questions, workflow patterns, known bugs, and connection examples.',
       parameters: {
         type: 'object',
         properties: {
@@ -136,7 +136,7 @@ export function getToolDefinitions() {
     },
     {
       name: 'search_known_failures',
-      description: 'Search documented runtime failures and fixes.',
+      description: 'Search known runtime failures and their fixes. Use when user reports an error, unexpected behavior, or asks why something is not working. Returns symptom/cause/fix triplets.',
       parameters: {
         type: 'object',
         properties: {
@@ -202,7 +202,7 @@ export function getToolDefinitions() {
     },
     {
       name: 'validate_action_payload',
-      description: 'Validate ACTIONS_JSON payload before returning it.',
+      description: 'Validate the ACTIONS_JSON payload structure before returning it to the user. Call this as the LAST step before outputting ACTIONS_JSON to catch schema errors, missing saveAs, and invalid step types.',
       parameters: {
         type: 'object',
         properties: {
