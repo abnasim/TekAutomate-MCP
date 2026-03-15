@@ -139,6 +139,12 @@ function buildTmDevicesMeasurementShortcut(req: McpChatRequest): string | null {
 // Condensed SCPI arg-type reference (injected into user prompt, not system prompt,
 // to reduce static system prompt token usage — Fix 5).
 const SCPI_ARG_TYPES_BRIEF = '<NR1>=int <NR2>=dec <NR3>=sci <QString>="str" {A|B}=choose [x]=opt NaN=9.91E+37';
+const KNOWN_PATTERN_HINTS = [
+  'Measurements on modern scopes: use MEASUrement:ADDMEAS <TYPE>, set SOURCE1 to the requested channel, then query the current acquisition result.',
+  'FastFrame on modern scopes: use HORizontal:FASTframe:STATE ON and HORizontal:FASTframe:COUNt <N>.',
+  'Screenshots on pyvisa scopes: prefer save_screenshot step type instead of raw HARDCOPY or SAVE:IMAGe commands.',
+  'tm_devices backend: prefer tm_device_command steps, not raw write/query SCPI steps.',
+].join('\n- ');
 
 function clipString(value: unknown, max = 280): unknown {
   if (typeof value !== 'string') return value;
@@ -287,6 +293,9 @@ function buildSystemPrompt(policies: Record<string, string>, outputMode?: string
     '- tm_devices backend + measurement request: build immediately using tm_device_command steps. Never ask about command style.',
     '- For MSO5/6 tm_devices measurements, prefer addmeas-style measurement creation and value query methods. Do NOT fall back to legacy MEASurement:MEAS<x>:TYPE patterns unless the model family is explicitly legacy 5k/7k/70k.',
     '- If part of a request is fully verified, build that part now and isolate only the uncertain portion in findings. Do not stall the whole flow.',
+    '- For simple single-feature requests (one measurement type, one command), search_scpi once then output ACTIONS_JSON directly.',
+    '- Only call verify_scpi_commands for multi-command flows (3+ commands).',
+    '- Only call validate_action_payload when the flow has groups or otherwise complex structure.',
     '- Use only the tool calls actually needed for the request. For simple requests, do not force every verification tool if the command/payload is already sufficiently grounded.',
     '- Output: 1-2 sentences then ACTIONS_JSON block',
     '- NEVER output Python unless user explicitly requests it',
@@ -315,6 +324,7 @@ function buildUserPrompt(req: McpChatRequest): string {
   const parts = [
     // Fix 5: SCPI arg types moved here from system prompt (only paid once per call, not multiplied by tool rounds)
     `SCPI types: ${SCPI_ARG_TYPES_BRIEF}`,
+    `Known patterns:\n- ${KNOWN_PATTERN_HINTS}`,
     `## User Request\n${req.userMessage}`,
     `## Output Mode\n${req.outputMode}`,
     `## Device Context\nBackend: ${fc.backend || 'pyvisa'}\nModel: ${fc.modelFamily || '(unknown)'}\nHost: ${fc.host || '(unknown)'}\nConnection: ${fc.connectionType || 'tcpip'}${fc.deviceType ? `\nDevice Type: ${fc.deviceType}` : ''}`,
