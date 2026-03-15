@@ -1,7 +1,41 @@
 import { validateActionPayload } from '../tools/validateActionPayload';
 import { verifyScpiCommands } from '../tools/verifyScpiCommands';
 import { extractReplaceFlowSteps } from './schemas';
-import { normalizeCommandHeader } from '../../../src/utils/commandLoader';
+// Local copy of the shared normalization used in commandLoader.normalizeCommandHeader
+function normalizeCommandHeader(command: string): string {
+  if (!command) return '';
+  let normalized = command.split('?')[0].trim();
+  normalized = normalized.split(/\s/)[0];
+  normalized = normalized
+    .replace(/PG(\d+)Val/gi, 'PG<x>Val')
+    .replace(/PW(\d+)Val/gi, 'PW<x>Val')
+    .replace(/AMP(\d+)Val/gi, 'AMP<x>Val')
+    .replace(/FREQ(\d+)Val/gi, 'FREQ<x>Val')
+    .replace(/SPAN(\d+)Val/gi, 'SPAN<x>Val')
+    .replace(/RIPPLEFREQ(\d+)Val/gi, 'RIPPLEFREQ<x>Val')
+    .replace(/MAXG(\d+)Voltage/gi, 'MAXG<x>Voltage')
+    .replace(/OUTPUT(\d+)VOLTage/gi, 'OUTPUT<x>VOLTage')
+    .replace(/CH\d+/gi, 'CH<x>')
+    .replace(/REF\d+/gi, 'REF<x>')
+    .replace(/MATH\d+/gi, 'MATH<x>')
+    .replace(/MEAS\d+/gi, 'MEAS<x>')
+    .replace(/B\d+/gi, 'B<x>')
+    .replace(/BUS\d+/gi, 'BUS<x>')
+    .replace(/CURSOR\d+/gi, 'CURSOR<x>')
+    .replace(/ZOOM\d+/gi, 'ZOOM<x>')
+    .replace(/SEARCH\d+/gi, 'SEARCH<x>')
+    .replace(/PLOT\d+/gi, 'PLOT<x>')
+    .replace(/WAVEView\d+/gi, 'WAVEView<x>')
+    .replace(/PLOTView\d+/gi, 'PLOTView<x>')
+    .replace(/MATHFFTView\d+/gi, 'MATHFFTView<x>')
+    .replace(/REFFFTView\d+/gi, 'REFFFTView<x>')
+    .replace(/SPECView\d+/gi, 'SPECView<x>')
+    .replace(/POWer\d+/gi, 'POWer<x>')
+    .replace(/GSOurce\d+/gi, 'GSOurce<x>')
+    .replace(/SOUrce\d+/gi, 'SOUrce<x>')
+    .toLowerCase();
+  return normalized;
+}
 
 export interface PostCheckResult {
   ok: boolean;
