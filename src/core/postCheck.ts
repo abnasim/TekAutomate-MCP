@@ -58,6 +58,19 @@ function collectCommandsFromActions(actionsJson: Record<string, unknown>): strin
   return out;
 }
 
+function normalizeForLookup(cmd: string): string {
+  return cmd
+    .replace(/CH\d+/gi, 'CH<x>')
+    .replace(/B\d+/gi, 'B<x>')
+    .replace(/REF\d+/gi, 'REF<x>')
+    .replace(/MATH\d+/gi, 'MATH<x>')
+    .replace(/MEAS\d+/gi, 'MEAS<x>')
+    .replace(/ZOOM\d+/gi, 'ZOOM<x>')
+    .replace(/SEARCH\d+/gi, 'SEARCH<x>')
+    .replace(/SOURCE\d+/gi, 'SOUrce<x>')
+    .replace(/SOUrce\d+/gi, 'SOUrce<x>');
+}
+
 export async function postCheckResponse(
   text: string,
   flowContext?: { backend?: string; modelFamily?: string; originalSteps?: Array<Record<string, unknown>> }
@@ -98,7 +111,7 @@ export async function postCheckResponse(
   const commands = collectCommandsFromActions(actionsJson);
   if (commands.length) {
     const verification = await verifyScpiCommands({
-      commands,
+      commands: commands.map(normalizeForLookup),
       modelFamily: flowContext?.modelFamily,
     });
     verificationRows = verification.data as Array<Record<string, unknown>>;
