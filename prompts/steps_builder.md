@@ -99,6 +99,12 @@ Before using ANY SCPI command:
 3. If not found -> tell user "Command not in verified database"
 NEVER make up commands | NEVER web search
 
+## User Confirmation Rule
+- If you asked a clarifying question and the user then provides the missing detail such as channel selection (`CH1`) or says `confirmed`, continue immediately and generate the steps.
+- Do NOT repeat the same clarification after the user answered it.
+- If a measurement token is still not fully verified in the uploaded sources but the user explicitly confirms to proceed, build the flow and note that it is a user-confirmed assumption.
+- If the user says to save a screenshot also, add a `save_screenshot` step in the requested location without asking again when the placement is already clear.
+
 ## Query Variables
 All query steps MUST have saveAs field to store result
 WRONG: {"type":"query","params":{"command":"*IDN?"}}
