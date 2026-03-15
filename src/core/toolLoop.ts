@@ -64,7 +64,7 @@ function slimToolResultForModel(name: string, result: unknown): unknown {
         modelRoot: obj.modelRoot,
         methodPath: obj.methodPath,
         signature: clipString(obj.signature, 180),
-        description: clipString(obj.description || obj.shortDescription, 200),
+        description: clipString(obj.text || obj.description || obj.shortDescription, 200),
         usageExample: clipString(obj.usageExample || obj.example, 200),
         availableForModel: obj.availableForModel,
       };
@@ -224,7 +224,8 @@ async function runOpenAiToolLoop(req: McpChatRequest, maxCalls = 4): Promise<str
   ];
 
   for (let i = 0; i < maxCalls; i += 1) {
-    const res = await fetch('https://api.openai.com/v1/chat/completions', {
+    const openAiBase = process.env.OPENAI_BASE_URL || 'https://api.openai.com';
+    const res = await fetch(`${openAiBase}/v1/chat/completions`, {
       method: 'POST',
       headers: {
         Authorization: `Bearer ${req.apiKey}`,
