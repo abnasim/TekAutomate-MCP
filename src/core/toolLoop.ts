@@ -29,6 +29,22 @@ function slimScpiEntry(entry: Record<string, unknown>): Record<string, unknown> 
     ? (examples[0] as Record<string, unknown>)
     : null;
   const resolvedExample = directExample || firstExample;
+  const argumentsList = Array.isArray(entry.arguments)
+    ? (entry.arguments as unknown[])
+        .filter((arg): arg is Record<string, unknown> => !!arg && typeof arg === 'object')
+        .slice(0, 3)
+        .map((arg) => ({
+          name: arg.name,
+          type: arg.type,
+          description: clipString(arg.description || arg.shortDescription || arg.text, 180),
+          required: arg.required,
+        }))
+    : [];
+  const relatedCommands = Array.isArray(entry.relatedCommands)
+    ? (entry.relatedCommands as unknown[])
+        .filter((cmd): cmd is string => typeof cmd === 'string')
+        .slice(0, 5)
+    : [];
   return {
     commandId: entry.commandId,
     sourceFile: entry.sourceFile,
@@ -36,7 +52,7 @@ function slimScpiEntry(entry: Record<string, unknown>): Record<string, unknown> 
     commandType: entry.commandType,
     shortDescription: clipString(entry.shortDescription, 200),
     syntax: entry.syntax,
-    example: resolvedExample
+    codeExamples: resolvedExample
       ? {
           scpi: (resolvedExample.scpi as Record<string, unknown> | undefined)?.code || resolvedExample.scpi,
           python: (resolvedExample.python as Record<string, unknown> | undefined)?.code || resolvedExample.python,
@@ -46,7 +62,9 @@ function slimScpiEntry(entry: Record<string, unknown>): Record<string, unknown> 
         }
       : undefined,
     notes: Array.isArray(entry.notes) ? (entry.notes as unknown[]).slice(0, 2).map((n) => clipString(n, 180)) : [],
+    arguments: argumentsList,
     validValues: entry.validValues,
+    relatedCommands,
   };
 }
 
