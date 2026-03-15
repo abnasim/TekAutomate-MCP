@@ -330,52 +330,6 @@ function slimScpiEntry(entry: Record<string, unknown>): Record<string, unknown> 
   };
 }
 
-function slimToolResultForModel(name: string, result: unknown): unknown {
-  const payload = (result || {}) as Record<string, unknown>;
-  const data = payload.data;
-  if (!Array.isArray(data)) return result;
-
-  const limited = data.slice(0, 5).map((item) => {
-    if (!item || typeof item !== 'object') return item;
-    const obj = item as Record<string, unknown>;
-    if (name === 'search_scpi') return slimScpiEntry(obj);
-    if (name === 'search_tm_devices') {
-      return {
-        modelRoot: obj.modelRoot,
-        methodPath: obj.methodPath,
-        signature: clipString(obj.signature, 180),
-        description: clipString(obj.text || obj.description || obj.shortDescription, 200),
-        usageExample: clipString(obj.usageExample || obj.example, 200),
-        availableForModel: obj.availableForModel,
-      };
-    }
-    if (name === 'get_command_group') {
-      const headers = Array.isArray(obj.commandHeaders) ? (obj.commandHeaders as unknown[]) : [];
-      const trimmedHeaders = headers
-        .filter((h): h is string => typeof h === 'string')
-        .slice(0, 80);
-      return {
-        groupName: obj.groupName,
-        description: clipString(obj.description, 280),
-        commandCount: obj.commandCount,
-        commandHeaders: trimmedHeaders,
-        truncated: headers.length > trimmedHeaders.length,
-      };
-    }
-    return obj;
-  });
-
-  return {
-    ...payload,
-    data: limited,
-    sourceMeta: Array.isArray(payload.sourceMeta) ? (payload.sourceMeta as unknown[]).slice(0, 5) : payload.sourceMeta,
-    warnings: [
-      ...(Array.isArray(payload.warnings) ? (payload.warnings as unknown[]) : []),
-      ...(data.length > limited.length ? [`Truncated tool data from ${data.length} to ${limited.length} entries`] : []),
-    ],
-  };
-}
-
 function logToolCall(name: string, args: Record<string, unknown>) {
   // eslint-disable-next-line no-console
   console.log(`[MCP] tool call: ${name} ${JSON.stringify(args)}`);
@@ -615,11 +569,10 @@ async function runOpenAiToolLoop(req: McpChatRequest, maxCalls = 8): Promise<str
       logToolCall(name, args);
       const result = await runTool(name, args);
       logToolResult(name, result);
-      const modelResult = slimToolResultForModel(name, result);
       messages.push({
         role: 'tool',
         tool_call_id: id,
-        content: JSON.stringify(modelResult),
+        content: JSON.stringify(result),
       });
     }
   }
@@ -685,11 +638,10 @@ async function runAnthropicToolLoop(req: McpChatRequest, maxCalls = 6): Promise<
       logToolCall(name, args);
       const result = await runTool(name, args);
       logToolResult(name, result);
-      const modelResult = slimToolResultForModel(name, result);
       toolResults.push({
         type: 'tool_result',
         tool_use_id: id,
-        content: JSON.stringify(modelResult),
+        content: JSON.stringify(result),
       });
     }
     messages.push({ role: 'user', content: toolResults });
