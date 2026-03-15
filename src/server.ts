@@ -6,6 +6,8 @@ import { initTemplateIndex } from './core/templateIndex';
 import { runToolLoop } from './core/toolLoop';
 import type { McpChatRequest } from './core/schemas';
 
+let lastAiDebug: Record<string, unknown> | null = null;
+
 async function readJsonBody(req: http.IncomingMessage): Promise<Record<string, unknown>> {
   const chunks: Buffer[] = [];
   for await (const chunk of req) {
@@ -56,6 +58,11 @@ export async function createServer(port = 8787): Promise<http.Server> {
 
     if (req.method === 'GET' && req.url === '/health') {
       sendJson(res, 200, { ok: true, status: 'ready' });
+      return;
+    }
+
+    if (req.method === 'GET' && req.url === '/ai/debug/last') {
+      sendJson(res, 200, { ok: true, debug: lastAiDebug });
       return;
     }
 
@@ -143,6 +150,23 @@ export async function createServer(port = 8787): Promise<http.Server> {
         sseStarted = true;
         sseWrite(res, 'status', { phase: 'processing' });
         const result = await runToolLoop(body);
+        lastAiDebug = {
+          timestamp: new Date().toISOString(),
+          request: {
+            ...body,
+            apiKey: '[redacted]',
+            instrumentEndpoint: body.instrumentEndpoint
+              ? {
+                  ...body.instrumentEndpoint,
+                  visaResource: '[redacted]',
+                }
+              : undefined,
+          },
+          response: {
+            text: result.text,
+            errors: result.errors,
+          },
+        };
         sseWrite(res, 'chunk', result.text);
         if (result.errors.length) {
           sseWrite(res, 'warnings', result.errors);
@@ -150,6 +174,10 @@ export async function createServer(port = 8787): Promise<http.Server> {
         sseWrite(res, 'done', '[DONE]');
         res.end();
       } catch (err) {
+        lastAiDebug = {
+          timestamp: new Date().toISOString(),
+          error: err instanceof Error ? err.message : 'Server error',
+        };
         if (sseStarted) {
           sseWrite(res, 'error', {
             ok: false,
