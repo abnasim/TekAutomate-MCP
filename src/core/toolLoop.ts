@@ -133,6 +133,8 @@ function buildSystemPrompt(policies: Record<string, string>, outputMode?: string
     '- Use EXACT syntax from tool results only — never invent commands',
     '- Flows MUST start with connect, end with disconnect',
     '- Query steps MUST have saveAs parameter',
+    '- set_step_param actions MUST update one param at a time',
+    '- NEVER use param="params" in set_step_param; emit separate actions for scopeType, method, filename, etc.',
     '- Output: 1-2 sentences then ACTIONS_JSON block',
     '- NEVER output Python unless user explicitly requests it',
     '- Call validate_action_payload as the FINAL tool call before outputting ACTIONS_JSON',

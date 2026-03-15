@@ -30,6 +30,20 @@ Reference: STEPSUI_GOLDEN_EXAMPLES.json - Verified working workflows
 ```
 IDs: Use "1","2","3" for steps, "g1","g2" for groups. MUST be unique strings.
 
+## ACTIONS_JSON Action Rules
+- `set_step_param` updates exactly ONE parameter per action
+- NEVER set `param: "params"` and NEVER replace the whole `params` object in one action
+- CORRECT:
+```json
+{"type":"set_step_param","targetStepId":"step-123","param":"scopeType","value":"modern"}
+{"type":"set_step_param","targetStepId":"step-123","param":"method","value":"pc_transfer"}
+```
+- WRONG:
+```json
+{"set_step_param":{"targetStepId":"step-123","param":"params","value":{"scopeType":"modern","method":"pc_transfer"}}}
+{"type":"set_step_param","targetStepId":"step-123","param":"params","value":{"scopeType":"modern","method":"pc_transfer"}}
+```
+
 # VALID STEP TYPES
 
 ## Connection

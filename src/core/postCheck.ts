@@ -73,6 +73,24 @@ export async function postCheckResponse(
   const validData = payloadValidation.data as { valid: boolean; errors: string[] };
   if (!validData.valid) errors.push(...validData.errors);
 
+  const actionRows = Array.isArray(actionsJson.actions)
+    ? (actionsJson.actions as Array<Record<string, unknown>>)
+    : [];
+  actionRows.forEach((action) => {
+    const actionType = String(action.action_type || action.type || '');
+    const targetStepId =
+      String(action.targetStepId || action.target_step_id || action.stepId || '');
+    const payload = (action.payload && typeof action.payload === 'object')
+      ? (action.payload as Record<string, unknown>)
+      : {};
+    const param = String(action.param || payload.param || '');
+    if (actionType === 'set_step_param' && param === 'params') {
+      errors.push(
+        `Invalid set_step_param for ${targetStepId || '(unknown step)'}: param must be a single field, not "params"`
+      );
+    }
+  });
+
   const commands = collectCommandsFromActions(actionsJson);
   if (commands.length) {
     const verification = await verifyScpiCommands({
