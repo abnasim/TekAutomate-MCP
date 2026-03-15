@@ -29,6 +29,15 @@ function detectMeasurementChannel(req: McpChatRequest): string | null {
   return match ? `CH${match[1]}` : null;
 }
 
+function isFastFrameRequest(req: McpChatRequest): boolean {
+  return /\bfast\s*frame\b|\bfastframe\b/i.test(req.userMessage);
+}
+
+function detectFastFrameCount(req: McpChatRequest): number {
+  const match = req.userMessage.match(/\b(\d+)\s+frames?\b/i) || req.userMessage.match(/\bcount\s+(\d+)\b/i);
+  return match ? Math.max(1, Number(match[1])) : 10;
+}
+
 function isValidationRequest(req: McpChatRequest): boolean {
   return /\b(validate|validation|review|check flow|does this look right|does this look good|looks good|briefly)\b/i.test(
     req.userMessage
@@ -141,6 +150,63 @@ function buildPyvisaMeasurementShortcut(req: McpChatRequest): string | null {
     newStep: step,
   }));
   return `ACTIONS_JSON: ${JSON.stringify({ summary: `Added ${measurements.join(', ')} measurement steps on ${channel}.`, findings: [], suggestedFixes: [], actions: insertActions })}`;
+}
+
+function buildPyvisaFastFrameShortcut(req: McpChatRequest): string | null {
+  if ((req.outputMode || '') !== 'steps_json') return null;
+  const backend = (req.flowContext.backend || 'pyvisa').toLowerCase();
+  if (backend === 'tm_devices') return null;
+  if (!isFastFrameRequest(req)) return null;
+
+  const existingSteps = Array.isArray(req.flowContext.steps) ? req.flowContext.steps : [];
+  const count = detectFastFrameCount(req);
+  const connectStep = existingSteps.find((step) => String(step.type || '') === 'connect') as Record<string, unknown> | undefined;
+  const screenshotStep = existingSteps.find((step) => String(step.type || '') === 'save_screenshot') as Record<string, unknown> | undefined;
+  const insertAfterId = (connectStep?.id as string | undefined) || (req.flowContext.selectedStepId ? String(req.flowContext.selectedStepId) : null);
+  const fastFrameSteps = [
+    {
+      id: 'ff1',
+      type: 'write',
+      label: 'Enable FastFrame',
+      params: { command: 'HORizontal:FASTframe:STATE ON' },
+    },
+    {
+      id: 'ff2',
+      type: 'write',
+      label: `Set FastFrame Count to ${count}`,
+      params: { command: `HORizontal:FASTframe:COUNt ${count}` },
+    },
+  ];
+
+  if (!existingSteps.length) {
+    const flow = {
+      name: 'FastFrame Workflow',
+      description: `Enable FastFrame with frame count ${count}`,
+      backend: backend || 'pyvisa',
+      deviceType: req.flowContext.deviceType || 'SCOPE',
+      steps: [
+        { id: '1', type: 'connect', label: 'Connect to scope', params: { instrumentIds: ['scope1'], printIdn: true } },
+        ...fastFrameSteps,
+        { id: '99', type: 'disconnect', label: 'Disconnect', params: {} },
+      ],
+    };
+    return `ACTIONS_JSON: ${JSON.stringify({ summary: `Added FastFrame enable and frame count ${count}.`, findings: [], suggestedFixes: [], actions: [{ type: 'replace_flow', flow }] })}`;
+  }
+
+  const actions: Record<string, unknown>[] = [];
+  if (insertAfterId) {
+    actions.push(
+      { type: 'insert_step_after', targetStepId: insertAfterId, newStep: fastFrameSteps[0] },
+      { type: 'insert_step_after', targetStepId: 'ff1', newStep: fastFrameSteps[1] }
+    );
+  } else {
+    actions.push(...fastFrameSteps.map((step) => ({ type: 'insert_step_after', targetStepId: null, newStep: step })));
+  }
+
+  if (screenshotStep) {
+    return `ACTIONS_JSON: ${JSON.stringify({ summary: `Added FastFrame enable and frame count ${count} before the screenshot.`, findings: [], suggestedFixes: [], actions })}`;
+  }
+  return `ACTIONS_JSON: ${JSON.stringify({ summary: `Added FastFrame enable and frame count ${count}.`, findings: [], suggestedFixes: [], actions })}`;
 }
 
 function buildTmDevicesMeasurementShortcut(req: McpChatRequest): string | null {
@@ -372,6 +438,7 @@ function buildSystemPrompt(policies: Record<string, string>, outputMode?: string
     '- Emit separate set_step_param actions for scopeType, method, filename, etc.',
     '- If user provides channel/confirmation after a clarification, build immediately — no repeat questions.',
     '- If user asks for screenshot, add save_screenshot without asking when placement is inferable.',
+    '- If the user says "add these commands", "apply that", "do it", or similar after a command lookup/explanation, treat it as a mutation request and return ACTIONS_JSON, not prose.',
     '- tm_devices + measurement: build immediately with tm_device_command steps. Never ask about command style.',
     '- For MSO5/6 tm_devices, use addmeas-style creation and mean.query(). Never fall back to legacy MEAS<x>:TYPE.',
     '- Treat backend, device driver, visa backend, alias, and instrument map as authoritative routing truth.',
@@ -663,7 +730,7 @@ async function runAnthropicToolLoop(req: McpChatRequest, maxCalls = 6): Promise<
 }
 
 export async function runToolLoop(req: McpChatRequest): Promise<ToolLoopResult> {
-  const shortcut = buildPyvisaMeasurementShortcut(req) || buildTmDevicesMeasurementShortcut(req);
+  const shortcut = buildPyvisaMeasurementShortcut(req) || buildTmDevicesMeasurementShortcut(req) || buildPyvisaFastFrameShortcut(req);
   if (shortcut) {
     const checked = await postCheckResponse(shortcut, {
       backend: req.flowContext.backend,
