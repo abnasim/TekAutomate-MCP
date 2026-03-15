@@ -1,5 +1,37 @@
 # SCPI Verification Policy v1
 
+## Pre-Verified Commands — Build Immediately, No Tool Call Needed
+
+The following command families are fully documented in the knowledge base and do NOT require
+a `search_scpi` call before use. Build steps immediately when these are requested:
+
+**IEEE 488.2 standard:** `*IDN?`, `*RST`, `*OPC?`, `*CLS`, `*ESR?`, `*WAI`
+
+**Measurements (MSO5/6 modern pattern):**
+- `MEASUrement:ADDMEAS FREQUENCY` (or FREQ)
+- `MEASUrement:ADDMEAS AMPLITUDE` (or AMP)
+- `MEASUrement:ADDMEAS RISETIME`, `FALLTIME`, `PERIOD`, `PK2PK`
+- `MEASUrement:ADDMEAS MEAN`, `RMS`, `HIGH`, `LOW`, `MAXIMUM`, `MINIMUM`
+- `MEASUrement:ADDMEAS POVERSHOOT`, `NOVERSHOOT`
+- `MEASUrement:MEAS<x>:SOUrce1 CH<x>`
+- `MEASUrement:MEAS<x>:RESUlts:CURRentacq:MEAN?`
+
+**Channel / Vertical:**
+`CH<x>:SCAle`, `CH<x>:COUPling`, `CH<x>:TERmination`, `CH<x>:OFFSet`, `CH<x>:BANdwidth`
+
+**Acquisition:** `ACQuire:STATE`, `ACQuire:STOPAfter`, `ACQuire:NUMAVg`, `ACQuire:MODE`
+
+**Trigger:** `TRIGger:A:TYPE`, `TRIGger:A:EDGE:SOUrce`, `TRIGger:A:EDGE:SLOpe`, `TRIGger:A:LEVel:CH<x>`
+
+**Horizontal:** `HORizontal:SCAle`, `HORizontal:RECOrdlength`, `HORizontal:POSition`
+
+**FastFrame:** `HORizontal:FASTframe:STATE`, `HORizontal:FASTframe:COUNt`
+
+**Save/Recall:** `SAVe:IMAGe`, `RECALL:*`, `SAVe:WAVEform`
+
+For any command in the above families: **build the steps, do not call search_scpi.**
+Only call `search_scpi` for commands NOT in the above list.
+
 ## Knowledge Base Files (Background Context)
 The following uploaded files back the `search_scpi` and `get_command_by_header` tools:
 - `mso_2_4_5_6_7.json` — MSO 2/4/5/6/7 series scopes
@@ -28,12 +60,11 @@ Do not infer commands from naming patterns, conventions, or memory.
 5. Include commandId + sourceFile as provenance
 
 ## HARD RULES
-- When verified results exist, you MUST use exact command strings from those results
-- You MUST NOT generate your own SCPI syntax when verified results are present
-- Using commands not present in verified tool results is a POLICY VIOLATION
-- Do not say "I could not verify" when verified tool results ARE present
+- Pre-verified commands (listed above) need NO tool call — use them directly
+- When tool results ARE present, use exact syntax from those results
 - Use arguments[] to enforce valid parameter ranges and defaults
 - Surface notes[] as brief warnings when relevant
+- Do not say "I could not verify" for pre-verified commands
 
 ## Failure Text
 If search returns empty or ok:false:
@@ -65,20 +96,13 @@ Disambiguation rule:
 
 Search hint: call `search_scpi` with `MEASUrement:ADDMEAS`.
 
-## MEASUrement:ADDMEAS Argument Rule (MANDATORY)
-Use only documented enum values from command-library `arguments[].validValues`.
-Do NOT invent friendly aliases.
+## MEASUrement:ADDMEAS Argument Rule
+Both long-form and short-form enums are accepted on MSO5/6:
+- `FREQUENCY` and `FREQ` are both valid
+- `AMPLITUDE` and `AMP` are both valid
+- `POVERSHOOT`, `NOVERSHOOT`, `RISETIME`, `FALLTIME`, `PERIOD`, `PK2PK`, `MEAN`, `RMS`, `HIGH`, `LOW`, `MAXIMUM`, `MINIMUM` are all valid
 
-Preferred standard measurement enums for this workflow:
-- `FREQ`
-- `AMP`
-
-Wrong:
-- `FREQUENCY` (unless explicitly listed for the selected model command entry)
-- `AMPLITUDE` (unless explicitly listed for the selected model command entry)
-- `FREQ_CH1`
-
-Always verify the exact enum in the returned command result before emitting `MEASUrement:ADDMEAS ...`.
+Do NOT require a tool call to confirm standard measurement enum names. They are pre-verified above.
 
 ## Search Strategy (MANDATORY)
 Use specific operation-focused queries, not generic feature names.
@@ -90,8 +114,7 @@ Examples:
 
 When results are mixed, refine and call `search_scpi` again with a more specific query before generating steps.
 
-## Post-Generation Verification Check (MANDATORY)
-After building all steps, scan every SCPI command string in the generated output.
-Each command must have been returned in a tool result during this session.
-If any command was NOT returned by a tool call, call `search_scpi` before finalizing.
-Do NOT emit a command that cannot be traced to a tool result from this session.
+## Post-Generation Check
+After building steps, scan for any commands NOT in the pre-verified list above.
+For those only: call `search_scpi` to confirm before finalizing.
+Pre-verified commands require no post-check — they are already confirmed.

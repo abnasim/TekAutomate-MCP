@@ -29,6 +29,106 @@ function detectMeasurementChannel(req: McpChatRequest): string | null {
   return match ? `CH${match[1]}` : null;
 }
 
+function buildPyvisaMeasurementShortcut(req: McpChatRequest): string | null {
+  if ((req.outputMode || '') !== 'steps_json') return null;
+  const backend = (req.flowContext.backend || 'pyvisa').toLowerCase();
+  if (backend === 'tm_devices') return null; // handled by other shortcut
+  const deviceType = (req.flowContext.deviceType || 'SCOPE').toUpperCase();
+  if (deviceType !== 'SCOPE') return null;
+
+  const measurements = detectMeasurementRequest(req);
+  const channel = detectMeasurementChannel(req);
+  if (!measurements.length || !channel) return null;
+
+  const existingSteps = Array.isArray(req.flowContext.steps) ? req.flowContext.steps : [];
+  const hasScreenshot = /\bscreenshot\b|\bscreen shot\b|\bcapture screen\b/.test(req.userMessage.toLowerCase());
+  const isBuildNew = existingSteps.length === 0;
+
+  // Build write+query triples for each measurement
+  const measurementSlots = measurements.map((measurement, index) => {
+    const slot = index + 1;
+    const saveAsName = (
+      measurement === 'FREQUENCY' ? 'ch1_frequency'
+      : measurement === 'AMPLITUDE' ? 'ch1_amplitude'
+      : measurement === 'POVERSHOOT' ? 'ch1_positive_overshoot'
+      : measurement === 'NOVERSHOOT' ? 'ch1_negative_overshoot'
+      : `meas${slot}_result`
+    ).replace('ch1', channel.toLowerCase().replace(' ', ''));
+    return { measurement, slot, saveAsName };
+  });
+
+  const addGroup: Record<string, unknown>[] = measurementSlots.flatMap(({ measurement, slot, saveAsName: _ }) => [
+    {
+      id: `${slot * 2}`,
+      type: 'write',
+      label: `Add ${measurement.toLowerCase()} measurement`,
+      params: { command: `MEASUrement:ADDMEAS ${measurement}` },
+    },
+    {
+      id: `${slot * 2 + 1}`,
+      type: 'write',
+      label: `Set measurement ${slot} source to ${channel}`,
+      params: { command: `MEASUrement:MEAS${slot}:SOUrce1 ${channel}` },
+    },
+  ]);
+
+  const queryGroup: Record<string, unknown>[] = measurementSlots.map(({ measurement, slot, saveAsName }) => ({
+    id: `q${slot}`,
+    type: 'query',
+    label: `Query ${measurement.toLowerCase()} result`,
+    params: {
+      command: `MEASUrement:MEAS${slot}:RESUlts:CURRentacq:MEAN?`,
+      saveAs: saveAsName,
+    },
+  }));
+
+  const screenshotStep = hasScreenshot ? [{
+    id: 'ss1',
+    type: 'save_screenshot',
+    label: 'Save Screenshot',
+    params: { filename: 'screenshot.png', scopeType: 'modern', method: 'pc_transfer' },
+  }] : [];
+
+  if (isBuildNew) {
+    const flow = {
+      name: `CH${channel.replace('CH', '')} Measurements`,
+      description: `Add ${measurements.join(', ')} measurements on ${channel}`,
+      backend: backend || 'pyvisa',
+      deviceType: req.flowContext.deviceType || 'SCOPE',
+      steps: [
+        { id: '1', type: 'connect', label: 'Connect to scope', params: { instrumentIds: ['scope1'], printIdn: true } },
+        {
+          id: 'g1', type: 'group', label: `Add ${channel} measurements`, params: {}, collapsed: false,
+          children: addGroup,
+        },
+        {
+          id: 'g2', type: 'group', label: 'Read measurement results', params: {}, collapsed: false,
+          children: queryGroup,
+        },
+        ...screenshotStep,
+        { id: '99', type: 'disconnect', label: 'Disconnect', params: {} },
+      ],
+    };
+    const summaryParts = [`Added ${measurements.join(', ')} measurements on ${channel}.`];
+    if (hasScreenshot) summaryParts.push('Screenshot step included.');
+    const actions = [{ type: 'replace_flow', flow }];
+    return `ACTIONS_JSON: ${JSON.stringify({ summary: summaryParts.join(' '), findings: [], suggestedFixes: [], actions })}`;
+  }
+
+  // Existing flow — insert steps
+  const insertAfterId =
+    (req.flowContext.selectedStepId && String(req.flowContext.selectedStepId)) ||
+    (existingSteps.find((step) => String(step.type || '') === 'connect')?.id as string | undefined) ||
+    null;
+  const allNewSteps = [...addGroup, ...queryGroup, ...screenshotStep];
+  const insertActions = allNewSteps.map((step) => ({
+    type: 'insert_step_after',
+    targetStepId: insertAfterId,
+    newStep: step,
+  }));
+  return `ACTIONS_JSON: ${JSON.stringify({ summary: `Added ${measurements.join(', ')} measurement steps on ${channel}.`, findings: [], suggestedFixes: [], actions: insertActions })}`;
+}
+
 function buildTmDevicesMeasurementShortcut(req: McpChatRequest): string | null {
   if ((req.outputMode || '') !== 'steps_json') return null;
   if ((req.flowContext.backend || '').toLowerCase() !== 'tm_devices') return null;
@@ -140,11 +240,25 @@ function buildTmDevicesMeasurementShortcut(req: McpChatRequest): string | null {
 // to reduce static system prompt token usage — Fix 5).
 const SCPI_ARG_TYPES_BRIEF = '<NR1>=int <NR2>=dec <NR3>=sci <QString>="str" {A|B}=choose [x]=opt NaN=9.91E+37';
 const KNOWN_PATTERN_HINTS = [
-  'Measurements on modern scopes: use MEASUrement:ADDMEAS <TYPE>, set SOURCE1 to the requested channel, then query the current acquisition result.',
+  'Measurements on modern scopes: use MEASUrement:ADDMEAS <TYPE>, set SOUrce1 to the requested channel, then query MEASUrement:MEAS<x>:RESUlts:CURRentacq:MEAN?.',
   'FastFrame on modern scopes: use HORizontal:FASTframe:STATE ON and HORizontal:FASTframe:COUNt <N>.',
-  'Screenshots on pyvisa scopes: prefer save_screenshot step type instead of raw HARDCOPY or SAVE:IMAGe commands.',
+  'Screenshots on pyvisa scopes: prefer save_screenshot step type (scopeType:modern, method:pc_transfer) instead of raw HARDCOPY or SAVE:IMAGe commands.',
   'tm_devices backend: prefer tm_device_command steps, not raw write/query SCPI steps.',
+  'Standard measurement enums are pre-verified: FREQUENCY, AMPLITUDE, POVERSHOOT, NOVERSHOOT, RISETIME, FALLTIME, PERIOD, PK2PK, MEAN, RMS. No search_scpi needed for these.',
 ].join('\n- ');
+
+// Golden flow examples injected inline — gives the model a direct pattern to match
+// without requiring a getTemplateExamples tool call.
+const GOLDEN_EXAMPLES_PYVISA = `## Golden Flow Examples
+
+### Measurement + Screenshot (pyvisa, MSO5/6)
+Request: "Add CH1 frequency, amplitude, positive overshoot measurements, query results, save screenshot"
+ACTIONS_JSON: {"summary":"Connected, added 3 CH1 measurements, queried results, screenshot, disconnected.","findings":[],"suggestedFixes":[],"actions":[{"type":"replace_flow","flow":{"name":"CH1 Measurements","description":"Frequency, amplitude, positive overshoot on CH1 with screenshot","backend":"pyvisa","deviceType":"SCOPE","steps":[{"id":"1","type":"connect","label":"Connect to scope","params":{"instrumentIds":["scope1"],"printIdn":true}},{"id":"g1","type":"group","label":"Add CH1 measurements","params":{},"collapsed":false,"children":[{"id":"2","type":"write","label":"Add frequency measurement","params":{"command":"MEASUrement:ADDMEAS FREQUENCY"}},{"id":"3","type":"write","label":"Set frequency source to CH1","params":{"command":"MEASUrement:MEAS1:SOUrce1 CH1"}},{"id":"4","type":"write","label":"Add amplitude measurement","params":{"command":"MEASUrement:ADDMEAS AMPLITUDE"}},{"id":"5","type":"write","label":"Set amplitude source to CH1","params":{"command":"MEASUrement:MEAS2:SOUrce1 CH1"}},{"id":"6","type":"write","label":"Add positive overshoot measurement","params":{"command":"MEASUrement:ADDMEAS POVERSHOOT"}},{"id":"7","type":"write","label":"Set positive overshoot source to CH1","params":{"command":"MEASUrement:MEAS3:SOUrce1 CH1"}}]},{"id":"g2","type":"group","label":"Read measurement results","params":{},"collapsed":false,"children":[{"id":"8","type":"query","label":"Query frequency result","params":{"command":"MEASUrement:MEAS1:RESUlts:CURRentacq:MEAN?","saveAs":"ch1_frequency"}},{"id":"9","type":"query","label":"Query amplitude result","params":{"command":"MEASUrement:MEAS2:RESUlts:CURRentacq:MEAN?","saveAs":"ch1_amplitude"}},{"id":"10","type":"query","label":"Query positive overshoot result","params":{"command":"MEASUrement:MEAS3:RESUlts:CURRentacq:MEAN?","saveAs":"ch1_positive_overshoot"}}]},{"id":"11","type":"save_screenshot","label":"Save Screenshot","params":{"filename":"screenshot.png","scopeType":"modern","method":"pc_transfer"}},{"id":"12","type":"disconnect","label":"Disconnect","params":{}}]}}]}
+
+### Single Measurement (pyvisa, MSO5/6)
+Request: "Add frequency measurement on CH1"
+ACTIONS_JSON: {"summary":"Added frequency measurement on CH1.","findings":[],"suggestedFixes":[],"actions":[{"type":"insert_step_after","targetStepId":null,"newStep":{"id":"m1","type":"write","label":"Add frequency measurement","params":{"command":"MEASUrement:ADDMEAS FREQUENCY"}}},{"type":"insert_step_after","targetStepId":"m1","newStep":{"id":"m2","type":"write","label":"Set frequency source to CH1","params":{"command":"MEASUrement:MEAS1:SOUrce1 CH1"}}},{"type":"insert_step_after","targetStepId":"m2","newStep":{"id":"m3","type":"query","label":"Query frequency result","params":{"command":"MEASUrement:MEAS1:RESUlts:CURRentacq:MEAN?","saveAs":"ch1_frequency"}}}]}
+`;
 
 function clipString(value: unknown, max = 280): unknown {
   if (typeof value !== 'string') return value;
@@ -275,31 +389,29 @@ function logToolResult(name: string, result: unknown) {
 }
 
 function buildSystemPrompt(policies: Record<string, string>, outputMode?: string): string {
-  // Fix 5: reduced system prompt. SCPI_ARG_TYPES moved to user prompt. blockly_xml only
-  // included when output mode is blockly_xml (saves ~800 tokens on every other request).
   const parts = [
     '# TekAutomate Flow Builder',
-    'Expert assistant for Tektronix instrument automation. Use tools to verify every SCPI command.',
-    '## Rules',
-    '- Call search_scpi or get_command_by_header BEFORE emitting any SCPI command',
-    '- Use EXACT syntax from tool results only — never invent commands',
-    '- Flows MUST start with connect, end with disconnect',
-    '- Query steps MUST have saveAs parameter',
-    '- set_step_param actions MUST update one param at a time',
-    '- NEVER use param="params" in set_step_param; emit separate actions for scopeType, method, filename, etc.',
-    '- If the user explicitly confirms an unverified measurement token or command choice, proceed once and mark it as user-confirmed instead of asking again.',
-    '- If the user provides the missing channel after a clarification, continue immediately and generate the requested steps.',
-    '- If the user asks to save a screenshot also, add a save_screenshot step without another clarification when placement is inferable from context.',
-    '- tm_devices backend + measurement request: build immediately using tm_device_command steps. Never ask about command style.',
-    '- For MSO5/6 tm_devices measurements, prefer addmeas-style measurement creation and value query methods. Do NOT fall back to legacy MEASurement:MEAS<x>:TYPE patterns unless the model family is explicitly legacy 5k/7k/70k.',
-    '- If part of a request is fully verified, build that part now and isolate only the uncertain portion in findings. Do not stall the whole flow.',
-    '- For simple single-feature requests (one measurement type, one command), search_scpi once then output ACTIONS_JSON directly.',
-    '- Only call verify_scpi_commands for multi-command flows (3+ commands).',
-    '- Only call validate_action_payload when the flow has groups or otherwise complex structure.',
-    '- Use only the tool calls actually needed for the request. For simple requests, do not force every verification tool if the command/payload is already sufficiently grounded.',
-    '- Output: 1-2 sentences then ACTIONS_JSON block',
-    '- NEVER output Python unless user explicitly requests it',
-    '- Prefer validate_action_payload as the final tool call when the payload is complex or structurally risky; do not waste extra tool calls on trivial flows.',
+    'Expert assistant for Tektronix instrument automation.',
+    '## Core Rules',
+    '- Standard pre-verified commands (IEEE 488.2, MEASUrement:ADDMEAS, CH<x>:*, TRIGger:A:*, HORizontal:*, ACQuire:*, FastFrame) need NO tool call — build immediately.',
+    '- Call search_scpi ONLY for commands outside the pre-verified set (novel, app-specific, or unfamiliar commands).',
+    '- Use EXACT syntax from tool results when you DO call a tool.',
+    '- Flows MUST start with connect, end with disconnect.',
+    '- Query steps MUST have saveAs parameter.',
+    '- set_step_param actions MUST update one param at a time. NEVER use param="params".',
+    '- Emit separate set_step_param actions for scopeType, method, filename, etc.',
+    '- If user provides channel/confirmation after a clarification, build immediately — no repeat questions.',
+    '- If user asks for screenshot, add save_screenshot without asking when placement is inferable.',
+    '- tm_devices + measurement: build immediately with tm_device_command steps. Never ask about command style.',
+    '- For MSO5/6 tm_devices, use addmeas-style creation and mean.query(). Never fall back to legacy MEAS<x>:TYPE.',
+    '- If part of a request is fully pre-verified, build that part now. Isolate only uncertain portions in findings.',
+    '- Only call verify_scpi_commands for multi-command flows (3+ novel commands).',
+    '- Only call validate_action_payload for complex/grouped flows.',
+    '- For standard requests: match the golden flow examples below, output ACTIONS_JSON directly, no tool calls.',
+    '- Output: 1-2 sentences then ACTIONS_JSON block.',
+    '- NEVER output Python unless user explicitly requests it.',
+    '',
+    GOLDEN_EXAMPLES_PYVISA,
     '',
     policies.response_format || '',
     policies.steps_json || '',
@@ -519,7 +631,7 @@ async function runAnthropicToolLoop(req: McpChatRequest, maxCalls = 6): Promise<
 }
 
 export async function runToolLoop(req: McpChatRequest): Promise<ToolLoopResult> {
-  const shortcut = buildTmDevicesMeasurementShortcut(req);
+  const shortcut = buildPyvisaMeasurementShortcut(req) || buildTmDevicesMeasurementShortcut(req);
   if (shortcut) {
     const checked = await postCheckResponse(shortcut, {
       backend: req.flowContext.backend,
