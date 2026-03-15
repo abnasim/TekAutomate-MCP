@@ -1,7 +1,7 @@
 import { validateActionPayload } from '../tools/validateActionPayload';
 import { verifyScpiCommands } from '../tools/verifyScpiCommands';
 import { extractReplaceFlowSteps } from './schemas';
-import { normalizeCommandHeader } from '../../src/utils/commandLoader';
+import { normalizeCommandHeader } from '../../../src/utils/commandLoader';
 
 export interface PostCheckResult {
   ok: boolean;
