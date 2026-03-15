@@ -29,6 +29,20 @@ function detectMeasurementChannel(req: McpChatRequest): string | null {
   return match ? `CH${match[1]}` : null;
 }
 
+function isValidationRequest(req: McpChatRequest): boolean {
+  return /\b(validate|validation|review|check flow|does this look right|does this look good|looks good|briefly)\b/i.test(
+    req.userMessage
+  );
+}
+
+function runLooksSuccessful(runContext: McpChatRequest['runContext']): boolean {
+  const audit = String(runContext.auditOutput || '');
+  const log = String(runContext.logTail || '');
+  if (/\bAudit:\s*pass\b/i.test(audit) || /\bexecutionPassed["']?\s*:\s*true\b/i.test(audit)) return true;
+  if (/\[OK\]\s+Complete/i.test(log) || /\bConnected:\b/i.test(log) && /\bScreenshot saved\b/i.test(log)) return true;
+  return false;
+}
+
 function buildPyvisaMeasurementShortcut(req: McpChatRequest): string | null {
   if ((req.outputMode || '') !== 'steps_json') return null;
   const backend = (req.flowContext.backend || 'pyvisa').toLowerCase();
@@ -414,6 +428,10 @@ function buildSystemPrompt(policies: Record<string, string>, outputMode?: string
     '- For standard requests: match the golden flow examples below, output ACTIONS_JSON directly, no tool calls.',
     '- Output: 1-2 sentences then ACTIONS_JSON block.',
     '- NEVER output Python unless user explicitly requests it.',
+    '- Validation is user-truth first: if the flow already runs or audit/logs show success, say "Flow looks good." unless there is a concrete blocker.',
+    '- A blocker must be something that will prevent build, apply, or execution. Hidden/internal params, backend normalization, or style cleanup are NOT blockers by themselves.',
+    '- If execution succeeded, backend mismatch or internal-param mismatches are warnings or optional autofixes only.',
+    '- Do not rebuild or replace a successful flow just to normalize backend labels or add inferred params.',
     '',
     GOLDEN_EXAMPLES_PYVISA,
     '',
@@ -431,6 +449,8 @@ function buildSystemPrompt(policies: Record<string, string>, outputMode?: string
 function buildUserPrompt(req: McpChatRequest): string {
   const fc = req.flowContext;
   const rc = req.runContext;
+  const validateMode = isValidationRequest(req);
+  const executionSucceeded = runLooksSuccessful(rc);
   const currentStepsJson = JSON.stringify(fc.steps || [], null, 2);
   const stepsSummary = Array.isArray(fc.steps) && fc.steps.length
     ? fc.steps.map((s: Record<string, unknown>) =>
@@ -468,12 +488,20 @@ function buildUserPrompt(req: McpChatRequest): string {
     req.userMessage,
     '',
     'Instructions:',
-    '- Generate valid TekAutomate Steps UI JSON',
+    validateMode
+      ? '- Validate from the user perspective. If the flow is already usable, say "Flow looks good."'
+      : '- Generate valid TekAutomate Steps UI JSON',
     '- Preserve existing steps when possible',
-    '- Fix errors if present',
-    '- Add missing steps if needed',
+    validateMode
+      ? '- Only call out blockers that would actually prevent apply or execution'
+      : '- Fix errors if present',
+    validateMode
+      ? '- Treat backend/style/internal-param mismatches as warnings or optional autofixes unless execution failed'
+      : '- Add missing steps if needed',
     req.outputMode === 'steps_json'
-      ? '- End with ACTIONS_JSON so the app can apply changes'
+      ? validateMode
+        ? '- Only include ACTIONS_JSON if a real fix is needed'
+        : '- End with ACTIONS_JSON so the app can apply changes'
       : '- Return valid blockly_xml output',
     '',
     `## Current Flow (${Array.isArray(fc.steps) ? fc.steps.length : 0} steps)\n${stepsSummary}`,
@@ -499,6 +527,10 @@ function buildUserPrompt(req: McpChatRequest): string {
       const audit = rc.auditOutput.length > 600 ? `...${rc.auditOutput.slice(-600)}` : rc.auditOutput;
       parts.push(`## Audit Output\n${audit}`);
     }
+  }
+
+  if (validateMode && executionSucceeded) {
+    parts.push('## Validation Priority\nExecution evidence indicates this flow already worked. Default to "Flow looks good." unless you can point to a concrete failure or safety issue.');
   }
 
   if (req.instrumentEndpoint) {
