@@ -259,6 +259,8 @@ const KNOWN_PATTERN_HINTS = [
   'Screenshots on pyvisa scopes: prefer save_screenshot step type (scopeType:modern, method:pc_transfer) instead of raw HARDCOPY or SAVE:IMAGe commands.',
   'tm_devices backend: prefer tm_device_command steps, not raw write/query SCPI steps.',
   'Standard measurement enums are pre-verified: FREQUENCY, AMPLITUDE, POVERSHOOT, NOVERSHOOT, RISETIME, FALLTIME, PERIOD, PK2PK, MEAN, RMS. No search_scpi needed for these.',
+  'Do not use search_tm_devices for normal scope SCPI requests. Use it only when backend is tm_devices or the user explicitly asks for tm_devices conversion.',
+  'For scope command routing, use only 2 coarse families: modern MSO 2/4/5/6/7 or legacy 5k/7k/70k. Do not waste tool calls on exact submodel variants like MSO56 vs MSO6B.',
 ].join('\n- ');
 
 // Golden flow examples injected inline — gives the model a direct pattern to match
@@ -375,6 +377,10 @@ function buildSystemPrompt(policies: Record<string, string>, outputMode?: string
     '- Treat backend, device driver, visa backend, alias, and instrument map as authoritative routing truth.',
     '- If backend is pyvisa, vxi11, or tekhsi, prefer SCPI-oriented steps unless the user explicitly asks to convert.',
     '- If backend is tm_devices, prefer tm_device_command steps unless the user explicitly asks to convert.',
+    '- Never call search_tm_devices for normal scope SCPI tasks such as screenshot, FastFrame, trigger, horizontal, or basic measurements.',
+    '- Built-in TekAutomate step types are already preferred patterns: save_screenshot for screenshots, save_waveform for waveform saves, connect/disconnect for connection handling.',
+    '- Standard screenshot, FastFrame, trigger, horizontal, and measurement requests should usually complete in zero tool calls.',
+    '- Model routing is coarse, not exact: modern scopes use the MSO 2/4/5/6/7 corpus; legacy scopes use 5k/7k/70k. Do not spend tool calls on exact model variant names.',
     '- If the user asks to convert SCPI to tm_devices or tm_devices to SCPI, preserve behavior and change only the command representation.',
     '- If part of a request is fully pre-verified, build that part now. Isolate only uncertain portions in findings.',
     '- Only call verify_scpi_commands for multi-command flows (3+ novel commands).',

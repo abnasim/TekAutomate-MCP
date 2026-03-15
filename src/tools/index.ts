@@ -43,7 +43,7 @@ export function getToolDefinitions() {
   return [
     {
       name: 'search_scpi',
-      description: 'Search SCPI commands by feature or keyword (e.g. "FastFrame", "trigger edge", "measurement frequency"). Use when you know what to DO but not the exact header. Returns syntax, examples, commandId.',
+      description: 'Search SCPI commands by feature or keyword (e.g. "FastFrame", "trigger edge", "measurement frequency"). Use for normal scope SCPI work when backend is pyvisa/vxi11/tekhsi or when the user wants SCPI. Do not overfit exact submodels; the scope corpus is already split into modern MSO 2/4/5/6/7 vs legacy 5k/7k/70k families.',
       parameters: {
         type: 'object',
         properties: {
@@ -105,7 +105,7 @@ export function getToolDefinitions() {
     },
     {
       name: 'search_tm_devices',
-      description: 'Search tm_devices Python library method tree and docstrings. Returns method paths, signatures, descriptions, and usage examples for instrument control.',
+      description: 'Search tm_devices Python library method tree and docstrings. ONLY use when backend is tm_devices or when the user explicitly asks to convert SCPI to tm_devices. Do not use for normal scope SCPI tasks like screenshot, FastFrame, trigger, or basic measurements.',
       parameters: {
         type: 'object',
         properties: {
