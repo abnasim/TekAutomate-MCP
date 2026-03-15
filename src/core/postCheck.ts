@@ -37,18 +37,22 @@ function collectCommandsFromActions(actionsJson: Record<string, unknown>): strin
     if (actionType === 'replace_flow' && Array.isArray(replaceFlowSteps)) {
       const walk = (steps: Array<Record<string, unknown>>) => {
         steps.forEach((step) => {
+          if (String(step.type || '') === 'tm_device_command') {
+            return;
+          }
           const params = (step.params || {}) as Record<string, unknown>;
           if (typeof params.command === 'string' && params.command.trim()) out.push(params.command);
-          if (typeof params.code === 'string' && params.code.trim()) out.push(params.code);
           if (Array.isArray(step.children)) walk(step.children as Array<Record<string, unknown>>);
         });
       };
       walk(replaceFlowSteps);
     }
     if (newStep) {
+      if (String(newStep.type || '') === 'tm_device_command') {
+        return;
+      }
       const params = (newStep.params || {}) as Record<string, unknown>;
       if (typeof params.command === 'string' && params.command.trim()) out.push(params.command);
-      if (typeof params.code === 'string' && params.code.trim()) out.push(params.code);
     }
   });
   return out;

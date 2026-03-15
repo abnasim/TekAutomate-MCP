@@ -22,6 +22,7 @@ export async function searchTmDevices(
       modelRoot: d.modelRoot,
       methodPath: d.methodPath,
       signature: d.signature,
+      description: d.text,
       usageExample: d.usageExample,
       availableForModel: d.availableForModel,
       warning: d.availableForModel ? undefined : 'Method unavailable for requested model',

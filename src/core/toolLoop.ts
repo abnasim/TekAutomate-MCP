@@ -156,6 +156,9 @@ function buildSystemPrompt(policies: Record<string, string>, outputMode?: string
     '- If the user explicitly confirms an unverified measurement token or command choice, proceed once and mark it as user-confirmed instead of asking again.',
     '- If the user provides the missing channel after a clarification, continue immediately and generate the requested steps.',
     '- If the user asks to save a screenshot also, add a save_screenshot step without another clarification when placement is inferable from context.',
+    '- tm_devices backend + measurement request: build immediately using tm_device_command steps. Never ask about command style.',
+    '- For MSO5/6 tm_devices measurements, prefer addmeas-style measurement creation and value query methods. Do NOT fall back to legacy MEASurement:MEAS<x>:TYPE patterns unless the model family is explicitly legacy 5k/7k/70k.',
+    '- If part of a request is fully verified, build that part now and isolate only the uncertain portion in findings. Do not stall the whole flow.',
     '- Output: 1-2 sentences then ACTIONS_JSON block',
     '- NEVER output Python unless user explicitly requests it',
     '- Call validate_action_payload as the FINAL tool call before outputting ACTIONS_JSON',
@@ -218,8 +221,8 @@ function buildUserPrompt(req: McpChatRequest): string {
   return parts.join('\n\n');
 }
 
-async function runOpenAiToolLoop(req: McpChatRequest, maxCalls = 4): Promise<string> {
-  // Fix 5: default maxCalls reduced from 6 to 4 to limit token burn per request.
+async function runOpenAiToolLoop(req: McpChatRequest, maxCalls = 6): Promise<string> {
+  // Default maxCalls raised slightly to avoid premature failure on tm_devices measurement setup.
   const policies = await loadPolicyBundle([
     'response_format',
     'backend_taxonomy',
@@ -300,11 +303,10 @@ async function runOpenAiToolLoop(req: McpChatRequest, maxCalls = 4): Promise<str
       });
     }
   }
-  return 'Tool call limit reached. ACTIONS_JSON: {"summary":"Failed to complete within tool budget.","findings":[],"suggestedFixes":[],"actions":[]}';
+  return 'ACTIONS_JSON: {"summary":"Failed to complete within tool budget.","findings":["Tool call limit reached before the flow could be finalized."],"suggestedFixes":["Retry with a more specific request or reduce the requested scope."],"actions":[]}';
 }
 
-async function runAnthropicToolLoop(req: McpChatRequest, maxCalls = 4): Promise<string> {
-  // Fix 5: default maxCalls reduced from 6 to 4 to limit token burn per request.
+async function runAnthropicToolLoop(req: McpChatRequest, maxCalls = 6): Promise<string> {
   const policies = await loadPolicyBundle([
     'response_format',
     'backend_taxonomy',
@@ -373,7 +375,7 @@ async function runAnthropicToolLoop(req: McpChatRequest, maxCalls = 4): Promise<
     messages.push({ role: 'user', content: toolResults });
   }
 
-  return 'Tool call limit reached. ACTIONS_JSON: {"summary":"Failed to complete within tool budget.","findings":[],"suggestedFixes":[],"actions":[]}';
+  return 'ACTIONS_JSON: {"summary":"Failed to complete within tool budget.","findings":["Tool call limit reached before the flow could be finalized."],"suggestedFixes":["Retry with a more specific request or reduce the requested scope."],"actions":[]}';
 }
 
 export async function runToolLoop(req: McpChatRequest): Promise<ToolLoopResult> {
