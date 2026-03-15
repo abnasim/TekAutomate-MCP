@@ -52,13 +52,13 @@ async function runCase(test) {
       body: JSON.stringify(body),
     });
     const ms = Math.round(performance.now() - t0);
+    const raw = await res.text();
     let data;
     try {
-      data = await res.json();
+      data = JSON.parse(raw);
     } catch (parseErr) {
-      const txt = await res.text();
       console.log(
-        `${test.label} | ${res.status} | ${ms}ms | JSON parse fail | raw: ${txt.slice(0, 150).replace(/\\s+/g, ' ')}`
+        `${test.label} | ${res.status} | ${ms}ms | JSON parse fail | raw: ${raw.slice(0, 150).replace(/\\s+/g, ' ')}`
       );
       return;
     }

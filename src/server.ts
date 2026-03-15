@@ -189,6 +189,7 @@ export async function createServer(port = 8787): Promise<http.Server> {
                 promptFileText: result.debug.promptFileText,
                 systemPrompt: result.debug.systemPrompt,
                 userPrompt: result.debug.userPrompt,
+                developerPrompt: (result.debug as Record<string, unknown>).developerPrompt,
                 shortcutResponse: result.debug.shortcutResponse,
               }
             : undefined,
@@ -198,6 +199,7 @@ export async function createServer(port = 8787): Promise<http.Server> {
                 trace: result.debug.toolTrace,
               }
             : undefined,
+          rawOutput: (result.debug as Record<string, unknown>).rawOutput,
           timings: {
             totalMs: Date.now() - startedAt,
             ...(result.metrics || {}),
