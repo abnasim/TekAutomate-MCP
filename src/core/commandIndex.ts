@@ -618,6 +618,16 @@ export class CommandIndex {
   size(): number {
     return this.entries.length;
   }
+
+  getAllHeaders(): string[] {
+    return this.entries.map((e) => e.header);
+  }
+
+  getByHeaderPrefix(header: string, family?: string): CommandRecord | null {
+    const h = header.toLowerCase();
+    const candidate = this.entries.find((e) => e.header.toLowerCase().startsWith(h) && familyMatches(e, family));
+    return candidate || null;
+  }
 }
 
 function toCommandRecord(

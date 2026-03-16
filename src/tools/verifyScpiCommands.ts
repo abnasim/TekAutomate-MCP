@@ -43,7 +43,11 @@ export async function verifyScpiCommands(
     let firstMatch: { commandId: string; sourceFile: string } | null = null;
     for (const segment of segments) {
       const candidate = headerFromSegment(segment);
-      const entry = index.getByHeader(candidate, input.modelFamily);
+      const entry =
+        index.getByHeader(candidate, input.modelFamily) ||
+        index.getByHeader(candidate.toUpperCase(), input.modelFamily) ||
+        index.getByHeader(candidate.toLowerCase(), input.modelFamily) ||
+        index.getByHeaderPrefix(candidate, input.modelFamily);
       if (!entry) {
         failed = true;
         break;
