@@ -5,7 +5,8 @@ import { extractReplaceFlowSteps } from './schemas';
 function normalizeCommandHeader(command: string): string {
   if (!command) return '';
   let normalized = command.split('?')[0].trim();
-  normalized = normalized.split(/\s/)[0];
+  // Split on whitespace or semicolon to drop arguments/suffix chains
+  normalized = normalized.split(/[\\s;]/)[0];
   normalized = normalized
     .replace(/PG(\d+)Val/gi, 'PG<x>Val')
     .replace(/PW(\d+)Val/gi, 'PW<x>Val')

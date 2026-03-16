@@ -92,6 +92,18 @@ const TESTS: TestCase[] = [
   // === LEGACY DPO ===
   { id: 'DPO01', userMessage: 'Add frequency measurement on CH1', flowContext: { backend: 'pyvisa', modelFamily: 'DPO7000', deviceType: 'SCOPE', steps: [] } },
   { id: 'DPO02', userMessage: 'Set up CAN decode on B1 source CH1 500kbps', flowContext: { backend: 'pyvisa', modelFamily: 'DPO5000', deviceType: 'SCOPE', steps: [] } },
+
+  // === MSO vs DPO comparison ===
+  { id: 'MSO_MEAS01', userMessage: 'Add frequency measurement on CH1', flowContext: { backend: 'pyvisa', modelFamily: 'MSO6B', deviceType: 'SCOPE', steps: [] } },
+  { id: 'MSO_MEAS02', userMessage: 'Add frequency amplitude and rise time on CH1', flowContext: { backend: 'pyvisa', modelFamily: 'MSO56', deviceType: 'SCOPE', steps: [] } },
+  { id: 'MSO_BUS01', userMessage: 'Set up CAN decode on B1 source CH1 500kbps', flowContext: { backend: 'pyvisa', modelFamily: 'MSO6B', deviceType: 'SCOPE', steps: [] } },
+  { id: 'MSO_TRIG01', userMessage: 'Set edge trigger CH1 rising 1V', flowContext: { backend: 'pyvisa', modelFamily: 'MSO6B', deviceType: 'SCOPE', steps: [] } },
+  { id: 'MSO_SAVE01', userMessage: 'Save CH1 waveform and take screenshot', flowContext: { backend: 'pyvisa', modelFamily: 'MSO6B', deviceType: 'SCOPE', steps: [] } },
+  { id: 'DPO_MEAS01', userMessage: 'Add frequency measurement on CH1', flowContext: { backend: 'pyvisa', modelFamily: 'DPO7000', deviceType: 'SCOPE', steps: [] } },
+  { id: 'DPO_MEAS02', userMessage: 'Add frequency amplitude and rise time on CH1', flowContext: { backend: 'pyvisa', modelFamily: 'DPO5000', deviceType: 'SCOPE', steps: [] } },
+  { id: 'DPO_BUS01', userMessage: 'Set up CAN decode on B1 source CH1 500kbps', flowContext: { backend: 'pyvisa', modelFamily: 'DPO7000', deviceType: 'SCOPE', steps: [] } },
+  { id: 'DPO_TRIG01', userMessage: 'Set edge trigger CH1 rising 1V', flowContext: { backend: 'pyvisa', modelFamily: 'DPO5000', deviceType: 'SCOPE', steps: [] } },
+  { id: 'DPO_SAVE01', userMessage: 'Save CH1 waveform and take screenshot', flowContext: { backend: 'pyvisa', modelFamily: 'DPO7000', deviceType: 'SCOPE', steps: [] } },
 ];
 
 const MCP_HOST = process.env.MCP_HOST || 'http://localhost:8787';
@@ -110,7 +122,7 @@ const filterSet = CASE_FILTER
 
 const selected = filterSet ? TESTS.filter((t) => filterSet.has(t.id)) : TESTS;
 
-function extractActionsJson(text: string): { actionsLength: number } {
+function extractActionsJson(text: string): { actionsLength: number; findingsLength: number } {
   const cleaned = text
     .replace(/ACTIONS_JSON:\s*```json\s*/gi, 'ACTIONS_JSON: ')
     .replace(/```\s*(\n|$)/g, '')
@@ -137,7 +149,8 @@ function extractActionsJson(text: string): { actionsLength: number } {
     }
   }
   const actions = obj && Array.isArray(obj.actions) ? obj.actions : [];
-  return { actionsLength: actions.length };
+  const findings = obj && Array.isArray(obj.findings) ? obj.findings : [];
+  return { actionsLength: actions.length, findingsLength: findings.length };
 }
 
 async function runCase(test: TestCase) {
@@ -175,11 +188,17 @@ async function runCase(test: TestCase) {
     }
     const ok = data?.ok === true;
     const errors = Array.isArray(data?.errors) ? data.errors.length : 0;
-    const { actionsLength } = extractActionsJson(String(data?.text || ''));
+    const { actionsLength, findingsLength } = extractActionsJson(String(data?.text || ''));
     const modelMs = data?.metrics?.modelMs ?? '-';
-    const status = !ok ? 'FAIL' : errors > 0 ? 'WARN' : actionsLength > 0 ? 'PASS' : 'WARN';
+    const status = !ok
+      ? 'FAIL'
+      : errors > 0
+        ? 'WARN'
+        : actionsLength > 0 || findingsLength > 0
+          ? 'PASS'
+          : 'WARN';
     console.log(
-      `${test.id} | ${status} | total:${totalMs}ms model:${modelMs} | errors:${errors} | actions:${actionsLength}`
+      `${test.id} | ${status} | total:${totalMs}ms model:${modelMs} | errors:${errors} | actions:${actionsLength} | findings:${findingsLength}`
     );
   } catch (e) {
     const totalMs = Math.round(performance.now() - t0);
