@@ -114,6 +114,7 @@ export async function buildContext(req: McpChatRequest): Promise<string> {
       'Combine ALL channel setup into ONE write step; combine ALL bus config into ONE action. Maximum 3 actions total per response.',
       'Every query step MUST include saveAs. No exceptions.',
       'Never ask for confirmation. Never say "shall I proceed". Apply the request directly.',
+      'If run logs contain "error", "failed", "could not reach executor", or non-zero exit code, mark the flow as failed and return the error in findings. Do NOT say "Flow looks good" in that case.',
     ].join('\n')
   );
 
