@@ -7,6 +7,10 @@ import { runToolLoop } from './core/toolLoop';
 import type { McpChatRequest } from './core/schemas';
 import fs from 'fs';
 import path from 'path';
+import { fileURLToPath } from 'url';
+
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
 
 let lastAiDebug: Record<string, unknown> | null = null;
 const REQUEST_LOG_DIR = path.join(__dirname, 'logs', 'requests');
