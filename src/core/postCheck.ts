@@ -8,6 +8,9 @@ function normalizeCommandHeader(command: string): string {
   // Remove query marker
   let normalized = command.split('?')[0].trim();
 
+  // Split on comma first (for comma-separated args)
+  normalized = normalized.split(',')[0].trim();
+
   // Remove arguments (everything after first space)
   normalized = normalized.split(/\s/)[0];
 
