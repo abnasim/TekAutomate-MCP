@@ -183,6 +183,14 @@ export async function postCheckResponse(
 
   const commands = collectCommandsFromActions(actionsJson);
   if (commands.length) {
+    commands.forEach((cmd) => {
+      if (/trigg(er)?:?a:?edge/i.test(cmd)) {
+        // eslint-disable-next-line no-console
+        console.log('[postCheck] raw:', cmd);
+        // eslint-disable-next-line no-console
+        console.log('[postCheck] normalized:', normalizeCommandHeader(cmd));
+      }
+    });
     const verification = await verifyScpiCommands({
       commands: commands.map(normalizeCommandHeader),
       modelFamily: flowContext?.modelFamily,

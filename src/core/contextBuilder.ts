@@ -67,9 +67,15 @@ async function searchCommandJson(userMessage: string, modelFamily: string, devic
 
 export async function buildContext(req: McpChatRequest): Promise<string> {
   const sections: string[] = [];
+  const targetFile = getTargetFile(req.flowContext.deviceType, req.flowContext.modelFamily);
 
   sections.push(
     [
+      'FIRST LINE OF YOUR RESPONSE MUST BE ONE SENTENCE ONLY.',
+      'SECOND LINE MUST BE ACTIONS_JSON: {"summary":"...","findings":[],"suggestedFixes":[],"actions":[...]}',
+      'NO numbered lists. NO step explanations. NO prose sections.',
+      'IF YOU WRITE MORE THAN 2 LINES BEFORE ACTIONS_JSON YOU ARE WRONG.',
+      '',
       'OUTPUT RULE (read first):',
       'End your response with ACTIONS_JSON: {"summary":"...","findings":[],"suggestedFixes":[],"actions":[...]}',
       'No code fences. No raw arrays. No prose after ACTIONS_JSON.',
@@ -159,6 +165,17 @@ export async function buildContext(req: McpChatRequest): Promise<string> {
     req.flowContext.modelFamily,
     req.flowContext.deviceType
   );
+  // eslint-disable-next-line no-console
+  console.log(
+    '[contextBuilder] targetFile:',
+    targetFile,
+    'deviceType:',
+    req.flowContext.deviceType,
+    'modelFamily:',
+    req.flowContext.modelFamily,
+    'hits:',
+    Array.isArray(scpiHits) ? scpiHits.length : 0
+  );
   if (scpiHits && scpiHits.length) {
     sections.push('## MATCHED SCPI COMMANDS\n\n' + scpiHits);
   }
@@ -169,7 +186,7 @@ export async function buildContext(req: McpChatRequest): Promise<string> {
     `Steps: ${JSON.stringify(req.flowContext.steps, null, 2)}`,
     `Device type: ${req.flowContext.deviceType || 'SCOPE'}`,
     `Model family: ${req.flowContext.modelFamily}`,
-    `Command library: ${getTargetFile(req.flowContext.deviceType, req.flowContext.modelFamily)}`,
+    `Command library: ${targetFile}`,
   ];
   if (req.flowContext.validationErrors?.length) {
     ws.push('Errors:\n' + req.flowContext.validationErrors.map((e) => `- ${e}`).join('\n'));
