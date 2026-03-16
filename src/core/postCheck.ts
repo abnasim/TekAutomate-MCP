@@ -1,12 +1,18 @@
 import { validateActionPayload } from '../tools/validateActionPayload';
 import { verifyScpiCommands } from '../tools/verifyScpiCommands';
 import { extractReplaceFlowSteps } from './schemas';
-// Local copy of the shared normalization used in commandLoader.normalizeCommandHeader
+// Canonical normalizeCommandHeader (copied from src/utils/commandLoader.ts)
 function normalizeCommandHeader(command: string): string {
   if (!command) return '';
+
+  // Remove query marker
   let normalized = command.split('?')[0].trim();
-  // Split on whitespace or semicolon to drop arguments/suffix chains
-  normalized = normalized.split(/[\s;]/)[0];
+
+  // Remove arguments (everything after first space)
+  normalized = normalized.split(/\s/)[0];
+
+  // Normalize variable mnemonics to patterns
+  // First handle patterns with <x> in the middle (before "Val" or "Voltage" or "VOLTage")
   normalized = normalized
     .replace(/PG(\d+)Val/gi, 'PG<x>Val')
     .replace(/PW(\d+)Val/gi, 'PW<x>Val')
@@ -15,7 +21,10 @@ function normalizeCommandHeader(command: string): string {
     .replace(/SPAN(\d+)Val/gi, 'SPAN<x>Val')
     .replace(/RIPPLEFREQ(\d+)Val/gi, 'RIPPLEFREQ<x>Val')
     .replace(/MAXG(\d+)Voltage/gi, 'MAXG<x>Voltage')
-    .replace(/OUTPUT(\d+)VOLTage/gi, 'OUTPUT<x>VOLTage')
+    .replace(/OUTPUT(\d+)VOLTage/gi, 'OUTPUT<x>VOLTage');
+
+  // Then handle standard patterns with <x> at the end
+  normalized = normalized
     .replace(/CH\d+/gi, 'CH<x>')
     .replace(/REF\d+/gi, 'REF<x>')
     .replace(/MATH\d+/gi, 'MATH<x>')
@@ -33,7 +42,9 @@ function normalizeCommandHeader(command: string): string {
     .replace(/SPECView\d+/gi, 'SPECView<x>')
     .replace(/POWer\d+/gi, 'POWer<x>')
     .replace(/GSOurce\d+/gi, 'GSOurce<x>')
-    .replace(/SOUrce\d+/gi, 'SOUrce<x>');
+    .replace(/SOUrce\d+/gi, 'SOUrce<x>')
+    .toLowerCase();
+
   return normalized;
 }
 

@@ -18,27 +18,54 @@ async function searchCommandJson(userMessage: string, modelFamily: string, devic
   const idx = await getCommandIndex();
   const entries: any[] = (idx as any).entries || [];
   const targetFile = getTargetFile(deviceType, modelFamily);
-  const terms = userMessage.toLowerCase().split(/\s+/).filter(Boolean);
+  const terms = userMessage
+    .toLowerCase()
+    .split(/[^a-z0-9_:/]+/g)
+    .map((t) => t.trim())
+    .filter(Boolean);
   if (!terms.length) return [];
+
+  const norm = (t: string) => t.replace(/<[^>]*>/g, '').replace(/\d+/g, '').replace(/[^a-z0-9:_]/gi, '').toUpperCase();
+
+  const scoreEntry = (entry: any) => {
+    const header = String(entry.header || '').trim();
+    const headerTokens = header.split(':').map(norm).filter(Boolean);
+    const setSyn = entry.raw?._manualEntry?.syntax?.set || entry.syntax?.set || '';
+    const querySyn = entry.raw?._manualEntry?.syntax?.query || entry.syntax?.query || '';
+    const textBlob = [
+      header,
+      entry.shortDescription,
+      entry.description,
+      entry.group,
+      setSyn,
+      querySyn,
+      ...(entry.raw?._manualEntry?.examples || []).map((ex: any) => ex?.codeExamples?.scpi?.code || ex?.scpi),
+    ]
+      .filter(Boolean)
+      .join(' ')
+      .toLowerCase();
+
+    // Path-order score: terms appear in order across header tokens
+    let pathScore = 0;
+    let pos = 0;
+    terms.forEach((term) => {
+      const tNorm = norm(term);
+      for (let i = pos; i < headerTokens.length; i++) {
+        if (headerTokens[i].includes(tNorm) || tNorm.includes(headerTokens[i])) {
+          pathScore += 2; // strong match
+          pos = i + 1;
+          return;
+        }
+      }
+    });
+
+    const textScore = terms.reduce((s, t) => s + (textBlob.includes(t) ? 1 : 0), 0);
+    return pathScore + textScore;
+  };
 
   const hits = entries
     .filter((e) => (e.sourceFile || '').endsWith(targetFile))
-    .map((e) => {
-      const text = [
-        e.header,
-        e.shortDescription,
-        e.description,
-        e.group,
-        e.raw?._manualEntry?.syntax?.set,
-        e.raw?._manualEntry?.syntax?.query,
-        ...(e.raw?._manualEntry?.examples || []).map((ex: any) => ex?.codeExamples?.scpi?.code),
-      ]
-        .filter(Boolean)
-        .join(' ')
-        .toLowerCase();
-      const score = terms.reduce((s, t) => s + (text.includes(t) ? 1 : 0), 0);
-      return { rec: e.raw || e, score };
-    })
+    .map((e) => ({ rec: e.raw || e, score: scoreEntry(e) }))
     .filter((x) => x.score > 0)
     .sort((a, b) => b.score - a.score)
     .slice(0, 5);
