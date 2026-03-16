@@ -669,7 +669,7 @@ async function runOpenAiResponses(
         'Content-Type': 'application/json',
       },
       body: JSON.stringify({
-        model: req.model || 'gpt-4o-mini',
+        model: req.model || 'gpt-4o',
         instructions,
         input: [
           scpiContext
@@ -795,7 +795,7 @@ async function runOpenAiToolLoop(
       'Content-Type': 'application/json',
     },
     body: JSON.stringify({
-      model: req.model || 'gpt-4o-mini',
+      model: req.model || 'gpt-4o',
       instructions: systemPrompt,
       input: [{ role: 'user', content: userPrompt }],
       stream: false,

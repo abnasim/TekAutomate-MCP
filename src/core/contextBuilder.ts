@@ -3,7 +3,7 @@ import type { McpChatRequest } from './schemas';
 
 export async function buildScpiContext(req: McpChatRequest): Promise<string> {
   const idx = await getCommandIndex();
-  const results = idx.searchByQuery(req.userMessage, req.flowContext.modelFamily, 10);
+  const results = idx.searchByQuery(req.userMessage, req.flowContext.modelFamily, 3);
   if (!results.length) return '';
 
   const wantTmDevices = (req.flowContext.backend || '').toLowerCase() === 'tm_devices';
