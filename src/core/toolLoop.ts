@@ -669,7 +669,7 @@ async function runOpenAiResponses(
         'Content-Type': 'application/json',
       },
       body: JSON.stringify({
-        model: req.model || 'gpt-4o-mini',
+        model: req.model || 'gpt-4o',
         instructions,
         max_output_tokens: 4096,
         input: [
@@ -886,6 +886,7 @@ export async function runToolLoop(req: McpChatRequest): Promise<ToolLoopResult> 
       backend: req.flowContext.backend,
       modelFamily: req.flowContext.modelFamily,
       originalSteps: req.flowContext.steps,
+      scpiContext: req.scpiContext as Array<Record<string, unknown>>,
     });
     return {
       text: checked.text,
@@ -916,9 +917,13 @@ export async function runToolLoop(req: McpChatRequest): Promise<ToolLoopResult> 
     backend: req.flowContext.backend,
     modelFamily: req.flowContext.modelFamily,
     originalSteps: req.flowContext.steps,
+    scpiContext: req.scpiContext as Array<Record<string, unknown>>,
   });
   if (checked.errors.length) {
     console.log('[MCP] postCheck errors:', checked.errors);
+  }
+  if (checked.warnings.length) {
+    console.log('[MCP] postCheck warnings:', checked.warnings);
   }
   return {
     text: checked.text,

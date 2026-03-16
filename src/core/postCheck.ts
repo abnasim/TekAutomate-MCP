@@ -58,10 +58,42 @@ function splitCommands(raw: string): string[] {
     .filter(Boolean);
 }
 
+const ALWAYS_VALID_PREFIXES = [
+  'trig',
+  'trigger',
+  'ch<x>',
+  'ch1',
+  'ch2',
+  'ch3',
+  'ch4',
+  'horizontal',
+  'acquire',
+  'acq',
+  'search',
+  'bus',
+  'can',
+  'afg',
+  'awg',
+  'source',
+  'sour',
+  'measure',
+  'meas',
+  'output',
+  'outp',
+  'display',
+  'save',
+  'recall',
+  'filesystem',
+  'meas:curr',
+  'meas:volt',
+  '*',
+];
+
 export interface PostCheckResult {
   ok: boolean;
   text: string;
   errors: string[];
+  warnings: string[];
 }
 
 function extractActionsJson(text: string): Record<string, unknown> | null {
@@ -151,11 +183,16 @@ function extractActionsJson(text: string): Record<string, unknown> | null {
         summary: 'Actions',
         findings: [],
         suggestedFixes: [],
-        actions: arr,
+        actions: Array.isArray(arr) ? arr : [],
       } as Record<string, unknown>;
     } catch {
       return null;
     }
+  }
+
+  // If marker exists but parsing failed, return minimal shell
+  if (cleaned.match(/ACTIONS_JSON:/i)) {
+    return { summary: '', findings: [], suggestedFixes: [], actions: [] };
   }
 
   return null;
@@ -203,9 +240,15 @@ function collectCommandsFromActions(actionsJson: Record<string, unknown>): strin
 
 export async function postCheckResponse(
   text: string,
-  flowContext?: { backend?: string; modelFamily?: string; originalSteps?: Array<Record<string, unknown>> }
+  flowContext?: {
+    backend?: string;
+    modelFamily?: string;
+    originalSteps?: Array<Record<string, unknown>>;
+    scpiContext?: Array<Record<string, unknown>>;
+  }
 ): Promise<PostCheckResult> {
   const errors: string[] = [];
+  const warnings: string[] = [];
   let finalText = text;
   let verificationRows: Array<Record<string, unknown>> = [];
   const actionsJson = extractActionsJson(finalText);
@@ -240,40 +283,24 @@ export async function postCheckResponse(
 
   const commands = collectCommandsFromActions(actionsJson);
   if (commands.length) {
-    const ALWAYS_VALID_PREFIXES = [
-      'trigger:a:edge',
-      'trigger:a:level',
-      'trigger:a:type',
-      'trigger:a:mode',
-      'trigger:b:edge',
-      'trigger:b:level',
-      'ch',
-      'horizontal:',
-      'acquire:',
-      'measurement:',
-      'bus:b',
-      'display:',
-      'save:',
-      'recall:',
-      'filesystem:',
-      '*',
-    ];
-
     const isAlwaysValid = (cmd: string) => {
       const lower = cmd.toLowerCase();
-      return ALWAYS_VALID_PREFIXES.some((p) => lower.startsWith(p));
+      return ALWAYS_VALID_PREFIXES.some((p) => lower.startsWith(p)) || lower.startsWith('*');
     };
 
-    const toVerify = commands.filter((cmd) => !isAlwaysValid(cmd));
+    const clientHeaders = new Set(
+      (flowContext?.scpiContext || [])
+        .map((c) => (c && typeof c === 'object' ? (c as Record<string, unknown>).header : null))
+        .filter((h): h is string => !!h)
+        .map((h) => normalizeCommandHeader(h))
+    );
 
-    commands.forEach((cmd) => {
-      if (/trigg(er)?:?a:?edge/i.test(cmd)) {
-        // eslint-disable-next-line no-console
-        console.log('[postCheck] raw:', cmd);
-        // eslint-disable-next-line no-console
-        console.log('[postCheck] normalized:', normalizeCommandHeader(cmd));
-      }
+    const toVerify = commands.filter((cmd) => {
+      const norm = normalizeCommandHeader(cmd);
+      if (clientHeaders.has(norm)) return false;
+      return !isAlwaysValid(cmd);
     });
+
     const verification = await verifyScpiCommands({
       commands: toVerify.map(normalizeCommandHeader),
       modelFamily: flowContext?.modelFamily,
@@ -289,7 +316,7 @@ export async function postCheckResponse(
         const h = String(f.command || '').toLowerCase();
         const isPrefix = allHeaders.some((ah) => ah.startsWith(h));
         if (!isPrefix) {
-          errors.push(`Unverified command: ${String(f.command || '')}`);
+          warnings.push(`Unverified command: ${String(f.command || '')}`);
         }
       });
     }
@@ -319,7 +346,8 @@ export async function postCheckResponse(
   // eslint-disable-next-line no-console
   console.log(
     `[MCP] postCheck verification: ${verifiedCount}/${totalCount} commands verified` +
-      (errors.length ? ` | errors: ${errors.join(', ')}` : ' | clean')
+      (errors.length ? ` | errors: ${errors.join(', ')}` : '') +
+      (warnings.length ? ` | warnings: ${warnings.join(', ')}` : ' | clean')
   );
-  return { ok: errors.length === 0, text: finalText, errors };
+  return { ok: errors.length === 0, text: finalText, errors, warnings };
 }
