@@ -6,7 +6,7 @@ function normalizeCommandHeader(command: string): string {
   if (!command) return '';
   let normalized = command.split('?')[0].trim();
   // Split on whitespace or semicolon to drop arguments/suffix chains
-  normalized = normalized.split(/[\\s;]/)[0];
+  normalized = normalized.split(/[\s;]/)[0];
   normalized = normalized
     .replace(/PG(\d+)Val/gi, 'PG<x>Val')
     .replace(/PW(\d+)Val/gi, 'PW<x>Val')
@@ -33,8 +33,7 @@ function normalizeCommandHeader(command: string): string {
     .replace(/SPECView\d+/gi, 'SPECView<x>')
     .replace(/POWer\d+/gi, 'POWer<x>')
     .replace(/GSOurce\d+/gi, 'GSOurce<x>')
-    .replace(/SOUrce\d+/gi, 'SOUrce<x>')
-    .toLowerCase();
+    .replace(/SOUrce\d+/gi, 'SOUrce<x>');
   return normalized;
 }
 
@@ -163,10 +162,20 @@ export async function postCheckResponse(
       modelFamily: flowContext?.modelFamily,
     });
     verificationRows = verification.data as Array<Record<string, unknown>>;
-    const failures = verificationRows.filter(
-      (item) => item.verified !== true
-    );
-    failures.forEach((f) => errors.push(`Unverified command: ${String(f.command || '')}`));
+    const failures = verificationRows.filter((item) => item.verified !== true);
+
+    if (failures.length) {
+      // Prefix fallback: treat group headers as valid if they prefix any known command
+      const idx = await getCommandIndex();
+      const allHeaders = idx.getAllHeaders().map((h) => h.toLowerCase());
+      failures.forEach((f) => {
+        const h = String(f.command || '').toLowerCase();
+        const isPrefix = allHeaders.some((ah) => ah.startsWith(h));
+        if (!isPrefix) {
+          errors.push(`Unverified command: ${String(f.command || '')}`);
+        }
+      });
+    }
   }
 
   const prose = finalText.replace(/ACTIONS_JSON:[\s\S]*$/i, '').trim();

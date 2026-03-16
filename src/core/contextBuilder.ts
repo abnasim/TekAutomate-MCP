@@ -1,11 +1,20 @@
 import type { McpChatRequest } from './schemas';
 import { getCommandIndex } from './commandIndex';
 
-async function searchCommandJson(userMessage: string, modelFamily: string): Promise<any[]> {
+function getTargetFile(deviceType?: string, modelFamily?: string): string {
+  const dt = (deviceType || '').toUpperCase();
+  const mf = (modelFamily || '').toUpperCase();
+  if (dt === 'AFG' || /AFG/.test(mf)) return 'afg.json';
+  if (dt === 'AWG' || /AWG/.test(mf)) return 'awg.json';
+  if (dt === 'SMU' || /SMU/.test(mf)) return 'smu.json';
+  if (/DPO|5K|7K|70K/.test(mf)) return 'MSO_DPO_5k_7k_70K.json';
+  return 'mso_2_4_5_6_7.json';
+}
+
+async function searchCommandJson(userMessage: string, modelFamily: string, deviceType?: string): Promise<any[]> {
   const idx = await getCommandIndex();
   const entries: any[] = (idx as any).entries || [];
-  const isDpo = /DPO|5k|7k|70k/i.test(modelFamily || '');
-  const targetFile = isDpo ? 'MSO_DPO_5k_7k_70K.json' : 'mso_2_4_5_6_7.json';
+  const targetFile = getTargetFile(deviceType, modelFamily);
   const terms = userMessage.toLowerCase().split(/\s+/).filter(Boolean);
   if (!terms.length) return [];
 
@@ -31,19 +40,26 @@ async function searchCommandJson(userMessage: string, modelFamily: string): Prom
     .sort((a, b) => b.score - a.score)
     .slice(0, 5);
 
-  const slim = (r: any) => ({
-    header: r.header,
-    commandType: r.commandType,
-    syntax: r.syntax,
-    arguments: r.arguments,
-    examples: (r.examples || []).slice(0, 2),
-    notes: r.notes,
-    conditions: r.conditions,
-  });
+  const slim = (r: any) => {
+    const m = r._manualEntry || r;
+    return {
+      header: m.header || r.header,
+      commandType: m.commandType,
+      syntax: m.syntax,
+      arguments: m.arguments,
+      examples: Array.isArray(m.examples)
+        ? m.examples.slice(0, 2).map((e: any) => ({
+            description: e.description,
+            scpi: e.codeExamples?.scpi?.code,
+            tm_devices: e.codeExamples?.tm_devices?.code,
+          }))
+        : [],
+      notes: m.notes,
+      conditions: r.conditions,
+    };
+  };
 
-  return hits
-    .map((x) => JSON.stringify(slim(x.rec._manualEntry || x.rec)))
-    .join('\n\n---\n\n');
+  return hits.map((x) => JSON.stringify(slim(x.rec), null, 2)).join('\n\n---\n\n');
 }
 
 export async function buildContext(req: McpChatRequest): Promise<string> {
@@ -56,6 +72,8 @@ export async function buildContext(req: McpChatRequest): Promise<string> {
       'No code fences. No raw arrays. No prose after ACTIONS_JSON.',
       'If no changes needed: ACTIONS_JSON: {"summary":"...","findings":[],"suggestedFixes":[],"actions":[]}',
       'COMPLEX flows (3+ steps): after one short summary sentence, output ACTIONS_JSON immediately. No numbered lists or step-by-step prose. The actions array is the breakdown.',
+      'Never ask for confirmation. If parameters are inferable, build immediately and state assumptions in the summary.',
+      'If backend is pyvisa/vxi11: use write/query/save_* steps. tm_device_command is ONLY for tm_devices backend.',
     ].join('\n')
   );
 
@@ -93,7 +111,11 @@ export async function buildContext(req: McpChatRequest): Promise<string> {
     ].join('\n')
   );
 
-  const scpiHits = await searchCommandJson(req.userMessage, req.flowContext.modelFamily);
+  const scpiHits = await searchCommandJson(
+    req.userMessage,
+    req.flowContext.modelFamily,
+    req.flowContext.deviceType
+  );
   if (scpiHits && scpiHits.length) {
     sections.push('## MATCHED SCPI COMMANDS\n\n' + scpiHits);
   }
