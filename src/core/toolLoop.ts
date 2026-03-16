@@ -671,6 +671,7 @@ async function runOpenAiResponses(
       body: JSON.stringify({
         model: req.model || 'gpt-4o-mini',
         instructions,
+        max_output_tokens: 4096,
         input: [
           {
             role: 'developer',

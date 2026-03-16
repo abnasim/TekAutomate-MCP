@@ -173,5 +173,13 @@ export async function buildContext(req: McpChatRequest): Promise<string> {
   }
   sections.push('## WORKSPACE\n\n' + ws.join('\n'));
 
+  if ((req.flowContext.backend || '').toLowerCase() !== 'tm_devices') {
+    sections.push(
+      '## BACKEND ENFORCEMENT\n\n' +
+        `Backend is ${req.flowContext.backend}. Use ONLY write/query/save_* steps with SCPI strings. ` +
+        'tm_device_command is FORBIDDEN for this backend. If you see tm_device_command in your response, replace it with write/query.'
+    );
+  }
+
   return sections.join('\n\n---\n\n');
 }

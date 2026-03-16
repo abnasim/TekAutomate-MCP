@@ -105,6 +105,9 @@ const TESTS: TestCase[] = [
   { id: 'DPO_BUS01', userMessage: 'Set up CAN decode on B1 source CH1 500kbps', flowContext: { backend: 'pyvisa', modelFamily: 'DPO7000', deviceType: 'SCOPE', steps: [] } },
   { id: 'DPO_TRIG01', userMessage: 'Set edge trigger CH1 rising 1V', flowContext: { backend: 'pyvisa', modelFamily: 'DPO5000', deviceType: 'SCOPE', steps: [] } },
   { id: 'DPO_SAVE01', userMessage: 'Save CH1 waveform and take screenshot', flowContext: { backend: 'pyvisa', modelFamily: 'DPO7000', deviceType: 'SCOPE', steps: [] } },
+  // Instrument families
+  { id: 'AFG01', userMessage: 'Set sine wave 1kHz 2Vpp output on', flowContext: { backend: 'pyvisa', modelFamily: 'AFG3252', deviceType: 'AFG', steps: [] } },
+  { id: 'SMU01', userMessage: 'Source 3.3V current limit 100mA output on then query current', flowContext: { backend: 'pyvisa', modelFamily: 'SMU2450', deviceType: 'SMU', steps: [] } },
 ];
 
 const MCP_HOST = process.env.MCP_HOST || 'http://localhost:8787';
