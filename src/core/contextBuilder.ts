@@ -111,6 +111,46 @@ export async function buildContext(req: McpChatRequest): Promise<string> {
     ].join('\n')
   );
 
+  sections.push(
+    [
+      '## tm_device_command Guidance (tm_devices backend ONLY)',
+      '',
+      'Preferred tm_devices API examples:',
+      '  scope.commands.ch[1].scale.write(0.2)',
+      '  scope.commands.horizontal.scale.write(1e-6)',
+      '  scope.commands.horizontal.recordlength.write(10000)',
+      '  scope.commands.trigger.a.type.write("EDGE")',
+      '  scope.commands.trigger.a.edge.source.write("CH1")',
+      '  scope.commands.trigger.a.level.ch[1].write(0.5)',
+      '  scope.commands.acquire.state.write("ON")',
+      '  scope.commands.acquire.stopafter.write("SEQUENCE")',
+      '  scope.commands.acquire.mode.write("SAMple")',
+      '  scope.commands.measurement.addmeas.write("FREQUENCY")',
+      '  scope.commands.measurement.meas[1].source.write("CH1")',
+      '  scope.commands.measurement.meas[1].results.currentacq.mean.query()',
+      '  scope.commands.display.waveview1.ch[1].state.write("ON")',
+      '  scope.commands.save.session.write("example.tss")',
+      '  scope.commands.save.waveform.write(\'CH1,"example.wfm"\')',
+      '  scope.save_screenshot("example.png")',
+      '  scope.recall_session("example.tss")',
+      '  scope.recall_reference("example.wfm", 1)',
+      '',
+      'Fallback raw SCPI via visa_resource (when API path unknown):',
+      '  scope.visa_resource.write("TRIGger:A:EDGE:SOUrce CH1")',
+      '  result = scope.visa_resource.query("MEASUrement:MEAS1:RESUlts:CURRentacq:MEAN?")',
+      '  scope.visa_resource.read_bytes(1024)',
+      '',
+      'Device routing for tm_devices:',
+      '  SCOPE → scope.commands.*',
+      '  AFG   → afg.commands.* (e.g., afg.commands.frequency.write(1e6))',
+      '  AWG   → awg.commands.*',
+      '  SMU   → smu.commands.* (e.g., smu.commands.smua.source.levelv.write(3.3))',
+      '',
+      'tm_devices backend: NEVER emit write/query/save_*; only tm_device_command with valid API code.',
+      'pyvisa/vxi11 backend: NEVER emit tm_device_command; use write/query/save_* instead.',
+    ].join('\n')
+  );
+
   const scpiHits = await searchCommandJson(
     req.userMessage,
     req.flowContext.modelFamily,
