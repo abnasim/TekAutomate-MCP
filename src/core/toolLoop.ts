@@ -670,8 +670,6 @@ async function runOpenAiResponses(
       },
       body: JSON.stringify({
         model: req.model || 'gpt-4o-mini',
-        max_output_tokens: 900,
-        temperature: 0,
         instructions,
         input: [
           scpiContext
