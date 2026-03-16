@@ -25,7 +25,7 @@ const TESTS: TestCase[] = [
 
   // === TRIGGER ===
   { id: 'TRIG01', userMessage: 'Set edge trigger on CH1 rising at 1.5V normal mode', flowContext: { backend: 'pyvisa', modelFamily: 'MSO6B', deviceType: 'SCOPE', steps: [] } },
-  { id: 'TRIG02', userMessage: 'Set pulse width trigger on CH2, positive polarity, wider than 100ns', flowContext: { backend: 'pyvisa', modelFamily: 'MSO6B', deviceType: 'SCOPE', steps: [] } },
+  { id: 'TRIG02', userMessage: 'Set pulse width trigger CH2 positive polarity minimum width 100ns', flowContext: { backend: 'pyvisa', modelFamily: 'MSO6B', deviceType: 'SCOPE', steps: [], validationErrors: [] } },
   { id: 'TRIG03', userMessage: 'Configure B trigger on CH1 rising edge, 5 events after A trigger', flowContext: { backend: 'pyvisa', modelFamily: 'MSO6B', deviceType: 'SCOPE', steps: [] } },
 
   // === HORIZONTAL ===
