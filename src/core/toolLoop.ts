@@ -3,6 +3,7 @@ import type { McpChatRequest } from './schemas';
 import { postCheckResponse } from './postCheck';
 import { buildContext } from './contextBuilder';
 import { getToolDefinitions, runTool } from '../tools';
+import { getCommandIndex } from './commandIndex';
 
 interface ToolLoopResult {
   text: string;
@@ -140,12 +141,83 @@ function flattenSteps(steps: unknown[]): Array<Record<string, unknown>> {
   return flat;
 }
 
+function splitCommandSegments(command: string): string[] {
+  return String(command || '')
+    .split(';')
+    .map((s) => s.trim())
+    .filter(Boolean);
+}
+
+function isNumericLike(value: string): boolean {
+  return /^[-+]?\d+(\.\d+)?([eE][-+]?\d+)?$/.test(value.trim());
+}
+
+async function detectFlowCommandIssues(req: McpChatRequest): Promise<string[]> {
+  const out: string[] = [];
+  const steps = flattenSteps(Array.isArray(req.flowContext.steps) ? req.flowContext.steps : []);
+  if (!steps.length) return out;
+  const index = await getCommandIndex();
+
+  for (const step of steps) {
+    const type = String(step.type || '').toLowerCase();
+    if (!['write', 'query', 'set_and_query'].includes(type)) continue;
+    const params = (step.params || {}) as Record<string, unknown>;
+    const rawCommand = String(params.command || '').trim();
+    if (!rawCommand) continue;
+    if (type === 'query' && !rawCommand.includes('?')) {
+      out.push(`[${String(step.id || '?')}] query step command should usually end with '?': ${rawCommand}`);
+    }
+
+    const segments = splitCommandSegments(rawCommand);
+    for (const segment of segments) {
+      const [headerRaw, ...argParts] = segment.split(/\s+/);
+      const header = String(headerRaw || '').trim();
+      const args = argParts.join(' ').trim();
+      const entry =
+        index.getByHeader(header, req.flowContext.modelFamily) ||
+        index.getByHeader(header.toUpperCase(), req.flowContext.modelFamily) ||
+        index.getByHeaderPrefix(header, req.flowContext.modelFamily);
+      if (!entry) {
+        out.push(`[${String(step.id || '?')}] command header not verified: ${header}`);
+        continue;
+      }
+      const requiredArgs = (entry.arguments || []).filter((a) => a.required);
+      const firstArg = args.split(',').map((x) => x.trim()).filter(Boolean)[0] || '';
+      if (requiredArgs.length > 0 && !firstArg && type !== 'query') {
+        const hasSetAndQueryValue =
+          type === 'set_and_query' &&
+          ((params.paramValues && typeof params.paramValues === 'object' && (
+            Object.prototype.hasOwnProperty.call(params.paramValues as Record<string, unknown>, 'value') ||
+            Object.prototype.hasOwnProperty.call(params.paramValues as Record<string, unknown>, 'Value')
+          )) || false);
+        if (!hasSetAndQueryValue) {
+          out.push(`[${String(step.id || '?')}] missing required argument for ${header}`);
+        }
+      }
+      const numericArg = requiredArgs.find((a) => /number|numeric|float|nr\d*/i.test(String(a.type || '')));
+      if (numericArg && firstArg) {
+        const looksToken = /^[A-Za-z_]/.test(firstArg) && !/^(MIN|MAX|DEF|AUTO|ON|OFF)$/i.test(firstArg);
+        if (!isNumericLike(firstArg) && looksToken) {
+          out.push(
+            `[${String(step.id || '?')}] possible invalid numeric value "${firstArg}" for ${header} (${numericArg.name})`
+          );
+        }
+      }
+    }
+  }
+  return out.slice(0, 20);
+}
+
 function isFastFrameRequest(req: McpChatRequest): boolean {
   return /\bfast\s*frame\b|\bfastframe\b/i.test(req.userMessage);
 }
 
 function detectFastFrameCount(req: McpChatRequest): number {
-  const match = req.userMessage.match(/\b(\d+)\s+frames?\b/i) || req.userMessage.match(/\bcount\s+(\d+)\b/i);
+  const match =
+    req.userMessage.match(/\b(\d+)\s+fast\s*frames?\b/i) ||
+    req.userMessage.match(/\b(\d+)\s+fastframes?\b/i) ||
+    req.userMessage.match(/\b(\d+)\s+frames?\b/i) ||
+    req.userMessage.match(/\bcount\s+(\d+)\b/i);
   return match ? Math.max(1, Number(match[1])) : 10;
 }
 
@@ -153,6 +225,20 @@ function isValidationRequest(req: McpChatRequest): boolean {
   return /\b(validate|validation|review|check flow|does this look right|does this look good|looks good|briefly)\b/i.test(
     req.userMessage
   );
+}
+
+function isFlowValidationRequest(req: McpChatRequest): boolean {
+  const msg = req.userMessage.toLowerCase();
+  if (!isValidationRequest(req)) return false;
+  // If the user explicitly asks for log/runtime review, this is not flow-only validation.
+  if (/\b(check logs|run logs?|audit|runtime|executor|stderr|stdout|exit code)\b/.test(msg)) {
+    return false;
+  }
+  return true;
+}
+
+function isLogReviewRequest(req: McpChatRequest): boolean {
+  return /\b(check logs|run logs?|audit|runtime|executor)\b/i.test(req.userMessage);
 }
 
 function runLooksSuccessful(runContext: McpChatRequest['runContext']): boolean {
@@ -290,9 +376,10 @@ function buildPyvisaFastFrameShortcut(req: McpChatRequest): string | null {
   if (!isFastFrameRequest(req)) return null;
 
   const existingSteps = Array.isArray(req.flowContext.steps) ? req.flowContext.steps : [];
+  const flatSteps = flattenSteps(existingSteps);
   const count = detectFastFrameCount(req);
-  const connectStep = existingSteps.find((step) => String(step.type || '') === 'connect') as Record<string, unknown> | undefined;
-  const screenshotStep = existingSteps.find((step) => String(step.type || '') === 'save_screenshot') as Record<string, unknown> | undefined;
+  const connectStep = flatSteps.find((step) => String(step.type || '') === 'connect') as Record<string, unknown> | undefined;
+  const screenshotStep = flatSteps.find((step) => String(step.type || '') === 'save_screenshot') as Record<string, unknown> | undefined;
   const insertAfterId = (connectStep?.id as string | undefined) || (req.flowContext.selectedStepId ? String(req.flowContext.selectedStepId) : null);
   const fastFrameSteps = [
     {
@@ -326,9 +413,11 @@ function buildPyvisaFastFrameShortcut(req: McpChatRequest): string | null {
 
   const actions: Record<string, unknown>[] = [];
   if (insertAfterId) {
+    // Insert in reverse order at the same anchor so final order is ff1 then ff2.
+    // This avoids depending on generated IDs from newly inserted steps.
     actions.push(
-      { type: 'insert_step_after', targetStepId: insertAfterId, newStep: fastFrameSteps[0] },
-      { type: 'insert_step_after', targetStepId: 'ff1', newStep: fastFrameSteps[1] }
+      { type: 'insert_step_after', targetStepId: insertAfterId, newStep: fastFrameSteps[1] },
+      { type: 'insert_step_after', targetStepId: insertAfterId, newStep: fastFrameSteps[0] }
     );
   } else {
     actions.push(...fastFrameSteps.map((step) => ({ type: 'insert_step_after', targetStepId: null, newStep: step })));
@@ -544,6 +633,8 @@ function buildSystemPrompt(modePrompt: string, outputMode: 'steps_json' | 'block
     '- If the user asks to add, insert, update, fix, move, remove, replace, convert, apply, or "do it", return actionable changes in this response, not promises.',
     '- Never claim a change is already applied. You are proposing actions for the app to apply.',
     '- Never output Python unless the user explicitly asks for Python.',
+    '- Prefer separate write/query steps over semicolon-chained multi-command strings unless the user explicitly asks for a single combined command.',
+    '- Prefer grouped flow structure for readability: for multi-phase flows, organize steps into phase groups (setup/config/trigger/measure/save/cleanup) unless the user asks for flat steps.',
     '',
     '## MCP Tools',
     '- search_scpi / get_command_by_header: use when exact SCPI syntax is genuinely uncertain.',
@@ -562,10 +653,12 @@ function buildSystemPrompt(modePrompt: string, outputMode: 'steps_json' | 'block
   ].join('\n');
 }
 
-function buildUserPrompt(req: McpChatRequest): string {
+function buildUserPrompt(req: McpChatRequest, flowCommandIssues: string[] = []): string {
   const fc = req.flowContext;
   const rc = req.runContext;
   const validateMode = isValidationRequest(req);
+  const flowValidateMode = isFlowValidationRequest(req);
+  const logReviewMode = isLogReviewRequest(req);
   const executionSucceeded = runLooksSuccessful(rc);
   const flatSteps = flattenSteps(Array.isArray(fc.steps) ? fc.steps : []);
   const stepsSummary = flatSteps.length
@@ -577,8 +670,9 @@ function buildUserPrompt(req: McpChatRequest): string {
         .join('\n')
     : '  (empty flow)';
   const compactStepsJson = JSON.stringify(fc.steps || []);
-  const stepsJsonPreview =
-    compactStepsJson.length > 1600
+  const stepsJsonPreview = (logReviewMode || flowValidateMode)
+    ? compactStepsJson
+    : compactStepsJson.length > 1600
       ? `${compactStepsJson.slice(0, 1600)}...[truncated ${compactStepsJson.length - 1600} chars]`
       : compactStepsJson;
 
@@ -623,15 +717,32 @@ function buildUserPrompt(req: McpChatRequest): string {
     parts.push(`Current flow validation errors:\n${(fc.validationErrors as string[]).map((e: string) => `- ${e}`).join('\n')}`);
   }
 
-  if (rc.runStatus !== 'idle') {
+  if (rc.runStatus !== 'idle' && !flowValidateMode) {
     parts.push(`Run status: ${rc.runStatus}${rc.exitCode !== null ? ` (exit ${rc.exitCode})` : ''}`);
     if (rc.logTail) {
-      const tail = rc.logTail.length > 800 ? `...${rc.logTail.slice(-800)}` : rc.logTail;
-      parts.push(`Run log tail:\n${tail}`);
+      const tail = logReviewMode
+        ? rc.logTail
+        : rc.logTail.length > 800
+          ? `...${rc.logTail.slice(-800)}`
+          : rc.logTail;
+      parts.push(`Run log${logReviewMode ? ' (full)' : ' tail'}:\n${tail}`);
     }
     if (rc.auditOutput) {
-      const audit = rc.auditOutput.length > 600 ? `...${rc.auditOutput.slice(-600)}` : rc.auditOutput;
-      parts.push(`Audit output:\n${audit}`);
+      const audit = logReviewMode
+        ? rc.auditOutput
+        : rc.auditOutput.length > 600
+          ? `...${rc.auditOutput.slice(-600)}`
+          : rc.auditOutput;
+      parts.push(`Audit output${logReviewMode ? ' (full)' : ''}:\n${audit}`);
+    }
+  }
+
+  if (flowValidateMode) {
+    parts.push(
+      'Validation scope: FLOW/STEP STRUCTURE ONLY. Ignore runtime logs, audit output, executor/network/environment failures, and host machine issues.'
+    );
+    if (flowCommandIssues.length) {
+      parts.push(`Precomputed flow command findings:\n${flowCommandIssues.map((x) => `- ${x}`).join('\n')}`);
     }
   }
 
@@ -643,11 +754,18 @@ function buildUserPrompt(req: McpChatRequest): string {
     parts.push(`Live instrument:\n- executor: ${req.instrumentEndpoint.executorUrl}\n- visa: ${req.instrumentEndpoint.visaResource}`);
   }
 
+  if (logReviewMode && !executionSucceeded) {
+    parts.push(
+      'Response style requirement: provide a detailed diagnostic explanation (around 200-400 words) grounded only in the supplied logs/audit. If no safe flow edit is possible, still return ACTIONS_JSON with actions: [] and keep the narrative detailed.'
+    );
+  }
+
   return parts.join('\n\n');
 }
 
 async function runOpenAiResponses(
-  req: McpChatRequest
+  req: McpChatRequest,
+  flowCommandIssues: string[] = []
 ): Promise<{
   text: string;
   metrics: NonNullable<ToolLoopResult['metrics']>;
@@ -655,7 +773,7 @@ async function runOpenAiResponses(
 }> {
   const instructions = loadPromptFile(req.outputMode);
   const developerPrompt = await buildContext(req);
-  const userPrompt = req.userMessage;
+  const userPrompt = buildUserPrompt(req, flowCommandIssues);
   const toolDefinitions: Array<{ name: string; description: string }> = [];
   const toolTrace: NonNullable<ToolLoopResult['debug']>['toolTrace'] = [];
 
@@ -753,17 +871,52 @@ function shouldUseTools(req: McpChatRequest): boolean {
   );
 }
 
+function isModelFirstPriority(req: McpChatRequest): boolean {
+  const msg = req.userMessage.toLowerCase();
+  return (
+    msg.includes('build a complete tekautomate flow') ||
+    msg.includes('command lookup request') ||
+    /\b(command|syntax|params?|examples?|what is|how do i|lookup|look up)\b/.test(msg) ||
+    msg.includes('validate tm_devices command usage') ||
+    msg.includes('sync / wait review') ||
+    msg.includes('find missing synchronization') ||
+    msg.includes('return actions_json')
+  );
+}
+
+function shouldAttemptShortcutFirst(req: McpChatRequest): boolean {
+  const msg = req.userMessage.toLowerCase();
+  if (isModelFirstPriority(req)) return false;
+  const lookupIntent = /\b(command|syntax|params?|examples?|what is|how do i|lookup|look up)\b/.test(msg);
+  const editIntent = /\b(add|insert|set|configure|build|create|make|update|fix|change|apply)\b/.test(msg);
+  // Keep deterministic shortcuts for concise direct asks only.
+  return (
+    msg.length <= 180 &&
+    editIntent &&
+    !lookupIntent &&
+    (
+      /\bfast\s*frame\b|\bfastframes?\b/.test(msg) ||
+      /\bmeas(?:urement)?s?\b/.test(msg)
+    )
+  );
+}
+
+function hasActionsJsonPayload(text: string): boolean {
+  return /ACTIONS_JSON\s*:\s*\{[\s\S]*"actions"\s*:/i.test(text);
+}
+
 async function runOpenAiToolLoop(
   req: McpChatRequest,
+  flowCommandIssues: string[] = [],
   _maxCalls = 8
 ): Promise<{
   text: string;
   metrics: NonNullable<ToolLoopResult['metrics']>;
   debug: NonNullable<ToolLoopResult['debug']>;
 }> {
-  const modePrompt = loadPromptText(req.outputMode);
+  const modePrompt = loadPromptFile(req.outputMode);
   const systemPrompt = buildSystemPrompt(modePrompt, req.outputMode);
-  const userPrompt = buildUserPrompt(req);
+  const userPrompt = buildUserPrompt(req, flowCommandIssues);
   const toolDefinitions: Array<{ name: string; description: string }> = [];
   const toolTrace: NonNullable<ToolLoopResult['debug']>['toolTrace'] = [];
 
@@ -816,15 +969,16 @@ async function runOpenAiToolLoop(
 
 async function runAnthropicToolLoop(
   req: McpChatRequest,
+  flowCommandIssues: string[] = [],
   maxCalls = 6
 ): Promise<{
   text: string;
   metrics: NonNullable<ToolLoopResult['metrics']>;
   debug: NonNullable<ToolLoopResult['debug']>;
 }> {
-  const modePrompt = loadPromptText(req.outputMode);
+  const modePrompt = loadPromptFile(req.outputMode);
   const systemPrompt = buildSystemPrompt(modePrompt, req.outputMode);
-  const userPrompt = buildUserPrompt(req);
+  const userPrompt = buildUserPrompt(req, flowCommandIssues);
   const res = await fetch('https://api.anthropic.com/v1/messages', {
     method: 'POST',
     headers: {
@@ -881,8 +1035,11 @@ async function runAnthropicToolLoop(
 
 export async function runToolLoop(req: McpChatRequest): Promise<ToolLoopResult> {
   const startedAt = Date.now();
+  const flowCommandIssues = isFlowValidationRequest(req)
+    ? await detectFlowCommandIssues(req)
+    : [];
   const shortcut = buildPyvisaMeasurementShortcut(req) || buildTmDevicesMeasurementShortcut(req) || buildPyvisaFastFrameShortcut(req);
-  if (shortcut) {
+  if (shortcut && shouldAttemptShortcutFirst(req)) {
     const checked = await postCheckResponse(shortcut, {
       backend: req.flowContext.backend,
       modelFamily: req.flowContext.modelFamily,
@@ -912,15 +1069,55 @@ export async function runToolLoop(req: McpChatRequest): Promise<ToolLoopResult> 
       },
     };
   }
+
   const loopResult = shouldUseTools(req)
-    ? await runOpenAiToolLoop(req, 3)
-    : await runOpenAiResponses(req);
-  const checked = await postCheckResponse(loopResult.text, {
+    ? await runOpenAiToolLoop(req, flowCommandIssues, 3)
+    : await runOpenAiResponses(req, flowCommandIssues);
+  const checkedPass1 = await postCheckResponse(loopResult.text, {
     backend: req.flowContext.backend,
     modelFamily: req.flowContext.modelFamily,
     originalSteps: req.flowContext.steps,
     scpiContext: req.scpiContext as Array<Record<string, unknown>>,
   });
+  // Two-pass validation: re-run post-check over the repaired output.
+  const checkedPass2 = await postCheckResponse(checkedPass1.text, {
+    backend: req.flowContext.backend,
+    modelFamily: req.flowContext.modelFamily,
+    originalSteps: req.flowContext.steps,
+    scpiContext: req.scpiContext as Array<Record<string, unknown>>,
+  });
+  const checked = {
+    text: checkedPass2.text,
+    errors: Array.from(new Set([...(checkedPass1.errors || []), ...(checkedPass2.errors || [])])),
+    warnings: Array.from(new Set([...(checkedPass1.warnings || []), ...(checkedPass2.warnings || [])])),
+  };
+
+  if (checked.errors.length && shortcut && !shouldAttemptShortcutFirst(req)) {
+    const fallback = await postCheckResponse(shortcut, {
+      backend: req.flowContext.backend,
+      modelFamily: req.flowContext.modelFamily,
+      originalSteps: req.flowContext.steps,
+      scpiContext: req.scpiContext as Array<Record<string, unknown>>,
+    });
+    const modelLooksWeak = !hasActionsJsonPayload(checked.text) && /return actions_json|add|insert|build|fix|update/i.test(req.userMessage);
+    if (!fallback.errors.length && modelLooksWeak) {
+      return {
+        text: fallback.text,
+        errors: [],
+        warnings: fallback.warnings,
+        metrics: {
+          ...loopResult.metrics,
+          totalMs: Date.now() - startedAt,
+          usedShortcut: true,
+        },
+        debug: {
+          ...loopResult.debug,
+          shortcutResponse: shortcut,
+        },
+      };
+    }
+  }
+
   if (checked.errors.length) {
     console.log('[MCP] postCheck errors:', checked.errors);
   }

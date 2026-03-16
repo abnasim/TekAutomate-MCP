@@ -96,6 +96,204 @@ export interface PostCheckResult {
   warnings: string[];
 }
 
+function rebuildTextWithActionsJson(text: string, actionsJson: Record<string, unknown>): string {
+  const prose = text.replace(/ACTIONS_JSON:[\s\S]*$/i, '').trim();
+  const block = `ACTIONS_JSON: ${JSON.stringify(actionsJson)}`;
+  return prose ? `${prose}\n\n${block}` : block;
+}
+
+function isLongFlatFlow(steps: Array<Record<string, unknown>>): boolean {
+  if (!Array.isArray(steps) || steps.length < 8) return false;
+  const hasGroup = steps.some((s) => String(s.type || '').toLowerCase() === 'group');
+  const hasNested = steps.some((s) => Array.isArray(s.children) && s.children.length > 0);
+  return !hasGroup && !hasNested;
+}
+
+function classifyPhase(step: Record<string, unknown>): string {
+  const type = String(step.type || '').toLowerCase();
+  const params = (step.params || {}) as Record<string, unknown>;
+  const cmd = String(params.command || '').toLowerCase();
+  if (type === 'save_screenshot' || type === 'save_waveform' || /save|hardcopy|filesystem|export/.test(cmd)) return 'Save Results';
+  if (/\*rst|\*cls|recall|preset|clear/.test(cmd)) return 'Setup';
+  if (/display:waveview|ch\d|math\d|ref\d|bus/.test(cmd)) return 'Channel / Bus Configuration';
+  if (/trig|trigger|acq|acquire|horizontal:recordlength|hor:record/.test(cmd)) return 'Trigger / Acquisition';
+  if (/meas|measure/.test(cmd)) return 'Measurements';
+  if (type === 'error_check') return 'Validation / Error Check';
+  return 'Operation';
+}
+
+function groupFlatFlowSteps(steps: Array<Record<string, unknown>>): Array<Record<string, unknown>> {
+  const leadingConnect: Array<Record<string, unknown>> = [];
+  const trailingDisconnect: Array<Record<string, unknown>> = [];
+  const body: Array<Record<string, unknown>> = [];
+
+  let i = 0;
+  while (i < steps.length && String(steps[i].type || '').toLowerCase() === 'connect') {
+    leadingConnect.push(steps[i]);
+    i += 1;
+  }
+  let j = steps.length - 1;
+  while (j >= i && String(steps[j].type || '').toLowerCase() === 'disconnect') {
+    trailingDisconnect.unshift(steps[j]);
+    j -= 1;
+  }
+  for (let k = i; k <= j; k += 1) body.push(steps[k]);
+
+  const phaseOrder: string[] = [];
+  const byPhase = new Map<string, Array<Record<string, unknown>>>();
+  body.forEach((step) => {
+    const phase = classifyPhase(step);
+    if (!byPhase.has(phase)) {
+      byPhase.set(phase, []);
+      phaseOrder.push(phase);
+    }
+    byPhase.get(phase)!.push(step);
+  });
+
+  const grouped = phaseOrder.map((phase, idx) => ({
+    id: `g_auto_${idx + 1}`,
+    type: 'group',
+    label: phase,
+    params: {},
+    collapsed: false,
+    children: byPhase.get(phase) || [],
+  }));
+
+  return [...leadingConnect, ...grouped, ...trailingDisconnect];
+}
+
+function upsertSuggestedFix(actionsJson: Record<string, unknown>, message: string): void {
+  const current = Array.isArray(actionsJson.suggestedFixes) ? (actionsJson.suggestedFixes as unknown[]) : [];
+  const next = current.map((x) => String(x));
+  if (!next.includes(message)) next.push(message);
+  actionsJson.suggestedFixes = next;
+}
+
+function mkId(prefix: string): string {
+  return `${prefix}_${Math.random().toString(36).slice(2, 8)}`;
+}
+
+function splitCommandParts(raw: string): string[] {
+  return String(raw || '')
+    .split(';')
+    .map((p) => p.trim())
+    .filter((p) => p.length > 0);
+}
+
+function enforceConcatCapInSteps(
+  steps: Array<Record<string, unknown>>,
+  cap = 4
+): { steps: Array<Record<string, unknown>>; changed: boolean } {
+  let changed = false;
+  const out = steps.flatMap((step) => {
+    const base = { ...step };
+    if (Array.isArray(base.children)) {
+      const nested = enforceConcatCapInSteps(base.children as Array<Record<string, unknown>>, cap);
+      base.children = nested.steps;
+      if (nested.changed) changed = true;
+    }
+
+    const type = String(base.type || '').toLowerCase();
+    if (!['write', 'query', 'set_and_query'].includes(type)) return [base];
+    const params = (base.params || {}) as Record<string, unknown>;
+    const command = String(params.command || '');
+    const parts = splitCommandParts(command);
+    if (parts.length <= cap) return [base];
+
+    changed = true;
+    const baseLabel = String(base.label || 'Command').replace(/\s+\(\d+\/\d+\)$/i, '');
+    const children = parts.map((cmd, idx) => ({
+      ...base,
+      id: idx === 0 && typeof base.id === 'string' ? base.id : mkId('cmd'),
+      label: baseLabel,
+      params: { ...params, command: cmd },
+      children: undefined,
+    }));
+    return [{
+      id: mkId('g_concat'),
+      type: 'group',
+      label: baseLabel,
+      params: {},
+      collapsed: false,
+      children,
+    }];
+  });
+  return { steps: out, changed };
+}
+
+function isMeasurementAddOrSource(step: Record<string, unknown>): boolean {
+  const type = String(step.type || '').toLowerCase();
+  if (!['write', 'set_and_query'].includes(type)) return false;
+  const cmd = String(((step.params || {}) as Record<string, unknown>).command || '').toLowerCase();
+  return /measurement:addmeas\b/.test(cmd) || /measurement:meas\d+:sour(?:ce)?\d*\b/.test(cmd);
+}
+
+function isMeasurementResultQuery(step: Record<string, unknown>): boolean {
+  const type = String(step.type || '').toLowerCase();
+  if (type !== 'query') return false;
+  const cmd = String(((step.params || {}) as Record<string, unknown>).command || '').toLowerCase();
+  return /measurement:meas\d+:.+\?/.test(cmd) && /(results|curr|mean|value|pk2pk|rms|max|min)/.test(cmd);
+}
+
+function enforceMeasurementGroupingInSteps(
+  steps: Array<Record<string, unknown>>
+): { steps: Array<Record<string, unknown>>; changed: boolean } {
+  let changed = false;
+  const normalized = steps.map((step) => {
+    if (!Array.isArray(step.children)) return step;
+    const nested = enforceMeasurementGroupingInSteps(step.children as Array<Record<string, unknown>>);
+    if (nested.changed) changed = true;
+    return { ...step, children: nested.steps };
+  });
+
+  const hasCanonicalGroups = normalized.some((s) => {
+    const t = String(s.type || '').toLowerCase();
+    const lbl = String(s.label || '').toLowerCase();
+    return t === 'group' && (lbl.includes('add measurements') || lbl.includes('read results'));
+  });
+  if (hasCanonicalGroups) return { steps: normalized, changed };
+
+  const addIdx: number[] = [];
+  const readIdx: number[] = [];
+  normalized.forEach((s, idx) => {
+    if (String(s.type || '').toLowerCase() === 'group') return;
+    if (isMeasurementAddOrSource(s)) addIdx.push(idx);
+    else if (isMeasurementResultQuery(s)) readIdx.push(idx);
+  });
+  if (addIdx.length < 2 || readIdx.length < 1) return { steps: normalized, changed };
+
+  const addSet = new Set(addIdx);
+  const readSet = new Set(readIdx);
+  const firstIdx = Math.min(...addIdx, ...readIdx);
+  const out: Array<Record<string, unknown>> = [];
+  const addChildren = addIdx.map((i) => normalized[i]);
+  const readChildren = readIdx.map((i) => normalized[i]);
+
+  normalized.forEach((s, idx) => {
+    if (idx === firstIdx) {
+      out.push({
+        id: mkId('g_meas_add'),
+        type: 'group',
+        label: 'Add Measurements',
+        params: {},
+        collapsed: false,
+        children: addChildren,
+      });
+      out.push({
+        id: mkId('g_meas_read'),
+        type: 'group',
+        label: 'Read Results',
+        params: {},
+        collapsed: false,
+        children: readChildren,
+      });
+    }
+    if (addSet.has(idx) || readSet.has(idx)) return;
+    out.push(s);
+  });
+  return { steps: out, changed: true };
+}
+
 function extractActionsJson(text: string): Record<string, unknown> | null {
   // Strip any fences wrapping ACTIONS_JSON
   const cleaned = text
@@ -280,6 +478,76 @@ export async function postCheckResponse(
       );
     }
   });
+
+  // Group-aware post-check: for long flat replace_flow payloads, auto-suggest a grouped rewrite.
+  let regroupedAny = false;
+  let concatSplitAny = false;
+  let measurementGroupedAny = false;
+  actionRows.forEach((action) => {
+    const actionType = String(action.action_type || action.type || '');
+    if (actionType !== 'replace_flow') return;
+    const replaceFlowSteps = extractReplaceFlowSteps(action);
+    if (!Array.isArray(replaceFlowSteps)) return;
+    let nextSteps = replaceFlowSteps;
+
+    if (isLongFlatFlow(nextSteps)) {
+      const grouped = groupFlatFlowSteps(nextSteps);
+      if (JSON.stringify(grouped) !== JSON.stringify(nextSteps)) {
+        nextSteps = grouped;
+        regroupedAny = true;
+      }
+    }
+
+    const concatFixed = enforceConcatCapInSteps(nextSteps, 4);
+    if (concatFixed.changed) {
+      nextSteps = concatFixed.steps;
+      concatSplitAny = true;
+    }
+
+    const measFixed = enforceMeasurementGroupingInSteps(nextSteps);
+    if (measFixed.changed) {
+      nextSteps = measFixed.steps;
+      measurementGroupedAny = true;
+    }
+
+    if (action.flow && typeof action.flow === 'object') {
+      const flow = action.flow as Record<string, unknown>;
+      flow.steps = nextSteps;
+      action.flow = flow;
+    } else if (Array.isArray(action.steps)) {
+      action.steps = nextSteps as unknown as Record<string, unknown>;
+    } else {
+      const payload = (action.payload && typeof action.payload === 'object')
+        ? (action.payload as Record<string, unknown>)
+        : {};
+      payload.steps = nextSteps;
+      action.payload = payload;
+    }
+  });
+  if (regroupedAny) {
+    warnings.push('Detected long flat flow; suggested grouped rewrite for readability.');
+    upsertSuggestedFix(
+      actionsJson,
+      'Flow was long and flat. Suggested grouping by phase (setup/config/trigger/measure/save/cleanup) for readability.'
+    );
+    finalText = rebuildTextWithActionsJson(finalText, actionsJson);
+  }
+  if (concatSplitAny) {
+    warnings.push('Detected over-concatenated SCPI command strings; split into grouped steps (max 4 per step).');
+    upsertSuggestedFix(
+      actionsJson,
+      'Long semicolon command chains were split and grouped for readability (max 4 commands per step).'
+    );
+    finalText = rebuildTextWithActionsJson(finalText, actionsJson);
+  }
+  if (measurementGroupedAny) {
+    warnings.push('Detected measurement setup/result scatter; grouped into Add Measurements and Read Results.');
+    upsertSuggestedFix(
+      actionsJson,
+      'Measurement steps were regrouped into Add Measurements and Read Results.'
+    );
+    finalText = rebuildTextWithActionsJson(finalText, actionsJson);
+  }
 
   const commands = collectCommandsFromActions(actionsJson);
   if (commands.length) {

@@ -31,7 +31,14 @@ function thinResult(entry: {
     python?: { code: string };
     tm_devices?: { code: string };
   }>;
-  arguments: Array<{ validValues: Record<string, unknown> }>;
+  arguments: Array<{
+    name: string;
+    type: string;
+    required: boolean;
+    description: string;
+    validValues: Record<string, unknown>;
+    defaultValue?: unknown;
+  }>;
   notes: string[];
 }) {
   const ex = entry.codeExamples?.[0];
@@ -39,6 +46,16 @@ function thinResult(entry: {
   const normalizedValues =
     (Array.isArray(firstValidValues?.values) ? (firstValidValues.values as unknown[]) : undefined) ||
     (Array.isArray(firstValidValues?.options) ? (firstValidValues.options as unknown[]) : undefined);
+  const argumentsPreview = Array.isArray(entry.arguments)
+    ? entry.arguments.slice(0, 6).map((arg) => ({
+        name: arg.name,
+        type: arg.type,
+        required: arg.required,
+        description: arg.description,
+        defaultValue: arg.defaultValue,
+        validValues: arg.validValues,
+      }))
+    : [];
   return {
     commandId: entry.commandId,
     sourceFile: entry.sourceFile,
@@ -57,6 +74,7 @@ function thinResult(entry: {
       ? normalizedValues.filter((v): v is string => typeof v === 'string')
       : undefined,
     validValuesRaw: firstValidValues,
+    arguments: argumentsPreview.length ? argumentsPreview : undefined,
     notes: entry.notes?.length ? entry.notes : undefined,
   };
 }

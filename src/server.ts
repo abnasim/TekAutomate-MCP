@@ -75,24 +75,37 @@ function logRequest(payload: {
   ensureLogDir();
   rotateLogs();
   const { req, result, requestId, startedAt } = payload;
+  const safeReq = ((req || {}) as Partial<McpChatRequest>);
+  const flowContext =
+    safeReq.flowContext && typeof safeReq.flowContext === 'object'
+      ? safeReq.flowContext
+      : ({
+          backend: '(unknown)',
+          host: '(unknown)',
+          connectionType: '(unknown)',
+          modelFamily: '(unknown)',
+          steps: [],
+          selectedStepId: null,
+          executionSource: 'steps',
+        } as McpChatRequest['flowContext']);
   const actionsJson = result ? extractActionsJson(result.text) : null;
   const actions = actionsJson && Array.isArray(actionsJson.actions) ? (actionsJson.actions as unknown[]) : [];
   const logEntry = {
     timestamp: new Date().toISOString(),
     requestId,
-    provider: req.provider,
-    model: req.model,
-    outputMode: req.outputMode,
-    deviceType: req.flowContext.deviceType,
-    modelFamily: req.flowContext.modelFamily,
-    backend: req.flowContext.backend,
-    userMessage: req.userMessage,
+    provider: safeReq.provider,
+    model: safeReq.model,
+    outputMode: safeReq.outputMode,
+    deviceType: flowContext.deviceType,
+    modelFamily: flowContext.modelFamily,
+    backend: flowContext.backend,
+    userMessage: safeReq.userMessage,
     flowContext: {
-      stepCount: Array.isArray(req.flowContext.steps) ? req.flowContext.steps.length : 0,
-      stepTypes: flattenStepTypes(req.flowContext.steps),
-      validationErrors: req.flowContext.validationErrors || [],
+      stepCount: Array.isArray(flowContext.steps) ? flowContext.steps.length : 0,
+      stepTypes: flattenStepTypes(Array.isArray(flowContext.steps) ? flowContext.steps : []),
+      validationErrors: flowContext.validationErrors || [],
     },
-    scpiContextHits: Array.isArray(req.scpiContext) ? req.scpiContext.length : 0,
+    scpiContextHits: Array.isArray(safeReq.scpiContext) ? safeReq.scpiContext.length : 0,
     toolCalls: [],
     postCheck: {
       errors: result?.errors || [],
