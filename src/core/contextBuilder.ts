@@ -111,6 +111,7 @@ export async function buildContext(req: McpChatRequest): Promise<string> {
       'Never ask for confirmation. If parameters are inferable, build immediately and state assumptions in the summary.',
       'If backend is pyvisa/vxi11: use write/query/save_* steps. tm_device_command is ONLY for tm_devices backend.',
       'Combine related SCPI settings into ONE write step using semicolons. Example: CH1:SCALe 0.5;CH1:COUPling DC;CH1:TERMination 50.',
+      'Combine ALL channel setup into ONE write step; combine ALL bus config into ONE action. Maximum 3 actions total per response.',
       'Every query step MUST include saveAs. No exceptions.',
       'Never ask for confirmation. Never say "shall I proceed". Apply the request directly.',
     ].join('\n')
@@ -252,26 +253,24 @@ export async function buildContext(req: McpChatRequest): Promise<string> {
     ].join('\n')
   );
 
-  const scpiHits = await searchCommandJson(
-    req.userMessage,
-    req.flowContext.modelFamily,
-    req.flowContext.deviceType
-  );
-  // eslint-disable-next-line no-console
-  console.log(
-    '[contextBuilder] targetFile:',
-    targetFile,
-    'deviceType:',
-    req.flowContext.deviceType,
-    'modelFamily:',
-    req.flowContext.modelFamily,
-    'hits:',
-    Array.isArray(scpiHits) ? scpiHits.length : 0,
-    'firstHit:',
-    Array.isArray(scpiHits) && scpiHits.length ? scpiHits[0] : null
-  );
+  let scpiHits: string | undefined;
+  if (req.scpiContext && Array.isArray(req.scpiContext) && req.scpiContext.length > 0) {
+    scpiHits = req.scpiContext.map((r: any) => JSON.stringify(r, null, 2)).join('\n\n---\n\n');
+  } else {
+    scpiHits = await searchCommandJson(req.userMessage, req.flowContext.modelFamily, req.flowContext.deviceType);
+  }
   if (scpiHits && scpiHits.length) {
     sections.push('## MATCHED SCPI COMMANDS\n\n' + scpiHits);
+  }
+
+  if (req.tmContext && Array.isArray(req.tmContext) && req.tmContext.length > 0) {
+    const tmLines = req.tmContext
+      .map((r: any) => {
+        const usage = Array.isArray(r?.usage) ? r.usage[0] : r?.usage;
+        return `${r.model || ''}:${r.path}${usage ? ` → ${usage}` : ''}`;
+      })
+      .join('\n');
+    sections.push('## MATCHED TM_DEVICES PATHS\n\n' + tmLines);
   }
 
   if ((req.flowContext.deviceType || '').toUpperCase() === 'SMU') {
@@ -310,7 +309,8 @@ NEVER use VSET/ISET/OUTPUT — those are not valid Keithley SCPI.`);
 
   For square: SOURce1:FUNCtion:SHAPe SQUare
   For pulse:  SOURce1:FUNCtion:SHAPe PULSe
-  For ramp:   SOURce1:FUNCtion:SHAPe RAMP`);
+  For ramp:   SOURce1:FUNCtion:SHAPe RAMP
+  NEVER use short forms FUNC/FREQ/VOLT/OUTP; use full SOURce/OUTPut paths.`);
   }
 
   const ws: string[] = [

@@ -18,6 +18,8 @@ export interface McpChatRequest {
   provider: 'openai' | 'anthropic';
   apiKey: string;
   model: string;
+  scpiContext?: unknown[];
+  tmContext?: unknown[];
   history?: Array<{ role: 'user' | 'assistant'; content: string }>;
   flowContext: {
     backend: string;
