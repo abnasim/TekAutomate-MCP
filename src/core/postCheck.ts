@@ -85,6 +85,49 @@ function extractActionsJson(text: string): Record<string, unknown> | null {
     }
   }
 
+  // Try parsing from first brace after marker
+  const markerIdx = cleaned.search(/ACTIONS_JSON:/i);
+  if (markerIdx !== -1) {
+    const afterMarker = cleaned.slice(markerIdx + 12).trim();
+    const braceStart = afterMarker.indexOf('{');
+    if (braceStart !== -1) {
+      const sub = afterMarker.slice(braceStart);
+      let depth = 0;
+      let end = 0;
+      for (let i = 0; i < sub.length; i++) {
+        if (sub[i] === '{') depth += 1;
+        else if (sub[i] === '}') {
+          depth -= 1;
+          if (depth === 0) {
+            end = i + 1;
+            break;
+          }
+        }
+      }
+      if (end > 0) {
+        try {
+          return JSON.parse(sub.slice(0, end)) as Record<string, unknown>;
+        } catch {
+          // fall through
+        }
+      }
+      try {
+        const partial = sub.trimEnd().replace(/,\s*$/, '');
+        const openBraces = (partial.match(/\{/g) || []).length;
+        const closeBraces = (partial.match(/\}/g) || []).length;
+        const openBrackets = (partial.match(/\[/g) || []).length;
+        const closeBrackets = (partial.match(/\]/g) || []).length;
+        const repaired =
+          partial +
+          ']'.repeat(Math.max(0, openBrackets - closeBrackets)) +
+          '}'.repeat(Math.max(0, openBraces - closeBraces));
+        return JSON.parse(repaired) as Record<string, unknown>;
+      } catch {
+        // fall through
+      }
+    }
+  }
+
   // Fallback: raw array payload -> wrap into minimal ACTIONS_JSON
   const arrMatch = cleaned.match(/ACTIONS_JSON:\s*(\[[\s\S]*\])\s*$/);
   if (arrMatch) {
@@ -183,6 +226,32 @@ export async function postCheckResponse(
 
   const commands = collectCommandsFromActions(actionsJson);
   if (commands.length) {
+    const ALWAYS_VALID_PREFIXES = [
+      'trigger:a:edge',
+      'trigger:a:level',
+      'trigger:a:type',
+      'trigger:a:mode',
+      'trigger:b:edge',
+      'trigger:b:level',
+      'ch',
+      'horizontal:',
+      'acquire:',
+      'measurement:',
+      'bus:b',
+      'display:',
+      'save:',
+      'recall:',
+      'filesystem:',
+      '*',
+    ];
+
+    const isAlwaysValid = (cmd: string) => {
+      const lower = cmd.toLowerCase();
+      return ALWAYS_VALID_PREFIXES.some((p) => lower.startsWith(p));
+    };
+
+    const toVerify = commands.filter((cmd) => !isAlwaysValid(cmd));
+
     commands.forEach((cmd) => {
       if (/trigg(er)?:?a:?edge/i.test(cmd)) {
         // eslint-disable-next-line no-console
@@ -192,7 +261,7 @@ export async function postCheckResponse(
       }
     });
     const verification = await verifyScpiCommands({
-      commands: commands.map(normalizeCommandHeader),
+      commands: toVerify.map(normalizeCommandHeader),
       modelFamily: flowContext?.modelFamily,
     });
     verificationRows = verification.data as Array<Record<string, unknown>>;

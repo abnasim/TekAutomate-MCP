@@ -180,6 +180,45 @@ export async function buildContext(req: McpChatRequest): Promise<string> {
     sections.push('## MATCHED SCPI COMMANDS\n\n' + scpiHits);
   }
 
+  if ((req.flowContext.deviceType || '').toUpperCase() === 'SMU') {
+    sections.push(`## SMU SCPI PATTERNS (Keithley 24xx series)
+Write commands use write step, query commands use query step with saveAs.
+
+Source voltage:
+  write: SOURce:FUNCtion VOLTage
+  write: SOURce:VOLTage:LEVel:IMMediate:AMPLitude 3.3
+  write: SENSe:CURRent:PROTection 0.1
+  write: OUTPut:STATe ON
+
+Query measurements:
+  query: MEASure:VOLTage:DC? -> saveAs: voltage
+  query: MEASure:CURRent:DC? -> saveAs: current
+  query: MEASure:RESistance? -> saveAs: resistance
+
+Source current:
+  write: SOURce:FUNCtion CURRent
+  write: SOURCe:CURRent:LEVel:IMMediate:AMPLitude 0.01
+  write: SENSe:VOLTage:PROTection 5.0
+  write: OUTPut:STATe ON
+
+NEVER use VSET/ISET/OUTPUT — those are not valid Keithley SCPI.`);
+  }
+
+  if ((req.flowContext.deviceType || '').toUpperCase() === 'AFG') {
+    sections.push(`## AFG SCPI PATTERNS (Tektronix AFG series)
+  write: SOURce1:FUNCtion:SHAPe SINusoid
+  write: SOURce1:FREQuency:FIXed 1000
+  write: SOURce1:VOLTage:LEVel:IMMediate:AMPLitude 2.0
+  write: SOURce1:VOLTage:LEVel:IMMediate:OFFSet 0.0
+  write: OUTPut1:STATe ON
+  query: SOURce1:FREQuency:FIXed? -> saveAs: freq
+  query: OUTPut1:STATe? -> saveAs: output_state
+
+  For square: SOURce1:FUNCtion:SHAPe SQUare
+  For pulse:  SOURce1:FUNCtion:SHAPe PULSe
+  For ramp:   SOURce1:FUNCtion:SHAPe RAMP`);
+  }
+
   const ws: string[] = [
     `Backend: ${req.flowContext.backend}`,
     `Device: ${req.flowContext.deviceType} / ${req.flowContext.modelFamily}`,
