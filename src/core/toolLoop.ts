@@ -7,6 +7,7 @@ import { getToolDefinitions, runTool } from '../tools';
 interface ToolLoopResult {
   text: string;
   errors: string[];
+  warnings?: string[];
   metrics?: {
     totalMs: number;
     usedShortcut: boolean;
@@ -891,6 +892,7 @@ export async function runToolLoop(req: McpChatRequest): Promise<ToolLoopResult> 
     return {
       text: checked.text,
       errors: checked.errors,
+      warnings: checked.warnings,
       metrics: {
         totalMs: Date.now() - startedAt,
         usedShortcut: true,
@@ -926,11 +928,12 @@ export async function runToolLoop(req: McpChatRequest): Promise<ToolLoopResult> 
     console.log('[MCP] postCheck warnings:', checked.warnings);
   }
   return {
-    text: checked.text,
-    errors: checked.errors,
-    metrics: {
-      ...loopResult.metrics,
-      totalMs: Date.now() - startedAt,
+      text: checked.text,
+      errors: checked.errors,
+      warnings: checked.warnings,
+      metrics: {
+        ...loopResult.metrics,
+        totalMs: Date.now() - startedAt,
     },
     debug: loopResult.debug,
   };

@@ -5,8 +5,114 @@ import { initRagIndexes } from './core/ragIndex';
 import { initTemplateIndex } from './core/templateIndex';
 import { runToolLoop } from './core/toolLoop';
 import type { McpChatRequest } from './core/schemas';
+import fs from 'fs';
+import path from 'path';
 
 let lastAiDebug: Record<string, unknown> | null = null;
+const REQUEST_LOG_DIR = path.join(__dirname, 'logs', 'requests');
+const MAX_LOG_FILES = 500;
+
+function ensureLogDir() {
+  fs.mkdirSync(REQUEST_LOG_DIR, { recursive: true });
+}
+
+function rotateLogs() {
+  const files = fs.readdirSync(REQUEST_LOG_DIR).map((name) => {
+    const full = path.join(REQUEST_LOG_DIR, name);
+    const stat = fs.statSync(full);
+    return { name, time: stat.mtimeMs };
+  });
+  if (files.length <= MAX_LOG_FILES) return;
+  const excess = files.length - MAX_LOG_FILES;
+  files
+    .sort((a, b) => a.time - b.time)
+    .slice(0, excess)
+    .forEach((f) => {
+      try {
+        fs.unlinkSync(path.join(REQUEST_LOG_DIR, f.name));
+      } catch {
+        // ignore
+      }
+    });
+}
+
+function flattenStepTypes(steps: unknown[]): string[] {
+  const types: string[] = [];
+  const walk = (items: unknown[]) => {
+    items.forEach((s) => {
+      if (!s || typeof s !== 'object') return;
+      const step = s as Record<string, unknown>;
+      if (step.type) types.push(String(step.type));
+      if (Array.isArray(step.children)) walk(step.children);
+    });
+  };
+  walk(steps || []);
+  return Array.from(new Set(types));
+}
+
+function extractActionsJson(text: string): Record<string, unknown> | null {
+  const cleaned = text.replace(/ACTIONS_JSON:\s*```json\s*/gi, 'ACTIONS_JSON: ').replace(/```/g, '');
+  const match = cleaned.match(/ACTIONS_JSON:\s*(\{[\s\S]*\})/);
+  if (!match) return null;
+  try {
+    return JSON.parse(match[1]);
+  } catch {
+    return null;
+  }
+}
+
+function logRequest(payload: {
+  requestId: string;
+  startedAt: number;
+  req: McpChatRequest;
+  result?: { text: string; errors: string[]; warnings?: string[] };
+  ok: boolean;
+}) {
+  ensureLogDir();
+  rotateLogs();
+  const { req, result, requestId, startedAt } = payload;
+  const actionsJson = result ? extractActionsJson(result.text) : null;
+  const actions = actionsJson && Array.isArray(actionsJson.actions) ? (actionsJson.actions as unknown[]) : [];
+  const logEntry = {
+    timestamp: new Date().toISOString(),
+    requestId,
+    provider: req.provider,
+    model: req.model,
+    outputMode: req.outputMode,
+    deviceType: req.flowContext.deviceType,
+    modelFamily: req.flowContext.modelFamily,
+    backend: req.flowContext.backend,
+    userMessage: req.userMessage,
+    flowContext: {
+      stepCount: Array.isArray(req.flowContext.steps) ? req.flowContext.steps.length : 0,
+      stepTypes: flattenStepTypes(req.flowContext.steps),
+      validationErrors: req.flowContext.validationErrors || [],
+    },
+    scpiContextHits: Array.isArray(req.scpiContext) ? req.scpiContext.length : 0,
+    toolCalls: [],
+    postCheck: {
+      errors: result?.errors || [],
+      warnings: result?.warnings || [],
+      autoRepairTriggered: false,
+    },
+    response: result
+      ? {
+          text: result.text,
+          actionsJson,
+          stepCount: actions.length,
+          stepTypes: actions.map((a: any) => a?.type).filter(Boolean),
+        }
+      : null,
+    durationMs: Date.now() - startedAt,
+    ok: payload.ok,
+  };
+  const file = path.join(REQUEST_LOG_DIR, `${Date.now()}_${requestId}.json`);
+  try {
+    fs.writeFileSync(file, JSON.stringify(logEntry, null, 2), 'utf8');
+  } catch {
+    // ignore logging errors
+  }
+}
 
 async function readJsonBody(req: http.IncomingMessage): Promise<Record<string, unknown>> {
   const chunks: Buffer[] = [];
@@ -160,6 +266,7 @@ export async function createServer(port = 8787): Promise<http.Server> {
 
     if (req.method === 'POST' && req.url === '/ai/chat') {
       const startedAt = Date.now();
+      const requestId = `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
       try {
         const body = (await readJsonBody(req)) as unknown as McpChatRequest;
         if (!body?.userMessage || !body?.provider || !body?.apiKey || !body?.model) {
@@ -205,10 +312,18 @@ export async function createServer(port = 8787): Promise<http.Server> {
             ...(result.metrics || {}),
           },
         };
+        logRequest({
+          requestId,
+          startedAt,
+          req: body,
+          result,
+          ok: true,
+        });
         sendJson(res, 200, {
           ok: true,
           text: result.text,
           errors: result.errors,
+          warnings: result.warnings,
           metrics: result.metrics,
         });
       } catch (err) {
@@ -220,6 +335,19 @@ export async function createServer(port = 8787): Promise<http.Server> {
             totalMs: Date.now() - startedAt,
           },
         };
+        const body = {} as McpChatRequest;
+        try {
+          Object.assign(body, await readJsonBody(req));
+        } catch {
+          /* ignore */
+        }
+        logRequest({
+          requestId,
+          startedAt,
+          req: body,
+          result: err instanceof Error ? { text: err.message, errors: [err.message] } : undefined,
+          ok: false,
+        });
         sendJson(res, 500, {
           ok: false,
           error: err instanceof Error ? err.message : 'Server error',
