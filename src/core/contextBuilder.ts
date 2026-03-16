@@ -113,8 +113,6 @@ export async function buildContext(req: McpChatRequest): Promise<string> {
       'Combine related SCPI settings into ONE write step using semicolons. Example: CH1:SCALe 0.5;CH1:COUPling DC;CH1:TERMination 50.',
       'Every query step MUST include saveAs. No exceptions.',
       'Never ask for confirmation. Never say "shall I proceed". Apply the request directly.',
-      'Maximum 5 actions per response. If more than 5 edits are needed, combine SCPI into single write steps (channel setup, bus setup, trigger setup).',
-      'Bus setup (type+source+bitrate+standard) should be ONE grouped write, not multiple steps.',
     ].join('\n')
   );
 

@@ -132,18 +132,7 @@ function extractActionsJson(text: string): Record<string, unknown> | null {
           partial +
           ']'.repeat(Math.max(0, openBrackets - closeBrackets)) +
           '}'.repeat(Math.max(0, openBraces - closeBraces));
-        const parsed = JSON.parse(repaired) as Record<string, unknown>;
-        if (parsed && typeof parsed === 'object' && Array.isArray((parsed as any).actions)) {
-          return parsed;
-        }
-        if (parsed && typeof parsed === 'object') {
-          return {
-            summary: (parsed as any).summary || '',
-            findings: [],
-            suggestedFixes: [],
-            actions: [],
-          } as Record<string, unknown>;
-        }
+        return JSON.parse(repaired) as Record<string, unknown>;
       } catch {
         // fall through
       }
@@ -249,39 +238,26 @@ export async function postCheckResponse(
   const commands = collectCommandsFromActions(actionsJson);
   if (commands.length) {
     const ALWAYS_VALID_PREFIXES = [
-      'trigger:a:',
-      'trigger:b:',
-      'trig:',
-      'ch<x>:',
-      'ch1:',
-      'ch2:',
-      'ch3:',
-      'ch4:',
+      'trigger:a:edge',
+      'trigger:a:level',
+      'trigger:a:type',
+      'trigger:a:mode',
+      'trigger:b:edge',
+      'trigger:b:level',
+      'ch',
       'horizontal:',
-      'horiz:',
       'acquire:',
-      'acq:',
       'measurement:',
-      'meas:',
       'bus:b',
-      'bus:',
       'display:',
-      'disp:',
       'save:',
       'recall:',
       'filesystem:',
-      'afg:',
-      'awg:',
-      'sour:',
-      'source:',
-      'output:',
-      'outp:',
-      'meas:curr',
       '*',
     ];
 
     const isAlwaysValid = (cmd: string) => {
-      const lower = normalizeCommandHeader(cmd);
+      const lower = cmd.toLowerCase();
       return ALWAYS_VALID_PREFIXES.some((p) => lower.startsWith(p));
     };
 
