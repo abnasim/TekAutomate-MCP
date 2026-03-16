@@ -44,17 +44,40 @@ export interface PostCheckResult {
 }
 
 function extractActionsJson(text: string): Record<string, unknown> | null {
-  const tagged = text.match(/ACTIONS_JSON:\s*([\s\S]*?)$/i);
-  const rawCandidate = tagged?.[1]?.trim() || text.trim();
-  const fenced = rawCandidate.match(/```json\s*([\s\S]*?)```/i);
-  const payload = fenced?.[1]?.trim() || rawCandidate;
-  const braceMatch = payload.match(/\{[\s\S]*\}/);
-  if (!braceMatch) return null;
-  try {
-    return JSON.parse(braceMatch[0]) as Record<string, unknown>;
-  } catch {
-    return null;
+  // Strip any fences wrapping ACTIONS_JSON
+  const cleaned = text
+    .replace(/ACTIONS_JSON:\s*```json\s*/gi, 'ACTIONS_JSON: ')
+    .replace(/```\s*(\n|$)/g, '')
+    .replace(/```json\s*/g, '')
+    .replace(/```\s*/g, '');
+
+  // Preferred: object payload
+  const objMatch = cleaned.match(/ACTIONS_JSON:\s*(\{[\s\S]*\})\s*$/);
+  if (objMatch) {
+    try {
+      return JSON.parse(objMatch[1]) as Record<string, unknown>;
+    } catch {
+      // fall through to array handling
+    }
   }
+
+  // Fallback: raw array payload -> wrap into minimal ACTIONS_JSON
+  const arrMatch = cleaned.match(/ACTIONS_JSON:\s*(\[[\s\S]*\])\s*$/);
+  if (arrMatch) {
+    try {
+      const arr = JSON.parse(arrMatch[1]);
+      return {
+        summary: 'Actions',
+        findings: [],
+        suggestedFixes: [],
+        actions: arr,
+      } as Record<string, unknown>;
+    } catch {
+      return null;
+    }
+  }
+
+  return null;
 }
 
 function collectCommandsFromActions(actionsJson: Record<string, unknown>): string[] {

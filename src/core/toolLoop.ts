@@ -1,7 +1,7 @@
-import { loadPromptText } from './promptLoader';
+import { loadPromptFile } from './promptLoader';
 import type { McpChatRequest } from './schemas';
 import { postCheckResponse } from './postCheck';
-import { buildScpiContext } from './contextBuilder';
+import { buildContext } from './contextBuilder';
 import { getToolDefinitions, runTool } from '../tools';
 
 interface ToolLoopResult {
@@ -23,6 +23,7 @@ interface ToolLoopResult {
   debug?: {
     promptFileText?: string;
     systemPrompt?: string;
+    developerPrompt?: string;
     userPrompt?: string;
     toolDefinitions?: Array<{ name: string; description: string }>;
     toolTrace?: Array<{
@@ -37,6 +38,7 @@ interface ToolLoopResult {
       };
       rawResult?: unknown;
     }>;
+    rawOutput?: unknown;
     shortcutResponse?: string;
   };
 }
@@ -650,15 +652,13 @@ async function runOpenAiResponses(
   metrics: NonNullable<ToolLoopResult['metrics']>;
   debug: NonNullable<ToolLoopResult['debug']>;
 }> {
-  const instructionsBase = loadPromptText(req.outputMode);
-  const instructions = `${instructionsBase}\n\n# Output Override\nRespond with exactly:\nACTIONS_JSON: {\"summary\":\"...\",\"findings\":[],\"suggestedFixes\":[],\"actions\":[...]}\nNo prose. No code fences. Nothing else.`;
-  const userPrompt = buildUserPrompt(req);
-  const scpiContext = await buildScpiContext(req);
+  const instructions = loadPromptFile(req.outputMode);
+  const developerPrompt = await buildContext(req);
+  const userPrompt = req.userMessage;
   const toolDefinitions: Array<{ name: string; description: string }> = [];
   const toolTrace: NonNullable<ToolLoopResult['debug']>['toolTrace'] = [];
 
   const openAiBase = process.env.OPENAI_BASE_URL || 'https://api.openai.com';
-  const tools = undefined; // Temporarily disable file_search to benchmark latency
   const modelStartedAt = Date.now();
   let res: Response;
   try {
@@ -669,31 +669,20 @@ async function runOpenAiResponses(
         'Content-Type': 'application/json',
       },
       body: JSON.stringify({
-        model: req.model || 'gpt-4o',
+        model: req.model || 'gpt-4o-mini',
         instructions,
         input: [
-          scpiContext
-            ? {
-                role: 'developer',
-                content: [
-                  `MATCHED COMMANDS FROM INDEX:\n${scpiContext}`,
-                  'OUTPUT RULE: Your entire response must be exactly:',
-                  'ACTIONS_JSON: {"summary":"...","findings":[],"suggestedFixes":[],"actions":[...]}',
-                  'Nothing before it. Nothing after it. No code fences. No prose.',
-                ].join('\n\n'),
-              }
-            : {
-                role: 'developer',
-                content: [
-                  'OUTPUT RULE: Your entire response must be exactly:',
-                  'ACTIONS_JSON: {"summary":"...","findings":[],"suggestedFixes":[],"actions":[...]}',
-                  'Nothing before it. Nothing after it. No code fences. No prose.',
-                ].join('\n\n'),
-              },
-          { role: 'user', content: userPrompt },
+          {
+            role: 'developer',
+            content: developerPrompt,
+          },
+          {
+            role: 'user',
+            content: req.userMessage,
+          },
         ],
         stream: false,
-        tools,
+        tools: undefined,
         store: false,
       }),
     });
@@ -741,18 +730,7 @@ async function runOpenAiResponses(
     },
     debug: {
       systemPrompt: instructions,
-      developerPrompt: scpiContext
-        ? [
-            `MATCHED COMMANDS FROM INDEX:\n${scpiContext}`,
-            'OUTPUT RULE: Your entire response must be exactly:',
-            'ACTIONS_JSON: {"summary":"...","findings":[],"suggestedFixes":[],"actions":[...]}',
-            'Nothing before it. Nothing after it. No code fences. No prose.',
-          ].join('\n\n')
-        : [
-            'OUTPUT RULE: Your entire response must be exactly:',
-            'ACTIONS_JSON: {"summary":"...","findings":[],"suggestedFixes":[],"actions":[...]}',
-            'Nothing before it. Nothing after it. No code fences. No prose.',
-          ].join('\n\n'),
+      developerPrompt,
       userPrompt,
       rawOutput: json,
       toolDefinitions,
@@ -795,7 +773,7 @@ async function runOpenAiToolLoop(
       'Content-Type': 'application/json',
     },
     body: JSON.stringify({
-      model: req.model || 'gpt-4o',
+      model: req.model || 'gpt-4o-mini',
       instructions: systemPrompt,
       input: [{ role: 'user', content: userPrompt }],
       stream: false,

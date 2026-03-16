@@ -27,3 +27,6 @@ export function loadPromptText(outputMode: 'steps_json' | 'blockly_xml'): string
   console.log(`[MCP] loading prompt for ${outputMode}: ${path.pathname}`);
   return fs.readFileSync(path, 'utf8').trim();
 }
+
+// Backwards-compatible alias expected by toolLoop edits.
+export const loadPromptFile = loadPromptText;

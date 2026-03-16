@@ -58,6 +58,36 @@ Build, edit, and validate TekAutomate Steps UI flows for the live workspace.
 - `save_waveform` is the preferred waveform-save step.
 - `error_check` represents TekAutomate's built-in error-check behavior; do not expand it into separate `*CLS`, `*ESR?`, and `ALLEV?` steps unless the user explicitly wants raw commands.
 
+## Built-in Step Types — Use These, Never Raw SCPI Equivalents
+
+save_screenshot
+  params: {filename, scopeType:"modern"|"legacy", method:"pc_transfer"}
+  NEVER replace with: SAVE:IMAGe, HARDCopy, FILESYSTEM:READFILE
+  Handles: capture + PC transfer pipeline automatically
+
+save_waveform  
+  params: {source:"CH1", filename:"data.wfm", format:"bin"|"csv"|"mat"}
+  NEVER replace with: raw DATa:SOUrce + CURVe? + WFMOutpre steps
+  Handles: full waveform transfer pipeline automatically
+
+error_check
+  params: {command:"ALLEV?"}
+  NEVER replace with: raw *CLS + *ESR? + ALLEV? write/query steps
+  Handles: *CLS → *ESR? → if error → ALLEV? internally
+
+recall
+  params: {recallType:"SESSION"|"SETUP"|"WAVEFORM", filePath:"...", reference:"REF1"}
+  NEVER replace with: raw RECAll:SETUp or RECAll:WAVEform write steps
+
+connect / disconnect
+  Always first and last steps
+  NEVER add raw *RST or *IDN? unless explicitly requested
+
+tm_device_command
+  params: {code:"scope.commands.x.y.write(val)", model:"MSO6B", description:"..."}
+  ONLY for tm_devices backend — never use for pyvisa/vxi11
+  code must be valid tm_devices Python API path, NOT raw SCPI strings
+
 ## Action Types
 - `insert_step_after`
 - `set_step_param`
