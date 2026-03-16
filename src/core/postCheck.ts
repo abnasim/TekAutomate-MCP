@@ -37,6 +37,13 @@ function normalizeCommandHeader(command: string): string {
   return normalized;
 }
 
+function splitCommands(raw: string): string[] {
+  return raw
+    .split(/\s*;\s*/)
+    .map((cmd) => cmd.split(/[\s,]/)[0].trim())
+    .filter(Boolean);
+}
+
 export interface PostCheckResult {
   ok: boolean;
   text: string;
@@ -47,19 +54,34 @@ function extractActionsJson(text: string): Record<string, unknown> | null {
   // Strip any fences wrapping ACTIONS_JSON
   const cleaned = text
     .replace(/ACTIONS_JSON:\s*```json\s*/gi, 'ACTIONS_JSON: ')
+    .replace(/ACTION_JSON:\s*```json\s*/gi, 'ACTIONS_JSON: ')
+    .replace(/ACTION_JSON:/gi, 'ACTIONS_JSON:')
     .replace(/```\s*(\n|$)/g, '')
     .replace(/```json\s*/g, '')
     .replace(/```\s*/g, '');
 
-  // Preferred: object payload; find anywhere (non-greedy, fallback greedy)
-  const objMatch = cleaned.match(/ACTIONS_JSON:\s*(\{[\s\S]*?\})\s*(?:$|\n\n)/);
-  const objMatchGreedy = cleaned.match(/ACTIONS_JSON:\s*(\{[\s\S]*\})/);
-  const match = objMatch || objMatchGreedy;
-  if (match) {
-    try {
-      return JSON.parse(match[1]) as Record<string, unknown>;
-    } catch {
-      // fall through to array handling
+  // Preferred: object payload; find anywhere
+  const objMatch = cleaned.match(/ACTIONS_JSON:\s*(\{[\s\S]*\})/);
+  if (objMatch) {
+    const sub = objMatch[1];
+    let depth = 0;
+    let end = 0;
+    for (let i = 0; i < sub.length; i++) {
+      if (sub[i] === '{') depth += 1;
+      else if (sub[i] === '}') {
+        depth -= 1;
+        if (depth === 0) {
+          end = i + 1;
+          break;
+        }
+      }
+    }
+    if (end > 0) {
+      try {
+        return JSON.parse(sub.slice(0, end)) as Record<string, unknown>;
+      } catch {
+        // fall through to array handling
+      }
     }
   }
 
@@ -100,8 +122,10 @@ function collectCommandsFromActions(actionsJson: Record<string, unknown>): strin
           if (String(step.type || '') === 'tm_device_command') {
             return;
           }
-          const params = (step.params || {}) as Record<string, unknown>;
-          if (typeof params.command === 'string' && params.command.trim()) out.push(params.command);
+      const params = (step.params || {}) as Record<string, unknown>;
+      if (typeof params.command === 'string' && params.command.trim()) {
+        splitCommands(params.command).forEach((cmd) => out.push(cmd));
+      }
           if (Array.isArray(step.children)) walk(step.children as Array<Record<string, unknown>>);
         });
       };
@@ -112,7 +136,9 @@ function collectCommandsFromActions(actionsJson: Record<string, unknown>): strin
         return;
       }
       const params = (newStep.params || {}) as Record<string, unknown>;
-      if (typeof params.command === 'string' && params.command.trim()) out.push(params.command);
+      if (typeof params.command === 'string' && params.command.trim()) {
+        splitCommands(params.command).forEach((cmd) => out.push(cmd));
+      }
     }
   });
   return out;

@@ -4,6 +4,9 @@ import { getCommandIndex } from './commandIndex';
 function getTargetFile(deviceType?: string, modelFamily?: string): string {
   const dt = (deviceType || '').toUpperCase();
   const mf = (modelFamily || '').toUpperCase();
+  if (dt === 'SMU' || /SMU/.test(mf)) return 'smu.json';
+  if (dt === 'AFG' || /AFG/.test(mf)) return 'afg.json';
+  if (dt === 'AWG' || /AWG/.test(mf)) return 'awg.json';
   if (dt === 'AFG' || /AFG/.test(mf)) return 'afg.json';
   if (dt === 'AWG' || /AWG/.test(mf)) return 'awg.json';
   if (dt === 'SMU' || /SMU/.test(mf)) return 'smu.json';
@@ -164,6 +167,9 @@ export async function buildContext(req: McpChatRequest): Promise<string> {
     `Backend: ${req.flowContext.backend}`,
     `Device: ${req.flowContext.deviceType} / ${req.flowContext.modelFamily}`,
     `Steps: ${JSON.stringify(req.flowContext.steps, null, 2)}`,
+    `Device type: ${req.flowContext.deviceType || 'SCOPE'}`,
+    `Model family: ${req.flowContext.modelFamily}`,
+    `Command library: ${getTargetFile(req.flowContext.deviceType, req.flowContext.modelFamily)}`,
   ];
   if (req.flowContext.validationErrors?.length) {
     ws.push('Errors:\n' + req.flowContext.validationErrors.map((e) => `- ${e}`).join('\n'));
