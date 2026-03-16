@@ -110,6 +110,9 @@ export async function buildContext(req: McpChatRequest): Promise<string> {
       'COMPLEX flows (3+ steps): after one short summary sentence, output ACTIONS_JSON immediately. No numbered lists or step-by-step prose. The actions array is the breakdown.',
       'Never ask for confirmation. If parameters are inferable, build immediately and state assumptions in the summary.',
       'If backend is pyvisa/vxi11: use write/query/save_* steps. tm_device_command is ONLY for tm_devices backend.',
+      'Combine related SCPI settings into ONE write step using semicolons. Example: CH1:SCALe 0.5;CH1:COUPling DC;CH1:TERMination 50.',
+      'Every query step MUST include saveAs. No exceptions.',
+      'Never ask for confirmation. Never say "shall I proceed". Apply the request directly.',
     ].join('\n')
   );
 
@@ -201,7 +204,9 @@ export async function buildContext(req: McpChatRequest): Promise<string> {
     'modelFamily:',
     req.flowContext.modelFamily,
     'hits:',
-    Array.isArray(scpiHits) ? scpiHits.length : 0
+    Array.isArray(scpiHits) ? scpiHits.length : 0,
+    'firstHit:',
+    Array.isArray(scpiHits) && scpiHits.length ? scpiHits[0] : null
   );
   if (scpiHits && scpiHits.length) {
     sections.push('## MATCHED SCPI COMMANDS\n\n' + scpiHits);
