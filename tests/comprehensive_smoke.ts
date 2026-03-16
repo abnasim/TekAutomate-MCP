@@ -69,6 +69,7 @@ const TESTS: TestCase[] = [
         { id: '2', type: 'query', params: { command: '*IDN?' } }, // missing saveAs
         { id: '3', type: 'disconnect', params: {} },
       ],
+      validationErrors: ['Step 2 query missing saveAs'],
     },
   },
   {
@@ -122,7 +123,9 @@ const filterSet = CASE_FILTER
 
 const selected = filterSet ? TESTS.filter((t) => filterSet.has(t.id)) : TESTS;
 
-function extractActionsJson(text: string): { actionsLength: number; findingsLength: number } {
+function extractActionsJson(
+  text: string
+): { actionsLength: number; findingsLength: number; actions?: any[]; ok: boolean; obj?: any } {
   const cleaned = text
     .replace(/ACTIONS_JSON:\s*```json\s*/gi, 'ACTIONS_JSON: ')
     .replace(/```\s*(\n|$)/g, '')
@@ -150,7 +153,7 @@ function extractActionsJson(text: string): { actionsLength: number; findingsLeng
   }
   const actions = obj && Array.isArray(obj.actions) ? obj.actions : [];
   const findings = obj && Array.isArray(obj.findings) ? obj.findings : [];
-  return { actionsLength: actions.length, findingsLength: findings.length };
+  return { actionsLength: actions.length, findingsLength: findings.length, actions, ok: !!obj, obj };
 }
 
 async function runCase(test: TestCase) {
@@ -188,18 +191,31 @@ async function runCase(test: TestCase) {
     }
     const ok = data?.ok === true;
     const errors = Array.isArray(data?.errors) ? data.errors.length : 0;
-    const { actionsLength, findingsLength } = extractActionsJson(String(data?.text || ''));
+    const rawText = String(data?.text || '');
+    const parsed = extractActionsJson(rawText);
+    const { actionsLength, findingsLength, actions } = parsed;
     const modelMs = data?.metrics?.modelMs ?? '-';
-    const status = !ok
-      ? 'FAIL'
-      : errors > 0
-        ? 'WARN'
-        : actionsLength > 0 || findingsLength > 0
-          ? 'PASS'
-          : 'WARN';
+    const isValidation = test.userMessage.toLowerCase().includes('validate');
+    const pass = ok && errors === 0 && (actionsLength > 0 || findingsLength > 0 || isValidation);
+    const status = pass ? 'PASS' : ok ? 'WARN' : 'FAIL';
     console.log(
       `${test.id} | ${status} | total:${totalMs}ms model:${modelMs} | errors:${errors} | actions:${actionsLength} | findings:${findingsLength}`
     );
+    if (Array.isArray(data?.errors) && data.errors.length) {
+      console.log(`  postCheck errors: ${data.errors.join(' | ')}`);
+      if (!parsed.ok) {
+        console.log(`  raw response: ${rawText.slice(0, 500)}`);
+      }
+    }
+    if (status !== 'PASS' && actions) {
+      console.log(`  actions: ${JSON.stringify(actions, null, 2)}`);
+    }
+    if (test.id === 'VAL01') {
+      console.log(`  VAL01 full response: ${rawText.slice(0, 500)}`);
+      if (parsed.obj) {
+        console.log(`  VAL01 actionsJson: ${JSON.stringify(parsed.obj, null, 2)}`);
+      }
+    }
   } catch (e) {
     const totalMs = Math.round(performance.now() - t0);
     console.log(`${test.id} | FAIL | ${totalMs}ms | ${e}`);

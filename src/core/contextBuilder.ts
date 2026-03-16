@@ -55,6 +55,7 @@ export async function buildContext(req: McpChatRequest): Promise<string> {
       'End your response with ACTIONS_JSON: {"summary":"...","findings":[],"suggestedFixes":[],"actions":[...]}',
       'No code fences. No raw arrays. No prose after ACTIONS_JSON.',
       'If no changes needed: ACTIONS_JSON: {"summary":"...","findings":[],"suggestedFixes":[],"actions":[]}',
+      'COMPLEX flows (3+ steps): after one short summary sentence, output ACTIONS_JSON immediately. No numbered lists or step-by-step prose. The actions array is the breakdown.',
     ].join('\n')
   );
 

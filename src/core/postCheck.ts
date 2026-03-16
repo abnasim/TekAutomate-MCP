@@ -52,11 +52,13 @@ function extractActionsJson(text: string): Record<string, unknown> | null {
     .replace(/```json\s*/g, '')
     .replace(/```\s*/g, '');
 
-  // Preferred: object payload
-  const objMatch = cleaned.match(/ACTIONS_JSON:\s*(\{[\s\S]*\})\s*$/);
-  if (objMatch) {
+  // Preferred: object payload; find anywhere (non-greedy, fallback greedy)
+  const objMatch = cleaned.match(/ACTIONS_JSON:\s*(\{[\s\S]*?\})\s*(?:$|\n\n)/);
+  const objMatchGreedy = cleaned.match(/ACTIONS_JSON:\s*(\{[\s\S]*\})/);
+  const match = objMatch || objMatchGreedy;
+  if (match) {
     try {
-      return JSON.parse(objMatch[1]) as Record<string, unknown>;
+      return JSON.parse(match[1]) as Record<string, unknown>;
     } catch {
       // fall through to array handling
     }
