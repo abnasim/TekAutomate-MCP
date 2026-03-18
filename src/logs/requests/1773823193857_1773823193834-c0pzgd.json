@@ -1,0 +1,28 @@
+{
+  "timestamp": "2026-03-18T08:39:53.857Z",
+  "requestId": "1773823193834-c0pzgd",
+  "modelFamily": "(unknown)",
+  "backend": "(unknown)",
+  "flowContext": {
+    "stepCount": 0,
+    "stepTypes": [],
+    "validationErrors": []
+  },
+  "scpiContextHits": 0,
+  "toolCalls": [],
+  "postCheck": {
+    "errors": [
+      "OPENAI_PROMPT_ID is required for hosted server-default assistant mode. Set a real pmpt_... value in mcp-server/.env or send a prompt ID directly."
+    ],
+    "warnings": [],
+    "autoRepairTriggered": false
+  },
+  "response": {
+    "text": "OPENAI_PROMPT_ID is required for hosted server-default assistant mode. Set a real pmpt_... value in mcp-server/.env or send a prompt ID directly.",
+    "actionsJson": null,
+    "stepCount": 0,
+    "stepTypes": []
+  },
+  "durationMs": 23,
+  "ok": false
+}

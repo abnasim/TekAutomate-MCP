@@ -1,62 +1,10 @@
 import { getCommandIndex } from '../core/commandIndex';
 import type { ToolResult } from '../core/schemas';
+import { serializeCommandResult } from './commandResultShape';
 
 interface GetCommandByHeaderInput {
   header: string;
   family?: string;
-}
-
-function thinResult(entry: {
-  commandId: string;
-  sourceFile: string;
-  header: string;
-  commandType: 'set' | 'query' | 'both';
-  shortDescription: string;
-  syntax: { set?: string; query?: string };
-  codeExamples: Array<{
-    scpi?: { code: string };
-    python?: { code: string };
-    tm_devices?: { code: string };
-  }>;
-  arguments: Array<{
-    name: string;
-    type: string;
-    required: boolean;
-    description: string;
-    validValues: Record<string, unknown>;
-    defaultValue?: unknown;
-  }>;
-  notes: string[];
-}) {
-  const ex = entry.codeExamples?.[0];
-  const argumentsPreview = Array.isArray(entry.arguments)
-    ? entry.arguments.slice(0, 8).map((arg) => ({
-        name: arg.name,
-        type: arg.type,
-        required: arg.required,
-        description: arg.description,
-        defaultValue: arg.defaultValue,
-        validValues: arg.validValues,
-      }))
-    : [];
-  return {
-    commandId: entry.commandId,
-    sourceFile: entry.sourceFile,
-    header: entry.header,
-    commandType: entry.commandType,
-    shortDescription: entry.shortDescription,
-    syntax: entry.syntax,
-    example: ex
-      ? {
-          scpi: ex.scpi?.code,
-          python: ex.python?.code,
-          tm_devices: ex.tm_devices?.code,
-        }
-      : undefined,
-    validValues: entry.arguments?.[0]?.validValues || undefined,
-    arguments: argumentsPreview.length ? argumentsPreview : undefined,
-    notes: entry.notes?.length ? entry.notes : undefined,
-  };
 }
 
 export async function getCommandByHeader(
@@ -73,7 +21,7 @@ export async function getCommandByHeader(
   }
   return {
     ok: true,
-    data: thinResult(entry),
+    data: serializeCommandResult(entry),
     sourceMeta: [{ file: entry.sourceFile, commandId: entry.commandId, section: entry.group }],
     warnings: [],
   };

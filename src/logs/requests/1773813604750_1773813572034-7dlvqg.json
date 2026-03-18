@@ -1,0 +1,31 @@
+{
+  "timestamp": "2026-03-18T06:00:04.750Z",
+  "requestId": "1773813572034-7dlvqg",
+  "provider": "openai",
+  "model": "gpt-5.4",
+  "outputMode": "steps_json",
+  "deviceType": "SCOPE",
+  "modelFamily": "MSO4/5/6 Series",
+  "backend": "pyvisa",
+  "userMessage": "Set CH1 to 500mV DC 50 ohm and CH2 to 1V AC coupled",
+  "flowContext": {
+    "stepCount": 0,
+    "stepTypes": [],
+    "validationErrors": []
+  },
+  "scpiContextHits": 0,
+  "toolCalls": [],
+  "postCheck": {
+    "errors": [],
+    "warnings": [],
+    "autoRepairTriggered": false
+  },
+  "response": {
+    "text": "I can’t safely emit applyable TekAutomate JSON for this turn.\n\nVerified retrieval is insufficient to fail-open:\n- `CH1:SCAle 0.5` was successfully materialized.\n- The other needed commands were only retrieved as canonical headers, not fully materialized as concrete SCPI:\n  - `CH1:COUPling DC`\n  - `CH1:TERmination 50`\n  - `CH2:SCAle 1`\n  - `CH2:COUPling AC`\n\nBecause your runtime policy says to use only exact verified MCP results for SCPI-bearing steps and fail closed otherwise, I’m stopping here instead of guessing.",
+    "actionsJson": null,
+    "stepCount": 0,
+    "stepTypes": []
+  },
+  "durationMs": 32716,
+  "ok": true
+}

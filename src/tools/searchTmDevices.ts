@@ -7,6 +7,15 @@ interface SearchTmDevicesInput {
   limit?: number;
 }
 
+function methodPathCandidates(raw: string): string[] {
+  const q = String(raw || '').trim();
+  if (!q) return [];
+  const candidates = new Set<string>([q]);
+  candidates.add(q.replace(/\[\d+\]/g, '[x]'));
+  candidates.add(q.replace(/\bch\d+\b/gi, 'ch[x]'));
+  return Array.from(candidates).filter(Boolean);
+}
+
 export async function searchTmDevices(
   input: SearchTmDevicesInput
 ): Promise<ToolResult<unknown[]>> {
@@ -15,7 +24,21 @@ export async function searchTmDevices(
     return { ok: true, data: [], sourceMeta: [], warnings: ['Empty query'] };
   }
   const index = await getTmDevicesIndex();
-  const docs = index.search(q, input.model, input.limit || 10);
+  const limit = input.limit || 10;
+  const directDocs = (q.includes('.') || /\[[x0-9]+\]/i.test(q))
+    ? methodPathCandidates(q)
+        .map((candidate) => index.getByMethodPath(candidate, input.model))
+        .filter((doc): doc is NonNullable<typeof doc> => Boolean(doc))
+        .map((doc) => ({ ...doc, availableForModel: true }))
+    : [];
+  const fuzzyDocs = index.search(q, input.model, limit);
+  const seen = new Set<string>();
+  const docs = [...directDocs, ...fuzzyDocs].filter((doc) => {
+    const key = `${doc.modelRoot}:${doc.methodPath}`;
+    if (seen.has(key)) return false;
+    seen.add(key);
+    return true;
+  }).slice(0, limit);
   return {
     ok: true,
     data: docs.map((d) => ({

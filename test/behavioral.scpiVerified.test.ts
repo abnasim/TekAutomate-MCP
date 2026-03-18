@@ -25,4 +25,28 @@ describe('behavioral.scpiVerified', () => {
     expect(Array.isArray(rows)).toBe(true);
     expect(rows.length).toBeGreaterThan(0);
   });
+
+  it('accepts exact long-form SCPI and rejects shorthand when exact syntax is required', async () => {
+    const exact = await verifyScpiCommands({
+      commands: [
+        'TRIGger:A:EDGE:SOUrce CH4',
+        'MEASUrement:MEAS3:RESUlts:CURRentacq:MEAN?',
+      ],
+      modelFamily: 'MSO4/5/6 Series',
+      requireExactSyntax: true,
+    });
+    const exactRows = exact.data as Array<Record<string, unknown>>;
+    expect(exactRows.every((row) => row.verified === true)).toBe(true);
+
+    const shorthand = await verifyScpiCommands({
+      commands: [
+        'TRIG:A:EDGE:SOU CH4',
+        'MEASU:MEAS3:RESU:CURR?',
+      ],
+      modelFamily: 'MSO4/5/6 Series',
+      requireExactSyntax: true,
+    });
+    const shorthandRows = shorthand.data as Array<Record<string, unknown>>;
+    expect(shorthandRows.every((row) => row.verified === false)).toBe(true);
+  });
 });

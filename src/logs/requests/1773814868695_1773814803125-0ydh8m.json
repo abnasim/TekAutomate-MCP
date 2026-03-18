@@ -1,0 +1,31 @@
+{
+  "timestamp": "2026-03-18T06:21:08.695Z",
+  "requestId": "1773814803125-0ydh8m",
+  "provider": "openai",
+  "model": "gpt-5.4",
+  "outputMode": "steps_json",
+  "deviceType": "SCOPE",
+  "modelFamily": "MSO4/5/6 Series",
+  "backend": "pyvisa",
+  "userMessage": "Set CH1 to 200mV DC 50ohm for high speed serial data at 1Gbps. Set horizontal scale to 500ps per div record length 10 million samples. Set trigger to edge CH1 rising 0V normal mode. Enable fast acquisition with temperature palette. Set acquisition to run continuous for 30 seconds. Add eye height eye width and jitter measurements on CH1. Query all results. Save screenshot of eye diagram.",
+  "flowContext": {
+    "stepCount": 0,
+    "stepTypes": [],
+    "validationErrors": []
+  },
+  "scpiContextHits": 0,
+  "toolCalls": [],
+  "postCheck": {
+    "errors": [],
+    "warnings": [],
+    "autoRepairTriggered": false
+  },
+  "response": {
+    "text": "I can’t safely emit applyable TekAutomate flow JSON for this request because exact verification is incomplete for a few required pieces, and your runtime policy says to fail closed rather than guess.\n\nMissing or insufficiently verified items from this turn:\n- Trigger level command for `0 V` on CH1 was not retrieved as an exact verified MSO4/5/6 command.\n- A clearly verified `eye width` measurement add command was not retrieved. I verified `MEASUrement:ADDMEAS` supports `EYEHIGH`, `WIDTH`, `WIDTHBER`, `TIE`, and `JITTERSUMMARY`, but not an exact `EYEWIDTH` token in the retrieved results.\n- The exact result query strategy for all three requested measurements is only partially verified. I have `MEASUrement:MEAS<x>:RESUlts:CURRentacq:MEAN?`, but not enough verified mapping to guarantee the intended measurement/result pairing without guessing.\n\nSo I’m stopping here instead of returning unsafe JSON. If you want, on the next turn I can build the flow immediately once those exact items are verified:\n1. trigger level header for CH1,\n2. exact eye-width measurement token for MSO4/5/6,\n3. preferred jitter measurement token (`TIE`, `PJ`, `RJ`, or `JITTERSUMMARY`).",
+    "actionsJson": null,
+    "stepCount": 0,
+    "stepTypes": []
+  },
+  "durationMs": 65570,
+  "ok": true
+}

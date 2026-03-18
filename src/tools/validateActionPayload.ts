@@ -1,5 +1,6 @@
 import type { ToolResult } from '../core/schemas';
 import { extractReplaceFlowSteps } from '../core/schemas';
+import { parseJsonValueString } from '../core/actionNormalizer';
 
 interface ValidateActionPayloadInput {
   actionsJson: Record<string, unknown>;
@@ -122,7 +123,7 @@ export async function validateActionPayload(
     }
     if (type === 'replace_step' || type === 'insert_step_after') {
       const payload = (action.payload || {}) as Record<string, unknown>;
-      const newStep = (action.newStep || payload.new_step || payload.newStep) as
+      const newStep = parseJsonValueString(action.newStep || payload.new_step || payload.newStep) as
         | Record<string, unknown>
         | undefined;
       if (!newStep) {
@@ -141,7 +142,14 @@ export async function validateActionPayload(
       if (String(newStep.type || '') === 'python') {
         const target = String(action.target_step_id || action.targetStepId || '');
         const original = target ? originalById.get(target) : null;
-        if (!original || String(original.type || '') !== 'python') {
+        const allowPython =
+          action.allow_python === true ||
+          action.allowPython === true ||
+          payload.allow_python === true ||
+          payload.allowPython === true ||
+          (newStep as Record<string, unknown>).allow_python === true ||
+          (newStep as Record<string, unknown>).allowPython === true;
+        if ((!original || String(original.type || '') !== 'python') && !allowPython) {
           errors.push(`actions[${i}]: unexpected python substitution`);
         }
       }

@@ -61,7 +61,9 @@ export interface SearchFilters {
 
 const DEFAULT_COMMAND_FILES = [
   'mso_2_4_5_6_7.json',
+  'mso_manual_overrides.json',
   'MSO_DPO_5k_7k_70K.json',
+  'legacy_scope_manual_overrides.json',
   'afg.json',
   'awg.json',
   'smu.json',
@@ -72,7 +74,9 @@ const DEFAULT_COMMAND_FILES = [
 
 const SOURCE_FILE_FAMILY_HINTS: Record<string, string[]> = {
   'mso_2_4_5_6_7.json': ['MSO2', 'MSO4', 'MSO5', 'MSO6', 'MSO7'],
+  'mso_manual_overrides.json': ['MSO4', 'MSO5', 'MSO6', 'MSO7'],
   'MSO_DPO_5k_7k_70K.json': ['MSO5000', 'DPO5000', 'DPO7000', 'DPO70000'],
+  'legacy_scope_manual_overrides.json': ['MSO5000', 'DPO5000', 'DPO7000', 'DPO70000'],
   'afg.json': ['AFG'],
   'awg.json': ['AWG'],
   'smu.json': ['SMU'],
@@ -126,9 +130,83 @@ function stripTrailingDigitsFromKey(key: string): string {
     .join(':');
 }
 
+function buildIndexedHeaderLookupVariants(header: string): string[] {
+  const source = String(header || '').trim();
+  if (!source) return [];
+
+  const variants = new Set<string>([source]);
+  const add = (value: string) => {
+    const trimmed = String(value || '').trim();
+    if (trimmed) variants.add(trimmed);
+  };
+
+  const placeholderized = source
+    .replace(/\bCH\d+_D\d+\b/gi, 'CH<x>_D<x>')
+    .replace(/\bCH\d+\b/gi, 'CH<x>')
+    .replace(/\bB\d+\b/gi, 'B<x>')
+    .replace(/\bREF\d+\b/gi, 'REF<x>')
+    .replace(/\bMATH\d+\b/gi, 'MATH<x>')
+    .replace(/\bBUS\d+\b/gi, 'BUS<x>')
+    .replace(/\bMEAS\d+\b/gi, 'MEAS<x>')
+    .replace(/\bSEARCH\d+\b/gi, 'SEARCH<x>')
+    .replace(/\bZOOM\d+\b/gi, 'ZOOM<x>')
+    .replace(/\bPLOT\d+\b/gi, 'PLOT<x>')
+    .replace(/\bVIEW\d+\b/gi, 'VIEW<x>')
+    .replace(/\bSOURCE\d+\b/gi, 'SOURCE<x>')
+    .replace(/\bEDGE\d+\b/gi, 'EDGE<x>')
+    .replace(/\bREFLEVELS\d+\b/gi, 'REFLevels<x>')
+    .replace(/(^|:)(A|B)(?=:|$)/gi, '$1{A|B}');
+  add(placeholderized);
+
+  add(
+    source
+      .replace(/\bSOURCE\d+\b/gi, 'SOURCE')
+      .replace(/\bEDGE\d+\b/gi, 'EDGE')
+      .replace(/\bREFLEVELS\d+\b/gi, 'REFLevels')
+  );
+
+  add(
+    placeholderized
+      .replace(/\bSOURCE<x>\b/gi, 'SOURCE')
+      .replace(/\bEDGE<x>\b/gi, 'EDGE')
+      .replace(/\bREFLEVELS<x>\b/gi, 'REFLevels')
+  );
+
+  return Array.from(variants);
+}
+
 function rootTokenForSafety(header: string): string {
   const root = tokenizeHeader(header)[0] || '';
   return normalizeToken(root.replace(/\d+$/g, ''));
+}
+
+function headerSpecificityScore(candidateHeader: string, requestedHeader: string): number {
+  const candidateTokens = tokenizeHeader(candidateHeader);
+  const requestedTokens = tokenizeHeader(requestedHeader);
+  let score = candidateTokens.length === requestedTokens.length ? 4 : 0;
+  const pairs = Math.min(candidateTokens.length, requestedTokens.length);
+
+  for (let i = 0; i < pairs; i += 1) {
+    const candidate = candidateTokens[i] || '';
+    const requested = requestedTokens[i] || '';
+    if (!candidate || !requested) continue;
+
+    const candidateUpper = candidate.toUpperCase();
+    const requestedUpper = requested.toUpperCase();
+    const candidateNorm = normalizeToken(candidate);
+    const requestedNorm = normalizeToken(requested);
+
+    if (candidateNorm === requestedNorm) score += 2;
+    if (candidateUpper === requestedUpper) score += 10;
+
+    if (/<[^>]+>/.test(requested) && /<[^>]+>/.test(candidate)) score += 8;
+    if (/\{[^}]+\}/.test(requested) && /\{[^}]+\}/.test(candidate)) score += 8;
+    if (/SOURCE<[^>]+>/i.test(requested) && /SOURCE<[^>]+>/i.test(candidate)) score += 10;
+    if (/EDGE<[^>]+>/i.test(requested) && /EDGE<[^>]+>/i.test(candidate)) score += 10;
+    if (/REFLEVELS<[^>]+>/i.test(requested) && /REFLEVELS<[^>]+>/i.test(candidate)) score += 10;
+  }
+
+  return score;
 }
 
 function normalizeHeaderKey(header: string): string {
@@ -164,6 +242,10 @@ function normalizeText(input: string): string[] {
     .split(/[^a-z0-9_:.?]+/g)
     .map((v) => v.trim())
     .filter((v) => v.length > 1);
+}
+
+function sourceFilePriority(sourceFile: string): number {
+  return /manual_overrides\.json$/i.test(String(sourceFile || '')) ? 0 : 1;
 }
 
 function extractHeader(raw: Record<string, unknown>): string {
@@ -253,6 +335,56 @@ function extractSyntax(raw: Record<string, unknown>): CommandSyntax {
     set: setValue || undefined,
     query: queryValue || undefined,
   };
+}
+
+function collectSyntaxChunks(syntax: unknown): string[] {
+  const candidates: string[] = [];
+  if (typeof syntax === 'string') {
+    candidates.push(syntax.trim());
+  } else if (Array.isArray(syntax)) {
+    syntax.forEach((item) => {
+      if (typeof item === 'string' && item.trim()) candidates.push(item.trim());
+    });
+  }
+
+  const chunks: string[] = [];
+  candidates.forEach((candidate) => {
+    const parts = candidate
+      .split(/\s+(?=[*A-Za-z][A-Za-z0-9_<>{}\[\]\-|]*(?::[A-Za-z0-9_<>{}\[\]\-|]+)+)/g)
+      .map((p) => p.trim())
+      .filter(Boolean);
+    if (parts.length <= 1) {
+      chunks.push(candidate);
+      return;
+    }
+    chunks.push(...parts);
+  });
+  return chunks;
+}
+
+function extractHeaderFromSyntaxChunk(chunk: string): string {
+  const match = chunk.trim().match(/^[*A-Za-z][A-Za-z0-9_<>{}\[\]\-|]*(?::[A-Za-z0-9_<>{}\[\]\-|]+)+\??/);
+  return match ? match[0].replace(/\?$/, '') : '';
+}
+
+function buildSyntaxVariantSpecs(raw: Record<string, unknown>): Array<{ header: string; syntax: CommandSyntax }> {
+  const chunks = collectSyntaxChunks(raw.syntax);
+  if (!chunks.length) return [];
+
+  const grouped = new Map<string, CommandSyntax>();
+  chunks.forEach((chunk) => {
+    const header = extractHeaderFromSyntaxChunk(chunk);
+    if (!header || !header.includes(':')) return;
+    const current = grouped.get(header) || {};
+    if (chunk.includes('?')) {
+      if (!current.query) current.query = chunk;
+    } else if (!current.set) {
+      current.set = chunk;
+    }
+    grouped.set(header, current);
+  });
+
+  return Array.from(grouped.entries()).map(([header, syntax]) => ({ header, syntax }));
 }
 
 function toValidValues(raw: unknown): Record<string, unknown> {
@@ -498,10 +630,67 @@ class Bm25 {
   }
 }
 
+function normalizeFamilyKey(value: string): string {
+  return value.toUpperCase().replace(/[^A-Z0-9]/g, '');
+}
+
+function requestedFamilyBuckets(family?: string): Set<string> {
+  const out = new Set<string>();
+  const raw = String(family || '').trim();
+  if (!raw) return out;
+  const normalized = normalizeFamilyKey(raw);
+  const add = (value: string) => out.add(value);
+
+  if (/MSO24567|MSO456|MSO45|MSO56|MSO7|MSO6|MSO5|MSO4|MSO2/.test(normalized)) add('MODERN_MSO');
+  if (/DPO|5K|7K|70K|MSO5000/.test(normalized)) add('LEGACY_SCOPE');
+  if (/AFG/.test(normalized)) add('AFG');
+  if (/AWG/.test(normalized)) add('AWG');
+  if (/SMU|KEITHLEY/.test(normalized)) add('SMU');
+  if (/RSA/.test(normalized)) add('RSA');
+  if (/DPOJET/.test(normalized)) add('DPOJET');
+  if (/TEKEXPRESS/.test(normalized)) add('TEKEXPRESS');
+
+  out.add(normalized);
+  return out;
+}
+
+function entryFamilyKeys(entry: CommandRecord): Set<string> {
+  const out = new Set<string>();
+  [...entry.families, ...entry.models, ...(SOURCE_FILE_FAMILY_HINTS[entry.sourceFile] || [])]
+    .map((value) => normalizeFamilyKey(value))
+    .filter(Boolean)
+    .forEach((value) => out.add(value));
+
+  if (
+    entry.sourceFile === 'mso_2_4_5_6_7.json' ||
+    ['MSO2', 'MSO4', 'MSO5', 'MSO6', 'MSO7'].some((family) => out.has(family))
+  ) {
+    out.add('MODERN_MSO');
+  }
+  if (
+    entry.sourceFile === 'MSO_DPO_5k_7k_70K.json' ||
+    ['MSO5000', 'DPO5000', 'DPO7000', 'DPO70000'].some((family) => out.has(family))
+  ) {
+    out.add('LEGACY_SCOPE');
+  }
+  if (entry.sourceFile === 'afg.json') out.add('AFG');
+  if (entry.sourceFile === 'awg.json') out.add('AWG');
+  if (entry.sourceFile === 'smu.json') out.add('SMU');
+  if (entry.sourceFile === 'rsa.json') out.add('RSA');
+  if (entry.sourceFile === 'dpojet.json') out.add('DPOJET');
+  if (entry.sourceFile === 'tekexpress.json') out.add('TEKEXPRESS');
+
+  return out;
+}
+
 function familyMatches(entry: CommandRecord, family?: string): boolean {
-  void entry;
-  void family;
-  return true;
+  const requested = requestedFamilyBuckets(family);
+  if (!requested.size) return true;
+  const entryKeys = entryFamilyKeys(entry);
+  for (const key of requested) {
+    if (entryKeys.has(key)) return true;
+  }
+  return false;
 }
 
 function commandTypeMatches(entryType: CommandType, requested?: CommandType): boolean {
@@ -554,7 +743,13 @@ export class CommandIndex {
       const candidates = indexes
         .map((idx) => this.entries[idx])
         .filter((entry) => familyMatches(entry, family))
-        .sort((a, b) => `${a.sourceFile}:${a.commandId}`.localeCompare(`${b.sourceFile}:${b.commandId}`));
+        .sort((a, b) => {
+          const score = headerSpecificityScore(b.header, header) - headerSpecificityScore(a.header, header);
+          if (score !== 0) return score;
+          const priority = sourceFilePriority(a.sourceFile) - sourceFilePriority(b.sourceFile);
+          if (priority !== 0) return priority;
+          return `${a.sourceFile}:${a.commandId}`.localeCompare(`${b.sourceFile}:${b.commandId}`);
+        });
       return candidates[0] || null;
     };
 
@@ -577,6 +772,14 @@ export class CommandIndex {
       const inputRoot = rootTokenForSafety(header);
       const safe = digitCandidates.find((candidate) => rootTokenForSafety(candidate.header) === inputRoot);
       if (safe) return safe;
+    }
+
+    for (const variant of buildIndexedHeaderLookupVariants(header)) {
+      const variantKey = normalizeHeaderKey(variant);
+      if (variantKey && variantKey !== exactKey) {
+        const matched = selectCandidate(this.byHeaderKey.get(variantKey) || []);
+        if (matched) return matched;
+      }
     }
 
     return null;
@@ -621,6 +824,10 @@ export class CommandIndex {
 
   getAllHeaders(): string[] {
     return this.entries.map((e) => e.header);
+  }
+
+  getEntries(family?: string): CommandRecord[] {
+    return this.entries.filter((entry) => familyMatches(entry, family));
   }
 
   getByHeaderPrefix(header: string, family?: string): CommandRecord | null {
@@ -708,8 +915,28 @@ function parseGroupedCommands(sourceFile: string, root: Record<string, unknown>)
     const commands = Array.isArray(groupObj?.commands) ? (groupObj.commands as unknown[]) : [];
     commands.forEach((cmd) => {
       if (!cmd || typeof cmd !== 'object') return;
-      const rec = toCommandRecord(cmd as Record<string, unknown>, sourceFile, groupName);
+      const raw = cmd as Record<string, unknown>;
+      const rec = toCommandRecord(raw, sourceFile, groupName);
       if (rec) out.push(rec);
+      const parentHeader = rec?.header || extractHeader(raw);
+      buildSyntaxVariantSpecs(raw).forEach((variant) => {
+        if (normalizeHeaderKey(variant.header) === normalizeHeaderKey(parentHeader)) return;
+        const variantRec = toCommandRecord(
+          {
+            ...raw,
+            _manualEntry: {
+              header: variant.header,
+              syntax: variant.syntax,
+              shortDescription: extractShortDescription(raw),
+              commandType:
+                variant.syntax.set && variant.syntax.query ? 'both' : variant.syntax.query ? 'query' : 'set',
+            },
+          },
+          sourceFile,
+          groupName
+        );
+        if (variantRec) out.push(variantRec);
+      });
     });
   });
   return out;
@@ -723,8 +950,28 @@ function parseSectionedCommands(sourceFile: string, root: Record<string, unknown
     if (!Array.isArray(sectionRaw)) return;
     sectionRaw.forEach((cmd) => {
       if (!cmd || typeof cmd !== 'object') return;
-      const rec = toCommandRecord(cmd as Record<string, unknown>, sourceFile, sectionName);
+      const raw = cmd as Record<string, unknown>;
+      const rec = toCommandRecord(raw, sourceFile, sectionName);
       if (rec) out.push(rec);
+      const parentHeader = rec?.header || extractHeader(raw);
+      buildSyntaxVariantSpecs(raw).forEach((variant) => {
+        if (normalizeHeaderKey(variant.header) === normalizeHeaderKey(parentHeader)) return;
+        const variantRec = toCommandRecord(
+          {
+            ...raw,
+            _manualEntry: {
+              header: variant.header,
+              syntax: variant.syntax,
+              shortDescription: extractShortDescription(raw),
+              commandType:
+                variant.syntax.set && variant.syntax.query ? 'both' : variant.syntax.query ? 'query' : 'set',
+            },
+          },
+          sourceFile,
+          sectionName
+        );
+        if (variantRec) out.push(variantRec);
+      });
     });
   });
   return out;
@@ -732,10 +979,33 @@ function parseSectionedCommands(sourceFile: string, root: Record<string, unknown
 
 function parseFlatCommands(sourceFile: string, root: unknown): CommandRecord[] {
   if (!Array.isArray(root)) return [];
-  return root
+  const out: CommandRecord[] = [];
+  root
     .filter((cmd): cmd is Record<string, unknown> => !!cmd && typeof cmd === 'object')
-    .map((cmd) => toCommandRecord(cmd, sourceFile, 'general'))
-    .filter((rec): rec is CommandRecord => rec !== null);
+    .forEach((raw) => {
+      const rec = toCommandRecord(raw, sourceFile, 'general');
+      if (rec) out.push(rec);
+      const parentHeader = rec?.header || extractHeader(raw);
+      buildSyntaxVariantSpecs(raw).forEach((variant) => {
+        if (normalizeHeaderKey(variant.header) === normalizeHeaderKey(parentHeader)) return;
+        const variantRec = toCommandRecord(
+          {
+            ...raw,
+            _manualEntry: {
+              header: variant.header,
+              syntax: variant.syntax,
+              shortDescription: extractShortDescription(raw),
+              commandType:
+                variant.syntax.set && variant.syntax.query ? 'both' : variant.syntax.query ? 'query' : 'set',
+            },
+          },
+          sourceFile,
+          'general'
+        );
+        if (variantRec) out.push(variantRec);
+      });
+    });
+  return out;
 }
 
 export async function loadCommandIndex(options?: {

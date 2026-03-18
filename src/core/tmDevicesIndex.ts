@@ -97,6 +97,21 @@ export class TmDevicesIndex {
     }
     return out;
   }
+
+  getByMethodPath(methodPath: string, model?: string): TmMethodDoc | null {
+    const requested = String(methodPath || '').trim().toLowerCase();
+    if (!requested) return null;
+
+    const exact = this.docs
+      .filter((doc) => doc.methodPath.toLowerCase() === requested && modelMatches(doc.modelRoot, model))
+      .sort((a, b) => `${a.modelRoot}:${a.methodPath}`.localeCompare(`${b.modelRoot}:${b.methodPath}`));
+    if (exact.length) return exact[0];
+
+    const fallback = this.docs
+      .filter((doc) => doc.methodPath.toLowerCase() === requested)
+      .sort((a, b) => `${a.modelRoot}:${a.methodPath}`.localeCompare(`${b.modelRoot}:${b.methodPath}`));
+    return fallback[0] || null;
+  }
 }
 
 let _tmPromise: Promise<TmDevicesIndex> | null = null;

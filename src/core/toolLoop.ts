@@ -4,10 +4,15 @@ import { postCheckResponse } from './postCheck';
 import { buildContext } from './contextBuilder';
 import { getToolDefinitions, runTool } from '../tools';
 import { getCommandIndex } from './commandIndex';
+import { buildCommandGroupSeedQuery, suggestCommandGroups } from './commandGroups';
+import { planIntent, type PlannerOutput } from './intentPlanner';
+import { probeCommandProxy } from './instrumentProxy';
 
 interface ToolLoopResult {
   text: string;
+  displayText?: string;
   errors: string[];
+  assistantThreadId?: string;
   warnings?: string[];
   metrics?: {
     totalMs: number;
@@ -41,8 +46,56 @@ interface ToolLoopResult {
       rawResult?: unknown;
     }>;
     rawOutput?: unknown;
+    providerRequest?: unknown;
     shortcutResponse?: string;
   };
+}
+
+type HostedResponseInputItem = Record<string, unknown>;
+type HostedToolDefinition = Record<string, unknown>;
+type HostedToolPhase = 'initial' | 'finalize';
+
+interface HostedResponsesRequestOptions {
+  inputOverride?: HostedResponseInputItem[];
+  previousResponseId?: string;
+  tools?: HostedToolDefinition[];
+  toolChoice?: string | Record<string, unknown>;
+}
+
+interface HostedPreloadContext {
+  contextText: string;
+  restrictSearchTools: boolean;
+  batchMaterializeOnly: boolean;
+  candidateCount: number;
+  groupCount: number;
+  usedBm25: boolean;
+}
+
+interface HostedFunctionCall {
+  name: string;
+  callId: string;
+  argumentsText: string;
+}
+
+function buildHostedFinalAnswerInput(toolOutputs: HostedResponseInputItem[]): HostedResponseInputItem[] {
+  return [
+    ...toolOutputs,
+    {
+      role: 'user',
+      content:
+        'Tool retrieval is complete for this turn. Use only the retrieved results already in conversation state and return the final answer now. Do not call more tools. If exact source-of-truth verification is still insufficient, say so briefly and do not emit applyable JSON.',
+    },
+  ];
+}
+
+function stableStringify(value: unknown): string {
+  if (value === null || typeof value !== 'object') return JSON.stringify(value);
+  if (Array.isArray(value)) {
+    return `[${value.map((item) => stableStringify(item)).join(',')}]`;
+  }
+  const record = value as Record<string, unknown>;
+  const keys = Object.keys(record).sort();
+  return `{${keys.map((key) => `${JSON.stringify(key)}:${stableStringify(record[key])}`).join(',')}}`;
 }
 
 function escapeJsonString(value: string): string {
@@ -52,6 +105,9 @@ function escapeJsonString(value: string): string {
 const STANDARD_MEASUREMENT_PATTERNS: Array<{ type: string; pattern: RegExp }> = [
   { type: 'FREQUENCY', pattern: /\bfrequency\b|\bfreq\b/i },
   { type: 'AMPLITUDE', pattern: /\bamplitude\b|\bamp\b/i },
+  { type: 'EYEHIGH', pattern: /\beye\s*height\b|\beyehigh\b/i },
+  { type: 'WIDTHBER', pattern: /\beye\s*width\b|\bwidthber\b/i },
+  { type: 'TIE', pattern: /\bjitter\b|\btie\b/i },
   { type: 'POVERSHOOT', pattern: /\bpositive overshoot\b|\bpos(?:itive)?\s*overshoot\b|\bpovershoot\b/i },
   { type: 'NOVERSHOOT', pattern: /\bnegative overshoot\b|\bneg(?:ative)?\s*overshoot\b|\bnovershoot\b/i },
   { type: 'RISETIME', pattern: /\brise\s*time\b|\brisetime\b/i },
@@ -60,8 +116,8 @@ const STANDARD_MEASUREMENT_PATTERNS: Array<{ type: string; pattern: RegExp }> = 
   { type: 'PK2PK', pattern: /\bpk2pk\b|\bpeak[-\s]*to[-\s]*peak\b|\bpeak to peak\b/i },
   { type: 'MEAN', pattern: /\bmean\b|\baverage\b/i },
   { type: 'RMS', pattern: /\brms\b/i },
-  { type: 'HIGH', pattern: /\bhigh\b/i },
-  { type: 'LOW', pattern: /\blow\b/i },
+  { type: 'HIGH', pattern: /(?<!eye\s)\bhigh\b(?!\s*speed)/i },
+  { type: 'LOW', pattern: /(?<!eye\s)\blow\b/i },
   { type: 'MAXIMUM', pattern: /\bmaximum\b|\bmax\b/i },
   { type: 'MINIMUM', pattern: /\bminimum\b|\bmin\b/i },
 ];
@@ -69,11 +125,17 @@ const STANDARD_MEASUREMENT_PATTERNS: Array<{ type: string; pattern: RegExp }> = 
 const DEFAULT_MEASUREMENT_SET = [
   'FREQUENCY',
   'AMPLITUDE',
+  'PERIOD',
   'PK2PK',
   'MEAN',
   'RMS',
-  'POVERSHOOT',
 ];
+
+function isGenericMeasurementWorkflowRequest(req: McpChatRequest): boolean {
+  return /\bsmart measurement workflow\b|\bmeasurement workflow\b|\bcurrent scope context\b/i.test(
+    req.userMessage
+  );
+}
 
 function detectMeasurementRequest(req: McpChatRequest): string[] {
   const text = req.userMessage.toLowerCase();
@@ -83,6 +145,10 @@ function detectMeasurementRequest(req: McpChatRequest): string[] {
 
   if (found.length > 0) {
     return Array.from(new Set(found));
+  }
+
+  if (isGenericMeasurementWorkflowRequest(req)) {
+    return [...DEFAULT_MEASUREMENT_SET];
   }
 
   if (!/\bmeas(?:urement)?s?\b/i.test(text)) {
@@ -115,6 +181,218 @@ function detectMeasurementChannel(req: McpChatRequest): string | null {
   return match ? `CH${match[1]}` : null;
 }
 
+function inferMeasurementChannelFromFlow(steps: unknown[]): string | null {
+  const flatSteps = flattenSteps(Array.isArray(steps) ? steps : []);
+  for (const item of flatSteps) {
+    if (!item || typeof item !== 'object') continue;
+    const step = item as Record<string, unknown>;
+    const params =
+      step.params && typeof step.params === 'object' ? (step.params as Record<string, unknown>) : {};
+    if (String(step.type || '').toLowerCase() === 'save_waveform') {
+      const source = String(params.source || '').toUpperCase();
+      if (/^CH[1-8]$/.test(source)) {
+        return source;
+      }
+    }
+    const command = String(params.command || '').toUpperCase();
+    const match = command.match(/\bCH([1-8])\b/);
+    if (match) {
+      return `CH${match[1]}`;
+    }
+  }
+  return null;
+}
+
+interface ScopedMeasurementRequest {
+  measurement: string;
+  channel: string;
+}
+
+interface DelayMeasurementRequest {
+  fromChannel: string;
+  toChannel: string;
+  fromEdge: 'RISe' | 'FALL';
+  toEdge: 'RISe' | 'FALL';
+  thresholdVolts?: number;
+}
+
+interface SetupHoldMeasurementRequest {
+  measurement: 'SETUP' | 'HOLD';
+  source1: string;
+  source2: string;
+}
+
+interface CanSearchConfig {
+  bus: string;
+  condition: 'ERRor' | 'FRAMEtype' | 'FDBITS' | 'DATA';
+  frameType?: string;
+  errType?: string;
+  brsBit?: 'ONE' | 'ZERo' | 'NOCARE';
+  esiBit?: 'ONE' | 'ZERo' | 'NOCARE';
+  dataOffset?: number;
+}
+
+function normalizeMeasurementSaveAs(channel: string, measurement: string): string {
+  const normalizedMeasurement = measurement.toLowerCase();
+  if (measurement === 'POVERSHOOT') return `${channel.toLowerCase()}_positive_overshoot`;
+  if (measurement === 'NOVERSHOOT') return `${channel.toLowerCase()}_negative_overshoot`;
+  if (measurement === 'WIDTHBER') return `${channel.toLowerCase()}_eye_width`;
+  if (measurement === 'EYEHIGH') return `${channel.toLowerCase()}_eye_height`;
+  if (measurement === 'TIE') return `${channel.toLowerCase()}_jitter`;
+  return `${channel.toLowerCase()}_${normalizedMeasurement}`;
+}
+
+function normalizeSetupHoldSaveAs(item: SetupHoldMeasurementRequest): string {
+  return `${item.source1.toLowerCase()}_${item.source2.toLowerCase()}_${item.measurement.toLowerCase()}`;
+}
+
+function detectMeasurementTypesInText(text: string): string[] {
+  return STANDARD_MEASUREMENT_PATTERNS
+    .filter(({ pattern }) => pattern.test(text))
+    .map(({ type }) => type);
+}
+
+function extractScopedMeasurementRequests(message: string, fallbackChannel = 'CH1'): ScopedMeasurementRequest[] {
+  const segments = String(message || '')
+    .split(/[.;]\s*/g)
+    .map((segment) => segment.trim())
+    .filter(Boolean);
+  const out: ScopedMeasurementRequest[] = [];
+
+  segments.forEach((segment) => {
+    const types = detectMeasurementTypesInText(segment);
+    if (!types.length) return;
+    const channels = Array.from(segment.toUpperCase().matchAll(/\bCH([1-8])\b/g)).map((match) => `CH${match[1]}`);
+    const scopedChannels = channels.length ? Array.from(new Set(channels)) : [fallbackChannel];
+    scopedChannels.forEach((channel) => {
+      types.forEach((measurement) => out.push({ measurement, channel }));
+    });
+  });
+
+  if (out.length) {
+    return out.filter(
+      (item, index, arr) =>
+        arr.findIndex((other) => other.channel === item.channel && other.measurement === item.measurement) === index
+    );
+  }
+
+  const fallbackTypes = detectMeasurementTypesInText(message);
+  return fallbackTypes.map((measurement) => ({ measurement, channel: fallbackChannel }));
+}
+
+function buildDefaultMeasurementRequests(measurements: string[], fallbackChannel = 'CH1'): ScopedMeasurementRequest[] {
+  return Array.from(new Set(measurements)).map((measurement) => ({
+    measurement,
+    channel: fallbackChannel,
+  }));
+}
+
+function extractDelayMeasurements(message: string): DelayMeasurementRequest[] {
+  const out: DelayMeasurementRequest[] = [];
+  const normalized = String(message || '');
+  const explicitPattern =
+    /\bdelay(?:\s+measurement)?\s+(?:between\s+(CH[1-8])\s+and\s+(CH[1-8])\s+(rising|falling)\s+edges?|from\s+(CH[1-8])\s+(rising|falling)\s+to\s+(CH[1-8])\s+(crossing|rising|falling)(?:\s+edges?)?(?:\s+([-+]?\d+(?:\.\d+)?)\s*(mV|V))?)/gi;
+
+  for (const match of normalized.matchAll(explicitPattern)) {
+    if (match[1] && match[2] && match[3]) {
+      out.push({
+        fromChannel: match[1].toUpperCase(),
+        toChannel: match[2].toUpperCase(),
+        fromEdge: match[3].toLowerCase() === 'falling' ? 'FALL' : 'RISe',
+        toEdge: match[3].toLowerCase() === 'falling' ? 'FALL' : 'RISe',
+      });
+      continue;
+    }
+
+    if (match[4] && match[5] && match[6]) {
+      const thresholdVolts = match[8] ? parseVoltageToVolts(`${match[8]}${match[9] || ''}`) : null;
+      const rawToEdge = String(match[7] || '').toLowerCase();
+      out.push({
+        fromChannel: match[4].toUpperCase(),
+        toChannel: match[6].toUpperCase(),
+        fromEdge: match[5].toLowerCase() === 'falling' ? 'FALL' : 'RISe',
+        toEdge: rawToEdge === 'falling' ? 'FALL' : 'RISe',
+        thresholdVolts: thresholdVolts === null ? undefined : thresholdVolts,
+      });
+    }
+  }
+
+  return out;
+}
+
+function extractSetupHoldMeasurements(
+  message: string,
+  i2cDecode?: { clockSource: string; dataSource: string } | null
+): SetupHoldMeasurementRequest[] {
+  const text = String(message || '');
+  const wantsSetup = /\bsetup time\b|\bsetup\b/i.test(text);
+  const wantsHold = /\bhold time\b|\bhold\b/i.test(text);
+  if (!wantsSetup && !wantsHold) return [];
+
+  let source1 = i2cDecode?.clockSource?.toUpperCase() || '';
+  let source2 = i2cDecode?.dataSource?.toUpperCase() || '';
+  if (!source1 || !source2) {
+    const channels = Array.from(text.toUpperCase().matchAll(/\bCH([1-8])\b/g)).map((match) => `CH${match[1]}`);
+    const unique = Array.from(new Set(channels));
+    if (!source1) source1 = unique[0] || '';
+    if (!source2) source2 = unique[1] || source1;
+  }
+
+  if (!/^CH[1-8]$/.test(source1) || !/^CH[1-8]$/.test(source2)) return [];
+
+  const out: SetupHoldMeasurementRequest[] = [];
+  if (wantsSetup) out.push({ measurement: 'SETUP', source1, source2 });
+  if (wantsHold) out.push({ measurement: 'HOLD', source1, source2 });
+  return out;
+}
+
+function extractCanSearchConfig(message: string, bus: string): CanSearchConfig | null {
+  const text = String(message || '');
+  if (!/\bsearch\b/i.test(text) || !/\bcan(?:\s+fd)?\b/i.test(text)) return null;
+
+  if (/\berror frames?\b/i.test(text)) {
+    return {
+      bus,
+      condition: 'FRAMEtype',
+      frameType: 'ERRor',
+    };
+  }
+
+  const brsMatch = text.match(/\bbrs\s*bit\s*(1|one|0|zero|nocare|no\s*care)\b/i);
+  const esiMatch = text.match(/\besi\s*bit\s*(1|one|0|zero|nocare|no\s*care)\b/i);
+  const offsetMatch = text.match(/\bdata\s*offset\s+(\d+)\s*bytes?\b/i);
+  if (brsMatch || esiMatch || offsetMatch) {
+    const normalizeBit = (raw: string): 'ONE' | 'ZERo' | 'NOCARE' =>
+      /^(1|one)$/i.test(raw) ? 'ONE' : /^(0|zero)$/i.test(raw) ? 'ZERo' : 'NOCARE';
+    return {
+      bus,
+      condition: brsMatch || esiMatch ? 'FDBITS' : 'DATA',
+      brsBit: brsMatch ? normalizeBit(brsMatch[1]) : undefined,
+      esiBit: esiMatch ? normalizeBit(esiMatch[1]) : undefined,
+      dataOffset: offsetMatch ? Number(offsetMatch[1]) : undefined,
+    };
+  }
+
+  const errTypeMatch =
+    text.match(/\b(any error|ack(?:\s*miss|\s*missing)?|bit\s*stuff(?:ing)?|form\s*error|crc)\b/i);
+  if (errTypeMatch) {
+    const token = errTypeMatch[1].toLowerCase().replace(/\s+/g, '');
+    const errType =
+      token.startsWith('ack') ? 'ACKMISS'
+      : token.startsWith('bitstuff') ? 'BITSTUFFing'
+      : token.startsWith('form') ? 'FORMERRor'
+      : token.startsWith('crc') ? 'CRC'
+      : 'ANYERRor';
+    return {
+      bus,
+      condition: 'ERRor',
+      errType,
+    };
+  }
+
+  return null;
+}
+
 function shouldQueryMeasurementResults(req: McpChatRequest): boolean {
   return /\b(query|read|result|results|save result|save results|mean\?|value|values)\b/i.test(
     req.userMessage
@@ -122,7 +400,23 @@ function shouldQueryMeasurementResults(req: McpChatRequest): boolean {
 }
 
 function isMeasurementAppendRequest(req: McpChatRequest): boolean {
-  return /\b(append|add|keep|preserve|existing|overwrite|overwritten)\b/i.test(req.userMessage);
+  return /\bappend\b|\bkeep existing\b|\bpreserve existing\b|\bwithout overwrit(?:e|ing)\b|\bdo not overwrite\b|\bdon't overwrite\b/i.test(
+    req.userMessage
+  );
+}
+
+function isImdaTrendRequest(req: McpChatRequest): boolean {
+  const text = req.userMessage.toLowerCase();
+  return /\bimda\b/.test(text) && /\b(acq\s*trend|acqtrend|trend\s*plot|time\s*trend)\b/.test(text);
+}
+
+function detectImdaMeasurements(req: McpChatRequest): string[] {
+  const text = req.userMessage.toLowerCase();
+  const out: string[] = [];
+  if (/\btorque\b/.test(text)) out.push('IMDATORQUE');
+  if (/\bspeed\b/.test(text)) out.push('IMDASPEED');
+  if (/\bpower\s*quality\b|\bpwr[_\s-]*quality\b/.test(text)) out.push('PWR_QUALity');
+  return out.length ? Array.from(new Set(out)) : ['IMDATORQUE', 'IMDASPEED'];
 }
 
 function flattenSteps(steps: unknown[]): Array<Record<string, unknown>> {
@@ -146,6 +440,19 @@ function splitCommandSegments(command: string): string[] {
     .split(';')
     .map((s) => s.trim())
     .filter(Boolean);
+}
+
+function normalizeHeaderForMatch(command: string): string {
+  if (!command) return '';
+  return command
+    .split('?')[0]
+    .trim()
+    .split(/\s/)[0]
+    .replace(/CH\d+/gi, 'CH<x>')
+    .replace(/MEAS\d+/gi, 'MEAS<x>')
+    .replace(/PLOT\d+/gi, 'PLOT<x>')
+    .replace(/SOUrce\d+/gi, 'SOUrce<x>')
+    .toLowerCase();
 }
 
 function isNumericLike(value: string): boolean {
@@ -181,6 +488,11 @@ async function detectFlowCommandIssues(req: McpChatRequest): Promise<string[]> {
         out.push(`[${String(step.id || '?')}] command header not verified: ${header}`);
         continue;
       }
+      const entryHeader = String((entry as Record<string, unknown>).header || (entry as Record<string, unknown>).command || '');
+      if (normalizeHeaderForMatch(entryHeader) !== normalizeHeaderForMatch(header)) {
+        out.push(`[${String(step.id || '?')}] command header not verified: ${header}`);
+        continue;
+      }
       const requiredArgs = (entry.arguments || []).filter((a) => a.required);
       const firstArg = args.split(',').map((x) => x.trim()).filter(Boolean)[0] || '';
       if (requiredArgs.length > 0 && !firstArg && type !== 'query') {
@@ -209,7 +521,7 @@ async function detectFlowCommandIssues(req: McpChatRequest): Promise<string[]> {
 }
 
 function isFastFrameRequest(req: McpChatRequest): boolean {
-  return /\bfast\s*frame\b|\bfastframe\b/i.test(req.userMessage);
+  return /\bfast\s*frames?\b|\bfastframes?\b/i.test(req.userMessage);
 }
 
 function detectFastFrameCount(req: McpChatRequest): number {
@@ -249,64 +561,203 @@ function runLooksSuccessful(runContext: McpChatRequest['runContext']): boolean {
   return false;
 }
 
-function buildPyvisaMeasurementShortcut(req: McpChatRequest): string | null {
+async function buildPyvisaMeasurementShortcut(req: McpChatRequest): Promise<string | null> {
   if ((req.outputMode || '') !== 'steps_json') return null;
   const backend = (req.flowContext.backend || 'pyvisa').toLowerCase();
   if (backend === 'tm_devices') return null; // handled by other shortcut
   const deviceType = (req.flowContext.deviceType || 'SCOPE').toUpperCase();
   if (deviceType !== 'SCOPE') return null;
 
-  const measurements = detectMeasurementRequest(req);
-  const channel = detectMeasurementChannel(req);
-  if (!measurements.length || !channel) return null;
-
   const existingSteps = Array.isArray(req.flowContext.steps) ? req.flowContext.steps : [];
   const flatSteps = flattenSteps(existingSteps);
+  const measurements = detectMeasurementRequest(req);
+  const genericWorkflow = isGenericMeasurementWorkflowRequest(req);
+  const channel =
+    detectMeasurementChannel(req) ||
+    inferMeasurementChannelFromFlow(existingSteps) ||
+    'CH1';
+  const imdaTrend = isImdaTrendRequest(req);
+  const imdaMeasurements = imdaTrend ? detectImdaMeasurements(req) : [];
+  if (!imdaTrend) return null;
+
   const hasScreenshot = /\bscreenshot\b|\bscreen shot\b|\bcapture screen\b/.test(req.userMessage.toLowerCase());
-  const wantsQueries = shouldQueryMeasurementResults(req);
+  const wantsQueries = shouldQueryMeasurementResults(req) || genericWorkflow;
+  const appendMode = isMeasurementAppendRequest(req);
   const isBuildNew = existingSteps.length === 0;
+  const defaultChannel = channel || 'CH1';
 
-  // ADDMEAS appends to the scope's existing measurement table. Only emit
-  // result queries when the user explicitly asked for values; otherwise avoid
-  // guessing slot numbers against pre-existing scope measurements.
-  const measurementSlots = measurements.map((measurement, index) => {
-    const slot = index + 1;
-    const saveAsName = (
-      measurement === 'FREQUENCY' ? 'ch1_frequency'
-      : measurement === 'AMPLITUDE' ? 'ch1_amplitude'
-      : measurement === 'POVERSHOOT' ? 'ch1_positive_overshoot'
-      : measurement === 'NOVERSHOOT' ? 'ch1_negative_overshoot'
-      : `meas${slot}_result`
-    ).replace('ch1', channel.toLowerCase().replace(' ', ''));
-    return { measurement, slot, saveAsName };
-  });
+  if (imdaTrend) {
+    const addGroup: Record<string, unknown>[] = imdaMeasurements.flatMap((measurement, index) => {
+      const slot = index + 1;
+      return [
+        {
+          id: `imda_${slot}_add`,
+          type: 'write',
+          label: `Add ${measurement} measurement`,
+          params: { command: `MEASUrement:ADDMEAS ${measurement}` },
+        },
+        {
+          id: `imda_${slot}_src`,
+          type: 'write',
+          label: `Set source for MEAS${slot}`,
+          params: { command: `MEASUrement:MEAS${slot}:SOUrce1 ${defaultChannel}` },
+        },
+      ];
+    });
 
-  const addGroup: Record<string, unknown>[] = measurementSlots.flatMap(({ measurement, slot, saveAsName: _ }) => [
-    {
-      id: `${slot * 2}`,
-      type: 'write',
-      label: `Add ${measurement.toLowerCase()} measurement`,
-      params: { command: `MEASUrement:ADDMEAS ${measurement}` },
-    },
-    {
-      id: `${slot * 2 + 1}`,
-      type: 'write',
-      label: `Set measurement ${slot} source to ${channel}`,
-      params: { command: `MEASUrement:MEAS${slot}:SOUrce1 ${channel}` },
-    },
-  ]);
+    const plotGroup: Record<string, unknown>[] = [
+      {
+        id: 'imda_plot_1',
+        type: 'write',
+        label: 'Create IMDA acquisition trend plot',
+        params: { command: 'PLOT:PLOT1:TYPe IMDAACQTREND' },
+      },
+      {
+        id: 'imda_plot_bind_1',
+        type: 'write',
+        label: `Bind plot to MEAS1`,
+        params: { command: 'PLOT:PLOT1:SOUrce1 MEAS1' },
+      },
+    ];
+    if (imdaMeasurements.length > 1) {
+      plotGroup.push(
+        {
+          id: 'imda_plot_2',
+          type: 'write',
+          label: 'Create second IMDA acquisition trend plot',
+          params: { command: 'PLOT:PLOT2:TYPe IMDAACQTREND' },
+        },
+        {
+          id: 'imda_plot_bind_2',
+          type: 'write',
+          label: `Bind second plot to MEAS2`,
+          params: { command: 'PLOT:PLOT2:SOUrce1 MEAS2' },
+        }
+      );
+    }
 
-  const queryGroup: Record<string, unknown>[] = wantsQueries
-    ? measurementSlots.map(({ measurement, slot, saveAsName }) => ({
-        id: `q${slot}`,
+    const addGroupStep: Record<string, unknown> = {
+      id: 'g_imda_add',
+      type: 'group',
+      label: 'Add Measurements',
+      params: {},
+      collapsed: false,
+      children: addGroup,
+    };
+    const plotGroupStep: Record<string, unknown> = {
+      id: 'g_imda_plot',
+      type: 'group',
+      label: 'Create IMDA Acq Trend Plot',
+      params: {},
+      collapsed: false,
+      children: plotGroup,
+    };
+
+    if (isBuildNew) {
+      const flow = {
+        name: 'IMDA Measurements with Acq Trend',
+        description: 'Add IMDA measurements and create acquisition trend plots',
+        backend: backend || 'pyvisa',
+        deviceType: req.flowContext.deviceType || 'SCOPE',
+        steps: [
+          { id: '1', type: 'connect', label: 'Connect to scope', params: { instrumentIds: ['scope1'], printIdn: true } },
+          addGroupStep,
+          plotGroupStep,
+          ...(hasScreenshot ? [{ id: 'ss1', type: 'save_screenshot', label: 'Save Screenshot', params: { filename: 'screenshot.png', scopeType: 'modern', method: 'pc_transfer' } }] : []),
+          { id: '99', type: 'disconnect', label: 'Disconnect', params: {} },
+        ],
+      };
+      const actions = [{ type: 'replace_flow', flow }];
+      return `ACTIONS_JSON: ${JSON.stringify({ summary: 'Added IMDA measurements with verified PLOT-based acquisition trend setup.', findings: [], suggestedFixes: [], actions })}`;
+    }
+
+    const flat = flattenSteps(existingSteps);
+    const insertAfterId =
+      (req.flowContext.selectedStepId && String(req.flowContext.selectedStepId)) ||
+      (flat.find((step) => String(step.type || '') === 'connect')?.id as string | undefined) ||
+      null;
+    // Insert in reverse at same anchor so final order is Add group -> Plot group -> Screenshot.
+    const actions = [
+      ...(hasScreenshot
+        ? [{
+            type: 'insert_step_after',
+            targetStepId: insertAfterId,
+            newStep: { id: 'ss1', type: 'save_screenshot', label: 'Save Screenshot', params: { filename: 'screenshot.png', scopeType: 'modern', method: 'pc_transfer' } },
+          }]
+        : []),
+      { type: 'insert_step_after', targetStepId: insertAfterId, newStep: plotGroupStep },
+      { type: 'insert_step_after', targetStepId: insertAfterId, newStep: addGroupStep },
+    ];
+    return `ACTIONS_JSON: ${JSON.stringify({
+      summary: 'Added IMDA torque/speed measurements and IMDAACQTREND plot using verified PLOT commands.',
+      findings: ['Avoided unverified DISPlay:ACQTREND and MEAS:ACQTREND command patterns.'],
+      suggestedFixes: [],
+      actions,
+    })}`;
+  }
+
+  if (appendMode) {
+    return null;
+  }
+
+  const measurementSlots = measurements.map((measurement, index) => ({
+    measurement,
+    slot: index + 1,
+    saveAsName: normalizeMeasurementSaveAs(defaultChannel, measurement),
+  }));
+
+  const resetCommands = await finalizeShortcutCommands(req, [{
+    header: 'MEASUrement:DELETEALL',
+    concreteHeader: 'MEASUrement:DELETEALL',
+  }]);
+  if (!resetCommands || !resetCommands.length) return null;
+
+  const addGroup: Record<string, unknown>[] = [
+    buildWriteStep('meas_reset', 'Clear existing measurements', resetCommands),
+  ];
+  const queryGroup: Record<string, unknown>[] = [];
+
+  for (const { measurement, slot, saveAsName } of measurementSlots) {
+    const addCommands = await finalizeShortcutCommands(req, [
+      {
+        header: 'MEASUrement:MEAS<x>:TYPe',
+        concreteHeader: `MEASUrement:MEAS${slot}:TYPe`,
+        value: measurement,
+      },
+      {
+        header: 'MEASUrement:MEAS<x>:SOURCE',
+        concreteHeader: `MEASUrement:MEAS${slot}:SOURCE`,
+        value: defaultChannel,
+      },
+    ]);
+    if (!addCommands) return null;
+
+    addGroup.push(
+      buildWriteStep(
+        `meas_${slot}`,
+        `Configure ${measurement.toLowerCase()} on ${defaultChannel}`,
+        addCommands
+      )
+    );
+
+    if (wantsQueries) {
+      const queryCommands = await finalizeShortcutCommands(req, [{
+        header: 'MEASUrement:MEAS<x>:RESUlts:CURRentacq:MEAN',
+        concreteHeader: `MEASUrement:MEAS${slot}:RESUlts:CURRentacq:MEAN`,
+        commandType: 'query',
+      }]);
+      if (!queryCommands || !queryCommands[0]) return null;
+      queryGroup.push({
+        id: `meas_q${slot}`,
         type: 'query',
         label: `Query ${measurement.toLowerCase()} result`,
         params: {
-          command: `MEASUrement:MEAS${slot}:RESUlts:CURRentacq:MEAN?`,
+          command: queryCommands[0],
           saveAs: saveAsName,
         },
-      }))
-    : [];
+      });
+    }
+  }
 
   const screenshotStep = hasScreenshot ? [{
     id: 'ss1',
@@ -317,14 +768,14 @@ function buildPyvisaMeasurementShortcut(req: McpChatRequest): string | null {
 
   if (isBuildNew) {
     const flow = {
-      name: `CH${channel.replace('CH', '')} Measurements`,
-      description: `Add ${measurements.join(', ')} measurements on ${channel}`,
+      name: `${defaultChannel} Measurements`,
+      description: `Deterministic measurement workflow for ${defaultChannel}`,
       backend: backend || 'pyvisa',
       deviceType: req.flowContext.deviceType || 'SCOPE',
       steps: [
         { id: '1', type: 'connect', label: 'Connect to scope', params: { instrumentIds: ['scope1'], printIdn: true } },
         {
-          id: 'g1', type: 'group', label: `Add ${channel} measurements`, params: {}, collapsed: false,
+          id: 'g1', type: 'group', label: `Configure ${defaultChannel} measurements`, params: {}, collapsed: false,
           children: addGroup,
         },
         ...(queryGroup.length
@@ -337,10 +788,8 @@ function buildPyvisaMeasurementShortcut(req: McpChatRequest): string | null {
         { id: '99', type: 'disconnect', label: 'Disconnect', params: {} },
       ],
     };
-    const summaryParts = [`Added ${measurements.join(', ')} measurements on ${channel}.`];
-    if (!wantsQueries) {
-      summaryParts.push('Used ADDMEAS so the scope appends new measurements without replacing existing ones.');
-    }
+    const summaryParts = [`Built a deterministic ${defaultChannel} measurement workflow using explicit MEAS slots.`];
+    summaryParts.push('The flow clears the existing measurement table before programming MEAS1 and onward.');
     if (hasScreenshot) summaryParts.push('Screenshot step included.');
     const actions = [{ type: 'replace_flow', flow }];
     return `ACTIONS_JSON: ${JSON.stringify({ summary: summaryParts.join(' '), findings: [], suggestedFixes: [], actions })}`;
@@ -351,22 +800,49 @@ function buildPyvisaMeasurementShortcut(req: McpChatRequest): string | null {
     (req.flowContext.selectedStepId && String(req.flowContext.selectedStepId)) ||
     (flatSteps.find((step) => String(step.type || '') === 'connect')?.id as string | undefined) ||
     null;
-  let previousId = insertAfterId;
-  const allNewSteps = [...addGroup, ...queryGroup, ...screenshotStep];
-  const insertActions = allNewSteps.map((step) => {
-    const action = {
-      type: 'insert_step_after',
-      targetStepId: previousId,
-      newStep: step,
-    };
-    previousId = String(step.id || previousId || '');
-    return action;
-  });
-  const findings = [];
-  if (!wantsQueries && isMeasurementAppendRequest(req)) {
-    findings.push('Used ADDMEAS-only steps so new CH1 measurements append on the scope and do not rely on existing measurement slot numbers.');
+  const measurementGroupStep = {
+    id: 'g_meas_add',
+    type: 'group',
+    label: genericWorkflow ? 'Smart measurement workflow' : `Configure ${defaultChannel} measurements`,
+    params: {},
+    collapsed: false,
+    children: addGroup,
+  };
+  const resultGroupStep = queryGroup.length
+    ? {
+        id: 'g_meas_query',
+        type: 'group',
+        label: 'Read measurement results',
+        params: {},
+        collapsed: false,
+        children: queryGroup,
+      }
+    : null;
+  const actions: Array<Record<string, unknown>> = [
+    { type: 'insert_step_after', targetStepId: insertAfterId, newStep: measurementGroupStep },
+  ];
+  if (resultGroupStep) {
+    actions.push({ type: 'insert_step_after', targetStepId: measurementGroupStep.id, newStep: resultGroupStep });
   }
-  return `ACTIONS_JSON: ${JSON.stringify({ summary: `Added ${measurements.join(', ')} measurement steps on ${channel}.`, findings, suggestedFixes: [], actions: insertActions })}`;
+  if (screenshotStep.length) {
+    actions.push({
+      type: 'insert_step_after',
+      targetStepId: resultGroupStep ? resultGroupStep.id : measurementGroupStep.id,
+      newStep: screenshotStep[0],
+    });
+  }
+  const findings = [
+    `Clears the scope measurement table with ${resetCommands[0]} before programming explicit MEAS slots.`,
+  ];
+  if (!detectMeasurementChannel(req) && inferMeasurementChannelFromFlow(existingSteps)) {
+    findings.push(`Inferred ${defaultChannel} from the current scope context.`);
+  }
+  return `ACTIONS_JSON: ${JSON.stringify({
+    summary: `Added a deterministic ${defaultChannel} measurement workflow using explicit MEAS1-${measurementSlots.length} slots.`,
+    findings,
+    suggestedFixes: [],
+    actions,
+  })}`;
 }
 
 function buildPyvisaFastFrameShortcut(req: McpChatRequest): string | null {
@@ -427,6 +903,1417 @@ function buildPyvisaFastFrameShortcut(req: McpChatRequest): string | null {
     return `ACTIONS_JSON: ${JSON.stringify({ summary: `Added FastFrame enable and frame count ${count} before the screenshot.`, findings: [], suggestedFixes: [], actions })}`;
   }
   return `ACTIONS_JSON: ${JSON.stringify({ summary: `Added FastFrame enable and frame count ${count}.`, findings: [], suggestedFixes: [], actions })}`;
+}
+
+type ShortcutFinalizeItem = {
+  header: string;
+  concreteHeader?: string;
+  commandType?: 'set' | 'query';
+  value?: string | number | boolean;
+  arguments?: Array<string | number | boolean>;
+};
+
+function parseVoltageToVolts(raw: string): number | null {
+  const match = String(raw || '').trim().match(/^([-+]?\d+(?:\.\d+)?)\s*(mv|v)$/i);
+  if (!match) return null;
+  const magnitude = Number(match[1]);
+  if (!Number.isFinite(magnitude)) return null;
+  return match[2].toLowerCase() === 'mv' ? magnitude / 1000 : magnitude;
+}
+
+function parseTimeToSeconds(raw: string): number | null {
+  const match = String(raw || '').trim().match(/^([-+]?\d+(?:\.\d+)?)\s*(ps|ns|us|ms|s)$/i);
+  if (!match) return null;
+  const magnitude = Number(match[1]);
+  if (!Number.isFinite(magnitude)) return null;
+  const unit = match[2].toLowerCase();
+  if (unit === 'ps') return magnitude / 1e12;
+  if (unit === 'ns') return magnitude / 1e9;
+  if (unit === 'us') return magnitude / 1e6;
+  if (unit === 'ms') return magnitude / 1e3;
+  return magnitude;
+}
+
+function parseScaledInteger(raw: string, scaleWord?: string | null): number | null {
+  const magnitude = Number(String(raw || '').trim());
+  if (!Number.isFinite(magnitude)) return null;
+  const word = String(scaleWord || '').trim().toLowerCase();
+  if (!word) return magnitude;
+  if (word.startsWith('million')) return Math.round(magnitude * 1_000_000);
+  if (word.startsWith('thousand') || word === 'k') return Math.round(magnitude * 1_000);
+  return Math.round(magnitude);
+}
+
+function detectBusSlot(message: string, fallback = 'B1'): string {
+  const match = String(message || '').match(/\bB(\d{1,2})\b/i);
+  return match ? `B${match[1]}` : fallback;
+}
+
+function channelToBusSourceValue(channel: string): number | null {
+  const match = String(channel || '').toUpperCase().match(/^CH([1-8])$/);
+  return match ? Number(match[1]) : null;
+}
+
+function parseCanRateEnum(raw: string): string | null {
+  const match = String(raw || '').trim().match(/^(\d+(?:\.\d+)?)\s*(k|m)(?:bit\/s|bps)$/i);
+  if (!match) return null;
+  const magnitude = Number(match[1]);
+  if (!Number.isFinite(magnitude)) return null;
+  const unit = match[2].toLowerCase();
+  if (unit === 'k') {
+    const rounded = Math.round(magnitude);
+    const allowed = new Set([10, 20, 25, 31, 33, 50, 62, 68, 83, 92, 100, 125, 153, 250, 400, 500, 800]);
+    return allowed.has(rounded) ? `RATE${rounded}K` : null;
+  }
+  const rounded = Math.round(magnitude);
+  return rounded >= 1 && rounded <= 16 ? `RATE${rounded}M` : null;
+}
+
+function parseRs232RateEnum(raw: string): string | null {
+  const match = String(raw || '').trim().match(/^(\d+(?:\.\d+)?)\s*(?:baud|bps)$/i);
+  if (!match) return null;
+  const magnitude = Number(match[1]);
+  if (!Number.isFinite(magnitude)) return null;
+  if (magnitude >= 900_000) return 'RATE921K';
+  if (magnitude >= 110_000) return 'RATE115K';
+  if (magnitude >= 38_000) return 'RATE38K';
+  if (magnitude >= 19_000) return 'RATE19K';
+  if (magnitude >= 9_000) return 'RATE9K';
+  if (magnitude >= 2_000) return 'RATE2K';
+  if (magnitude >= 1_000) return 'RATE1K';
+  return 'RATE300';
+}
+
+function parseTerminationOhms(raw: string): number | null {
+  const text = String(raw || '').replace(/\s+/g, '').toLowerCase();
+  if (!text) return null;
+  if (text === '50ohm' || text === '50ohms' || text === '50') return 50;
+  if (text === '1mohm' || text === '1megohm' || text === '1000000ohm' || text === '1000000') return 1000000;
+  return null;
+}
+
+function detectWaveformFormat(message: string): 'bin' | 'csv' | 'wfm' | 'mat' {
+  const text = message.toLowerCase();
+  if (/\bcsv\b/.test(text)) return 'csv';
+  if (/\bmat\b/.test(text)) return 'mat';
+  if (/\bwfm\b/.test(text)) return 'wfm';
+  return 'bin';
+}
+
+function detectSaveSetupPath(message: string): string | null {
+  const match = message.match(/\bsave setup to\s+([^\s,]+\.set)\b/i);
+  return match ? match[1] : null;
+}
+
+function detectRecallSessionPath(message: string): string | null {
+  const match = message.match(/\brecall session from\s+([^\s,]+\.tss)\b/i);
+  return match ? match[1] : null;
+}
+
+function detectWaveformSources(message: string): string[] {
+  const text = message.toUpperCase();
+  if (/\bsave all 4 channels\b/i.test(text)) {
+    return ['CH1', 'CH2', 'CH3', 'CH4'];
+  }
+  if (/\bsave both channels\b/i.test(text)) {
+    return ['CH1', 'CH2'];
+  }
+  const matches = Array.from(text.matchAll(/\bCH([1-8])\b/g)).map((m) => `CH${m[1]}`);
+  if (/\bwaveform\b/i.test(text) && matches.length) {
+    return Array.from(new Set(matches));
+  }
+  return [];
+}
+
+function extractChannelConfigs(message: string): Array<{
+  channel: string;
+  scaleVolts: number;
+  coupling?: 'AC' | 'DC' | 'DCR';
+  terminationOhms?: number;
+}> {
+  const results: Array<{
+    channel: string;
+    scaleVolts: number;
+    coupling?: 'AC' | 'DC' | 'DCR';
+    terminationOhms?: number;
+  }> = [];
+  const regex = /\b(CH([1-8]))\b(?:\s+to)?\s+([-+]?\d+(?:\.\d+)?)\s*(mV|V)\b(?:\s+(AC|DC|DCR))?(?:\s+(50\s*ohm|1\s*M(?:ohm)?|1Mohm))?/gi;
+  for (const match of message.matchAll(regex)) {
+    const scaleVolts = parseVoltageToVolts(`${match[3]}${match[4]}`);
+    if (scaleVolts === null) continue;
+    const terminationOhms = parseTerminationOhms(match[6] || '');
+    results.push({
+      channel: String(match[1]).toUpperCase(),
+      scaleVolts,
+      coupling: match[5] ? (String(match[5]).toUpperCase() as 'AC' | 'DC' | 'DCR') : undefined,
+      terminationOhms: terminationOhms === null ? undefined : terminationOhms,
+    });
+  }
+  return results;
+}
+
+function extractEdgeTrigger(message: string): {
+  source?: string;
+  slope?: 'RISe' | 'FALL';
+  levelVolts?: number;
+  mode?: 'NORMal' | 'AUTO';
+  holdoffSeconds?: number;
+} {
+  const text = String(message || '');
+  const out: {
+    source?: string;
+    slope?: 'RISe' | 'FALL';
+    levelVolts?: number;
+    mode?: 'NORMal' | 'AUTO';
+    holdoffSeconds?: number;
+  } = {};
+  const triggerSourceMatch = text.match(/\b(?:edge\s+)?trigger(?:\s+on)?\s+(CH[1-8])\b/i);
+  if (triggerSourceMatch) out.source = triggerSourceMatch[1].toUpperCase();
+  if (/\brising\b/i.test(text)) out.slope = 'RISe';
+  if (/\bfalling\b/i.test(text)) out.slope = 'FALL';
+  const levelMatch = text.match(/\bat\s+([-+]?\d+(?:\.\d+)?)\s*(mV|V)\b/i);
+  if (levelMatch) {
+    const volts = parseVoltageToVolts(`${levelMatch[1]}${levelMatch[2]}`);
+    if (volts !== null) out.levelVolts = volts;
+  }
+  if (/\bnormal mode\b|\bmode to normal\b/i.test(text)) out.mode = 'NORMal';
+  if (/\bauto mode\b|\bmode to auto\b/i.test(text)) out.mode = 'AUTO';
+  const holdoffMatch = text.match(/\bholdoff(?:\s+to)?\s+([-+]?\d+(?:\.\d+)?)\s*(ns|us|ms|s)\b/i);
+  if (holdoffMatch) {
+    const seconds = parseTimeToSeconds(`${holdoffMatch[1]}${holdoffMatch[2]}`);
+    if (seconds !== null) out.holdoffSeconds = seconds;
+  }
+  return out;
+}
+
+function extractHorizontalConfig(message: string): {
+  scaleSeconds?: number;
+  recordLength?: number;
+  fastFrameCount?: number;
+  fastAcqPalette?: 'NORMal' | 'TEMPerature' | 'SPECtral' | 'INVErted';
+  continuousSeconds?: number;
+} {
+  const text = String(message || '');
+  const out: {
+    scaleSeconds?: number;
+    recordLength?: number;
+    fastFrameCount?: number;
+    fastAcqPalette?: 'NORMal' | 'TEMPerature' | 'SPECtral' | 'INVErted';
+    continuousSeconds?: number;
+  } = {};
+
+  const scaleMatch = text.match(/\b([-+]?\d+(?:\.\d+)?)\s*(ps|ns|us|ms|s)\s+per\s+div\b/i);
+  if (scaleMatch) {
+    const seconds = parseTimeToSeconds(`${scaleMatch[1]}${scaleMatch[2]}`);
+    if (seconds !== null) out.scaleSeconds = seconds;
+  }
+
+  const recordMatch =
+    text.match(/\brecord length\s+(\d+(?:\.\d+)?)\s*(million|thousand)?(?:\s+samples?)?\b/i) ||
+    text.match(/\brecord length\s+(\d+)\b/i);
+  if (recordMatch) {
+    const recordLength = parseScaledInteger(recordMatch[1], recordMatch[2] || '');
+    if (recordLength !== null) out.recordLength = recordLength;
+  }
+
+  const fastFrameMatch =
+    text.match(/\bfast\s*frame\s+(\d+)\s+frames?\b/i) ||
+    text.match(/\bfastframes?\s+(\d+)\b/i) ||
+    text.match(/\b(\d+)\s+fast\s*frames?\b/i) ||
+    text.match(/\b(\d+)\s+fastframes?\b/i);
+  if (fastFrameMatch) {
+    out.fastFrameCount = Number(fastFrameMatch[1]);
+  }
+
+  if (/\btemperature palette\b/i.test(text)) out.fastAcqPalette = 'TEMPerature';
+  else if (/\bspectral palette\b/i.test(text)) out.fastAcqPalette = 'SPECtral';
+  else if (/\binverted palette\b/i.test(text)) out.fastAcqPalette = 'INVErted';
+  else if (/\bfast acquisition\b|\bfastacq\b/i.test(text)) out.fastAcqPalette = 'NORMal';
+
+  const continuousMatch = text.match(/\brun continuous(?:ly)? for\s+([-+]?\d+(?:\.\d+)?)\s*(ns|us|ms|s|seconds?)\b/i);
+  if (continuousMatch) {
+    const unit = /^s/i.test(continuousMatch[2]) ? 's' : continuousMatch[2];
+    const seconds = parseTimeToSeconds(`${continuousMatch[1]}${unit}`);
+    if (seconds !== null) out.continuousSeconds = seconds;
+  }
+
+  return out;
+}
+
+function extractI2cDecodeConfig(message: string): {
+  bus: string;
+  clockSource: string;
+  dataSource: string;
+  clockThresholdVolts?: number;
+  dataThresholdVolts?: number;
+} | null {
+  const text = String(message || '');
+  if (!/\bi2c\b/i.test(text)) return null;
+  const clockMatch = text.match(/\bclock\s+(CH[1-8])(?:\s+threshold\s+([-+]?\d+(?:\.\d+)?)\s*(mV|V))?/i);
+  const dataMatch = text.match(/\bdata\s+(CH[1-8])(?:\s+threshold\s+([-+]?\d+(?:\.\d+)?)\s*(mV|V))?/i);
+  if (!clockMatch || !dataMatch) return null;
+  const clockThreshold = clockMatch[2] ? parseVoltageToVolts(`${clockMatch[2]}${clockMatch[3]}`) : null;
+  const dataThreshold = dataMatch[2] ? parseVoltageToVolts(`${dataMatch[2]}${dataMatch[3]}`) : null;
+  return {
+    bus: detectBusSlot(text, 'B1'),
+    clockSource: clockMatch[1].toUpperCase(),
+    dataSource: dataMatch[1].toUpperCase(),
+    clockThresholdVolts: clockThreshold === null ? undefined : clockThreshold,
+    dataThresholdVolts: dataThreshold === null ? undefined : dataThreshold,
+  };
+}
+
+function extractCanDecodeConfig(message: string): {
+  bus: string;
+  sourceChannel: string;
+  nominalRate?: string;
+  dataRate?: string;
+  standard?: 'FDISO' | 'FDNONISO' | 'CAN2X';
+} | null {
+  const text = String(message || '');
+  if (!/\bcan\b/i.test(text)) return null;
+  const sourceMatch = text.match(/\bsource\s+(CH[1-8])\b/i);
+  if (!sourceMatch) return null;
+  const nominalMatch = text.match(/\b(\d+(?:\.\d+)?)\s*(k|m)bps\s+nominal\b/i);
+  const dataMatch = text.match(/\b(\d+(?:\.\d+)?)\s*(k|m)bps\s+data(?:\s+phase)?\b/i);
+  const nominalRate = nominalMatch ? parseCanRateEnum(`${nominalMatch[1]}${nominalMatch[2]}bps`) : null;
+  const dataRate = dataMatch ? parseCanRateEnum(`${dataMatch[1]}${dataMatch[2]}bps`) : null;
+  let standard: 'FDISO' | 'FDNONISO' | 'CAN2X' | undefined;
+  if (/\bnon[-\s]?iso\b/i.test(text)) standard = 'FDNONISO';
+  else if (/\biso standard\b|\bfdiso\b/i.test(text)) standard = 'FDISO';
+  else if (/\bcan 2\.?0\b|\bcan2x\b/i.test(text)) standard = 'CAN2X';
+  return {
+    bus: detectBusSlot(text, 'B1'),
+    sourceChannel: sourceMatch[1].toUpperCase(),
+    nominalRate: nominalRate || undefined,
+    dataRate: dataRate || undefined,
+    standard,
+  };
+}
+
+function extractRs232DecodeConfig(message: string): {
+  bus: string;
+  sourceChannel: string;
+  bitRate?: string;
+  dataBits?: 7 | 8 | 9;
+  parity?: 'NONe' | 'EVEN' | 'ODD';
+} | null {
+  const text = String(message || '');
+  if (!/\buart\b|\brs-?232\b/i.test(text)) return null;
+  const sourceMatch = text.match(/\b(?:uart|rs-?232(?:c)?)\b.*?\b(CH[1-8])\b/i) || text.match(/\bsource\s+(CH[1-8])\b/i);
+  if (!sourceMatch) return null;
+  const bitRateMatch = text.match(/\b(\d+(?:\.\d+)?)\s*(?:baud|bps)\b/i);
+  const dataBitsMatch = text.match(/\b([789])N1\b/i) || text.match(/\b([789])\s*(?:data bits|data-bits)\b/i);
+  const parityMatch =
+    text.match(/\b([789])([NEO])1\b/i) ||
+    text.match(/\bparity\s+(none|even|odd)\b/i);
+  let parity: 'NONe' | 'EVEN' | 'ODD' | undefined;
+  if (parityMatch) {
+    const token = String(parityMatch[2] || parityMatch[1] || '').toLowerCase();
+    parity = token.startsWith('e') ? 'EVEN' : token.startsWith('o') ? 'ODD' : 'NONe';
+  }
+  return {
+    bus: detectBusSlot(text, 'B1'),
+    sourceChannel: sourceMatch[1].toUpperCase(),
+    bitRate: bitRateMatch ? (parseRs232RateEnum(`${bitRateMatch[1]} baud`) || undefined) : undefined,
+    dataBits: dataBitsMatch ? (Number(dataBitsMatch[1]) as 7 | 8 | 9) : undefined,
+    parity,
+  };
+}
+
+function extractI2cBusTrigger(message: string): {
+  bus: string;
+  addressValue?: string;
+  addressMode?: 'ADDR7' | 'ADDR10';
+  direction?: 'READ' | 'WRITE' | 'NOCARE';
+} | null {
+  const text = String(message || '');
+  if (!/\btrigger\b.*\bi2c\b|\bi2c\b.*\btrigger\b/i.test(text)) return null;
+  const addressMatch = text.match(/\baddress\s+0x([0-9a-f]+)\b/i);
+  const directionMatch = text.match(/\bdirection\s+(read|write)\b/i);
+  if (!addressMatch && !directionMatch) return null;
+  return {
+    bus: detectBusSlot(text, 'B1'),
+    addressValue: addressMatch ? addressMatch[1].toUpperCase() : undefined,
+    addressMode: addressMatch && addressMatch[1].length > 2 ? 'ADDR10' : 'ADDR7',
+    direction: directionMatch ? (directionMatch[1].toUpperCase() as 'READ' | 'WRITE') : undefined,
+  };
+}
+
+function wantsFastFrameTimestampQuery(message: string): boolean {
+  return /\bfastframe\b.*\btimestamp\b|\btimestamp\b.*\bfastframe\b/i.test(message);
+}
+
+function wantsCanErrorSearch(message: string): boolean {
+  return /\bsearch\b.*\bcan(?:\s+fd)?\b.*\berror frames?\b|\berror frames?\b.*\bcan(?:\s+fd)?\b/i.test(message);
+}
+
+async function finalizeShortcutCommands(
+  req: McpChatRequest,
+  items: ShortcutFinalizeItem[]
+): Promise<string[] | null> {
+  if (!items.length) return [];
+  const result = await runTool('finalize_scpi_commands', {
+    items: items.map((item) => ({
+      ...item,
+      family: req.flowContext.modelFamily,
+    })),
+  }) as Record<string, unknown>;
+  const data = result.data && typeof result.data === 'object'
+    ? (result.data as Record<string, unknown>)
+    : {};
+  const rows = Array.isArray(data.results) ? (data.results as Array<Record<string, unknown>>) : [];
+  if (!rows.length || result.ok !== true) {
+    return null;
+  }
+  const commands = rows
+    .map((row) => (typeof row.command === 'string' ? row.command : ''))
+    .filter(Boolean);
+  return commands.length === rows.length ? commands : null;
+}
+
+function buildWriteStep(id: string, label: string, commands: string[]): Record<string, unknown> {
+  if (commands.length > 4) {
+    const chunks = chunkCommands(commands, 4);
+    return {
+      id,
+      type: 'group',
+      label,
+      params: {},
+      collapsed: false,
+      children: chunks.map((chunk, index) => ({
+        id: `${id}_${index + 1}`,
+        type: 'write',
+        label: chunks.length > 1 ? `${label} (${index + 1}/${chunks.length})` : label,
+        params: { command: chunk.join(';') },
+      })),
+    };
+  }
+  return {
+    id,
+    type: 'write',
+    label,
+    params: { command: commands.join(';') },
+  };
+}
+
+function buildQueryStep(
+  id: string,
+  label: string,
+  command: string,
+  saveAs?: string
+): Record<string, unknown> {
+  const variableName = saveAs || `result_${id}`;
+  return {
+    id,
+    type: 'query',
+    label,
+    params: { command, saveAs: variableName },
+  };
+}
+
+function buildShortcutResponse(opts: {
+  summary: string;
+  steps: Array<Record<string, unknown>>;
+  req: McpChatRequest;
+  startedAt: number;
+}): ToolLoopResult {
+  const payload = `ACTIONS_JSON: ${JSON.stringify({
+    summary: opts.summary,
+    findings: [],
+    suggestedFixes: [],
+    actions: [
+      {
+        type: 'replace_flow',
+        flow: {
+          name: 'Direct Command Flow',
+          description: opts.summary,
+          backend: opts.req.flowContext.backend,
+          deviceType: opts.req.flowContext.deviceType || 'SCOPE',
+          deviceDriver: opts.req.flowContext.deviceDriver,
+          visaBackend: opts.req.flowContext.visaBackend,
+          steps: opts.steps,
+        },
+      },
+    ],
+  })}`;
+
+  return {
+    text: payload,
+    displayText: payload,
+    assistantThreadId: resolveOpenAiResponseCursor(opts.req) || undefined,
+    errors: [],
+    warnings: [],
+    metrics: {
+      totalMs: Date.now() - opts.startedAt,
+      usedShortcut: true,
+      provider: opts.req.provider,
+      iterations: 0,
+      toolCalls: 0,
+      toolMs: 0,
+      modelMs: 0,
+      promptChars: { system: 0, user: 0 },
+    },
+    debug: {
+      shortcutResponse: payload,
+      toolTrace: [],
+    },
+  };
+}
+
+function detectDirectExecution(
+  req: McpChatRequest
+): { type: 'query' | 'write' | 'error_check'; command: string } | null {
+  const msg = String(req.userMessage || '').toLowerCase().trim();
+
+  if (
+    /^(query\s+)?(\*idn\??|what is the idn|print idn|get idn|identify scope)$/i.test(msg) ||
+    /\bconnect\b.*\b(print|get|query)\b.*\bidn\b/i.test(msg)
+  ) {
+    return { type: 'query', command: '*IDN?' };
+  }
+  if (/^(check errors?|query allev|error queue|any errors?)$/i.test(msg)) {
+    return { type: 'error_check', command: 'ALLEV?' };
+  }
+  if (/^(wait for opc|\*opc\??|opc query)$/i.test(msg)) {
+    return { type: 'query', command: '*OPC?' };
+  }
+  if (/^(query esr|\*esr\??|event status)$/i.test(msg)) {
+    return { type: 'query', command: '*ESR?' };
+  }
+  if (/^(reset scope|\*rst|factory reset|reset to factory)$/i.test(msg)) {
+    return { type: 'write', command: '*RST' };
+  }
+
+  return null;
+}
+
+function derivePlannerInstrumentId(req: McpChatRequest): string {
+  const mappedAlias =
+    Array.isArray(req.flowContext.instrumentMap) &&
+    req.flowContext.instrumentMap.length > 0 &&
+    typeof req.flowContext.instrumentMap[0]?.alias === 'string'
+      ? String(req.flowContext.instrumentMap[0]?.alias)
+      : '';
+  if (mappedAlias) return mappedAlias;
+  if (req.flowContext.alias) return String(req.flowContext.alias);
+  const deviceType = String(req.flowContext.deviceType || 'scope').toLowerCase();
+  return `${deviceType}1`;
+}
+
+function buildPlannerStepLabel(command: string): string {
+  const header = command.trim().split(/\s+/)[0] || command;
+  if (/\?$/.test(header)) return `Query ${header}`;
+  return `Write ${header}`;
+}
+
+function chunkCommands(commands: string[], size: number): string[][] {
+  const chunks: string[][] = [];
+  for (let i = 0; i < commands.length; i += size) {
+    chunks.push(commands.slice(i, i + size));
+  }
+  return chunks;
+}
+
+function buildActionsFromPlanner(
+  plannerOutput: PlannerOutput,
+  req: McpChatRequest
+): string | null {
+  if ((req.outputMode || '') !== 'steps_json') return null;
+  if (!plannerOutput.resolvedCommands.length) return null;
+
+  const instrumentId = derivePlannerInstrumentId(req);
+  const steps: Array<Record<string, unknown>> = [
+    {
+      id: '1',
+      type: 'connect',
+      label: 'Connect',
+      params: { instrumentIds: [instrumentId], printIdn: true },
+    },
+  ];
+
+  let nextId = 2;
+  const nextStepId = () => String(nextId++);
+  const pendingWrites: string[] = [];
+
+  const flushPendingWrites = () => {
+    if (!pendingWrites.length) return;
+    const writeChunks = chunkCommands(pendingWrites.splice(0, pendingWrites.length), 4);
+    for (const [index, chunk] of writeChunks.entries()) {
+      const baseLabel = buildPlannerStepLabel(chunk[0]);
+      const label =
+        writeChunks.length > 1
+          ? `${baseLabel} (${index + 1}/${writeChunks.length})`
+          : baseLabel;
+      steps.push(buildWriteStep(nextStepId(), label, chunk));
+    }
+  };
+
+  for (const command of plannerOutput.resolvedCommands) {
+    if (command.header.startsWith('STEP:') && command.stepType) {
+      flushPendingWrites();
+      steps.push({
+        id: nextStepId(),
+        type: command.stepType,
+        label: command.concreteCommand.replace(/^save_/, '').replace(/_/g, ' '),
+        params: command.stepParams || {},
+      });
+      continue;
+    }
+
+    if (command.commandType === 'query' || /\?$/.test(command.concreteCommand.trim())) {
+      flushPendingWrites();
+      steps.push(
+        buildQueryStep(
+          nextStepId(),
+          buildPlannerStepLabel(command.concreteCommand),
+          command.concreteCommand,
+          command.saveAs
+        )
+      );
+      continue;
+    }
+
+    pendingWrites.push(command.concreteCommand);
+  }
+
+  flushPendingWrites();
+
+  steps.push({
+    id: nextStepId(),
+    type: 'disconnect',
+    label: 'Disconnect',
+    params: {},
+  });
+
+  const actions = [
+    {
+      type: 'replace_flow',
+      flow: {
+        name: `${String(req.flowContext.deviceType || 'Instrument')} Planner Flow`,
+        description: String(req.userMessage || '').trim().slice(0, 160),
+        backend: req.flowContext.backend,
+        deviceType: req.flowContext.deviceType || 'SCOPE',
+        deviceDriver: req.flowContext.deviceDriver,
+        visaBackend: req.flowContext.visaBackend,
+        steps,
+      },
+    },
+  ];
+
+  return `ACTIONS_JSON: ${JSON.stringify({
+    summary: `Built ${plannerOutput.resolvedCommands.length} verified planner steps without a model call.`,
+    findings: [],
+    suggestedFixes: [],
+    actions,
+  })}`;
+}
+
+async function buildPyvisaCommonServerShortcut(req: McpChatRequest): Promise<string | null> {
+  if ((req.outputMode || '') !== 'steps_json') return null;
+  const backend = (req.flowContext.backend || 'pyvisa').toLowerCase();
+  if (backend !== 'pyvisa') return null;
+  const deviceType = (req.flowContext.deviceType || 'SCOPE').toUpperCase();
+  if (deviceType !== 'SCOPE') return null;
+
+  const message = String(req.userMessage || '');
+  const text = message.toLowerCase();
+  if (/\b(spi|lin)\b/i.test(message)) {
+    return null;
+  }
+
+  const existingSteps = Array.isArray(req.flowContext.steps) ? (req.flowContext.steps as Array<Record<string, unknown>>) : [];
+  const hasExistingSteps = existingSteps.length > 0;
+  const insertAfterId =
+    (req.flowContext.selectedStepId && String(req.flowContext.selectedStepId)) ||
+    (existingSteps.find((step) => String(step.type || '').toLowerCase() === 'connect')?.id as string | undefined) ||
+    (existingSteps[existingSteps.length - 1]?.id as string | undefined) ||
+    null;
+
+  const steps: Array<Record<string, unknown>> = hasExistingSteps
+    ? []
+    : [{ id: '1', type: 'connect', label: 'Connect', params: { instrumentIds: ['scope1'], printIdn: true } }];
+  let nextId = hasExistingSteps ? 1 : 2;
+  const nextStepId = () => String(nextId++);
+  const channelConfigs = extractChannelConfigs(message);
+  const measurementChannel = detectMeasurementChannel(req) || channelConfigs[0]?.channel || 'CH1';
+  const requestedMeasurements = detectMeasurementRequest(req);
+  const genericMeasurementWorkflow = isGenericMeasurementWorkflowRequest(req);
+  const appendMeasurements = isMeasurementAppendRequest(req);
+  const busSlot = detectBusSlot(message, 'B1');
+  const horizontal = extractHorizontalConfig(message);
+  const i2cDecode = extractI2cDecodeConfig(message);
+  const canDecode = extractCanDecodeConfig(message);
+  const rs232Decode = extractRs232DecodeConfig(message);
+  const i2cBusTrigger = extractI2cBusTrigger(message);
+  const canSearch = extractCanSearchConfig(message, canDecode?.bus || busSlot);
+  const delayMeasurements = extractDelayMeasurements(message);
+  const setupHoldMeasurements = extractSetupHoldMeasurements(message, i2cDecode);
+  const scopedMeasurements = extractScopedMeasurementRequests(message, measurementChannel);
+  const normalizedScopedMeasurements =
+    scopedMeasurements.length
+      ? scopedMeasurements
+      : requestedMeasurements.length
+        ? buildDefaultMeasurementRequests(requestedMeasurements, measurementChannel)
+        : [];
+
+  const recallSessionPath = detectRecallSessionPath(message);
+  if (/\bfactory defaults\b|\breset scope\b|\bfactory default\b/i.test(message)) {
+    steps.push({
+      id: nextStepId(),
+      type: 'recall',
+      label: 'Recall factory defaults',
+      params: { recallType: 'FACTORY' },
+    });
+  } else if (recallSessionPath) {
+    steps.push({
+      id: nextStepId(),
+      type: 'recall',
+      label: 'Recall session',
+      params: { recallType: 'SESSION', filePath: recallSessionPath },
+    });
+  }
+
+  for (const config of channelConfigs) {
+    const channelCommands = await finalizeShortcutCommands(req, [
+      {
+        header: 'CH<x>:SCAle',
+        concreteHeader: `${config.channel}:SCAle`,
+        value: config.scaleVolts,
+      },
+      ...(config.coupling ? [{
+        header: 'CH<x>:COUPling',
+        concreteHeader: `${config.channel}:COUPling`,
+        value: config.coupling,
+      } satisfies ShortcutFinalizeItem] : []),
+      ...(typeof config.terminationOhms === 'number' ? [{
+        header: 'CH<x>:TERmination',
+        concreteHeader: `${config.channel}:TERmination`,
+        value: config.terminationOhms,
+      } satisfies ShortcutFinalizeItem] : []),
+    ]);
+    if (!channelCommands) return null;
+    steps.push(buildWriteStep(nextStepId(), `Configure ${config.channel}`, channelCommands));
+  }
+
+  if (i2cDecode) {
+    const busCommands = await finalizeShortcutCommands(req, [
+      {
+        header: 'BUS:ADDNew',
+        concreteHeader: 'BUS:ADDNew',
+        value: '"I2C"',
+      },
+      {
+        header: 'BUS:B<x>:I2C:CLOCk:SOUrce',
+        concreteHeader: `BUS:${i2cDecode.bus}:I2C:CLOCk:SOUrce`,
+        value: i2cDecode.clockSource,
+      },
+      {
+        header: 'BUS:B<x>:I2C:DATa:SOUrce',
+        concreteHeader: `BUS:${i2cDecode.bus}:I2C:DATa:SOUrce`,
+        value: i2cDecode.dataSource,
+      },
+      ...(typeof i2cDecode.clockThresholdVolts === 'number'
+        ? [{
+            header: 'BUS:B<x>:I2C:CLOCk:THReshold',
+            concreteHeader: `BUS:${i2cDecode.bus}:I2C:CLOCk:THReshold`,
+            value: i2cDecode.clockThresholdVolts,
+          } satisfies ShortcutFinalizeItem]
+        : []),
+      ...(typeof i2cDecode.dataThresholdVolts === 'number'
+        ? [{
+            header: 'BUS:B<x>:I2C:DATa:THReshold',
+            concreteHeader: `BUS:${i2cDecode.bus}:I2C:DATa:THReshold`,
+            value: i2cDecode.dataThresholdVolts,
+          } satisfies ShortcutFinalizeItem]
+        : []),
+      {
+        header: 'DISplay:WAVEView<x>:BUS:B<x>:STATE',
+        concreteHeader: `DISplay:WAVEView1:BUS:${i2cDecode.bus}:STATE`,
+        value: 'ON',
+      },
+    ]);
+    if (!busCommands) return null;
+    steps.push(buildWriteStep(nextStepId(), `Configure ${i2cDecode.bus} I2C decode`, busCommands));
+  }
+
+  if (canDecode) {
+    const canSource = channelToBusSourceValue(canDecode.sourceChannel);
+    if (canSource === null) return null;
+    const busCommands = await finalizeShortcutCommands(req, [
+      {
+        header: 'BUS:ADDNew',
+        concreteHeader: 'BUS:ADDNew',
+        value: '"CAN"',
+      },
+      {
+        header: 'BUS:B<x>:CAN:SOUrce',
+        concreteHeader: `BUS:${canDecode.bus}:CAN:SOUrce`,
+        value: canSource,
+      },
+      ...(canDecode.nominalRate
+        ? [{
+            header: 'BUS:B<x>:CAN:BITRate',
+            concreteHeader: `BUS:${canDecode.bus}:CAN:BITRate`,
+            value: canDecode.nominalRate,
+          } satisfies ShortcutFinalizeItem]
+        : []),
+      ...(canDecode.dataRate
+        ? [{
+            header: 'BUS:B<x>:CAN:FD:BITRate',
+            concreteHeader: `BUS:${canDecode.bus}:CAN:FD:BITRate`,
+            value: canDecode.dataRate,
+          } satisfies ShortcutFinalizeItem]
+        : []),
+      ...(canDecode.standard
+        ? [{
+            header: 'BUS:B<x>:CAN:STANDard',
+            concreteHeader: `BUS:${canDecode.bus}:CAN:STANDard`,
+            value: canDecode.standard,
+          } satisfies ShortcutFinalizeItem]
+        : []),
+      {
+        header: 'DISplay:WAVEView<x>:BUS:B<x>:STATE',
+        concreteHeader: `DISplay:WAVEView1:BUS:${canDecode.bus}:STATE`,
+        value: 'ON',
+      },
+    ]);
+    if (!busCommands) return null;
+    steps.push(buildWriteStep(nextStepId(), `Configure ${canDecode.bus} CAN decode`, busCommands));
+  }
+
+  if (rs232Decode) {
+    const rs232Commands = await finalizeShortcutCommands(req, [
+      {
+        header: 'BUS:ADDNew',
+        concreteHeader: 'BUS:ADDNew',
+        value: '"RS232C"',
+      },
+      {
+        header: 'BUS:B<x>:RS232C:SOUrce',
+        concreteHeader: `BUS:${rs232Decode.bus}:RS232C:SOUrce`,
+        value: rs232Decode.sourceChannel,
+      },
+      ...(rs232Decode.bitRate
+        ? [{
+            header: 'BUS:B<x>:RS232C:BITRate',
+            concreteHeader: `BUS:${rs232Decode.bus}:RS232C:BITRate`,
+            value: rs232Decode.bitRate,
+          } satisfies ShortcutFinalizeItem]
+        : []),
+      ...(typeof rs232Decode.dataBits === 'number'
+        ? [{
+            header: 'BUS:B<x>:RS232C:DATABits',
+            concreteHeader: `BUS:${rs232Decode.bus}:RS232C:DATABits`,
+            value: rs232Decode.dataBits,
+          } satisfies ShortcutFinalizeItem]
+        : []),
+      ...(rs232Decode.parity
+        ? [{
+            header: 'BUS:B<x>:RS232C:PARity',
+            concreteHeader: `BUS:${rs232Decode.bus}:RS232C:PARity`,
+            value: rs232Decode.parity,
+          } satisfies ShortcutFinalizeItem]
+        : []),
+      {
+        header: 'DISplay:WAVEView<x>:BUS:B<x>:STATE',
+        concreteHeader: `DISplay:WAVEView1:BUS:${rs232Decode.bus}:STATE`,
+        value: 'ON',
+      },
+    ]);
+    if (!rs232Commands) return null;
+    steps.push(buildWriteStep(nextStepId(), `Configure ${rs232Decode.bus} RS232 decode`, rs232Commands));
+  }
+
+  const trigger = extractEdgeTrigger(message);
+  if (trigger.source || trigger.mode || typeof trigger.holdoffSeconds === 'number') {
+    const triggerItems: ShortcutFinalizeItem[] = [];
+    if (trigger.source) {
+      triggerItems.push({
+        header: 'TRIGger:{A|B}:EDGE:SOUrce',
+        concreteHeader: 'TRIGger:A:EDGE:SOUrce',
+        value: trigger.source,
+      });
+    }
+    if (trigger.slope) {
+      triggerItems.push({
+        header: 'TRIGger:{A|B}:EDGE:SLOpe',
+        concreteHeader: 'TRIGger:A:EDGE:SLOpe',
+        value: trigger.slope,
+      });
+    }
+    if (trigger.source && typeof trigger.levelVolts === 'number') {
+      triggerItems.push({
+        header: 'TRIGger:A:LEVel:CH<x>',
+        concreteHeader: `TRIGger:A:LEVel:${trigger.source}`,
+        value: trigger.levelVolts,
+      });
+    }
+    if (trigger.mode) {
+      triggerItems.push({
+        header: 'TRIGger:A:MODe',
+        concreteHeader: 'TRIGger:A:MODe',
+        value: trigger.mode,
+      });
+    }
+    const triggerCommands = await finalizeShortcutCommands(req, triggerItems);
+    if (triggerItems.length && !triggerCommands) return null;
+    if (triggerCommands && triggerCommands.length) {
+      steps.push(buildWriteStep(nextStepId(), 'Configure trigger', triggerCommands));
+    }
+    if (typeof trigger.holdoffSeconds === 'number') {
+      const holdoffCommands = await finalizeShortcutCommands(req, [{
+        header: 'TRIGger:A:HOLDoff:TIMe',
+        concreteHeader: 'TRIGger:A:HOLDoff:TIMe',
+        value: trigger.holdoffSeconds,
+      }]);
+      if (!holdoffCommands) return null;
+      steps.push(buildWriteStep(nextStepId(), 'Set trigger holdoff', holdoffCommands));
+    }
+  }
+
+  if (i2cBusTrigger) {
+    const triggerCommands = await finalizeShortcutCommands(req, [
+      {
+        header: 'TRIGger:{A|B}:TYPe',
+        concreteHeader: 'TRIGger:A:TYPe',
+        value: 'BUS',
+      },
+      {
+        header: 'TRIGger:{A|B}:BUS:B<x>:I2C:CONDition',
+        concreteHeader: `TRIGger:A:BUS:${i2cBusTrigger.bus}:I2C:CONDition`,
+        value: 'ADDRess',
+      },
+      ...(i2cBusTrigger.direction
+        ? [{
+            header: 'TRIGger:{A|B}:BUS:B<x>:I2C:DATa:DIRection',
+            concreteHeader: `TRIGger:A:BUS:${i2cBusTrigger.bus}:I2C:DATa:DIRection`,
+            value: i2cBusTrigger.direction,
+          } satisfies ShortcutFinalizeItem]
+        : []),
+      ...(i2cBusTrigger.addressMode
+        ? [{
+            header: 'TRIGger:{A|B}:BUS:B<x>:I2C:ADDRess:MODe',
+            concreteHeader: `TRIGger:A:BUS:${i2cBusTrigger.bus}:I2C:ADDRess:MODe`,
+            value: i2cBusTrigger.addressMode,
+          } satisfies ShortcutFinalizeItem]
+        : []),
+      ...(i2cBusTrigger.addressValue
+        ? [{
+            header: 'TRIGger:{A|B}:BUS:B<x>:I2C:ADDRess:VALue',
+            concreteHeader: `TRIGger:A:BUS:${i2cBusTrigger.bus}:I2C:ADDRess:VALue`,
+            value: `"${i2cBusTrigger.addressValue}"`,
+          } satisfies ShortcutFinalizeItem]
+        : []),
+    ]);
+    if (!triggerCommands) return null;
+    steps.push(buildWriteStep(nextStepId(), `Configure ${i2cBusTrigger.bus} I2C trigger`, triggerCommands));
+  }
+
+  const acquisitionItems: ShortcutFinalizeItem[] = [];
+  if (/\bsingle (?:acquisition|sequence)\b/i.test(message)) {
+    acquisitionItems.push({
+      header: 'ACQuire:STOPAfter',
+      concreteHeader: 'ACQuire:STOPAfter',
+      value: 'SEQuence',
+    });
+    acquisitionItems.push({
+      header: 'ACQuire:STATE',
+      concreteHeader: 'ACQuire:STATE',
+      value: 'ON',
+    });
+  }
+  const averageMatch = message.match(/\baverage(?: acquisition)?\s+(\d+)\b/i) || message.match(/\baverage\s+(\d+)\s+waveforms?\b/i);
+  if (averageMatch) {
+    acquisitionItems.push({
+      header: 'ACQuire:MODe',
+      concreteHeader: 'ACQuire:MODe',
+      value: 'AVErage',
+    });
+    acquisitionItems.push({
+      header: 'ACQuire:NUMAVg',
+      concreteHeader: 'ACQuire:NUMAVg',
+      value: Number(averageMatch[1]),
+    });
+  }
+  if (/\bcontinuous\b|\brun continuous(?:ly)?\b/i.test(message)) {
+    acquisitionItems.push({
+      header: 'ACQuire:STOPAfter',
+      concreteHeader: 'ACQuire:STOPAfter',
+      value: 'RUNSTop',
+    });
+    acquisitionItems.push({
+      header: 'ACQuire:STATE',
+      concreteHeader: 'ACQuire:STATE',
+      value: 'RUN',
+    });
+  }
+  if (horizontal.fastAcqPalette) {
+    acquisitionItems.push({
+      header: 'ACQuire:FASTAcq:STATE',
+      concreteHeader: 'ACQuire:FASTAcq:STATE',
+      value: 'ON',
+    });
+    acquisitionItems.push({
+      header: 'ACQuire:FASTAcq:PALEtte',
+      concreteHeader: 'ACQuire:FASTAcq:PALEtte',
+      value: horizontal.fastAcqPalette,
+    });
+  }
+  const saveSetupPath = detectSaveSetupPath(message);
+  if (saveSetupPath) {
+    acquisitionItems.push({
+      header: 'SAVe:SETUp',
+      concreteHeader: 'SAVe:SETUp',
+      value: `"${saveSetupPath}"`,
+    });
+  }
+  if (acquisitionItems.length) {
+    const acquisitionCommands = await finalizeShortcutCommands(req, acquisitionItems);
+    if (!acquisitionCommands) return null;
+    steps.push(buildWriteStep(nextStepId(), 'Configure acquisition/save', acquisitionCommands));
+  }
+
+  const horizontalItems: ShortcutFinalizeItem[] = [];
+  if (typeof horizontal.scaleSeconds === 'number') {
+    horizontalItems.push({
+      header: 'HORizontal:SCAle',
+      concreteHeader: 'HORizontal:SCAle',
+      value: horizontal.scaleSeconds,
+    });
+  }
+  if (typeof horizontal.recordLength === 'number') {
+    horizontalItems.push({
+      header: 'HORizontal:MODe',
+      concreteHeader: 'HORizontal:MODe',
+      value: 'MANual',
+    });
+    horizontalItems.push({
+      header: 'HORizontal:RECOrdlength',
+      concreteHeader: 'HORizontal:RECOrdlength',
+      value: horizontal.recordLength,
+    });
+  }
+  if (typeof horizontal.fastFrameCount === 'number') {
+    horizontalItems.push({
+      header: 'HORizontal:FASTframe:STATE',
+      concreteHeader: 'HORizontal:FASTframe:STATE',
+      value: 'ON',
+    });
+    horizontalItems.push({
+      header: 'HORizontal:FASTframe:COUNt',
+      concreteHeader: 'HORizontal:FASTframe:COUNt',
+      value: horizontal.fastFrameCount,
+    });
+  }
+  if (horizontalItems.length) {
+    const horizontalCommands = await finalizeShortcutCommands(req, horizontalItems);
+    if (!horizontalCommands) return null;
+    steps.push(buildWriteStep(nextStepId(), 'Configure horizontal', horizontalCommands));
+  }
+
+  if (canSearch && canDecode && canSearch.condition !== 'DATA') {
+    const searchCommands = await finalizeShortcutCommands(req, [
+      {
+        header: 'SEARCH:SEARCH<x>:TRIGger:A:TYPe',
+        concreteHeader: 'SEARCH:SEARCH1:TRIGger:A:TYPe',
+        value: 'Bus',
+      },
+      {
+        header: 'SEARCH:SEARCH<x>:TRIGger:A:BUS:SOUrce',
+        concreteHeader: 'SEARCH:SEARCH1:TRIGger:A:BUS:SOUrce',
+        value: canSearch.bus,
+      },
+      {
+        header: 'SEARCH:SEARCH<x>:TRIGger:A:BUS:CAN:CONDition',
+        concreteHeader: 'SEARCH:SEARCH1:TRIGger:A:BUS:CAN:CONDition',
+        value: canSearch.condition,
+      },
+      ...(canSearch.frameType
+        ? [{
+            header: 'SEARCH:SEARCH<x>:TRIGger:A:BUS:CAN:FRAMEtype',
+            concreteHeader: 'SEARCH:SEARCH1:TRIGger:A:BUS:CAN:FRAMEtype',
+            value: canSearch.frameType,
+          } satisfies ShortcutFinalizeItem]
+        : []),
+      ...(canSearch.errType
+        ? [{
+            header: 'SEARCH:SEARCH<x>:TRIGger:A:BUS:CAN:ERRType',
+            concreteHeader: 'SEARCH:SEARCH1:TRIGger:A:BUS:CAN:ERRType',
+            value: canSearch.errType,
+          } satisfies ShortcutFinalizeItem]
+        : []),
+      ...(canSearch.brsBit
+        ? [{
+            header: 'SEARCH:SEARCH<x>:TRIGger:A:BUS:CAN:FD:BRSBit',
+            concreteHeader: 'SEARCH:SEARCH1:TRIGger:A:BUS:CAN:FD:BRSBit',
+            value: canSearch.brsBit,
+          } satisfies ShortcutFinalizeItem]
+        : []),
+      ...(canSearch.esiBit
+        ? [{
+            header: 'SEARCH:SEARCH<x>:TRIGger:A:BUS:CAN:FD:ESIBit',
+            concreteHeader: 'SEARCH:SEARCH1:TRIGger:A:BUS:CAN:FD:ESIBit',
+            value: canSearch.esiBit,
+          } satisfies ShortcutFinalizeItem]
+        : []),
+    ]);
+    if (!searchCommands) return null;
+    steps.push(buildWriteStep(nextStepId(), 'Configure CAN search', searchCommands));
+  }
+
+  const wantsQueries = shouldQueryMeasurementResults(req) || genericMeasurementWorkflow;
+  let measurementSlot = 1;
+  if (appendMeasurements && (normalizedScopedMeasurements.length || delayMeasurements.length || setupHoldMeasurements.length)) {
+    return null;
+  }
+  if (normalizedScopedMeasurements.length || delayMeasurements.length || setupHoldMeasurements.length) {
+    const resetCommands = await finalizeShortcutCommands(req, [{
+      header: 'MEASUrement:DELETEALL',
+      concreteHeader: 'MEASUrement:DELETEALL',
+    }]);
+    if (!resetCommands) return null;
+    steps.push(buildWriteStep(nextStepId(), 'Clear existing measurements', resetCommands));
+  }
+  if (normalizedScopedMeasurements.length) {
+    const addChildren: Array<Record<string, unknown>> = [];
+    const queryChildren: Array<Record<string, unknown>> = [];
+    for (const { measurement, channel } of normalizedScopedMeasurements) {
+      const addCommands = await finalizeShortcutCommands(req, [
+        {
+          header: 'MEASUrement:MEAS<x>:TYPe',
+          concreteHeader: `MEASUrement:MEAS${measurementSlot}:TYPe`,
+          value: measurement,
+        },
+        {
+          header: 'MEASUrement:MEAS<x>:SOURCE',
+          concreteHeader: `MEASUrement:MEAS${measurementSlot}:SOURCE`,
+          value: channel,
+        },
+      ]);
+      if (!addCommands) return null;
+      addChildren.push(buildWriteStep(`m${measurementSlot}`, `Add ${measurement.toLowerCase()} measurement on ${channel}`, addCommands));
+      if (wantsQueries) {
+        const queryCommands = await finalizeShortcutCommands(req, [{
+          header: 'MEASUrement:MEAS<x>:RESUlts:CURRentacq:MEAN',
+          concreteHeader: `MEASUrement:MEAS${measurementSlot}:RESUlts:CURRentacq:MEAN`,
+          commandType: 'query',
+        }]);
+        if (!queryCommands || !queryCommands[0]) return null;
+        queryChildren.push({
+          id: `q${measurementSlot}`,
+          type: 'query',
+          label: `Query ${measurement.toLowerCase()} result for ${channel}`,
+          params: {
+            command: queryCommands[0],
+            saveAs: normalizeMeasurementSaveAs(channel, measurement),
+          },
+        });
+      }
+      measurementSlot += 1;
+    }
+    steps.push({
+      id: nextStepId(),
+      type: 'group',
+      label: 'Add measurements',
+      params: {},
+      collapsed: false,
+      children: addChildren,
+    });
+    if (queryChildren.length) {
+      steps.push({
+        id: nextStepId(),
+        type: 'group',
+        label: 'Read measurement results',
+        params: {},
+        collapsed: false,
+        children: queryChildren,
+      });
+    }
+  }
+
+  if (delayMeasurements.length) {
+    const addChildren: Array<Record<string, unknown>> = [];
+    const queryChildren: Array<Record<string, unknown>> = [];
+
+    for (const delay of delayMeasurements) {
+      const thresholdItems: ShortcutFinalizeItem[] = [];
+      if (typeof delay.thresholdVolts === 'number') {
+        thresholdItems.push({
+          header: 'MEASUrement:MEAS<x>:REFLevels<x>:METHod',
+          concreteHeader: `MEASUrement:MEAS${measurementSlot}:REFLevels2:METHod`,
+          value: 'ABSolute',
+        });
+        const suffixes =
+          delay.toEdge === 'FALL'
+            ? ['FALLLow', 'FALLMid', 'FALLHigh']
+            : ['RISELow', 'RISEMid', 'RISEHigh'];
+        suffixes.forEach((suffix) => {
+          thresholdItems.push({
+            header: `MEASUrement:MEAS<x>:REFLevels<x>:ABSolute:${suffix}`,
+            concreteHeader: `MEASUrement:MEAS${measurementSlot}:REFLevels2:ABSolute:${suffix}`,
+            value: delay.thresholdVolts as number,
+          });
+        });
+      }
+
+      const addCommands = await finalizeShortcutCommands(req, [
+        {
+          header: 'MEASUrement:ADDMEAS',
+          concreteHeader: 'MEASUrement:ADDMEAS',
+          value: 'DELAY',
+        },
+        {
+          header: 'MEASUrement:MEAS<x>:SOUrce<x>',
+          concreteHeader: `MEASUrement:MEAS${measurementSlot}:SOUrce1`,
+          value: delay.fromChannel,
+        },
+        {
+          header: 'MEASUrement:MEAS<x>:SOUrce<x>',
+          concreteHeader: `MEASUrement:MEAS${measurementSlot}:SOUrce2`,
+          value: delay.toChannel,
+        },
+        {
+          header: 'MEASUrement:MEAS<x>:DELay:EDGE<x>',
+          concreteHeader: `MEASUrement:MEAS${measurementSlot}:DELay:EDGE1`,
+          value: delay.fromEdge,
+        },
+        {
+          header: 'MEASUrement:MEAS<x>:DELay:EDGE<x>',
+          concreteHeader: `MEASUrement:MEAS${measurementSlot}:DELay:EDGE2`,
+          value: delay.toEdge,
+        },
+        ...thresholdItems,
+      ]);
+      if (!addCommands) return null;
+
+      addChildren.push(
+        buildWriteStep(
+          `d${measurementSlot}`,
+          `Add delay measurement ${delay.fromChannel} to ${delay.toChannel}`,
+          addCommands
+        )
+      );
+
+      if (wantsQueries) {
+        const queryCommands = await finalizeShortcutCommands(req, [{
+          header: 'MEASUrement:MEAS<x>:RESUlts:CURRentacq:MEAN',
+          concreteHeader: `MEASUrement:MEAS${measurementSlot}:RESUlts:CURRentacq:MEAN`,
+          commandType: 'query',
+        }]);
+        if (!queryCommands || !queryCommands[0]) return null;
+        queryChildren.push({
+          id: `dq${measurementSlot}`,
+          type: 'query',
+          label: `Query delay ${delay.fromChannel} to ${delay.toChannel}`,
+          params: {
+            command: queryCommands[0],
+            saveAs: `delay_${delay.fromChannel.toLowerCase()}_to_${delay.toChannel.toLowerCase()}`,
+          },
+        });
+      }
+
+      measurementSlot += 1;
+    }
+
+    steps.push({
+      id: nextStepId(),
+      type: 'group',
+      label: 'Add delay measurements',
+      params: {},
+      collapsed: false,
+      children: addChildren,
+    });
+    if (queryChildren.length) {
+      steps.push({
+        id: nextStepId(),
+        type: 'group',
+        label: 'Read delay results',
+        params: {},
+        collapsed: false,
+        children: queryChildren,
+      });
+    }
+  }
+
+  if (setupHoldMeasurements.length) {
+    const addChildren: Array<Record<string, unknown>> = [];
+    const queryChildren: Array<Record<string, unknown>> = [];
+
+    for (const measurementRequest of setupHoldMeasurements) {
+      const addCommands = await finalizeShortcutCommands(req, [
+        {
+          header: 'MEASUrement:MEAS<x>:TYPe',
+          concreteHeader: `MEASUrement:MEAS${measurementSlot}:TYPe`,
+          value: measurementRequest.measurement,
+        },
+        {
+          header: 'MEASUrement:MEAS<x>:SOUrce<x>',
+          concreteHeader: `MEASUrement:MEAS${measurementSlot}:SOUrce1`,
+          value: measurementRequest.source1,
+        },
+        {
+          header: 'MEASUrement:MEAS<x>:SOUrce<x>',
+          concreteHeader: `MEASUrement:MEAS${measurementSlot}:SOUrce2`,
+          value: measurementRequest.source2,
+        },
+      ]);
+      if (!addCommands) return null;
+
+      addChildren.push(
+        buildWriteStep(
+          `sh${measurementSlot}`,
+          `Add ${measurementRequest.measurement.toLowerCase()} measurement ${measurementRequest.source1} to ${measurementRequest.source2}`,
+          addCommands
+        )
+      );
+
+      if (wantsQueries) {
+        const queryCommands = await finalizeShortcutCommands(req, [{
+          header: 'MEASUrement:MEAS<x>:RESUlts:CURRentacq:MEAN',
+          concreteHeader: `MEASUrement:MEAS${measurementSlot}:RESUlts:CURRentacq:MEAN`,
+          commandType: 'query',
+        }]);
+        if (!queryCommands || !queryCommands[0]) return null;
+        queryChildren.push({
+          id: `shq${measurementSlot}`,
+          type: 'query',
+          label: `Query ${measurementRequest.measurement.toLowerCase()} result`,
+          params: {
+            command: queryCommands[0],
+            saveAs: normalizeSetupHoldSaveAs(measurementRequest),
+          },
+        });
+      }
+
+      measurementSlot += 1;
+    }
+
+    steps.push({
+      id: nextStepId(),
+      type: 'group',
+      label: 'Add setup/hold measurements',
+      params: {},
+      collapsed: false,
+      children: addChildren,
+    });
+    if (queryChildren.length) {
+      steps.push({
+        id: nextStepId(),
+        type: 'group',
+        label: 'Read setup/hold results',
+        params: {},
+        collapsed: false,
+        children: queryChildren,
+      });
+    }
+  }
+
+  if (/\berror queue\b|\bprint any errors\b|\bcheck.*errors?\b/i.test(message)) {
+    steps.push({
+      id: nextStepId(),
+      type: 'error_check',
+      label: 'Check error queue',
+      params: { command: 'ALLEV?' },
+    });
+  }
+
+  if (wantsFastFrameTimestampQuery(message)) {
+    const timestampCommands = await finalizeShortcutCommands(req, [{
+      header: 'HORizontal:FASTframe:TIMEStamp:ALL',
+      concreteHeader: 'HORizontal:FASTframe:TIMEStamp:ALL',
+      commandType: 'query',
+    }]);
+    if (!timestampCommands || !timestampCommands[0]) return null;
+    steps.push({
+      id: nextStepId(),
+      type: 'query',
+      label: 'Query FastFrame timestamps',
+      params: {
+        command: timestampCommands[0],
+        saveAs: 'fastframe_timestamps',
+      },
+    });
+  }
+
+  const waveformSources = detectWaveformSources(message);
+  if (waveformSources.length) {
+    const format = detectWaveformFormat(message);
+    waveformSources.forEach((source) => {
+      steps.push({
+        id: nextStepId(),
+        type: 'save_waveform',
+        label: `Save ${source} waveform`,
+        params: {
+          source,
+          filename: `${source.toLowerCase()}.${format}`,
+          format,
+        },
+      });
+    });
+  }
+
+  if (typeof horizontal.continuousSeconds === 'number' && horizontal.continuousSeconds > 0) {
+    steps.push({
+      id: nextStepId(),
+      type: 'sleep',
+      label: 'Run continuous acquisition',
+      params: { duration: horizontal.continuousSeconds },
+    });
+  }
+
+  if (/\bscreenshot\b|\bscreen shot\b|\bcapture screen\b/i.test(message)) {
+    steps.push({
+      id: nextStepId(),
+      type: 'save_screenshot',
+      label: 'Save screenshot',
+      params: { filename: 'capture.png', scopeType: 'modern', method: 'pc_transfer' },
+    });
+  }
+
+  if (steps.length === 0) return null;
+
+  if (!hasExistingSteps) {
+    if (steps.length <= 1) return null;
+    steps.push({ id: nextStepId(), type: 'disconnect', label: 'Disconnect', params: {} });
+  }
+
+  const actions =
+    hasExistingSteps && insertAfterId
+      ? (() => {
+          const inserts: Array<Record<string, unknown>> = [];
+          let currentTarget = insertAfterId;
+          steps.forEach((step) => {
+            inserts.push({
+              type: 'insert_step_after',
+              targetStepId: currentTarget,
+              newStep: step,
+            });
+            currentTarget = String(step.id || currentTarget);
+          });
+          return inserts;
+        })()
+      : [{
+          type: 'replace_flow',
+          flow: {
+            name: 'Generated Flow',
+            description: 'Common TekAutomate scope flow built server-side from verified commands.',
+            backend,
+            deviceType: req.flowContext.deviceType || 'SCOPE',
+            steps,
+          },
+        }];
+
+  if (hasExistingSteps && !Array.isArray(actions)) {
+    return null;
+  }
+
+  return `ACTIONS_JSON: ${JSON.stringify({
+    summary: 'Built a server-side verified common TekAutomate flow.',
+    findings: [],
+    suggestedFixes: [],
+    actions,
+  })}`;
 }
 
 function buildTmDevicesMeasurementShortcut(req: McpChatRequest): string | null {
@@ -763,78 +2650,1068 @@ function buildUserPrompt(req: McpChatRequest, flowCommandIssues: string[] = []):
   return parts.join('\n\n');
 }
 
+function shouldUseOpenAiAssistant(req: McpChatRequest): boolean {
+  return req.provider === 'openai' && typeof req.openaiAssistantId === 'string' && req.openaiAssistantId.trim().length > 0;
+}
+
+const SERVER_DEFAULT_ASSISTANT_TOKEN = '__SERVER_DEFAULT_ASSISTANT__';
+const VALID_PROMPT_ID = /^pmpt_[a-zA-Z0-9_-]+$/;
+
+function usesServerDefaultHostedPrompt(req: McpChatRequest): boolean {
+  return String(req.openaiAssistantId || '').trim() === SERVER_DEFAULT_ASSISTANT_TOKEN;
+}
+
+function resolveOpenAiPromptId(req: McpChatRequest): string {
+  const requested = String(req.openaiAssistantId || '').trim().replace(/\s+/g, '');
+  if (VALID_PROMPT_ID.test(requested)) return requested;
+  const serverPromptId = String(process.env.OPENAI_PROMPT_ID || '').trim().replace(/\s+/g, '');
+  if (VALID_PROMPT_ID.test(serverPromptId)) return serverPromptId;
+  const legacyAssistantEnv = String(process.env.OPENAI_ASSISTANT_ID || '').trim().replace(/\s+/g, '');
+  if (VALID_PROMPT_ID.test(legacyAssistantEnv)) return legacyAssistantEnv;
+  return '';
+}
+
+function resolveOpenAiPromptVersion(): string {
+  const raw = String(process.env.OPENAI_PROMPT_VERSION || '').trim();
+  return raw ? String(raw) : '';
+}
+
+function resolveOpenAiResponseCursor(req: McpChatRequest): string {
+  const requested = String(req.openaiThreadId || '').trim();
+  if (!requested || requested.startsWith('thread_')) return '';
+  return requested;
+}
+
+function resolveHostedAssistantModel(req: McpChatRequest): string {
+  const requested = String(req.model || '').trim();
+  if (requested) return requested;
+  const envModel = String(process.env.OPENAI_ASSISTANT_MODEL || '').trim();
+  if (envModel) return envModel;
+  return 'gpt-4.1';
+}
+
+function resolveOpenAiMaxOutputTokens(): number {
+  const raw = Number(process.env.OPENAI_MAX_OUTPUT_TOKENS || 12000);
+  if (!Number.isFinite(raw)) return 12000;
+  return Math.max(256, Math.floor(raw));
+}
+
+function resolveHostedResponseTemperature(req: McpChatRequest): number {
+  if (isExplainOnlyCommandAsk(req)) return 0.4;
+  return req.outputMode === 'steps_json' ? 0.1 : 0.5;
+}
+
+function hostedModelSupportsTemperature(model: string): boolean {
+  const normalized = String(model || '').trim().toLowerCase();
+  return !/^gpt-5([.-]|$)/.test(normalized);
+}
+
+function isHostedStructuredBuildRequest(req: McpChatRequest): boolean {
+  return shouldUseOpenAiAssistant(req) && req.outputMode === 'steps_json' && !isExplainOnlyCommandAsk(req);
+}
+
+function resolveHostedVectorStoreId(): string {
+  return String(process.env.COMMAND_VECTOR_STORE_ID || '').trim();
+}
+
+function buildHostedToolDefinitions(toolNames?: string[]): Array<{ name: string; description: string }> {
+  const allow = Array.isArray(toolNames) && toolNames.length ? new Set(toolNames) : null;
+  return getToolDefinitions()
+    .filter((tool) => !allow || allow.has(tool.name))
+    .map((tool) => ({
+    name: tool.name,
+    description: tool.description,
+  }));
+}
+
+function isTmDevicesHostedRequest(req: McpChatRequest): boolean {
+  return (
+    (req.flowContext.backend || '').toLowerCase() === 'tm_devices' ||
+    /\btm[_\s-]*devices\b|\bscope\.commands\./i.test(String(req.userMessage || ''))
+  );
+}
+
+function buildHostedAllowedToolChoice(tools: HostedToolDefinition[]): Record<string, unknown> | undefined {
+  const allowed = tools
+    .filter((tool) => tool.type === 'function' && typeof tool.name === 'string')
+    .map((tool) => ({
+      type: 'function',
+      name: String(tool.name),
+    }));
+  if (!allowed.length) return undefined;
+  return {
+    type: 'allowed_tools',
+    mode: 'auto',
+    tools: allowed,
+  };
+}
+
+export function buildHostedResponsesTools(
+  req?: McpChatRequest,
+  phase: HostedToolPhase = 'initial',
+  options?: { restrictSearchTools?: boolean; batchMaterializeOnly?: boolean }
+): HostedToolDefinition[] {
+  const hostedVectorStoreId = resolveHostedVectorStoreId();
+  const wantsTmDevices = req ? isTmDevicesHostedRequest(req) : false;
+  const toolNames = wantsTmDevices
+    ? phase === 'initial'
+      ? ['get_current_flow', 'search_tm_devices', 'materialize_tm_devices_call', 'validate_action_payload']
+      : ['get_current_flow', 'materialize_tm_devices_call', 'validate_action_payload']
+    : options?.batchMaterializeOnly
+      ? phase === 'initial'
+        ? ['finalize_scpi_commands']
+        : []
+    : phase === 'initial' && !options?.restrictSearchTools
+      ? ['get_current_flow', 'get_command_group', 'search_scpi', 'get_command_by_header', 'get_commands_by_header_batch', 'materialize_scpi_command', 'materialize_scpi_commands', 'finalize_scpi_commands', 'verify_scpi_commands', 'validate_action_payload']
+      : ['get_current_flow', 'get_command_by_header', 'get_commands_by_header_batch', 'materialize_scpi_command', 'materialize_scpi_commands', 'finalize_scpi_commands', 'verify_scpi_commands', 'validate_action_payload'];
+
+  const allow = new Set(toolNames);
+  const tools: HostedToolDefinition[] = [];
+  getToolDefinitions().forEach((tool) => {
+    if (!allow.has(tool.name)) return;
+    tools.push({
+      type: 'function',
+      name: tool.name,
+      description: tool.description,
+      parameters: tool.parameters,
+    });
+  });
+  if (phase === 'initial' && hostedVectorStoreId && !options?.batchMaterializeOnly) {
+    tools.unshift({
+      type: 'file_search',
+      vector_store_ids: [hostedVectorStoreId],
+      max_num_results: 6,
+    });
+  }
+  return tools;
+}
+
+function buildToolResultSummary(rawResult: unknown): {
+  ok?: boolean;
+  count?: number;
+  warnings?: string[];
+} {
+  const record = rawResult && typeof rawResult === 'object'
+    ? (rawResult as Record<string, unknown>)
+    : {};
+  const data = record.data;
+  return {
+    ok: typeof record.ok === 'boolean' ? Boolean(record.ok) : undefined,
+    count: Array.isArray(data) ? data.length : (data && typeof data === 'object' ? 1 : 0),
+    warnings: Array.isArray(record.warnings)
+      ? (record.warnings as unknown[]).slice(0, 3).map((item) => String(item))
+      : undefined,
+  };
+}
+
+function describeScpiPlaceholders(header: string, syntax: Record<string, unknown>, args: Array<Record<string, unknown>>): string[] {
+  const source = [header, String(syntax.set || ''), String(syntax.query || '')].join(' ');
+  const hints: string[] = [];
+  if (/CH<x>/i.test(source)) hints.push('CH<x> => concrete analog channel such as CH1, CH2, CH3, CH4');
+  if (/REF<x>/i.test(source)) hints.push('REF<x> => concrete reference waveform such as REF1');
+  if (/MATH<x>/i.test(source)) hints.push('MATH<x> => concrete math waveform such as MATH1');
+  if (/BUS<x>/i.test(source)) hints.push('BUS<x> => concrete bus slot such as BUS1');
+  if (/MEAS<x>/i.test(source)) hints.push('MEAS<x> => concrete measurement slot such as MEAS1, MEAS2, ...');
+  if (/SEARCH<x>/i.test(source)) hints.push('SEARCH<x> => concrete search slot such as SEARCH1');
+  if (/ZOOM<x>/i.test(source)) hints.push('ZOOM<x> => concrete zoom slot such as ZOOM1');
+  if (/PLOT<x>/i.test(source)) hints.push('PLOT<x> => concrete plot slot such as PLOT1');
+  if (/SOURCE\b/i.test(source) && !/SOURCE<x>|SOURCE\d/i.test(source)) {
+    hints.push('SOURCE is a literal SCPI token here; do not rename it to SOURCE1/SOURCE2 unless the retrieved syntax explicitly does so');
+  }
+  if (/EDGE\b/i.test(source) && !/EDGE<x>|EDGE\d/i.test(source)) {
+    hints.push('EDGE is a literal SCPI token here; do not rename it to EDGE1/EDGE2 unless the retrieved syntax explicitly does so');
+  }
+  args.forEach((arg) => {
+    const validValues = arg.validValues && typeof arg.validValues === 'object'
+      ? (arg.validValues as Record<string, unknown>)
+      : {};
+    if (typeof validValues.pattern === 'string' && validValues.pattern.trim()) {
+      hints.push(`${String(arg.name || 'arg')}: pattern ${String(validValues.pattern).trim()}`);
+    }
+  });
+  return Array.from(new Set(hints)).slice(0, 4);
+}
+
+function summarizeScpiArguments(argsRaw: unknown): string[] {
+  if (!Array.isArray(argsRaw)) return [];
+  return (argsRaw as Array<Record<string, unknown>>)
+    .slice(0, 4)
+    .map((arg) => {
+      const name = typeof arg.name === 'string' ? arg.name.trim() : 'arg';
+      const type = typeof arg.type === 'string' ? arg.type.trim() : 'value';
+      const validValues = arg.validValues && typeof arg.validValues === 'object'
+        ? (arg.validValues as Record<string, unknown>)
+        : {};
+      if (typeof validValues.pattern === 'string' && validValues.pattern.trim()) {
+        return `${name}: ${type}, pattern ${validValues.pattern.trim()}`;
+      }
+      if (Array.isArray(validValues.values) && validValues.values.length) {
+        const preview = (validValues.values as unknown[])
+          .filter((value): value is string => typeof value === 'string')
+          .slice(0, 4)
+          .join(', ');
+        if (preview) return `${name}: ${type}, values ${preview}`;
+      }
+      if (Array.isArray(validValues.examples) && validValues.examples.length) {
+        const preview = (validValues.examples as unknown[])
+          .slice(0, 4)
+          .map((value) => String(value))
+          .join(', ');
+        if (preview) return `${name}: ${type}, examples ${preview}`;
+      }
+      if (typeof arg.defaultValue !== 'undefined') {
+        return `${name}: ${type}, default ${String(arg.defaultValue)}`;
+      }
+      return `${name}: ${type}`;
+    });
+}
+
+function formatPreloadedScpiContext(rawResult: unknown): string {
+  const rows = rawResult && typeof rawResult === 'object' && Array.isArray((rawResult as Record<string, unknown>).data)
+    ? ((rawResult as Record<string, unknown>).data as Array<Record<string, unknown>>)
+    : [];
+  if (!rows.length) {
+    return [
+      'Source-of-truth preload:',
+      '- No SCPI command matches were preloaded for this request.',
+      '- Before proposing any write/query steps, call search_scpi for the missing commands and use only exact verified syntax.',
+    ].join('\n');
+  }
+
+  const lines = [
+    'Source-of-truth preload (verified SCPI candidates from MCP search_scpi):',
+  ];
+  rows.slice(0, 6).forEach((row, index) => {
+    const syntax = row.syntax && typeof row.syntax === 'object'
+      ? (row.syntax as Record<string, unknown>)
+      : {};
+    const example = row.example && typeof row.example === 'object'
+      ? (row.example as Record<string, unknown>)
+      : {};
+    const args = Array.isArray(row.arguments)
+      ? (row.arguments as Array<Record<string, unknown>>)
+      : [];
+    lines.push(`${index + 1}. ${String(row.header || '').trim()}`);
+    if (typeof syntax.set === 'string' && syntax.set.trim()) {
+      lines.push(`   set: ${String(syntax.set).trim()}`);
+    }
+    if (typeof syntax.query === 'string' && syntax.query.trim()) {
+      lines.push(`   query: ${String(syntax.query).trim()}`);
+    }
+    if (typeof example.scpi === 'string' && example.scpi.trim()) {
+      lines.push(`   example: ${String(example.scpi).trim()}`);
+    }
+    summarizeScpiArguments(args).forEach((summary) => {
+      lines.push(`   arg: ${summary}`);
+    });
+    describeScpiPlaceholders(String(row.header || ''), syntax, args).forEach((hint) => {
+      lines.push(`   placeholder: ${hint}`);
+    });
+  });
+  lines.push('Use only these verified forms or additional MCP tool results for SCPI-bearing steps.');
+  return lines.join('\n');
+}
+
+function formatPreloadedCommandGroupsContext(rawResults: unknown[]): string {
+  const groups = rawResults
+    .map((rawResult) => {
+      const data =
+        rawResult && typeof rawResult === 'object'
+          ? ((rawResult as Record<string, unknown>).data as Record<string, unknown> | undefined)
+          : undefined;
+      return data && typeof data === 'object' ? data : null;
+    })
+    .filter((value): value is Record<string, unknown> => Boolean(value));
+  if (!groups.length) return '';
+  const lines = ['Relevant TekAutomate command-browser groups narrowed by MCP:'];
+  groups.slice(0, 4).forEach((group, index) => {
+    const groupName = String(group.groupName || '').trim();
+    const description = String(group.description || '').trim();
+    const headers = Array.isArray(group.commandHeaders)
+      ? (group.commandHeaders as unknown[]).map((value) => String(value || '').trim()).filter(Boolean)
+      : [];
+    lines.push(`${index + 1}. ${groupName}`);
+    if (description) lines.push(`   ${clipString(description, 180)}`);
+    if (headers.length) {
+      lines.push(`   sample headers: ${headers.slice(0, 6).join(', ')}`);
+    }
+  });
+  lines.push('Use these group hints to pick likely headers before asking MCP for exact command details.');
+  return lines.join('\n');
+}
+
+function detectRelevantScpiGroups(userMessage: string): string[] {
+  const text = userMessage.toLowerCase();
+  const groups: string[] = [];
+  const push = (value: string) => {
+    if (!groups.includes(value)) groups.push(value);
+  };
+
+  if (/\bch[1-8]\b|\bchannel\b|\b50\s*ohm\b|\b1mohm\b|\bac\b|\bdc\b|\bbandwidth\b|\bdeskew\b|\bscale\b|\boffset\b|\blabel\b/i.test(text)) {
+    push('Vertical');
+  }
+  if (/\btrigger\b|\brising\b|\bfalling\b|\bnormal mode\b|\bauto mode\b|\blevel\b|\bholdoff\b/i.test(text)) {
+    push('Trigger');
+  }
+  if (/\bsingle\b|\bsequence\b|\bacquisition\b|\baverage\b|\bnumavg\b|\bfast acquisition\b|\bcontinuous\b/i.test(text)) {
+    push('Acquisition');
+  }
+  if (/\brecord length\b|\bhorizontal\b|\bfastframe\b|\bfast frame\b|\bps per div\b|\bper div\b|\bscale per div\b/i.test(text)) {
+    push('Horizontal');
+  }
+  if (/\bmeasure|\bmeasurement|\bpk2pk\b|\bmean\b|\brms\b|\bfrequency\b|\bamplitude\b|\bovershoot\b|\bundershoot\b|\bdelay\b|\bsetup time\b|\bhold time\b|\bquery all results\b/i.test(text)) {
+    push('Measurement');
+  }
+  if (/\bbus\b|\bdecode\b|\bi2c\b|\bcan\b|\buart\b|\bspi\b|\blin\b/i.test(text)) {
+    push('Bus');
+  }
+  if (/\bsearch\b|\bmark\b|\berror frames?\b|\berrtype\b|\bfind\b/i.test(text)) {
+    push('Search and Mark');
+  }
+  if (/\bsave\b|\bscreenshot\b|\bwaveform\b|\brecall\b|\bsession\b|\bsetup\b|\bimage\b/i.test(text)) {
+    push('Save and Recall');
+  }
+
+  suggestCommandGroups(userMessage, 8).forEach(push);
+  return groups.slice(0, 10);
+}
+
+function isCommonPreverifiedScpiRequest(userMessage: string, groups: string[]): boolean {
+  if (!groups.length) return false;
+  const text = userMessage.toLowerCase();
+  if (/\bcan\b|\bi2c\b|\buart\b|\bspi\b|\bsearch\b|\bmark\b|\bdelay\b|\bsetup time\b|\bhold time\b|\beye\b|\bjitter\b|\bmask\b/i.test(text)) {
+    return false;
+  }
+  return groups.every((group) => ['Vertical', 'Trigger', 'Acquisition', 'Horizontal', 'Measurement', 'Save and Recall'].includes(group));
+}
+
+function buildScpiBm25Queries(
+  userMessage: string,
+  relevantGroups: string[]
+): Array<{ query: string; commandType?: 'set' | 'query' | 'both' }> {
+  const queries: Array<{ query: string; commandType?: 'set' | 'query' | 'both' }> = [];
+  const seen = new Set<string>();
+  const push = (query: string, commandType: 'set' | 'query' | 'both' = 'both') => {
+    const value = String(query || '').trim();
+    if (!value) return;
+    const key = `${commandType}:${value.toLowerCase()}`;
+    if (seen.has(key)) return;
+    seen.add(key);
+    queries.push({ query: value, commandType });
+  };
+
+  push(userMessage, 'both');
+  if (relevantGroups.includes('Vertical')) push('channel scale coupling termination label bandwidth deskew', 'set');
+  if (relevantGroups.includes('Trigger')) push('trigger edge source slope level mode holdoff', 'set');
+  if (relevantGroups.includes('Acquisition')) push('acquire stopafter state mode numavg sequence', 'set');
+  if (relevantGroups.includes('Horizontal')) push('horizontal recordlength fastframe scale position', 'set');
+  if (relevantGroups.includes('Measurement')) push('measurement add source results currentacq mean', 'both');
+  if (relevantGroups.includes('Bus')) push('bus decode source threshold standard bitrate can i2c uart', 'set');
+  if (relevantGroups.includes('Search and Mark')) push('search and mark bus error frame errtype', 'set');
+  if (relevantGroups.includes('Save and Recall')) push('save recall waveform image screenshot session setup', 'both');
+
+  relevantGroups
+    .filter((group) => !['Vertical', 'Trigger', 'Acquisition', 'Horizontal', 'Measurement', 'Bus', 'Search and Mark', 'Save and Recall'].includes(group))
+    .forEach((group) => {
+    const seed = buildCommandGroupSeedQuery(group);
+    if (!seed) return;
+    const commandType =
+      group === 'Measurement' || group === 'Save and Recall' || group === 'Waveform Transfer' || group === 'Status and Error'
+        ? 'both'
+        : 'set';
+    push(seed, commandType);
+    });
+  return queries.slice(0, 6);
+}
+
+function buildScpiPreloadQueries(userMessage: string): Array<{
+  query?: string;
+  header?: string;
+  commandType?: 'set' | 'query' | 'both';
+}> {
+  const queries: Array<{ query?: string; header?: string; commandType?: 'set' | 'query' | 'both' }> = [];
+  const seen = new Set<string>();
+  const push = (entry: { query?: string; header?: string; commandType?: 'set' | 'query' | 'both' }) => {
+    if (!entry.query && !entry.header) return;
+    const key = JSON.stringify(entry);
+    if (seen.has(key)) return;
+    seen.add(key);
+    queries.push(entry);
+  };
+
+  if (/\bch[1-8]\b|\bchannel\b|\b50\s*ohm\b|\b1mohm\b|\bac\b|\bdc\b|\bvdd_|pgood/i.test(userMessage)) {
+    push({ header: 'CH<x>:SCAle' });
+    push({ header: 'CH<x>:COUPling' });
+    push({ header: 'CH<x>:TERmination' });
+    push({ header: 'CH<x>:LABel:NAMe' });
+  }
+  if (/\btrigger\b|\brising\b|\bfalling\b|\bnormal mode\b|\bauto mode\b|\blevel\b/i.test(userMessage)) {
+    push({ header: 'TRIGger:{A|B}:EDGE:SOUrce' });
+    push({ header: 'TRIGger:{A|B}:EDGE:SLOpe' });
+    push({ header: 'TRIGger:A:MODe' });
+    if (/\blevel\b/i.test(userMessage)) {
+      push({ query: 'trigger edge level', commandType: 'set' });
+    }
+  }
+  if (/\bsingle\b|\bsequence\b|\brecord length\b|\bacquisition\b/i.test(userMessage)) {
+    push({ header: 'ACQuire:STOPAfter' });
+    push({ header: 'HORizontal:RECOrdlength' });
+  }
+  if (/\bmeasure|\bmeasurement|\bpk2pk\b|\bmean\b|\bdelay\b|\bquery all results\b/i.test(userMessage)) {
+    push({ header: 'MEASUrement:ADDMEAS' });
+    push({ header: 'MEASUrement:MEAS<x>:SOURCE' });
+    push({ header: 'MEASUrement:MEAS<x>:RESUlts:CURRentacq:MEAN' });
+    if (/\bdelay\b/i.test(userMessage)) {
+      push({ query: 'measurement delay source threshold crossing', commandType: 'set' });
+    }
+  }
+  if (/\bwaveform\b|\bscreenshot\b|\bsave\b/i.test(userMessage)) {
+    push({ header: 'SAVe:WAVEform' });
+    push({ header: 'SAVe:IMAGe' });
+  }
+  if (!queries.length) {
+    push({ query: userMessage, commandType: 'both' });
+  }
+  return queries.slice(0, 8);
+}
+
+function buildTmDevicesPreloadQueries(userMessage: string): string[] {
+  const queries: string[] = [];
+  const seen = new Set<string>();
+  const push = (query: string) => {
+    const value = String(query || '').trim();
+    if (!value || seen.has(value)) return;
+    seen.add(value);
+    queries.push(value);
+  };
+
+  if (/\btermination\b|\b50\s*ohm\b|\b1mohm\b/i.test(userMessage)) {
+    push('ch[x].termination.write');
+    push('channel termination write');
+  }
+  if (/\btrigger\b.*\bsource\b|\bsource\b.*\btrigger\b/i.test(userMessage)) {
+    push('trigger.a.edge.source.write');
+    push('trigger edge source write');
+  }
+  if (/\btrigger\b.*\brising\b|\btrigger\b.*\bfalling\b|\bslope\b/i.test(userMessage)) {
+    push('trigger.a.edge.slope.write');
+    push('trigger edge slope write');
+  }
+  if (/\bstate\b|\brun\b|\bstop\b|\bsingle\b|\bsequence\b|\bacquisition\b/i.test(userMessage)) {
+    push('acquire.stopafter.write');
+    push('acquire.state.write');
+  }
+  if (!queries.length) {
+    push(userMessage);
+  }
+  return queries.slice(0, 8);
+}
+
+function formatPreloadedTmDevicesContext(rawResult: unknown): string {
+  const rows = rawResult && typeof rawResult === 'object' && Array.isArray((rawResult as Record<string, unknown>).data)
+    ? ((rawResult as Record<string, unknown>).data as Array<Record<string, unknown>>)
+    : [];
+  if (!rows.length) {
+    return [
+      'Source-of-truth preload:',
+      '- No tm_devices paths were preloaded for this request.',
+      '- Before proposing tm_device_command steps, call search_tm_devices for the missing method path and use only verified methods.',
+    ].join('\n');
+  }
+
+  const lines = [
+    'Source-of-truth preload (verified tm_devices candidates from MCP search_tm_devices):',
+  ];
+  rows.slice(0, 6).forEach((row, index) => {
+    lines.push(`${index + 1}. ${String(row.methodPath || '').trim()}`);
+    if (typeof row.signature === 'string' && row.signature.trim()) {
+      lines.push(`   signature: ${String(row.signature).trim()}`);
+    }
+    if (typeof row.usageExample === 'string' && row.usageExample.trim()) {
+      lines.push(`   example: ${String(row.usageExample).trim()}`);
+    }
+  });
+  lines.push('Use only these verified tm_devices methods or additional MCP tool results for tm_device_command steps.');
+  return lines.join('\n');
+}
+
+function extractHostedFunctionCalls(json: Record<string, unknown>): HostedFunctionCall[] {
+  if (!Array.isArray(json.output)) return [];
+  return (json.output as Array<Record<string, unknown>>)
+    .filter((item) => item.type === 'function_call' && typeof item.name === 'string' && typeof item.call_id === 'string')
+    .map((item) => ({
+      name: String(item.name),
+      callId: String(item.call_id),
+      argumentsText:
+        typeof item.arguments === 'string'
+          ? item.arguments
+          : JSON.stringify(item.arguments || {}),
+    }));
+}
+
+async function executeHostedToolCall(
+  req: McpChatRequest,
+  name: string,
+  args: Record<string, unknown>
+): Promise<unknown> {
+  if (name === 'get_current_flow') {
+    return {
+      ok: true,
+      data: {
+        flowContext: req.flowContext,
+        runContext: req.runContext,
+        selectedStepId: req.flowContext.selectedStepId,
+      },
+      sourceMeta: [],
+      warnings: [],
+    };
+  }
+
+  if (name === 'validate_flow') {
+    const issues = await detectFlowCommandIssues(req);
+    return {
+      ok: true,
+      data: {
+        valid: issues.length === 0,
+        issues,
+      },
+      sourceMeta: [],
+      warnings: [],
+    };
+  }
+
+  if (name === 'apply_actions') {
+    return {
+      ok: true,
+      data: {
+        applied: false,
+        message: 'Do not call apply_actions inside assistant chat. Return ACTIONS_JSON and let TekAutomate apply it client-side.',
+      },
+      sourceMeta: [],
+      warnings: ['apply_actions is not executed server-side in assistant chat'],
+    };
+  }
+
+  return runTool(name, args);
+}
+
+async function preloadSourceOfTruthContext(
+  req: McpChatRequest,
+  toolTrace: NonNullable<ToolLoopResult['debug']>['toolTrace']
+): Promise<HostedPreloadContext> {
+  if (!isHostedStructuredBuildRequest(req)) {
+    return {
+      contextText: '',
+      restrictSearchTools: false,
+      batchMaterializeOnly: false,
+      candidateCount: 0,
+      groupCount: 0,
+      usedBm25: false,
+    };
+  }
+
+  const wantsTmDevices =
+    (req.flowContext.backend || '').toLowerCase() === 'tm_devices' ||
+    /\btm[_\s-]*devices\b|\bscope\.commands\./i.test(req.userMessage);
+  if (wantsTmDevices) {
+    const mergedRows: Array<Record<string, unknown>> = [];
+    const mergedKeys = new Set<string>();
+    for (const query of buildTmDevicesPreloadQueries(req.userMessage)) {
+      const args = {
+        query,
+        model: req.flowContext.deviceDriver || req.flowContext.modelFamily,
+        limit: 6,
+      };
+      const startedAt = new Date().toISOString();
+      const t0 = Date.now();
+      const rawResult = await executeHostedToolCall(req, 'search_tm_devices', args);
+      toolTrace.push({
+        name: 'search_tm_devices',
+        args,
+        startedAt,
+        durationMs: Date.now() - t0,
+        resultSummary: buildToolResultSummary(rawResult),
+        rawResult,
+      });
+      const data =
+        rawResult && typeof rawResult === 'object'
+          ? (rawResult as Record<string, unknown>).data
+          : undefined;
+      const rows = Array.isArray(data)
+        ? (data as Array<Record<string, unknown>>)
+        : (data && typeof data === 'object' ? [data as Record<string, unknown>] : []);
+      rows.forEach((row) => {
+        const key = `${String(row.modelRoot || '')}:${String(row.methodPath || '')}`;
+        if (!key.trim() || mergedKeys.has(key)) return;
+        mergedKeys.add(key);
+        mergedRows.push(row);
+      });
+    }
+    return {
+      contextText: formatPreloadedTmDevicesContext({ data: mergedRows }),
+      restrictSearchTools: false,
+      batchMaterializeOnly: false,
+      candidateCount: mergedRows.length,
+      groupCount: 0,
+      usedBm25: true,
+    };
+  }
+
+  const relevantGroups = detectRelevantScpiGroups(req.userMessage);
+  const groupRawResults: unknown[] = [];
+  for (const groupName of relevantGroups) {
+    const args = { groupName };
+    const startedAt = new Date().toISOString();
+    const t0 = Date.now();
+    const rawResult = await executeHostedToolCall(req, 'get_command_group', args);
+    toolTrace.push({
+      name: 'get_command_group',
+      args,
+      startedAt,
+      durationMs: Date.now() - t0,
+      resultSummary: buildToolResultSummary(rawResult),
+      rawResult,
+    });
+    groupRawResults.push(rawResult);
+  }
+
+  const mergedRows: Array<Record<string, unknown>> = [];
+  const mergedKeys = new Set<string>();
+  const candidateHeaders: string[] = [];
+  const seenHeaders = new Set<string>();
+  const rememberHeader = (value: string) => {
+    const header = String(value || '').trim();
+    if (!header || seenHeaders.has(header)) return;
+    seenHeaders.add(header);
+    candidateHeaders.push(header);
+  };
+
+  for (const preload of buildScpiBm25Queries(req.userMessage, relevantGroups)) {
+    const toolName = 'search_scpi';
+    const args = {
+      query: preload.query,
+      modelFamily: req.flowContext.modelFamily,
+      limit: 10,
+      commandType: preload.commandType || 'both',
+    };
+    const startedAt = new Date().toISOString();
+    const t0 = Date.now();
+    const rawResult = await executeHostedToolCall(req, toolName, args);
+    toolTrace.push({
+      name: toolName,
+      args,
+      startedAt,
+      durationMs: Date.now() - t0,
+      resultSummary: buildToolResultSummary(rawResult),
+      rawResult,
+    });
+    const data =
+      rawResult && typeof rawResult === 'object'
+        ? (rawResult as Record<string, unknown>).data
+        : undefined;
+    const rows = Array.isArray(data)
+      ? (data as Array<Record<string, unknown>>)
+      : (data && typeof data === 'object' ? [data as Record<string, unknown>] : []);
+    rows.forEach((row) => {
+      const key = `${String(row.sourceFile || '')}:${String(row.commandId || row.header || '')}`;
+      if (!key.trim() || mergedKeys.has(key)) return;
+      mergedKeys.add(key);
+      mergedRows.push(row);
+      rememberHeader(String(row.header || row.matchedHeader || ''));
+    });
+  }
+
+  if (candidateHeaders.length < 4) {
+    buildScpiPreloadQueries(req.userMessage)
+      .filter((preload) => Boolean(preload.header))
+      .forEach((preload) => rememberHeader(String(preload.header || '')));
+  }
+
+  const hydratedRows: Array<Record<string, unknown>> = [];
+  if (candidateHeaders.length) {
+    const batchArgs = {
+      headers: candidateHeaders.slice(0, 8),
+      family: req.flowContext.modelFamily,
+    };
+    const startedAt = new Date().toISOString();
+    const t0 = Date.now();
+    const rawResult = await executeHostedToolCall(req, 'get_commands_by_header_batch', batchArgs);
+    toolTrace.push({
+      name: 'get_commands_by_header_batch',
+      args: batchArgs,
+      startedAt,
+      durationMs: Date.now() - t0,
+      resultSummary: buildToolResultSummary(rawResult),
+      rawResult,
+    });
+    const batchData =
+      rawResult && typeof rawResult === 'object'
+        ? ((rawResult as Record<string, unknown>).data as Record<string, unknown> | undefined)
+        : undefined;
+    const batchResults = Array.isArray(batchData?.results)
+      ? (batchData?.results as Array<Record<string, unknown>>)
+      : [];
+    batchResults.forEach((row) => {
+      if (row.deduped === true) return;
+      const key = `${String(row.sourceFile || '')}:${String(row.commandId || row.header || row.matchedHeader || '')}`;
+      if (!key.trim() || mergedKeys.has(`hydrated:${key}`)) return;
+      mergedKeys.add(`hydrated:${key}`);
+      hydratedRows.push(row);
+    });
+  }
+
+  const groupContext = formatPreloadedCommandGroupsContext(groupRawResults);
+  const scpiContext = formatPreloadedScpiContext({ data: hydratedRows.length ? hydratedRows : mergedRows });
+  const commonRequest = isCommonPreverifiedScpiRequest(req.userMessage, relevantGroups);
+  const candidateCount = hydratedRows.length || mergedRows.length;
+  const batchMaterializeOnly = commonRequest && candidateCount >= 1;
+  return {
+    contextText: [groupContext, scpiContext, batchMaterializeOnly
+      ? [
+          'MCP already completed BM25 top-match retrieval and command-group narrowing for this common request.',
+          'Common SCPI fast path is active for this turn.',
+          'Do not call search_scpi, get_command_group, get_command_by_header, get_commands_by_header_batch, or file_search unless the preloaded candidates are clearly insufficient.',
+          'Choose the needed verified headers from the preloaded candidates, call finalize_scpi_commands once with every concrete command you need, then answer immediately.',
+        ].join(' ')
+      : '',
+    ].filter(Boolean).join('\n\n'),
+    restrictSearchTools: batchMaterializeOnly,
+    batchMaterializeOnly,
+    candidateCount,
+    groupCount: relevantGroups.length,
+    usedBm25: true,
+  };
+}
+
+export function buildAssistantUserPrompt(
+  req: McpChatRequest,
+  flowCommandIssues: string[] = [],
+  options?: { hostedPromptConfigured?: boolean }
+): string {
+  const isExplainOnly = isExplainOnlyCommandAsk(req);
+  const fc = req.flowContext;
+  const flatSteps = flattenSteps(Array.isArray(fc.steps) ? fc.steps : []);
+  const topStepTypes = flatSteps.slice(0, 12).map((s) => String(s.type || 'unknown'));
+  const userText = String(req.userMessage || '');
+  const hostedPromptConfigured = options?.hostedPromptConfigured === true;
+  const isOfflineTekScope =
+    /\boffline\b/i.test(userText) &&
+    /\btekscope\s*pc\b|\btekscopepc\b/i.test(userText);
+  const wantsTmDevices =
+    (fc.backend || '').toLowerCase() === 'tm_devices' ||
+    /\btm[_\s-]*devices\b|\bscope\.commands\./i.test(userText);
+  const lines = [
+    `TekAutomate request mode: ${req.outputMode}.`,
+    `Backend: ${fc.backend || 'pyvisa'}, DeviceType: ${fc.deviceType || 'SCOPE'}, ModelFamily: ${fc.modelFamily || 'unknown'}.`,
+    `Flow size: ${flatSteps.length} steps. Types: ${topStepTypes.join(', ') || '(empty)'}.`,
+  ];
+  const schemaLines = [
+    'TekAutomate schema rules:',
+    '- Your true job is to build or edit directly applyable TekAutomate Steps UI flows or valid Blockly XML, not generic workflow descriptions.',
+    '- Use only real TekAutomate step types: connect, disconnect, write, query, set_and_query, sleep, comment, python, save_waveform, save_screenshot, error_check, group, tm_device_command, recall.',
+    '- Never invent pseudo-step types such as set_channel, set_acquisition_mode, repeat, acquire_waveform, measure_parameter, log_to_csv, or similar abstractions.',
+    '- Copy TekAutomate param keys exactly from these schemas:',
+    '  connect -> params { instrumentIds: [], printIdn: true }',
+    '  disconnect -> params { instrumentIds: [] }',
+    '  write -> params { command: "..." }',
+    '  query -> params { command: "...", saveAs: "..." }',
+    '  sleep -> params { duration: 0.5 }',
+    '  save_screenshot -> params { filename: "capture.png", scopeType: "modern|legacy", method: "pc_transfer" }',
+    '  save_waveform -> params { source: "CH1", filename: "ch1.bin", format: "bin|csv|wfm|mat" }',
+    '  group -> include params:{} and children:[]',
+    '- Use label for step display text. Do not use name or title as a step field.',
+    '- For query steps, use params.command, never params.query, and always include params.saveAs.',
+    '- Query steps should be query-only. Do not prepend setup writes or semicolon-chained non-query commands before the final ? command.',
+    '- Canonical headers returned by search_scpi/get_command_by_header are authoritative templates. If the retrieved header uses placeholders like CH<x>, MEAS<x>, REF<x>, BUS<x>, SEARCH<x>, or PLOT<x>, instantiate only those placeholders (for example CH1, MEAS1) and keep the rest of the header unchanged.',
+    '- After retrieving a canonical SCPI record for any write/query step, prefer finalize_scpi_commands for the whole set of commands you need in this turn. If you only need one command, materialize_scpi_command is acceptable. Pass the verified header plus placeholder bindings and argument values. If the user already specified a concrete instance like CH1, MEAS1, B1, or SEARCH1, pass that as concreteHeader so MCP can infer bindings deterministically. Copy the returned command verbatim into params.command instead of typing the final SCPI yourself.',
+    '- Do not mutate literal tokens such as SOURCE, EDGE, RESULTS, MODE, or LEVEL into indexed variants unless the retrieved syntax itself contains that indexed form.',
+    '- For any SCPI-bearing build/edit request, use source-of-truth retrieval first. Call search_scpi and/or file_search before proposing write/query steps unless MCP already preloaded verified command candidates for this turn.',
+    '- For tm_devices build/edit requests, use source-of-truth retrieval first. Call search_tm_devices before proposing tm_device_command steps unless MCP already preloaded verified method candidates for this turn.',
+    '- After retrieving a verified tm_devices methodPath, call materialize_tm_devices_call and copy the returned code verbatim into tm_device_command params.code instead of composing Python from memory.',
+    '- Do not emit applyable write/query/tm_device_command steps from memory or guesswork when retrieval did not verify the syntax/path.',
+    '- Do not treat prompt files, golden examples, templates, or general knowledge-base prose as proof of exact SCPI syntax. For exact SCPI verification, rely on MCP command-library tool results and their command JSON records.',
+    '- When MCP returns command records, use their detailed description, argument descriptions, validValues, relatedCommands, manualReference, and example text to choose the right verified command instead of relying on a stripped header match alone.',
+    '- Use exact verified long-form SCPI syntax when known. Do not guess short mnemonics like SCA, COUP, IMP, RESU:CURR, or similar abbreviations unless that exact form is verified.',
+    '- Combine related same-subsystem setup commands into one write step using semicolons when it keeps the flow compact.',
+    '- Keep compact combined setup writes to 4 commands or fewer per step.',
+    '- For sleep steps, use duration, never seconds.',
+    '- For screenshot steps, use filename, never file_path, and default to scopeType:"modern" plus method:"pc_transfer" when not otherwise specified.',
+    '- For waveform steps, prefer save_waveform over raw save SCPI and include source, filename, and format.',
+    '- Modern MSO screenshot capture should use save_screenshot, not HARDCopy.',
+    '- If the current workspace is empty and you build a full flow, include connect first and disconnect last.',
+    '- If the request cannot be represented with those real step types or valid Blockly blocks, explain the limitation briefly instead of emitting fake applyable JSON.',
+    '- For Blockly/XML requests, return XML only and use supported blocks only: connect_scope, disconnect, set_device_context, scpi_write, scpi_query, recall, save, save_screenshot, save_waveform, wait_seconds, wait_for_opc, tm_devices_write, tm_devices_query, tm_devices_save_screenshot, tm_devices_recall_session, controls_for, controls_if, variables_set, variables_get, math_number, math_arithmetic, python_code.',
+  ];
+  if (hostedPromptConfigured) {
+    lines.push(
+      'Hosted Responses prompt is configured.',
+      'Treat the stored prompt as the authority for TekAutomate schema, apply rules, Blockly rules, and tool-usage policy.',
+      'Use this runtime message only for dynamic workspace context, current request details, and any preloaded verification findings for this turn.',
+      resolveHostedVectorStoreId()
+        ? 'Hosted file_search is available for this turn. Use file_search first for source discovery when the preloaded MCP results are incomplete or too narrow.'
+        : 'Hosted file_search is not configured for this turn, so rely on MCP retrieval for source discovery.',
+      'Treat file_search results as source discovery only. For any applyable SCPI or tm_devices output, only MCP exact lookup, materialization, and verification are authoritative.',
+      'When MCP returns command records, use their detailed description, argument descriptions, validValues, relatedCommands, manualReference, and example text to disambiguate the right verified command before building steps.',
+      'Only emit structured flow JSON when it can be applied by TekAutomate as-is.',
+      'If SCPI or tm_devices syntax is not verified by retrieved MCP tool results for this turn, fail closed instead of guessing.',
+    'When multiple related SCPI headers or concrete commands are needed, prefer get_commands_by_header_batch and finalize_scpi_commands to reduce tool chatter.',
+      'If the stored prompt allows structured output, prefer a single parseable ```json``` block unless multiple smaller blocks are genuinely clearer.'
+    );
+  } else {
+    lines.push(
+      '',
+      'Chat response contract:',
+      '- For flow/create/edit requests, prefer one or more parseable ```json``` blocks rather than raw JSON text.',
+      '- A JSON block may contain either full Steps UI flow JSON with "steps", or ACTIONS_JSON with "actions".',
+      '- Short chat prose before or after the JSON is okay when it helps the user.',
+      '- For explain-only requests, reply in concise plain text instead of JSON.',
+      '- No citations, footnotes, or reference markers like [1] or [2].',
+      '- Keep any non-JSON narrative short when structured output is included.',
+      ...schemaLines,
+      '- Never invent commands. If not verifiable, explicitly say not verified.',
+      '- If you return actions, `newStep` and `flow` must be real JSON objects, not JSON-encoded strings.',
+      '- Never use `param: "params"`; set one concrete field per `set_step_param`, or use `replace_step`.'
+    );
+  }
+  if (wantsTmDevices) {
+    lines.push(
+      'tm_devices mode policy:',
+      '- Prefer tm_devices paths/functions from source of truth.',
+      '- The tm_devices API path from tm_devices_full_tree.json is authoritative for generation. Treat raw SCPI only as explanatory context when it is also available.',
+      '- Avoid SCPI write/query steps unless user explicitly asks for SCPI.',
+      '- If returning flow JSON, prefer "tm_device_command" steps for command execution.'
+    );
+  }
+  if (isOfflineTekScope) {
+    lines.push(
+      'Offline TekScopePC policy (strict):',
+      '- Do NOT include acquisition/trigger/channel hardware setup commands.',
+      '- Prefer recall/session or waveform-load + measurement + query + save results.',
+      '- If needed, include a finding that offline TekScopePC cannot execute live hardware acquisition.'
+    );
+  }
+  // History is sent as native messages in hosted Responses mode;
+  // avoid duplicating it in this prompt body.
+  if (req.flowContext.selectedStep) {
+    lines.push('Selected step:', JSON.stringify(req.flowContext.selectedStep));
+  }
+  if (flowCommandIssues.length) {
+    lines.push(`Precomputed flow command findings:\n${flowCommandIssues.map((x) => `- ${x}`).join('\n')}`);
+  }
+  if (isExplainOnly) {
+    lines.push(
+      hostedPromptConfigured
+        ? 'Intent: explain the selected command or step only.'
+        : 'Intent: explain only. Do not include flow-edit JSON unless the user asks for changes.'
+    );
+  } else {
+    lines.push(
+      hostedPromptConfigured
+        ? 'Intent: build or modify the flow for the current request.'
+        : 'Intent: chat naturally, and when proposing flow changes include parseable JSON payloads when helpful. One block is preferred, but multiple smaller JSON blocks are okay.'
+    );
+  }
+  lines.push('User request:', req.userMessage);
+  return lines.join('\n\n');
+}
+
+/** Extract assistant text from Responses API output (output_text or output[].message.content[].text). */
+function extractOpenAiResponseText(json: Record<string, unknown>): string {
+  if (typeof json.output_text === 'string' && json.output_text.trim().length > 0) {
+    return json.output_text;
+  }
+  if (!Array.isArray(json.output)) return '';
+  return (json.output as Array<Record<string, unknown>>)
+    .map((item) => {
+      if (item.type === 'message' && Array.isArray(item.content)) {
+        return (item.content as Array<Record<string, unknown>>)
+          .map((c) => (typeof c?.text === 'string' ? c.text : ''))
+          .join('');
+      }
+      if (typeof item.text === 'string') return item.text;
+      return '';
+    })
+    .join('');
+}
+
+/** Extract text from Chat Completions API response (one-shot direct LLM). */
+function extractChatCompletionText(json: Record<string, unknown>): string {
+  const choices = json.choices as Array<Record<string, unknown>> | undefined;
+  if (!Array.isArray(choices) || choices.length === 0) return '';
+  const msg = choices[0]?.message as Record<string, unknown> | undefined;
+  if (!msg || typeof msg.content !== 'string') return '';
+  return msg.content;
+}
+
+export function buildHostedOpenAiResponsesRequest(
+  req: McpChatRequest,
+  assistantPrompt: string,
+  options: HostedResponsesRequestOptions = {}
+): Record<string, unknown> {
+  const hostedModel = resolveHostedAssistantModel(req);
+  const promptId = resolveOpenAiPromptId(req);
+  const promptVersion = resolveOpenAiPromptVersion();
+  const previousResponseId = options.previousResponseId ?? resolveOpenAiResponseCursor(req);
+  const historyInput =
+    previousResponseId || !Array.isArray(req.history)
+      ? []
+      : req.history
+          .slice(-6)
+          .map((h) => ({
+            role: h.role,
+            content: String(h.content || '').slice(0, 2000),
+          }))
+          .filter((h) => h.content.trim().length > 0);
+  const requestPayload: Record<string, unknown> = {
+    model: hostedModel,
+    input: options.inputOverride || [
+      ...historyInput.map((h) => ({ role: h.role, content: h.content })),
+      { role: 'user', content: assistantPrompt },
+    ],
+    store: true,
+    stream: false,
+  };
+  if (hostedModelSupportsTemperature(hostedModel)) {
+    requestPayload.temperature = resolveHostedResponseTemperature(req);
+  }
+  if (Array.isArray(options.tools) && options.tools.length > 0) {
+    requestPayload.tools = options.tools;
+  }
+  if (options.toolChoice) {
+    requestPayload.tool_choice = options.toolChoice;
+  }
+  if (promptId) {
+    requestPayload.prompt = promptVersion
+      ? { id: promptId, version: promptVersion }
+      : { id: promptId };
+  }
+  if (previousResponseId) {
+    requestPayload.previous_response_id = previousResponseId;
+  }
+  return requestPayload;
+}
+
+async function runOpenAiHostedResponse(
+  req: McpChatRequest,
+  assistantPrompt: string,
+  options: HostedResponsesRequestOptions = {}
+): Promise<{
+  text: string;
+  raw: Record<string, unknown>;
+  requestPayload: Record<string, unknown>;
+  responseId: string;
+}> {
+  const openAiBase = process.env.OPENAI_BASE_URL || 'https://api.openai.com';
+  const requestPayload = buildHostedOpenAiResponsesRequest(req, assistantPrompt, options);
+  const promptConfig = requestPayload.prompt as Record<string, unknown> | undefined;
+  if (usesServerDefaultHostedPrompt(req) && !promptConfig?.id) {
+    throw new Error('OPENAI_PROMPT_ID is required for hosted server-default assistant mode. Set a real pmpt_... value in mcp-server/.env or send a prompt ID directly.');
+  }
+  if (promptConfig?.id) {
+    console.log(
+      `[MCP] OpenAI hosted responses: using prompt ${String(promptConfig.id)}${promptConfig.version ? ` v${String(promptConfig.version)}` : ''}`
+    );
+  } else if (String(req.openaiAssistantId || '').trim().length > 0) {
+    console.log('[MCP] OpenAI hosted responses: no prompt ID configured; using inline request prompt only');
+  }
+  const res = await fetch(`${openAiBase}/v1/responses`, {
+    method: 'POST',
+    headers: {
+      Authorization: `Bearer ${req.apiKey}`,
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify(requestPayload),
+  });
+  if (!res.ok) {
+    const errText = await res.text();
+    throw new Error(`OpenAI Responses error ${res.status}: ${errText}`);
+  }
+  const json = (await res.json()) as Record<string, unknown>;
+  const responseId = String(json.id || '').trim();
+  if (!responseId) {
+    throw new Error('OpenAI Responses response missing id.');
+  }
+  return {
+    text: extractOpenAiResponseText(json),
+    raw: json,
+    requestPayload,
+    responseId,
+  };
+}
+
 async function runOpenAiResponses(
   req: McpChatRequest,
   flowCommandIssues: string[] = []
 ): Promise<{
   text: string;
+  assistantThreadId?: string;
   metrics: NonNullable<ToolLoopResult['metrics']>;
   debug: NonNullable<ToolLoopResult['debug']>;
 }> {
-  const instructions = loadPromptFile(req.outputMode);
-  const developerPrompt = await buildContext(req);
+  const instructions = getModePrompt(req);
   const userPrompt = buildUserPrompt(req, flowCommandIssues);
+  const useHostedAssistant = shouldUseOpenAiAssistant(req);
+  const assistantPrompt = buildAssistantUserPrompt(req, flowCommandIssues, {
+    hostedPromptConfigured: useHostedAssistant && Boolean(resolveOpenAiPromptId(req)),
+  });
+  const developerPrompt = useHostedAssistant
+    ? 'Hosted assistant mode: compact prompt only.'
+    : isExplainOnlyCommandAsk(req)
+      ? 'Command explanation mode. Return plain text guidance only.'
+      : await buildContext(req);
+  console.log('[DEBUG] developer message:', String(developerPrompt || '').slice(0, 2000));
   const toolDefinitions: Array<{ name: string; description: string }> = [];
   const toolTrace: NonNullable<ToolLoopResult['debug']>['toolTrace'] = [];
 
-  const openAiBase = process.env.OPENAI_BASE_URL || 'https://api.openai.com';
   const modelStartedAt = Date.now();
-  let res: Response;
+  let json: Record<string, unknown>;
+  let content = '';
+  let providerRequest: Record<string, unknown>;
+  let assistantThreadId: string | undefined;
   try {
-    res = await fetch(`${openAiBase}/v1/responses`, {
-      method: 'POST',
-      headers: {
-        Authorization: `Bearer ${req.apiKey}`,
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({
-        model: req.model || 'gpt-4o',
-        instructions,
-        max_output_tokens: 4096,
-        input: [
-          {
-            role: 'developer',
-            content: developerPrompt,
-          },
-          {
-            role: 'user',
-            content: req.userMessage,
-          },
+    if (useHostedAssistant) {
+      console.log('[MCP] OpenAI route: assistant (Responses)');
+      const hosted = await runOpenAiHostedResponse(req, assistantPrompt);
+      providerRequest = hosted.requestPayload;
+      json = hosted.raw;
+      content = hosted.text;
+      assistantThreadId = hosted.responseId;
+    } else {
+      console.log('[MCP] OpenAI route: direct (Chat Completions one-shot)');
+      const openAiBase = process.env.OPENAI_BASE_URL || 'https://api.openai.com';
+      providerRequest = {
+        model: resolveOpenAiModel(req),
+        messages: [
+          { role: 'system', content: `${instructions}\n\n${developerPrompt}` },
+          { role: 'user', content: req.userMessage },
         ],
-        stream: false,
-        tools: undefined,
-        store: false,
-      }),
-    });
+        max_tokens: resolveOpenAiMaxOutputTokens(),
+      };
+      const res = await fetch(`${openAiBase}/v1/chat/completions`, {
+        method: 'POST',
+        headers: {
+          Authorization: `Bearer ${req.apiKey}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(providerRequest),
+      });
+      if (!res.ok) {
+        throw new Error(`OpenAI error ${res.status}: ${await res.text()}`);
+      }
+      json = (await res.json()) as Record<string, unknown>;
+      content = extractChatCompletionText(json);
+    }
   } catch (err) {
     console.log('[MCP] responses.create error:', JSON.stringify(err));
     throw err;
   }
-  if (!res.ok) {
-    throw new Error(`OpenAI error ${res.status}: ${await res.text()}`);
-  }
-  const json = (await res.json()) as Record<string, unknown>;
   console.log('[MCP] raw output:', JSON.stringify(json.output || json));
-  let content = '';
-  if (typeof json.output_text === 'string' && json.output_text.trim().length > 0) {
-    content = json.output_text;
-  } else if (Array.isArray(json.output)) {
-    content = (json.output as Array<Record<string, unknown>>)
-      .map((item) => {
-        if (item.type === 'message' && Array.isArray(item.content)) {
-          return (item.content as Array<Record<string, unknown>>)
-            .map((c) => (typeof c.text === 'string' ? c.text : ''))
-            .join('');
-        }
-        if (typeof item.text === 'string') return item.text;
-        return '';
-      })
-      .join('');
-  }
+  console.log('[DEBUG] raw response:', String(content || '').slice(0, 1000));
   const modelMs = Date.now() - modelStartedAt;
 
   return {
     text: content,
+    assistantThreadId,
     metrics: {
       totalMs: 0,
       usedShortcut: false,
@@ -845,14 +3722,15 @@ async function runOpenAiResponses(
       modelMs,
       promptChars: {
         system: instructions.length,
-        user: userPrompt.length,
+        user: useHostedAssistant ? assistantPrompt.length : userPrompt.length,
       },
     },
     debug: {
       systemPrompt: instructions,
       developerPrompt,
-      userPrompt,
+      userPrompt: useHostedAssistant ? assistantPrompt : userPrompt,
       rawOutput: json,
+      providerRequest,
       toolDefinitions,
       toolTrace,
     },
@@ -860,6 +3738,7 @@ async function runOpenAiResponses(
 }
 
 function shouldUseTools(req: McpChatRequest): boolean {
+  if (isHostedStructuredBuildRequest(req)) return true;
   const msg = req.userMessage.toLowerCase();
   return (
     msg.includes('verify') ||
@@ -886,6 +3765,7 @@ function isModelFirstPriority(req: McpChatRequest): boolean {
 
 function shouldAttemptShortcutFirst(req: McpChatRequest): boolean {
   const msg = req.userMessage.toLowerCase();
+  if (isHostedStructuredBuildRequest(req)) return false;
   if (isModelFirstPriority(req)) return false;
   const lookupIntent = /\b(command|syntax|params?|examples?|what is|how do i|lookup|look up)\b/.test(msg);
   const editIntent = /\b(add|insert|set|configure|build|create|make|update|fix|change|apply)\b/.test(msg);
@@ -905,42 +3785,260 @@ function hasActionsJsonPayload(text: string): boolean {
   return /ACTIONS_JSON\s*:\s*\{[\s\S]*"actions"\s*:/i.test(text);
 }
 
+function isExplainOnlyCommandAsk(req: McpChatRequest): boolean {
+  if (req.intent === 'command_explain') return true;
+  const msg = req.userMessage.toLowerCase();
+  return (
+    msg.includes('command lookup request') &&
+    msg.includes('focused command explanation') &&
+    msg.includes('do not rewrite the full flow')
+  );
+}
+
+function getModePrompt(req: McpChatRequest): string {
+  if (isExplainOnlyCommandAsk(req)) {
+    return [
+      '# TekAutomate Command Explainer',
+      '- This request is explanation-only for a selected command/step.',
+      '- Return plain explanatory text only.',
+      '- Never output ACTIONS_JSON for this mode.',
+      '- Do not propose flow apply actions unless explicitly requested.',
+      '- Cover command purpose, parameters, valid values/ranges, set/query usage, and common mistakes.',
+    ].join('\n');
+  }
+  return loadPromptFile(req.outputMode);
+}
+
+function resolveOpenAiModel(req: McpChatRequest): string {
+  const requested = String(req.model || '').trim();
+  if (requested) return requested;
+  const envDefault = String(process.env.OPENAI_DEFAULT_MODEL || '').trim();
+  return envDefault || 'gpt-4o';
+}
+
 async function runOpenAiToolLoop(
   req: McpChatRequest,
   flowCommandIssues: string[] = [],
   _maxCalls = 8
 ): Promise<{
   text: string;
+  assistantThreadId?: string;
   metrics: NonNullable<ToolLoopResult['metrics']>;
   debug: NonNullable<ToolLoopResult['debug']>;
 }> {
-  const modePrompt = loadPromptFile(req.outputMode);
+  const modePrompt = getModePrompt(req);
   const systemPrompt = buildSystemPrompt(modePrompt, req.outputMode);
   const userPrompt = buildUserPrompt(req, flowCommandIssues);
-  const toolDefinitions: Array<{ name: string; description: string }> = [];
+  const useHostedAssistant = shouldUseOpenAiAssistant(req);
+  let assistantPrompt = buildAssistantUserPrompt(req, flowCommandIssues, {
+    hostedPromptConfigured: useHostedAssistant && Boolean(resolveOpenAiPromptId(req)),
+  });
   const toolTrace: NonNullable<ToolLoopResult['debug']>['toolTrace'] = [];
+  if (useHostedAssistant) {
+    console.log('[MCP] OpenAI route: assistant (Responses + tools)');
+    const preloadedContext = await preloadSourceOfTruthContext(req, toolTrace);
+    if (preloadedContext.contextText) {
+      assistantPrompt = `${assistantPrompt}\n\n${preloadedContext.contextText}`;
+    }
 
+    const initialPhase: HostedToolPhase = 'initial';
+    const toolDefinitions: Array<{ name: string; description: string }> = buildHostedToolDefinitions(
+      buildHostedResponsesTools(req, initialPhase, {
+        restrictSearchTools: preloadedContext.restrictSearchTools,
+        batchMaterializeOnly: preloadedContext.batchMaterializeOnly,
+      })
+        .filter((tool) => tool.type === 'function' && typeof tool.name === 'string')
+        .map((tool) => String(tool.name))
+    );
+    const providerRequests: Record<string, unknown>[] = [];
+    let latestJson: Record<string, unknown> = {};
+    let assistantThreadId: string | undefined;
+    let finalText = '';
+    let currentInput: HostedResponseInputItem[] | undefined;
+    let previousResponseId: string | undefined;
+    const toolCache = new Map<string, unknown>();
+    let totalModelMs = 0;
+    let totalToolMs = 0;
+    let totalToolCalls = toolTrace.length;
+    let iterations = 0;
+    let pendingToolOutputs: HostedResponseInputItem[] | undefined;
+    let currentPhase: HostedToolPhase = initialPhase;
+
+    for (let i = 0; i < Math.max(1, _maxCalls); i += 1) {
+      iterations = i + 1;
+      const hostedTools = buildHostedResponsesTools(req, currentPhase, {
+        restrictSearchTools: currentPhase === 'initial' && preloadedContext.restrictSearchTools,
+        batchMaterializeOnly: preloadedContext.batchMaterializeOnly,
+      });
+      const toolChoice = buildHostedAllowedToolChoice(hostedTools);
+      const modelStartedAt = Date.now();
+      const hosted = await runOpenAiHostedResponse(req, assistantPrompt, {
+        inputOverride: currentInput,
+        previousResponseId,
+        tools: hostedTools,
+        toolChoice: toolChoice || 'auto',
+      });
+      totalModelMs += Date.now() - modelStartedAt;
+      providerRequests.push(hosted.requestPayload);
+      latestJson = hosted.raw;
+      assistantThreadId = hosted.responseId;
+      previousResponseId = hosted.responseId;
+
+      const functionCalls = extractHostedFunctionCalls(hosted.raw);
+      if (!functionCalls.length) {
+        finalText = hosted.text;
+        pendingToolOutputs = undefined;
+        break;
+      }
+
+      const toolOutputs: HostedResponseInputItem[] = [];
+      let allCallsCached = functionCalls.length > 0;
+      let shouldForceFinalAnswer = false;
+      for (const call of functionCalls) {
+        let parsedArgs: Record<string, unknown> = {};
+        try {
+          const parsed = JSON.parse(call.argumentsText);
+          if (parsed && typeof parsed === 'object' && !Array.isArray(parsed)) {
+            parsedArgs = parsed as Record<string, unknown>;
+          }
+        } catch {
+          parsedArgs = {};
+        }
+
+        const cacheKey = `${call.name}:${stableStringify(parsedArgs)}`;
+        const startedAt = new Date().toISOString();
+        const cachedResult = toolCache.get(cacheKey);
+        const t0 = Date.now();
+        const rawResult = typeof cachedResult === 'undefined'
+          ? await executeHostedToolCall(req, call.name, parsedArgs)
+          : cachedResult;
+        const durationMs = typeof cachedResult === 'undefined' ? Date.now() - t0 : 0;
+        if (typeof cachedResult === 'undefined') {
+          toolCache.set(cacheKey, rawResult);
+          totalToolMs += durationMs;
+          totalToolCalls += 1;
+          allCallsCached = false;
+        }
+        toolTrace.push({
+          name: call.name,
+          args: parsedArgs,
+          startedAt,
+          durationMs,
+          resultSummary: {
+            ...buildToolResultSummary(rawResult),
+            cached: typeof cachedResult !== 'undefined',
+          },
+          rawResult,
+        });
+        toolOutputs.push({
+          type: 'function_call_output',
+          call_id: call.callId,
+          output: JSON.stringify(rawResult),
+        });
+        if (call.name === 'verify_scpi_commands' || call.name === 'finalize_scpi_commands' || call.name === 'validate_action_payload') {
+          shouldForceFinalAnswer = true;
+        }
+      }
+
+      if ((allCallsCached || shouldForceFinalAnswer) && toolOutputs.length) {
+        const reason = shouldForceFinalAnswer
+          ? 'Hosted Responses verification pass completed; forcing final answer without more tools'
+          : 'Hosted Responses repeated cached tool calls; forcing final answer without more tools';
+        console.log(`[MCP] ${reason}`);
+        const modelStartedAt = Date.now();
+        const hostedFinal = await runOpenAiHostedResponse(req, assistantPrompt, {
+          inputOverride: buildHostedFinalAnswerInput(toolOutputs),
+          previousResponseId,
+        });
+        totalModelMs += Date.now() - modelStartedAt;
+        providerRequests.push(hostedFinal.requestPayload);
+        latestJson = hostedFinal.raw;
+        assistantThreadId = hostedFinal.responseId;
+        previousResponseId = hostedFinal.responseId;
+        finalText = hostedFinal.text;
+        iterations = providerRequests.length;
+        pendingToolOutputs = undefined;
+        break;
+      }
+
+      currentInput = toolOutputs;
+      pendingToolOutputs = toolOutputs;
+      currentPhase = 'finalize';
+    }
+
+    if (!finalText && pendingToolOutputs?.length) {
+      console.log('[MCP] Hosted Responses loop reached tool-call cap; forcing final answer pass without tools');
+      const modelStartedAt = Date.now();
+      const hosted = await runOpenAiHostedResponse(req, assistantPrompt, {
+        inputOverride: buildHostedFinalAnswerInput(pendingToolOutputs),
+        previousResponseId,
+      });
+      totalModelMs += Date.now() - modelStartedAt;
+      providerRequests.push(hosted.requestPayload);
+      latestJson = hosted.raw;
+      assistantThreadId = hosted.responseId;
+      previousResponseId = hosted.responseId;
+      finalText = hosted.text;
+      iterations = providerRequests.length;
+    }
+
+    return {
+      text: finalText || extractOpenAiResponseText(latestJson),
+      assistantThreadId,
+      metrics: {
+        totalMs: 0,
+        usedShortcut: false,
+        provider: 'openai',
+        iterations,
+        toolCalls: totalToolCalls,
+        toolMs: totalToolMs,
+        modelMs: totalModelMs,
+        promptChars: {
+          system: 0,
+          user: assistantPrompt.length,
+        },
+      },
+      debug: {
+        promptFileText: modePrompt,
+        systemPrompt: 'Hosted assistant mode (system prompt handled by assistant).',
+        userPrompt: assistantPrompt,
+        rawOutput: latestJson,
+        providerRequest:
+          providerRequests.length <= 1
+            ? providerRequests[0]
+            : { requests: providerRequests },
+        toolDefinitions,
+        toolTrace,
+      },
+    };
+  }
+
+  let json: Record<string, unknown>;
+  let content = '';
+  let providerRequest: Record<string, unknown>;
+  console.log('[MCP] OpenAI route: direct (Chat Completions one-shot)');
   const openAiBase = process.env.OPENAI_BASE_URL || 'https://api.openai.com';
-  const res = await fetch(`${openAiBase}/v1/responses`, {
+  providerRequest = {
+    model: resolveOpenAiModel(req),
+    messages: [
+      { role: 'system', content: systemPrompt },
+      { role: 'user', content: userPrompt },
+    ],
+    max_tokens: resolveOpenAiMaxOutputTokens(),
+  };
+  const res = await fetch(`${openAiBase}/v1/chat/completions`, {
     method: 'POST',
     headers: {
       Authorization: `Bearer ${req.apiKey}`,
       'Content-Type': 'application/json',
     },
-    body: JSON.stringify({
-      model: req.model || 'gpt-4o-mini',
-      instructions: systemPrompt,
-      input: [{ role: 'user', content: userPrompt }],
-      stream: false,
-      tools: undefined,
-    }),
+    body: JSON.stringify(providerRequest),
   });
   if (!res.ok) {
     throw new Error(`OpenAI error ${res.status}: ${await res.text()}`);
   }
-  const json = (await res.json()) as Record<string, unknown>;
-  const output = (json.output_text as unknown[]) || [];
-  const content = output.length ? String(output.join('')) : '';
+  json = (await res.json()) as Record<string, unknown>;
+  content = extractChatCompletionText(json);
 
   return {
     text: content,
@@ -953,14 +4051,16 @@ async function runOpenAiToolLoop(
       toolMs: 0,
       modelMs: 0,
       promptChars: {
-        system: systemPrompt.length,
-        user: userPrompt.length,
+        system: useHostedAssistant ? 0 : systemPrompt.length,
+        user: useHostedAssistant ? assistantPrompt.length : userPrompt.length,
       },
     },
     debug: {
       promptFileText: modePrompt,
-      systemPrompt,
-      userPrompt,
+      systemPrompt: useHostedAssistant ? 'Hosted assistant mode (system prompt handled by assistant).' : systemPrompt,
+      userPrompt: useHostedAssistant ? assistantPrompt : userPrompt,
+      rawOutput: json,
+      providerRequest,
       toolDefinitions,
       toolTrace,
     },
@@ -976,7 +4076,7 @@ async function runAnthropicToolLoop(
   metrics: NonNullable<ToolLoopResult['metrics']>;
   debug: NonNullable<ToolLoopResult['debug']>;
 }> {
-  const modePrompt = loadPromptFile(req.outputMode);
+  const modePrompt = getModePrompt(req);
   const systemPrompt = buildSystemPrompt(modePrompt, req.outputMode);
   const userPrompt = buildUserPrompt(req, flowCommandIssues);
   const res = await fetch('https://api.anthropic.com/v1/messages', {
@@ -1035,19 +4135,131 @@ async function runAnthropicToolLoop(
 
 export async function runToolLoop(req: McpChatRequest): Promise<ToolLoopResult> {
   const startedAt = Date.now();
+  console.log('[DEBUG] deviceType:', req.flowContext.deviceType || 'SCOPE');
+  const directExec = detectDirectExecution(req);
+  if (directExec) {
+    if (req.instrumentEndpoint) {
+      const result = await probeCommandProxy(req.instrumentEndpoint, directExec.command);
+      const responseText =
+        result.ok && result.data && typeof result.data === 'object' && typeof result.data.response === 'string'
+          ? result.data.response
+          : '';
+      const finalText = `${directExec.command}: ${responseText}`.trim();
+      return {
+        text: finalText,
+        displayText: finalText,
+        assistantThreadId: resolveOpenAiResponseCursor(req) || undefined,
+        errors: result.ok ? [] : ['Live instrument execution failed'],
+        warnings: result.warnings || [],
+        metrics: {
+          totalMs: Date.now() - startedAt,
+          usedShortcut: true,
+          provider: req.provider,
+          iterations: 0,
+          toolCalls: 1,
+          toolMs: Date.now() - startedAt,
+          modelMs: 0,
+          promptChars: { system: 0, user: 0 },
+        },
+        debug: {
+          shortcutResponse: finalText,
+          toolTrace: [],
+        },
+      };
+    }
+
+    const step =
+      directExec.type === 'query' || directExec.type === 'error_check'
+        ? {
+            id: '2',
+            type: 'query',
+            label: directExec.command,
+            params: { command: directExec.command, saveAs: 'result' },
+          }
+        : {
+            id: '2',
+            type: 'write',
+            label: directExec.command,
+            params: { command: directExec.command },
+          };
+
+    return buildShortcutResponse({
+      summary: `Execute ${directExec.command}`,
+      steps: [
+        { id: '1', type: 'connect', label: 'Connect', params: { printIdn: true } },
+        step,
+        { id: '3', type: 'disconnect', label: 'Disconnect', params: {} },
+      ],
+      req,
+      startedAt,
+    });
+  }
+  const allowMissingActionsJson = isExplainOnlyCommandAsk(req);
   const flowCommandIssues = isFlowValidationRequest(req)
     ? await detectFlowCommandIssues(req)
     : [];
-  const shortcut = buildPyvisaMeasurementShortcut(req) || buildTmDevicesMeasurementShortcut(req) || buildPyvisaFastFrameShortcut(req);
-  if (shortcut && shouldAttemptShortcutFirst(req)) {
+  if (isFlowValidationRequest(req) && flowCommandIssues.length > 0) {
+    const text =
+      `Found ${flowCommandIssues.length} flow command issue(s).\n` +
+      `ACTIONS_JSON: ${JSON.stringify({
+        summary: 'Flow has command verification issues.',
+        findings: flowCommandIssues,
+        suggestedFixes: [
+          'Fix unverified command headers and invalid argument values, then run Validate Flow again.',
+        ],
+        actions: [],
+      })}`;
+    return {
+      text,
+      displayText: text,
+      assistantThreadId: resolveOpenAiResponseCursor(req) || undefined,
+      errors: [],
+      warnings: [],
+      metrics: {
+        totalMs: Date.now() - startedAt,
+        usedShortcut: false,
+        provider: req.provider,
+        iterations: 0,
+        toolCalls: 1,
+        toolMs: 0,
+        modelMs: 0,
+        promptChars: { system: 0, user: 0 },
+      },
+      debug: {
+        toolDefinitions: [],
+        toolTrace: [
+          {
+            tool: 'detectFlowCommandIssues',
+            args: {},
+            result: { count: flowCommandIssues.length, issues: flowCommandIssues },
+          },
+        ],
+      },
+    };
+  }
+  const commonServerShortcut = await buildPyvisaCommonServerShortcut(req);
+  const measurementShortcut = await buildPyvisaMeasurementShortcut(req);
+  const shortcut =
+    commonServerShortcut ||
+    measurementShortcut ||
+    buildTmDevicesMeasurementShortcut(req);
+  const shouldUseShortcut =
+    Boolean(commonServerShortcut) ||
+    shouldAttemptShortcutFirst(req) ||
+    (Boolean(shortcut) && isHostedStructuredBuildRequest(req));
+  if (shortcut && shouldUseShortcut) {
     const checked = await postCheckResponse(shortcut, {
       backend: req.flowContext.backend,
       modelFamily: req.flowContext.modelFamily,
       originalSteps: req.flowContext.steps,
       scpiContext: req.scpiContext as Array<Record<string, unknown>>,
-    });
+      alias: req.flowContext.alias,
+      instrumentMap: req.flowContext.instrumentMap as Array<Record<string, unknown>> | undefined,
+    }, { allowMissingActionsJson });
     return {
       text: checked.text,
+      displayText: shortcut,
+      assistantThreadId: resolveOpenAiResponseCursor(req) || undefined,
       errors: checked.errors,
       warnings: checked.warnings,
       metrics: {
@@ -1070,39 +4282,146 @@ export async function runToolLoop(req: McpChatRequest): Promise<ToolLoopResult> 
     };
   }
 
+  const plannerOutput = await planIntent(req);
+  const plannerShortcut =
+    plannerOutput.resolvedCommands.length > 0 && plannerOutput.unresolved.length === 0
+      ? buildActionsFromPlanner(plannerOutput, req)
+      : null;
+  if (plannerShortcut) {
+    const checked = await postCheckResponse(plannerShortcut, {
+      backend: req.flowContext.backend,
+      modelFamily: req.flowContext.modelFamily,
+      originalSteps: req.flowContext.steps,
+      scpiContext: req.scpiContext as Array<Record<string, unknown>>,
+      alias: req.flowContext.alias,
+      instrumentMap: req.flowContext.instrumentMap as Array<Record<string, unknown>> | undefined,
+    }, { allowMissingActionsJson });
+    return {
+      text: checked.text,
+      displayText: plannerShortcut,
+      assistantThreadId: resolveOpenAiResponseCursor(req) || undefined,
+      errors: checked.errors,
+      warnings: checked.warnings,
+      metrics: {
+        totalMs: Date.now() - startedAt,
+        usedShortcut: true,
+        provider: req.provider,
+        iterations: 0,
+        toolCalls: 0,
+        toolMs: 0,
+        modelMs: 0,
+        promptChars: {
+          system: 0,
+          user: 0,
+        },
+      },
+      debug: {
+        shortcutResponse: plannerShortcut,
+        toolTrace: [],
+      },
+    };
+  }
+
   const loopResult = shouldUseTools(req)
-    ? await runOpenAiToolLoop(req, flowCommandIssues, 3)
+    ? await runOpenAiToolLoop(req, flowCommandIssues, isHostedStructuredBuildRequest(req) ? 4 : 3)
     : await runOpenAiResponses(req, flowCommandIssues);
+  const assistantMode = Boolean(loopResult.assistantThreadId);
   const checkedPass1 = await postCheckResponse(loopResult.text, {
     backend: req.flowContext.backend,
     modelFamily: req.flowContext.modelFamily,
     originalSteps: req.flowContext.steps,
     scpiContext: req.scpiContext as Array<Record<string, unknown>>,
-  });
-  // Two-pass validation: re-run post-check over the repaired output.
-  const checkedPass2 = await postCheckResponse(checkedPass1.text, {
-    backend: req.flowContext.backend,
-    modelFamily: req.flowContext.modelFamily,
-    originalSteps: req.flowContext.steps,
-    scpiContext: req.scpiContext as Array<Record<string, unknown>>,
-  });
+    alias: req.flowContext.alias,
+    instrumentMap: req.flowContext.instrumentMap as Array<Record<string, unknown>> | undefined,
+  }, { allowMissingActionsJson, assistantMode, toolTrace: loopResult.debug?.toolTrace as Array<Record<string, unknown>> | undefined });
+  // Second pass only for direct LLM; assistant mode uses single lenient pass.
+  const checkedPass2 = assistantMode
+    ? checkedPass1
+    : await postCheckResponse(checkedPass1.text, {
+        backend: req.flowContext.backend,
+        modelFamily: req.flowContext.modelFamily,
+        originalSteps: req.flowContext.steps,
+        scpiContext: req.scpiContext as Array<Record<string, unknown>>,
+        alias: req.flowContext.alias,
+        instrumentMap: req.flowContext.instrumentMap as Array<Record<string, unknown>> | undefined,
+      }, { allowMissingActionsJson });
   const checked = {
     text: checkedPass2.text,
     errors: Array.from(new Set([...(checkedPass1.errors || []), ...(checkedPass2.errors || [])])),
     warnings: Array.from(new Set([...(checkedPass1.warnings || []), ...(checkedPass2.warnings || [])])),
   };
 
-  if (checked.errors.length && shortcut && !shouldAttemptShortcutFirst(req)) {
+  // If the model returned truncated/invalid ACTIONS_JSON, retry once with
+  // a strict JSON-only instruction to recover actionable output.
+  if (!allowMissingActionsJson && checked.errors.includes('ACTIONS_JSON parse failed')) {
+    const retryReq: McpChatRequest = {
+      ...req,
+      userMessage:
+        `${req.userMessage}\n\n` +
+        'Return ONLY valid ACTIONS_JSON as one compact JSON object. No prose, no markdown, no code fences.',
+    };
+    const retryLoop = shouldUseTools(retryReq)
+      ? await runOpenAiToolLoop(retryReq, flowCommandIssues, 2)
+      : await runOpenAiResponses(retryReq, flowCommandIssues);
+    const retryChecked = await postCheckResponse(
+      retryLoop.text,
+      {
+        backend: req.flowContext.backend,
+        modelFamily: req.flowContext.modelFamily,
+        originalSteps: req.flowContext.steps,
+        scpiContext: req.scpiContext as Array<Record<string, unknown>>,
+        alias: req.flowContext.alias,
+        instrumentMap: req.flowContext.instrumentMap as Array<Record<string, unknown>> | undefined,
+      },
+      {
+        allowMissingActionsJson,
+        assistantMode: Boolean(retryLoop.assistantThreadId),
+        toolTrace: retryLoop.debug?.toolTrace as Array<Record<string, unknown>> | undefined,
+      }
+    );
+    if (!retryChecked.errors.length) {
+      return {
+        text: retryChecked.text,
+        displayText: retryLoop.displayText || retryLoop.text,
+        assistantThreadId: retryLoop.assistantThreadId || loopResult.assistantThreadId,
+        errors: [],
+        warnings: Array.from(new Set([...(checked.warnings || []), ...(retryChecked.warnings || []), 'Recovered from truncated model output via JSON-only retry.'])),
+        metrics: {
+          totalMs: Date.now() - startedAt,
+          usedShortcut: false,
+          provider: req.provider,
+          iterations: (loopResult.metrics?.iterations || 1) + 1,
+          toolCalls: (loopResult.metrics?.toolCalls || 0),
+          toolMs: (loopResult.metrics?.toolMs || 0),
+          modelMs: (loopResult.metrics?.modelMs || 0),
+          promptChars: loopResult.metrics?.promptChars,
+        },
+        debug: loopResult.debug,
+      };
+    }
+  }
+
+  if (
+    checked.errors.length &&
+    shortcut &&
+    !commonServerShortcut &&
+    !shouldAttemptShortcutFirst(req) &&
+    !isHostedStructuredBuildRequest(req)
+  ) {
     const fallback = await postCheckResponse(shortcut, {
       backend: req.flowContext.backend,
       modelFamily: req.flowContext.modelFamily,
       originalSteps: req.flowContext.steps,
       scpiContext: req.scpiContext as Array<Record<string, unknown>>,
-    });
+      alias: req.flowContext.alias,
+      instrumentMap: req.flowContext.instrumentMap as Array<Record<string, unknown>> | undefined,
+    }, { allowMissingActionsJson });
     const modelLooksWeak = !hasActionsJsonPayload(checked.text) && /return actions_json|add|insert|build|fix|update/i.test(req.userMessage);
     if (!fallback.errors.length && modelLooksWeak) {
       return {
         text: fallback.text,
+        displayText: shortcut,
+        assistantThreadId: loopResult.assistantThreadId,
         errors: [],
         warnings: fallback.warnings,
         metrics: {
@@ -1126,6 +4445,8 @@ export async function runToolLoop(req: McpChatRequest): Promise<ToolLoopResult> 
   }
   return {
       text: checked.text,
+      displayText: loopResult.displayText || loopResult.text,
+      assistantThreadId: loopResult.assistantThreadId,
       errors: checked.errors,
       warnings: checked.warnings,
       metrics: {
@@ -1135,4 +4456,3 @@ export async function runToolLoop(req: McpChatRequest): Promise<ToolLoopResult> 
     debug: loopResult.debug,
   };
 }
-

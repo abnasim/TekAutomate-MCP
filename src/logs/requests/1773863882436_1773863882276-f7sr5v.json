@@ -1,0 +1,122 @@
+{
+  "timestamp": "2026-03-18T19:58:02.436Z",
+  "requestId": "1773863882276-f7sr5v",
+  "provider": "openai",
+  "model": "gpt-5.4",
+  "outputMode": "steps_json",
+  "deviceType": "SCOPE",
+  "modelFamily": "MSO4/5/6 Series",
+  "backend": "pyvisa",
+  "userMessage": "Add rise time, fall time, pk2pk, and mean on CH2",
+  "flowContext": {
+    "stepCount": 0,
+    "stepTypes": [],
+    "validationErrors": []
+  },
+  "scpiContextHits": 0,
+  "toolCalls": [],
+  "postCheck": {
+    "errors": [],
+    "warnings": [],
+    "autoRepairTriggered": false
+  },
+  "response": {
+    "text": "ACTIONS_JSON: {\"summary\":\"Built a server-side verified common TekAutomate flow.\",\"findings\":[],\"suggestedFixes\":[\"Filled connect/disconnect instrumentIds with workspace alias \\\"scope1\\\" for direct chat apply compatibility.\"],\"actions\":[{\"type\":\"replace_flow\",\"flow\":{\"name\":\"Generated Flow\",\"description\":\"Common TekAutomate scope flow built server-side from verified commands.\",\"backend\":\"pyvisa\",\"deviceType\":\"SCOPE\",\"steps\":[{\"id\":\"1\",\"type\":\"connect\",\"label\":\"Connect\",\"params\":{\"instrumentIds\":[\"scope1\"],\"printIdn\":true}},{\"id\":\"2\",\"type\":\"write\",\"label\":\"Clear existing measurements\",\"params\":{\"command\":\"MEASUrement:DELETEALL\"}},{\"id\":\"3\",\"type\":\"group\",\"label\":\"Add measurements\",\"params\":{},\"collapsed\":false,\"children\":[{\"id\":\"m1\",\"type\":\"write\",\"label\":\"Add risetime measurement on CH2\",\"params\":{\"command\":\"MEASUrement:MEAS1:TYPe RISETIME;MEASUrement:MEAS1:SOURCE CH2\"}},{\"id\":\"m2\",\"type\":\"write\",\"label\":\"Add falltime measurement on CH2\",\"params\":{\"command\":\"MEASUrement:MEAS2:TYPe FALLTIME;MEASUrement:MEAS2:SOURCE CH2\"}},{\"id\":\"m3\",\"type\":\"write\",\"label\":\"Add pk2pk measurement on CH2\",\"params\":{\"command\":\"MEASUrement:MEAS3:TYPe PK2PK;MEASUrement:MEAS3:SOURCE CH2\"}},{\"id\":\"m4\",\"type\":\"write\",\"label\":\"Add mean measurement on CH2\",\"params\":{\"command\":\"MEASUrement:MEAS4:TYPe MEAN;MEASUrement:MEAS4:SOURCE CH2\"}}]},{\"id\":\"4\",\"type\":\"disconnect\",\"label\":\"Disconnect\",\"params\":{\"instrumentIds\":[\"scope1\"]}}]}}]}",
+    "actionsJson": {
+      "summary": "Built a server-side verified common TekAutomate flow.",
+      "findings": [],
+      "suggestedFixes": [
+        "Filled connect/disconnect instrumentIds with workspace alias \"scope1\" for direct chat apply compatibility."
+      ],
+      "actions": [
+        {
+          "type": "replace_flow",
+          "flow": {
+            "name": "Generated Flow",
+            "description": "Common TekAutomate scope flow built server-side from verified commands.",
+            "backend": "pyvisa",
+            "deviceType": "SCOPE",
+            "steps": [
+              {
+                "id": "1",
+                "type": "connect",
+                "label": "Connect",
+                "params": {
+                  "instrumentIds": [
+                    "scope1"
+                  ],
+                  "printIdn": true
+                }
+              },
+              {
+                "id": "2",
+                "type": "write",
+                "label": "Clear existing measurements",
+                "params": {
+                  "command": "MEASUrement:DELETEALL"
+                }
+              },
+              {
+                "id": "3",
+                "type": "group",
+                "label": "Add measurements",
+                "params": {},
+                "collapsed": false,
+                "children": [
+                  {
+                    "id": "m1",
+                    "type": "write",
+                    "label": "Add risetime measurement on CH2",
+                    "params": {
+                      "command": "MEASUrement:MEAS1:TYPe RISETIME;MEASUrement:MEAS1:SOURCE CH2"
+                    }
+                  },
+                  {
+                    "id": "m2",
+                    "type": "write",
+                    "label": "Add falltime measurement on CH2",
+                    "params": {
+                      "command": "MEASUrement:MEAS2:TYPe FALLTIME;MEASUrement:MEAS2:SOURCE CH2"
+                    }
+                  },
+                  {
+                    "id": "m3",
+                    "type": "write",
+                    "label": "Add pk2pk measurement on CH2",
+                    "params": {
+                      "command": "MEASUrement:MEAS3:TYPe PK2PK;MEASUrement:MEAS3:SOURCE CH2"
+                    }
+                  },
+                  {
+                    "id": "m4",
+                    "type": "write",
+                    "label": "Add mean measurement on CH2",
+                    "params": {
+                      "command": "MEASUrement:MEAS4:TYPe MEAN;MEASUrement:MEAS4:SOURCE CH2"
+                    }
+                  }
+                ]
+              },
+              {
+                "id": "4",
+                "type": "disconnect",
+                "label": "Disconnect",
+                "params": {
+                  "instrumentIds": [
+                    "scope1"
+                  ]
+                }
+              }
+            ]
+          }
+        }
+      ]
+    },
+    "stepCount": 1,
+    "stepTypes": [
+      "replace_flow"
+    ]
+  },
+  "durationMs": 160,
+  "ok": true
+}

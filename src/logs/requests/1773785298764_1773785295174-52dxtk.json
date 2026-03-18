@@ -1,0 +1,40 @@
+{
+  "timestamp": "2026-03-17T22:08:18.764Z",
+  "requestId": "1773785295174-52dxtk",
+  "provider": "openai",
+  "model": "gpt-5.4",
+  "outputMode": "steps_json",
+  "deviceType": "SCOPE",
+  "modelFamily": "MSO4/5/6 Series",
+  "backend": "pyvisa",
+  "userMessage": "Save setup to C:/setups/test.set and take a screenshot",
+  "flowContext": {
+    "stepCount": 0,
+    "stepTypes": [],
+    "validationErrors": []
+  },
+  "scpiContextHits": 0,
+  "toolCalls": [],
+  "postCheck": {
+    "errors": [],
+    "warnings": [],
+    "autoRepairTriggered": false
+  },
+  "response": {
+    "text": "Here’s a TekAutomate Steps UI flow to save the setup to C:/setups/test.set and take a screenshot. This uses the recall step for setup save and save_screenshot for the screenshot.\n\n```json\n{\n  \"steps\": [\n    {\n      \"type\": \"recall\",\n      \"id\": \"save_setup\",\n      \"params\": {\n        \"recall_type\": \"setup\",\n        \"recall_action\": \"save\",\n        \"file_path\": \"C:/setups/test.set\"\n      }\n    },\n    {\n      \"type\": \"save_screenshot\",\n      \"id\": \"take_screenshot\",\n      \"params\": {\n        \"file_path\": \"C:/setups/test.png\"\n      }\n    }\n  ]\n}\n```\n\n- The setup is saved to C:/setups/test.set.\n- The screenshot is saved to C:/setups/test.png (you can change the filename if needed).\n\nACTIONS_JSON: {\"summary\":\"Parsed full flow JSON from assistant output.\",\"findings\":[\"Assistant returned JSON that did not fully map to valid TekAutomate steps, so invalid apply actions were removed.\"],\"suggestedFixes\":[\"Use only real TekAutomate step types and schema-valid actions. Removed invalid items: actions[0].steps[0]: invalid recallType\"],\"actions\":[]}",
+    "actionsJson": {
+      "summary": "Parsed full flow JSON from assistant output.",
+      "findings": [
+        "Assistant returned JSON that did not fully map to valid TekAutomate steps, so invalid apply actions were removed."
+      ],
+      "suggestedFixes": [
+        "Use only real TekAutomate step types and schema-valid actions. Removed invalid items: actions[0].steps[0]: invalid recallType"
+      ],
+      "actions": []
+    },
+    "stepCount": 0,
+    "stepTypes": []
+  },
+  "durationMs": 3590,
+  "ok": true
+}

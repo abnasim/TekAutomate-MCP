@@ -1,0 +1,42 @@
+{
+  "timestamp": "2026-03-18T08:06:26.372Z",
+  "requestId": "1773821135242-o7x0fr",
+  "provider": "openai",
+  "model": "gpt-5.4",
+  "outputMode": "steps_json",
+  "deviceType": "SCOPE",
+  "modelFamily": "MSO4/5/6 Series",
+  "backend": "pyvisa",
+  "userMessage": "Enable FastFrame 100 frames single sequence then save CH1 waveform",
+  "flowContext": {
+    "stepCount": 0,
+    "stepTypes": [],
+    "validationErrors": []
+  },
+  "scpiContextHits": 0,
+  "toolCalls": [],
+  "postCheck": {
+    "errors": [],
+    "warnings": [
+      "Hosted SCPI apply disabled because the response skipped MCP exact verification."
+    ],
+    "autoRepairTriggered": false
+  },
+  "response": {
+    "text": "ACTIONS_JSON: {\"summary\":\"Parsed full flow JSON from assistant output.\",\"findings\":[\"Apply was disabled because SCPI-bearing output did not use MCP exact materialization and verification before returning JSON.\"],\"suggestedFixes\":[\"Before returning applyable SCPI steps, call materialize_scpi_command or materialize_scpi_commands, then verify_scpi_commands. Missing for this turn: MCP exact verification.\"],\"actions\":[]}",
+    "actionsJson": {
+      "summary": "Parsed full flow JSON from assistant output.",
+      "findings": [
+        "Apply was disabled because SCPI-bearing output did not use MCP exact materialization and verification before returning JSON."
+      ],
+      "suggestedFixes": [
+        "Before returning applyable SCPI steps, call materialize_scpi_command or materialize_scpi_commands, then verify_scpi_commands. Missing for this turn: MCP exact verification."
+      ],
+      "actions": []
+    },
+    "stepCount": 0,
+    "stepTypes": []
+  },
+  "durationMs": 51130,
+  "ok": true
+}

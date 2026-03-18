@@ -1,0 +1,67 @@
+{
+  "timestamp": "2026-03-18T05:59:31.981Z",
+  "requestId": "1773813562421-azj61t",
+  "provider": "openai",
+  "model": "gpt-5.4",
+  "outputMode": "steps_json",
+  "deviceType": "SCOPE",
+  "modelFamily": "MSO4/5/6 Series",
+  "backend": "pyvisa",
+  "userMessage": "Connect to scope and print the IDN",
+  "flowContext": {
+    "stepCount": 0,
+    "stepTypes": [],
+    "validationErrors": []
+  },
+  "scpiContextHits": 0,
+  "toolCalls": [],
+  "postCheck": {
+    "errors": [],
+    "warnings": [],
+    "autoRepairTriggered": false
+  },
+  "response": {
+    "text": "ACTIONS_JSON: {\"summary\":\"Parsed full flow JSON from assistant output.\",\"findings\":[],\"suggestedFixes\":[],\"actions\":[{\"type\":\"replace_flow\",\"flow\":{\"name\":\"Connect and Print IDN\",\"description\":\"Connects to the scope, prints the instrument ID, then disconnects.\",\"backend\":\"pyvisa\",\"deviceType\":\"SCOPE\",\"steps\":[{\"id\":\"s1\",\"type\":\"connect\",\"label\":\"Connect\",\"params\":{\"instrumentIds\":[],\"printIdn\":true}},{\"id\":\"s2\",\"type\":\"disconnect\",\"label\":\"Disconnect\",\"params\":{\"instrumentIds\":[]}}]}}]}",
+    "actionsJson": {
+      "summary": "Parsed full flow JSON from assistant output.",
+      "findings": [],
+      "suggestedFixes": [],
+      "actions": [
+        {
+          "type": "replace_flow",
+          "flow": {
+            "name": "Connect and Print IDN",
+            "description": "Connects to the scope, prints the instrument ID, then disconnects.",
+            "backend": "pyvisa",
+            "deviceType": "SCOPE",
+            "steps": [
+              {
+                "id": "s1",
+                "type": "connect",
+                "label": "Connect",
+                "params": {
+                  "instrumentIds": [],
+                  "printIdn": true
+                }
+              },
+              {
+                "id": "s2",
+                "type": "disconnect",
+                "label": "Disconnect",
+                "params": {
+                  "instrumentIds": []
+                }
+              }
+            ]
+          }
+        }
+      ]
+    },
+    "stepCount": 1,
+    "stepTypes": [
+      "replace_flow"
+    ]
+  },
+  "durationMs": 9560,
+  "ok": true
+}

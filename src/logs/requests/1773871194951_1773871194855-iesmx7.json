@@ -1,0 +1,81 @@
+{
+  "timestamp": "2026-03-18T21:59:54.951Z",
+  "requestId": "1773871194855-iesmx7",
+  "provider": "openai",
+  "model": "gpt-5.4",
+  "outputMode": "steps_json",
+  "deviceType": "SCOPE",
+  "modelFamily": "MSO4/5/6 Series",
+  "backend": "tm_devices",
+  "userMessage": "Set CH1 scale to 200mV and offset to 0 using tm_devices",
+  "flowContext": {
+    "stepCount": 0,
+    "stepTypes": [],
+    "validationErrors": []
+  },
+  "scpiContextHits": 0,
+  "toolCalls": [],
+  "postCheck": {
+    "errors": [],
+    "warnings": [],
+    "autoRepairTriggered": false
+  },
+  "response": {
+    "text": "ACTIONS_JSON: {\"summary\":\"Built 2 verified planner steps without a model call.\",\"findings\":[],\"suggestedFixes\":[\"Filled connect/disconnect instrumentIds with workspace alias \\\"scope1\\\" for direct chat apply compatibility.\"],\"actions\":[{\"type\":\"replace_flow\",\"flow\":{\"name\":\"SCOPE Planner Flow\",\"description\":\"Set CH1 scale to 200mV and offset to 0 using tm_devices\",\"backend\":\"tm_devices\",\"deviceType\":\"SCOPE\",\"steps\":[{\"id\":\"1\",\"type\":\"connect\",\"label\":\"Connect\",\"params\":{\"instrumentIds\":[\"scope1\"],\"printIdn\":true}},{\"id\":\"2\",\"type\":\"write\",\"label\":\"Write CH1:SCAle\",\"params\":{\"command\":\"CH1:SCAle 0.2;CH1:OFFSet 0\"}},{\"id\":\"3\",\"type\":\"disconnect\",\"label\":\"Disconnect\",\"params\":{\"instrumentIds\":[\"scope1\"]}}]}}]}",
+    "actionsJson": {
+      "summary": "Built 2 verified planner steps without a model call.",
+      "findings": [],
+      "suggestedFixes": [
+        "Filled connect/disconnect instrumentIds with workspace alias \"scope1\" for direct chat apply compatibility."
+      ],
+      "actions": [
+        {
+          "type": "replace_flow",
+          "flow": {
+            "name": "SCOPE Planner Flow",
+            "description": "Set CH1 scale to 200mV and offset to 0 using tm_devices",
+            "backend": "tm_devices",
+            "deviceType": "SCOPE",
+            "steps": [
+              {
+                "id": "1",
+                "type": "connect",
+                "label": "Connect",
+                "params": {
+                  "instrumentIds": [
+                    "scope1"
+                  ],
+                  "printIdn": true
+                }
+              },
+              {
+                "id": "2",
+                "type": "write",
+                "label": "Write CH1:SCAle",
+                "params": {
+                  "command": "CH1:SCAle 0.2;CH1:OFFSet 0"
+                }
+              },
+              {
+                "id": "3",
+                "type": "disconnect",
+                "label": "Disconnect",
+                "params": {
+                  "instrumentIds": [
+                    "scope1"
+                  ]
+                }
+              }
+            ]
+          }
+        }
+      ]
+    },
+    "stepCount": 1,
+    "stepTypes": [
+      "replace_flow"
+    ]
+  },
+  "durationMs": 96,
+  "ok": true
+}

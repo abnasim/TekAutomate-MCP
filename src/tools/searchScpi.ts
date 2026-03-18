@@ -1,5 +1,6 @@
 import { getCommandIndex, type CommandType } from '../core/commandIndex';
 import type { ToolResult } from '../core/schemas';
+import { serializeCommandResult } from './commandResultShape';
 
 interface SearchScpiInput {
   query: string;
@@ -13,70 +14,19 @@ function headerCandidates(raw: string): string[] {
   if (!q) return [];
   const candidates = new Set<string>([q]);
   candidates.add(q.replace(/\?$/, ''));
+  candidates.add(q.replace(/\bCH\d+_D\d+\b/gi, 'CH<x>_D<x>'));
+  candidates.add(q.replace(/\bCH\d+\b/gi, 'CH<x>'));
+  candidates.add(q.replace(/\bREF\d+\b/gi, 'REF<x>'));
+  candidates.add(q.replace(/\bMATH\d+\b/gi, 'MATH<x>'));
+  candidates.add(q.replace(/\bBUS\d+\b/gi, 'BUS<x>'));
   candidates.add(q.replace(/:MEAS\d+/gi, ':MEAS<x>'));
+  candidates.add(q.replace(/\bMEAS\d+\b/gi, 'MEAS<x>'));
   candidates.add(q.replace(/:SOURCE\d+/gi, ':SOURCE'));
+  candidates.add(q.replace(/\bSOURCE\d+\b/gi, 'SOURCE'));
+  candidates.add(q.replace(/\bEDGE\d+\b/gi, 'EDGE'));
+  candidates.add(q.replace(/\bREFLEVELS\d+\b/gi, 'REFLevels'));
   candidates.add(q.replace(/:RESUlts\d+/gi, ':RESUlts'));
   return Array.from(candidates).filter(Boolean);
-}
-
-function thinResult(entry: {
-  commandId: string;
-  sourceFile: string;
-  header: string;
-  commandType: CommandType;
-  shortDescription: string;
-  syntax: { set?: string; query?: string };
-  codeExamples: Array<{
-    scpi?: { code: string };
-    python?: { code: string };
-    tm_devices?: { code: string };
-  }>;
-  arguments: Array<{
-    name: string;
-    type: string;
-    required: boolean;
-    description: string;
-    validValues: Record<string, unknown>;
-    defaultValue?: unknown;
-  }>;
-  notes: string[];
-}) {
-  const ex = entry.codeExamples?.[0];
-  const firstValidValues = entry.arguments?.[0]?.validValues as Record<string, unknown> | undefined;
-  const normalizedValues =
-    (Array.isArray(firstValidValues?.values) ? (firstValidValues.values as unknown[]) : undefined) ||
-    (Array.isArray(firstValidValues?.options) ? (firstValidValues.options as unknown[]) : undefined);
-  const argumentsPreview = Array.isArray(entry.arguments)
-    ? entry.arguments.slice(0, 6).map((arg) => ({
-        name: arg.name,
-        type: arg.type,
-        required: arg.required,
-        description: arg.description,
-        defaultValue: arg.defaultValue,
-        validValues: arg.validValues,
-      }))
-    : [];
-  return {
-    commandId: entry.commandId,
-    sourceFile: entry.sourceFile,
-    header: entry.header,
-    commandType: entry.commandType,
-    shortDescription: entry.shortDescription,
-    syntax: entry.syntax,
-    example: ex
-      ? {
-          scpi: ex.scpi?.code,
-          python: ex.python?.code,
-          tm_devices: ex.tm_devices?.code,
-        }
-      : undefined,
-    validValues: normalizedValues
-      ? normalizedValues.filter((v): v is string => typeof v === 'string')
-      : undefined,
-    validValuesRaw: firstValidValues,
-    arguments: argumentsPreview.length ? argumentsPreview : undefined,
-    notes: entry.notes?.length ? entry.notes : undefined,
-  };
 }
 
 export async function searchScpi(input: SearchScpiInput): Promise<ToolResult<unknown[]>> {
@@ -107,7 +57,7 @@ export async function searchScpi(input: SearchScpiInput): Promise<ToolResult<unk
 
   return {
     ok: true,
-    data: merged.map((e) => thinResult(e)),
+    data: merged.map((e) => serializeCommandResult(e)),
     sourceMeta: merged.map((e) => ({
       file: e.sourceFile,
       commandId: e.commandId,

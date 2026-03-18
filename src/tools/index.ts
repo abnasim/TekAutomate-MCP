@@ -1,4 +1,5 @@
 import { getCommandByHeader } from './getCommandByHeader';
+import { getCommandsByHeaderBatch } from './getCommandsByHeaderBatch';
 import { getCommandGroup } from './getCommandGroup';
 import { getEnvironment } from './getEnvironment';
 import { getInstrumentState } from './getInstrumentState';
@@ -7,6 +8,10 @@ import { getTemplateExamples } from './getTemplateExamples';
 import { getVisaResources } from './getVisaResources';
 import { getBlockSchema } from './getBlockSchema';
 import { listValidStepTypes } from './listValidStepTypes';
+import { materializeScpiCommand } from './materializeScpiCommand';
+import { materializeScpiCommands } from './materializeScpiCommands';
+import { finalizeScpiCommands } from './finalizeScpiCommands';
+import { materializeTmDevicesCall } from './materializeTmDevicesCall';
 import { probeCommand } from './probeCommand';
 import { retrieveRagChunks } from './retrieveRagChunks';
 import { searchKnownFailures } from './searchKnownFailures';
@@ -21,6 +26,7 @@ export const TOOL_HANDLERS = {
   search_scpi: searchScpi,
   get_command_group: getCommandGroup,
   get_command_by_header: getCommandByHeader,
+  get_commands_by_header_batch: getCommandsByHeaderBatch,
   verify_scpi_commands: verifyScpiCommands,
   search_tm_devices: searchTmDevices,
   retrieve_rag_chunks: retrieveRagChunks,
@@ -29,6 +35,10 @@ export const TOOL_HANDLERS = {
   get_policy: getPolicy,
   list_valid_step_types: listValidStepTypes,
   get_block_schema: getBlockSchema,
+  materialize_scpi_command: materializeScpiCommand,
+  materialize_scpi_commands: materializeScpiCommands,
+  finalize_scpi_commands: finalizeScpiCommands,
+  materialize_tm_devices_call: materializeTmDevicesCall,
   validate_action_payload: validateActionPayload,
   validate_device_context: validateDeviceContext,
   get_instrument_state: getInstrumentState,
@@ -83,6 +93,24 @@ export function getToolDefinitions() {
           family: { type: 'string', description: 'Optional family filter.' },
         },
         required: ['header'],
+        additionalProperties: false,
+      },
+    },
+    {
+      name: 'get_commands_by_header_batch',
+      description:
+        'Batch exact lookup for multiple known SCPI headers in one call. Prefer over repeated get_command_by_header when the request needs several related headers.',
+      parameters: {
+        type: 'object',
+        properties: {
+          headers: {
+            type: 'array',
+            items: { type: 'string' },
+            description: 'Exact canonical SCPI headers to resolve in one call.',
+          },
+          family: { type: 'string', description: 'Optional family filter.' },
+        },
+        required: ['headers'],
         additionalProperties: false,
       },
     },
@@ -197,6 +225,149 @@ export function getToolDefinitions() {
           blockType: { type: 'string', description: 'Blockly block type name.' },
         },
         required: ['blockType'],
+        additionalProperties: false,
+      },
+    },
+    {
+      name: 'materialize_scpi_command',
+      description: 'Build an exact concrete SCPI command string from a verified canonical command record. Use after search_scpi or get_command_by_header. Pass placeholderBindings such as {"CH<x>":"CH1","MEAS<x>":"MEAS1","{A|B}":"A"} and arguments or value for set syntax. If the user already specified a concrete instance like CH1 or B1, also pass concreteHeader so MCP can infer placeholder bindings deterministically. Copy the returned command verbatim into params.command.',
+      parameters: {
+        type: 'object',
+        properties: {
+          header: { type: 'string', description: 'Canonical SCPI header from source of truth, e.g. CH<x>:TERmination.' },
+          concreteHeader: { type: 'string', description: 'Optional concrete header from the user intent, e.g. CH1:TERmination or BUS:B1:CAN:SOUrce, used to infer placeholder bindings.' },
+          family: { type: 'string', description: 'Optional family filter.' },
+          commandType: { type: 'string', enum: ['set', 'query'], description: 'Whether to materialize the set or query syntax.' },
+          placeholderBindings: {
+            type: 'object',
+            description: 'Exact placeholder replacements, e.g. {"CH<x>":"CH1","MEAS<x>":"MEAS1","{A|B}":"A","<x>":"1"}',
+            additionalProperties: { type: ['string', 'number', 'boolean'] },
+          },
+          argumentBindings: {
+            type: 'object',
+            description: 'Optional exact replacements for argument placeholders, e.g. {"<NR3>":"50"}',
+            additionalProperties: { type: ['string', 'number', 'boolean'] },
+          },
+          arguments: {
+            type: 'array',
+            description: 'Optional positional values to substitute into remaining argument placeholders in syntax order.',
+            items: { type: ['string', 'number', 'boolean'] },
+          },
+          value: {
+            type: ['string', 'number', 'boolean'],
+            description: 'Shorthand single positional value for simple set commands.',
+          },
+        },
+        required: ['header'],
+        additionalProperties: false,
+      },
+    },
+    {
+      name: 'materialize_scpi_commands',
+      description:
+        'Batch-build exact concrete SCPI command strings from verified canonical command records. Prefer over repeated materialize_scpi_command when several related commands must be instantiated in one turn.',
+      parameters: {
+        type: 'object',
+        properties: {
+          items: {
+            type: 'array',
+            description: 'Array of batch SCPI materialization requests.',
+            items: {
+              type: 'object',
+              properties: {
+                header: { type: 'string' },
+                concreteHeader: { type: 'string' },
+                family: { type: 'string' },
+                commandType: { type: 'string', enum: ['set', 'query'] },
+                placeholderBindings: {
+                  type: 'object',
+                  additionalProperties: { type: ['string', 'number', 'boolean'] },
+                },
+                argumentBindings: {
+                  type: 'object',
+                  additionalProperties: { type: ['string', 'number', 'boolean'] },
+                },
+                arguments: {
+                  type: 'array',
+                  items: { type: ['string', 'number', 'boolean'] },
+                },
+                value: { type: ['string', 'number', 'boolean'] },
+              },
+              required: ['header'],
+              additionalProperties: false,
+            },
+          },
+        },
+        required: ['items'],
+        additionalProperties: false,
+      },
+    },
+    {
+      name: 'finalize_scpi_commands',
+      description:
+        'One-call SCPI endgame for hosted chat: batch-build exact concrete SCPI command strings from verified canonical headers and confirm they passed MCP exact verification. Prefer this over separate materialize_scpi_commands plus verify_scpi_commands for common requests.',
+      parameters: {
+        type: 'object',
+        properties: {
+          items: {
+            type: 'array',
+            description: 'Array of SCPI commands to finalize in one call.',
+            items: {
+              type: 'object',
+              properties: {
+                header: { type: 'string' },
+                concreteHeader: { type: 'string' },
+                family: { type: 'string' },
+                commandType: { type: 'string', enum: ['set', 'query'] },
+                placeholderBindings: {
+                  type: 'object',
+                  additionalProperties: { type: ['string', 'number', 'boolean'] },
+                },
+                argumentBindings: {
+                  type: 'object',
+                  additionalProperties: { type: ['string', 'number', 'boolean'] },
+                },
+                arguments: {
+                  type: 'array',
+                  items: { type: ['string', 'number', 'boolean'] },
+                },
+                value: { type: ['string', 'number', 'boolean'] },
+              },
+              required: ['header'],
+              additionalProperties: false,
+            },
+          },
+        },
+        required: ['items'],
+        additionalProperties: false,
+      },
+    },
+    {
+      name: 'materialize_tm_devices_call',
+      description: 'Build an exact tm_devices Python call from a verified methodPath returned by search_tm_devices. Pass placeholderBindings such as {"channel":"1"} for paths like ch[x].termination.write, plus positional or keyword arguments, then copy the returned code verbatim into tm_device_command params.code.',
+      parameters: {
+        type: 'object',
+        properties: {
+          methodPath: { type: 'string', description: 'Verified tm_devices methodPath, e.g. ch[x].termination.write.' },
+          model: { type: 'string', description: 'Optional model filter.' },
+          objectName: { type: 'string', description: 'Optional root object name, default "scope".' },
+          placeholderBindings: {
+            type: 'object',
+            description: 'Placeholder replacements for methodPath, e.g. {"channel":"1"}',
+            additionalProperties: { type: ['string', 'number', 'boolean'] },
+          },
+          arguments: {
+            type: 'array',
+            description: 'Positional Python arguments for the call.',
+            items: {},
+          },
+          keywordArguments: {
+            type: 'object',
+            description: 'Keyword Python arguments for the call.',
+            additionalProperties: true,
+          },
+        },
+        required: ['methodPath'],
         additionalProperties: false,
       },
     },

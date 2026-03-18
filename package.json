@@ -6,7 +6,9 @@
   "scripts": {
     "start": "tsx src/index.ts",
     "dev": "tsx src/index.ts",
-    "eval:comprehensive": "tsx tests/comprehensive_smoke.ts"
+    "eval:comprehensive": "tsx tests/comprehensive_smoke.ts",
+    "eval:levels": "tsx tests/level_benchmark.ts",
+    "verify:command-groups": "tsx tests/verify_command_groups.ts"
   },
   "dependencies": {
     "dotenv": "^17.3.1",

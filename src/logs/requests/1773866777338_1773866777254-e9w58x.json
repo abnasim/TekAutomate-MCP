@@ -1,0 +1,99 @@
+{
+  "timestamp": "2026-03-18T20:46:17.338Z",
+  "requestId": "1773866777254-e9w58x",
+  "provider": "openai",
+  "model": "gpt-5.4",
+  "outputMode": "steps_json",
+  "deviceType": "SCOPE",
+  "modelFamily": "MSO4/5/6 Series",
+  "backend": "pyvisa",
+  "userMessage": "Enable FastFrame 100 frames single sequence then save CH1 waveform",
+  "flowContext": {
+    "stepCount": 0,
+    "stepTypes": [],
+    "validationErrors": []
+  },
+  "scpiContextHits": 0,
+  "toolCalls": [],
+  "postCheck": {
+    "errors": [],
+    "warnings": [],
+    "autoRepairTriggered": false
+  },
+  "response": {
+    "text": "ACTIONS_JSON: {\"summary\":\"Built a server-side verified common TekAutomate flow.\",\"findings\":[],\"suggestedFixes\":[\"Filled connect/disconnect instrumentIds with workspace alias \\\"scope1\\\" for direct chat apply compatibility.\"],\"actions\":[{\"type\":\"replace_flow\",\"flow\":{\"name\":\"Generated Flow\",\"description\":\"Common TekAutomate scope flow built server-side from verified commands.\",\"backend\":\"pyvisa\",\"deviceType\":\"SCOPE\",\"steps\":[{\"id\":\"1\",\"type\":\"connect\",\"label\":\"Connect\",\"params\":{\"instrumentIds\":[\"scope1\"],\"printIdn\":true}},{\"id\":\"2\",\"type\":\"write\",\"label\":\"Configure acquisition/save\",\"params\":{\"command\":\"ACQuire:STOPAfter SEQuence;ACQuire:STATE ON\"}},{\"id\":\"3\",\"type\":\"write\",\"label\":\"Configure horizontal\",\"params\":{\"command\":\"HORizontal:FASTframe:STATE ON;HORizontal:FASTframe:COUNt 100\"}},{\"id\":\"4\",\"type\":\"save_waveform\",\"label\":\"Save CH1 waveform\",\"params\":{\"source\":\"CH1\",\"filename\":\"ch1.bin\",\"format\":\"bin\"}},{\"id\":\"5\",\"type\":\"disconnect\",\"label\":\"Disconnect\",\"params\":{\"instrumentIds\":[\"scope1\"]}}]}}]}",
+    "actionsJson": {
+      "summary": "Built a server-side verified common TekAutomate flow.",
+      "findings": [],
+      "suggestedFixes": [
+        "Filled connect/disconnect instrumentIds with workspace alias \"scope1\" for direct chat apply compatibility."
+      ],
+      "actions": [
+        {
+          "type": "replace_flow",
+          "flow": {
+            "name": "Generated Flow",
+            "description": "Common TekAutomate scope flow built server-side from verified commands.",
+            "backend": "pyvisa",
+            "deviceType": "SCOPE",
+            "steps": [
+              {
+                "id": "1",
+                "type": "connect",
+                "label": "Connect",
+                "params": {
+                  "instrumentIds": [
+                    "scope1"
+                  ],
+                  "printIdn": true
+                }
+              },
+              {
+                "id": "2",
+                "type": "write",
+                "label": "Configure acquisition/save",
+                "params": {
+                  "command": "ACQuire:STOPAfter SEQuence;ACQuire:STATE ON"
+                }
+              },
+              {
+                "id": "3",
+                "type": "write",
+                "label": "Configure horizontal",
+                "params": {
+                  "command": "HORizontal:FASTframe:STATE ON;HORizontal:FASTframe:COUNt 100"
+                }
+              },
+              {
+                "id": "4",
+                "type": "save_waveform",
+                "label": "Save CH1 waveform",
+                "params": {
+                  "source": "CH1",
+                  "filename": "ch1.bin",
+                  "format": "bin"
+                }
+              },
+              {
+                "id": "5",
+                "type": "disconnect",
+                "label": "Disconnect",
+                "params": {
+                  "instrumentIds": [
+                    "scope1"
+                  ]
+                }
+              }
+            ]
+          }
+        }
+      ]
+    },
+    "stepCount": 1,
+    "stepTypes": [
+      "replace_flow"
+    ]
+  },
+  "durationMs": 84,
+  "ok": true
+}

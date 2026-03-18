@@ -1,0 +1,134 @@
+{
+  "timestamp": "2026-03-18T08:00:18.176Z",
+  "requestId": "1773820762210-5euyoh",
+  "provider": "openai",
+  "model": "gpt-5.4",
+  "outputMode": "steps_json",
+  "deviceType": "SCOPE",
+  "modelFamily": "MSO4/5/6 Series",
+  "backend": "pyvisa",
+  "userMessage": "Set up I2C decode on B1 clock CH1 data CH2",
+  "flowContext": {
+    "stepCount": 0,
+    "stepTypes": [],
+    "validationErrors": []
+  },
+  "scpiContextHits": 0,
+  "toolCalls": [],
+  "postCheck": {
+    "errors": [],
+    "warnings": [],
+    "autoRepairTriggered": false
+  },
+  "response": {
+    "text": "ACTIONS_JSON: {\"summary\":\"Parsed full flow JSON from assistant output.\",\"findings\":[],\"suggestedFixes\":[],\"actions\":[{\"type\":\"replace_flow\",\"flow\":{\"name\":\"Setup I2C Decode on B1\",\"description\":\"Configure Bus B1 for I2C decode with clock on CH1 and data on CH2 for MSO4/5/6 Series scopes.\",\"backend\":\"pyvisa\",\"deviceType\":\"SCOPE\",\"steps\":[{\"id\":\"s1\",\"type\":\"connect\",\"label\":\"Connect\",\"params\":{\"instrumentIds\":[],\"printIdn\":true}},{\"id\":\"g2\",\"type\":\"group\",\"label\":\"Setup I2C Decode\",\"params\":{},\"children\":[{\"id\":\"s3\",\"type\":\"comment\",\"label\":\"Comment\",\"params\":{\"text\":\"Requires the serial bus decode option SREMBD.\"}},{\"id\":\"s4\",\"type\":\"write\",\"label\":\"Configure Bus B1\",\"params\":{\"command\":\"BUS:B1:TYPe I2C;BUS:B1:I2C:CLOCk:SOUrce CH1;BUS:B1:I2C:DATa:SOUrce CH2\"}},{\"id\":\"s5\",\"type\":\"error_check\",\"label\":\"Error Check\",\"params\":{\"command\":\"ALLEV?\"}}]},{\"id\":\"g6\",\"type\":\"group\",\"label\":\"Verify I2C Decode\",\"params\":{},\"children\":[{\"id\":\"s7\",\"type\":\"query\",\"label\":\"Read Bus B1 Type\",\"params\":{\"command\":\"BUS:B1:TYPe?\",\"saveAs\":\"bus_b1_type\"}},{\"id\":\"s8\",\"type\":\"query\",\"label\":\"Read B1 I2C Clock Source\",\"params\":{\"command\":\"BUS:B1:I2C:CLOCk:SOUrce?\",\"saveAs\":\"bus_b1_i2c_clock_source\"}},{\"id\":\"s9\",\"type\":\"query\",\"label\":\"Read B1 I2C Data Source\",\"params\":{\"command\":\"BUS:B1:I2C:DATa:SOUrce?\",\"saveAs\":\"bus_b1_i2c_data_source\"}}]},{\"id\":\"s10\",\"type\":\"disconnect\",\"label\":\"Disconnect\",\"params\":{\"instrumentIds\":[]}}]}}]}",
+    "actionsJson": {
+      "summary": "Parsed full flow JSON from assistant output.",
+      "findings": [],
+      "suggestedFixes": [],
+      "actions": [
+        {
+          "type": "replace_flow",
+          "flow": {
+            "name": "Setup I2C Decode on B1",
+            "description": "Configure Bus B1 for I2C decode with clock on CH1 and data on CH2 for MSO4/5/6 Series scopes.",
+            "backend": "pyvisa",
+            "deviceType": "SCOPE",
+            "steps": [
+              {
+                "id": "s1",
+                "type": "connect",
+                "label": "Connect",
+                "params": {
+                  "instrumentIds": [],
+                  "printIdn": true
+                }
+              },
+              {
+                "id": "g2",
+                "type": "group",
+                "label": "Setup I2C Decode",
+                "params": {},
+                "children": [
+                  {
+                    "id": "s3",
+                    "type": "comment",
+                    "label": "Comment",
+                    "params": {
+                      "text": "Requires the serial bus decode option SREMBD."
+                    }
+                  },
+                  {
+                    "id": "s4",
+                    "type": "write",
+                    "label": "Configure Bus B1",
+                    "params": {
+                      "command": "BUS:B1:TYPe I2C;BUS:B1:I2C:CLOCk:SOUrce CH1;BUS:B1:I2C:DATa:SOUrce CH2"
+                    }
+                  },
+                  {
+                    "id": "s5",
+                    "type": "error_check",
+                    "label": "Error Check",
+                    "params": {
+                      "command": "ALLEV?"
+                    }
+                  }
+                ]
+              },
+              {
+                "id": "g6",
+                "type": "group",
+                "label": "Verify I2C Decode",
+                "params": {},
+                "children": [
+                  {
+                    "id": "s7",
+                    "type": "query",
+                    "label": "Read Bus B1 Type",
+                    "params": {
+                      "command": "BUS:B1:TYPe?",
+                      "saveAs": "bus_b1_type"
+                    }
+                  },
+                  {
+                    "id": "s8",
+                    "type": "query",
+                    "label": "Read B1 I2C Clock Source",
+                    "params": {
+                      "command": "BUS:B1:I2C:CLOCk:SOUrce?",
+                      "saveAs": "bus_b1_i2c_clock_source"
+                    }
+                  },
+                  {
+                    "id": "s9",
+                    "type": "query",
+                    "label": "Read B1 I2C Data Source",
+                    "params": {
+                      "command": "BUS:B1:I2C:DATa:SOUrce?",
+                      "saveAs": "bus_b1_i2c_data_source"
+                    }
+                  }
+                ]
+              },
+              {
+                "id": "s10",
+                "type": "disconnect",
+                "label": "Disconnect",
+                "params": {
+                  "instrumentIds": []
+                }
+              }
+            ]
+          }
+        }
+      ]
+    },
+    "stepCount": 1,
+    "stepTypes": [
+      "replace_flow"
+    ]
+  },
+  "durationMs": 55966,
+  "ok": true
+}

@@ -1,55 +1,7 @@
 import { validateActionPayload } from '../tools/validateActionPayload';
 import { verifyScpiCommands } from '../tools/verifyScpiCommands';
 import { extractReplaceFlowSteps } from './schemas';
-// Canonical normalizeCommandHeader (copied from src/utils/commandLoader.ts)
-function normalizeCommandHeader(command: string): string {
-  if (!command) return '';
-
-  // Remove query marker
-  let normalized = command.split('?')[0].trim();
-
-  // Split on comma first (for comma-separated args)
-  normalized = normalized.split(',')[0].trim();
-
-  // Remove arguments (everything after first space)
-  normalized = normalized.split(/\s/)[0];
-
-  // Normalize variable mnemonics to patterns
-  // First handle patterns with <x> in the middle (before "Val" or "Voltage" or "VOLTage")
-  normalized = normalized
-    .replace(/PG(\d+)Val/gi, 'PG<x>Val')
-    .replace(/PW(\d+)Val/gi, 'PW<x>Val')
-    .replace(/AMP(\d+)Val/gi, 'AMP<x>Val')
-    .replace(/FREQ(\d+)Val/gi, 'FREQ<x>Val')
-    .replace(/SPAN(\d+)Val/gi, 'SPAN<x>Val')
-    .replace(/RIPPLEFREQ(\d+)Val/gi, 'RIPPLEFREQ<x>Val')
-    .replace(/MAXG(\d+)Voltage/gi, 'MAXG<x>Voltage')
-    .replace(/OUTPUT(\d+)VOLTage/gi, 'OUTPUT<x>VOLTage');
-
-  // Then handle standard patterns with <x> at the end
-  normalized = normalized
-    .replace(/CH\d+/gi, 'CH<x>')
-    .replace(/REF\d+/gi, 'REF<x>')
-    .replace(/MATH\d+/gi, 'MATH<x>')
-    .replace(/MEAS\d+/gi, 'MEAS<x>')
-    .replace(/B\d+/gi, 'B<x>')
-    .replace(/BUS\d+/gi, 'BUS<x>')
-    .replace(/CURSOR\d+/gi, 'CURSOR<x>')
-    .replace(/ZOOM\d+/gi, 'ZOOM<x>')
-    .replace(/SEARCH\d+/gi, 'SEARCH<x>')
-    .replace(/PLOT\d+/gi, 'PLOT<x>')
-    .replace(/WAVEView\d+/gi, 'WAVEView<x>')
-    .replace(/PLOTView\d+/gi, 'PLOTView<x>')
-    .replace(/MATHFFTView\d+/gi, 'MATHFFTView<x>')
-    .replace(/REFFFTView\d+/gi, 'REFFFTView<x>')
-    .replace(/SPECView\d+/gi, 'SPECView<x>')
-    .replace(/POWer\d+/gi, 'POWer<x>')
-    .replace(/GSOurce\d+/gi, 'GSOurce<x>')
-    .replace(/SOUrce\d+/gi, 'SOUrce<x>')
-    .toLowerCase();
-
-  return normalized;
-}
+import { normalizeActionsJsonPayload, parseJsonValueString } from './actionNormalizer';
 
 function splitCommands(raw: string): string[] {
   return raw
@@ -59,33 +11,6 @@ function splitCommands(raw: string): string[] {
 }
 
 const ALWAYS_VALID_PREFIXES = [
-  'trig',
-  'trigger',
-  'ch<x>',
-  'ch1',
-  'ch2',
-  'ch3',
-  'ch4',
-  'horizontal',
-  'acquire',
-  'acq',
-  'search',
-  'bus',
-  'can',
-  'afg',
-  'awg',
-  'source',
-  'sour',
-  'measure',
-  'meas',
-  'output',
-  'outp',
-  'display',
-  'save',
-  'recall',
-  'filesystem',
-  'meas:curr',
-  'meas:volt',
   '*',
 ];
 
@@ -94,6 +19,14 @@ export interface PostCheckResult {
   text: string;
   errors: string[];
   warnings: string[];
+}
+
+export interface PostCheckOptions {
+  allowMissingActionsJson?: boolean;
+  /** When true, use lenient pipeline for assistant output: normalize action shape before apply validation. */
+  assistantMode?: boolean;
+  /** Hosted Responses tool trace for this turn, used to hard-gate applyable SCPI output. */
+  toolTrace?: Array<Record<string, unknown>>;
 }
 
 function rebuildTextWithActionsJson(text: string, actionsJson: Record<string, unknown>): string {
@@ -167,6 +100,109 @@ function upsertSuggestedFix(actionsJson: Record<string, unknown>, message: strin
   const next = current.map((x) => String(x));
   if (!next.includes(message)) next.push(message);
   actionsJson.suggestedFixes = next;
+}
+
+function upsertFinding(actionsJson: Record<string, unknown>, message: string): void {
+  const current = Array.isArray(actionsJson.findings) ? (actionsJson.findings as unknown[]) : [];
+  const next = current.map((x) => String(x));
+  if (!next.includes(message)) next.push(message);
+  actionsJson.findings = next;
+}
+
+function hasHostedToolCall(
+  toolTrace: Array<Record<string, unknown>> | undefined,
+  names: string[]
+): boolean {
+  if (!Array.isArray(toolTrace) || toolTrace.length === 0) return false;
+  const allowed = new Set(names.map((name) => String(name)));
+  return toolTrace.some((entry) => allowed.has(String(entry.name || '')));
+}
+
+function shouldHardGateHostedScpiApply(
+  assistantMode: boolean,
+  backend: string | undefined,
+  commands: string[],
+  toolTrace: Array<Record<string, unknown>> | undefined
+): boolean {
+  if (!assistantMode) return false;
+  if (!commands.length) return false;
+  if (!Array.isArray(toolTrace) || toolTrace.length === 0) return false;
+  return String(backend || '').toLowerCase() !== 'tm_devices';
+}
+
+function isHostedPreverifiedScpiCommand(command: string): boolean {
+  const header = String(command || '')
+    .split('?')[0]
+    .trim()
+    .split(/\s+/)[0]
+    .toLowerCase();
+  if (!header) return false;
+  return (
+    header.startsWith('ch') ||
+    header.startsWith('trigger:a:') ||
+    header.startsWith('trigger:b:') ||
+    header.startsWith('horizontal:') ||
+    header.startsWith('acquire:') ||
+    header.startsWith('measurement:addmeas') ||
+    /^measurement:meas\d+:source\d?$/i.test(header) ||
+    /^measurement:meas\d+:results:currentacq:mean$/i.test(header) ||
+    header.startsWith('*')
+  );
+}
+
+/** Normalize assistant-style actions (action_type, target_step_id, payload.new_step) for frontend and validator. */
+function normalizeAssistantActions(actionsJson: Record<string, unknown>): void {
+  const normalized = normalizeActionsJsonPayload(actionsJson);
+  actionsJson.summary = normalized.summary;
+  actionsJson.findings = normalized.findings;
+  actionsJson.suggestedFixes = normalized.suggestedFixes;
+  actionsJson.actions = normalized.actions;
+}
+
+async function filterInvalidAssistantActions(
+  actionsJson: Record<string, unknown>,
+  originalSteps?: Array<Record<string, unknown>>
+): Promise<void> {
+  const actions = Array.isArray(actionsJson.actions)
+    ? (actionsJson.actions as Array<Record<string, unknown>>)
+    : [];
+  if (!actions.length) return;
+
+  const kept: Array<Record<string, unknown>> = [];
+  const droppedDetails: string[] = [];
+
+  for (const action of actions) {
+    const candidate = {
+      summary: actionsJson.summary,
+      findings: actionsJson.findings,
+      suggestedFixes: actionsJson.suggestedFixes,
+      actions: [action],
+    };
+    const payloadValidation = await validateActionPayload({
+      actionsJson: candidate,
+      originalSteps,
+    });
+    const validData = payloadValidation.data as { valid: boolean; errors: string[] };
+    if (validData.valid) {
+      kept.push(action);
+      continue;
+    }
+    droppedDetails.push(...validData.errors.slice(0, 3));
+  }
+
+  if (kept.length === actions.length) return;
+
+  actionsJson.actions = kept;
+  upsertFinding(
+    actionsJson,
+    'Assistant returned JSON that did not fully map to valid TekAutomate steps, so invalid apply actions were removed.'
+  );
+  if (droppedDetails.length) {
+    upsertSuggestedFix(
+      actionsJson,
+      `Use only real TekAutomate step types and schema-valid actions. Removed invalid items: ${Array.from(new Set(droppedDetails)).join('; ')}`
+    );
+  }
 }
 
 function mkId(prefix: string): string {
@@ -295,6 +331,19 @@ function enforceMeasurementGroupingInSteps(
 }
 
 function extractActionsJson(text: string): Record<string, unknown> | null {
+  const rawTrim = text.trim();
+  // Assistant often returns raw JSON only (no ACTIONS_JSON marker).
+  if (rawTrim.startsWith('{')) {
+    try {
+      const parsed = JSON.parse(rawTrim) as Record<string, unknown>;
+      if (parsed && typeof parsed === 'object' && Array.isArray(parsed.actions)) {
+        return parsed;
+      }
+    } catch {
+      // fall through
+    }
+  }
+
   // Strip any fences wrapping ACTIONS_JSON
   const cleaned = text
     .replace(/ACTIONS_JSON:\s*```json\s*/gi, 'ACTIONS_JSON: ')
@@ -393,6 +442,136 @@ function extractActionsJson(text: string): Record<string, unknown> | null {
     return { summary: '', findings: [], suggestedFixes: [], actions: [] };
   }
 
+  // Assistant-mode fallback: accept raw JSON outputs without ACTIONS_JSON marker.
+  const tryParseObject = (raw: string): Record<string, unknown> | null => {
+    try {
+      const parsed = JSON.parse(raw);
+      return parsed && typeof parsed === 'object' && !Array.isArray(parsed)
+        ? (parsed as Record<string, unknown>)
+        : null;
+    } catch {
+      return null;
+    }
+  };
+  const normalizeFlowObject = (flow: Record<string, unknown>): Record<string, unknown> => {
+    let seq = 1;
+    const mkId = (prefix = 's') => `${prefix}${seq++}`;
+    const titleCase = (s: string) => s.charAt(0).toUpperCase() + s.slice(1);
+    const normalizeStep = (rawStep: Record<string, unknown>): Record<string, unknown> => {
+      const stepType = String(rawStep.type || 'comment').toLowerCase();
+      const inParams =
+        rawStep.params && typeof rawStep.params === 'object' && !Array.isArray(rawStep.params)
+          ? ({ ...(rawStep.params as Record<string, unknown>) } as Record<string, unknown>)
+          : {};
+      const out: Record<string, unknown> = {
+        id: typeof rawStep.id === 'string' && rawStep.id ? rawStep.id : mkId(stepType === 'group' ? 'g' : 's'),
+        type: stepType,
+        label:
+          typeof rawStep.label === 'string' && rawStep.label
+            ? rawStep.label
+            : typeof inParams.name === 'string' && inParams.name
+              ? String(inParams.name)
+              : titleCase(stepType || 'Step'),
+        params: inParams,
+      };
+
+      if (stepType === 'group') {
+        const nested =
+          Array.isArray(rawStep.children)
+            ? (rawStep.children as Array<Record<string, unknown>>)
+            : Array.isArray(inParams.steps)
+              ? (inParams.steps as Array<Record<string, unknown>>)
+              : [];
+        if (Object.prototype.hasOwnProperty.call(out.params as Record<string, unknown>, 'steps')) {
+          delete (out.params as Record<string, unknown>).steps;
+        }
+        if (Object.prototype.hasOwnProperty.call(out.params as Record<string, unknown>, 'name')) {
+          delete (out.params as Record<string, unknown>).name;
+        }
+        out.params = out.params && typeof out.params === 'object' ? out.params : {};
+        out.children = nested.map((s) => normalizeStep(s));
+      }
+
+      if (stepType === 'python') {
+        const p = out.params as Record<string, unknown>;
+        if (typeof p.code !== 'string' && typeof p.source === 'string') {
+          p.code = p.source;
+          delete p.source;
+        }
+      }
+
+      if (stepType === 'query') {
+        const p = out.params as Record<string, unknown>;
+        if (typeof p.saveAs !== 'string' || !String(p.saveAs).trim()) {
+          p.saveAs = 'result';
+        }
+      }
+
+      return out;
+    };
+
+    const rawSteps = Array.isArray(flow.steps) ? (flow.steps as Array<Record<string, unknown>>) : [];
+    return {
+      name: String(flow.name || 'Generated Flow'),
+      description: String(flow.description || 'Generated by assistant'),
+      backend: String(flow.backend || 'pyvisa'),
+      deviceType: String(flow.deviceType || 'SCOPE'),
+      steps: rawSteps.map((s) => normalizeStep(s)),
+    };
+  };
+
+  const wrapFlowAsActions = (flow: Record<string, unknown>): Record<string, unknown> => ({
+    summary: 'Parsed full flow JSON from assistant output.',
+    findings: [],
+    suggestedFixes: [],
+    actions: [{ type: 'replace_flow', flow: normalizeFlowObject(flow) }],
+  });
+  const looksLikeFlow = (obj: Record<string, unknown>): boolean => Array.isArray(obj.steps);
+
+  const fenced = cleaned.match(/```json\s*([\s\S]*?)```/i);
+  const fencedObj = fenced?.[1] ? tryParseObject(fenced[1].trim()) : null;
+  if (fencedObj) {
+    if (Array.isArray(fencedObj.actions)) return fencedObj;
+    if (looksLikeFlow(fencedObj)) return wrapFlowAsActions(fencedObj);
+  }
+
+  const start = cleaned.indexOf('{');
+  if (start !== -1) {
+    const sub = cleaned.slice(start);
+    let depth = 0;
+    let end = 0;
+    let inString = false;
+    let escaped = false;
+    for (let i = 0; i < sub.length; i++) {
+      const ch = sub[i];
+      if (inString) {
+        if (escaped) escaped = false;
+        else if (ch === '\\') escaped = true;
+        else if (ch === '"') inString = false;
+        continue;
+      }
+      if (ch === '"') {
+        inString = true;
+        continue;
+      }
+      if (ch === '{') depth += 1;
+      else if (ch === '}') {
+        depth -= 1;
+        if (depth === 0) {
+          end = i + 1;
+          break;
+        }
+      }
+    }
+    if (end > 0) {
+      const obj = tryParseObject(sub.slice(0, end));
+      if (obj) {
+        if (Array.isArray(obj.actions)) return obj;
+        if (looksLikeFlow(obj)) return wrapFlowAsActions(obj);
+      }
+    }
+  }
+
   return null;
 }
 
@@ -403,7 +582,7 @@ function collectCommandsFromActions(actionsJson: Record<string, unknown>): strin
     : [];
   actions.forEach((action) => {
     const payload = (action.payload || {}) as Record<string, unknown>;
-    const newStep = (action.newStep || payload.new_step || payload.newStep) as
+    const newStep = parseJsonValueString(action.newStep || payload.new_step || payload.newStep) as
       | Record<string, unknown>
       | undefined;
     const actionType = String(action.action_type || action.type || '');
@@ -443,7 +622,10 @@ export async function postCheckResponse(
     modelFamily?: string;
     originalSteps?: Array<Record<string, unknown>>;
     scpiContext?: Array<Record<string, unknown>>;
-  }
+    alias?: string;
+    instrumentMap?: Array<Record<string, unknown>>;
+  },
+  options?: PostCheckOptions
 ): Promise<PostCheckResult> {
   const errors: string[] = [];
   const warnings: string[] = [];
@@ -451,33 +633,61 @@ export async function postCheckResponse(
   let verificationRows: Array<Record<string, unknown>> = [];
   const actionsJson = extractActionsJson(finalText);
   if (!actionsJson) {
+    if (options?.allowMissingActionsJson || options?.assistantMode) {
+      return { ok: true, text: finalText, errors: [], warnings: [] };
+    }
     errors.push('ACTIONS_JSON parse failed');
     return { ok: false, text: finalText, errors };
   }
-  const payloadValidation = await validateActionPayload({
-    actionsJson,
-    originalSteps: flowContext?.originalSteps,
-  });
-  const validData = payloadValidation.data as { valid: boolean; errors: string[] };
-  if (!validData.valid) errors.push(...validData.errors);
+
+  // Lenient path: explicit flag or response that looks like assistant output (raw JSON with action_type).
+  const rawLooksLikeAssistant =
+    finalText.trim().startsWith('{') &&
+    Array.isArray(actionsJson.actions) &&
+    (actionsJson.actions as Array<Record<string, unknown>>).some(
+      (a) => a && typeof a === 'object' && (a.action_type !== undefined || a.payload?.new_step !== undefined)
+    );
+  const assistantMode =
+    options?.assistantMode === true || (options?.assistantMode !== false && rawLooksLikeAssistant);
+  if (assistantMode) {
+    if (rawLooksLikeAssistant && options?.assistantMode !== true) {
+      console.log('[MCP] postCheck: using lenient path (detected assistant-style JSON)');
+    }
+    normalizeAssistantActions(actionsJson);
+    await filterInvalidAssistantActions(actionsJson, flowContext?.originalSteps);
+    const trimmed = finalText.trim();
+    const jsonOnlyInput = trimmed.startsWith('{') || trimmed.startsWith('```');
+    finalText = jsonOnlyInput
+      ? `ACTIONS_JSON: ${JSON.stringify(actionsJson)}`
+      : rebuildTextWithActionsJson(finalText, actionsJson);
+  } else {
+    const payloadValidation = await validateActionPayload({
+      actionsJson,
+      originalSteps: flowContext?.originalSteps,
+    });
+    const validData = payloadValidation.data as { valid: boolean; errors: string[] };
+    if (!validData.valid) errors.push(...validData.errors);
+  }
 
   const actionRows = Array.isArray(actionsJson.actions)
     ? (actionsJson.actions as Array<Record<string, unknown>>)
     : [];
-  actionRows.forEach((action) => {
-    const actionType = String(action.action_type || action.type || '');
-    const targetStepId =
-      String(action.targetStepId || action.target_step_id || action.stepId || '');
-    const payload = (action.payload && typeof action.payload === 'object')
-      ? (action.payload as Record<string, unknown>)
-      : {};
-    const param = String(action.param || payload.param || '');
-    if (actionType === 'set_step_param' && param === 'params') {
-      errors.push(
-        `Invalid set_step_param for ${targetStepId || '(unknown step)'}: param must be a single field, not "params"`
-      );
-    }
-  });
+  if (!assistantMode) {
+    actionRows.forEach((action) => {
+      const actionType = String(action.action_type || action.type || '');
+      const targetStepId =
+        String(action.targetStepId || action.target_step_id || action.stepId || '');
+      const payload = (action.payload && typeof action.payload === 'object')
+        ? (action.payload as Record<string, unknown>)
+        : {};
+      const param = String(action.param || payload.param || '');
+      if (actionType === 'set_step_param' && param === 'params') {
+        errors.push(
+          `Invalid set_step_param for ${targetStepId || '(unknown step)'}: param must be a single field, not "params"`
+        );
+      }
+    });
+  }
 
   // Group-aware post-check: for long flat replace_flow payloads, auto-suggest a grouped rewrite.
   let regroupedAny = false;
@@ -525,11 +735,7 @@ export async function postCheckResponse(
     }
   });
   if (regroupedAny) {
-    warnings.push('Detected long flat flow; suggested grouped rewrite for readability.');
-    upsertSuggestedFix(
-      actionsJson,
-      'Flow was long and flat. Suggested grouping by phase (setup/config/trigger/measure/save/cleanup) for readability.'
-    );
+    // Auto-grouping applied; no warning so logs stay clean (behavior is silent improvement).
     finalText = rebuildTextWithActionsJson(finalText, actionsJson);
   }
   if (concatSplitAny) {
@@ -549,58 +755,169 @@ export async function postCheckResponse(
     finalText = rebuildTextWithActionsJson(finalText, actionsJson);
   }
 
-  const commands = collectCommandsFromActions(actionsJson);
+  const preferredInstrumentId = (() => {
+    const directAlias = String(flowContext?.alias || '').trim();
+    if (directAlias) return directAlias;
+    const instrumentMap = Array.isArray(flowContext?.instrumentMap)
+      ? (flowContext?.instrumentMap as Array<Record<string, unknown>>)
+      : [];
+    if (instrumentMap.length === 1) {
+      const alias = String(instrumentMap[0]?.alias || '').trim();
+      if (alias) return alias;
+    }
+    return '';
+  })();
+  if (preferredInstrumentId) {
+    const fillInstrumentIds = (steps: Array<Record<string, unknown>>): boolean => {
+      let changed = false;
+      steps.forEach((step) => {
+        const type = String(step.type || '').toLowerCase();
+        if (type === 'connect' || type === 'disconnect') {
+          const params =
+            step.params && typeof step.params === 'object'
+              ? ({ ...(step.params as Record<string, unknown>) } as Record<string, unknown>)
+              : {};
+          const ids = Array.isArray(params.instrumentIds)
+            ? (params.instrumentIds as unknown[]).map((value) => String(value || '').trim()).filter(Boolean)
+            : [];
+          if (!ids.length) {
+            params.instrumentIds = [preferredInstrumentId];
+            step.params = params;
+            changed = true;
+          }
+        }
+        if (Array.isArray(step.children) && step.children.length) {
+          if (fillInstrumentIds(step.children as Array<Record<string, unknown>>)) changed = true;
+        }
+      });
+      return changed;
+    };
+
+    let instrumentIdsFilled = false;
+    actionRows.forEach((action) => {
+      const actionType = String(action.action_type || action.type || '');
+      if (actionType === 'replace_flow') {
+        const replaceFlowSteps = extractReplaceFlowSteps(action);
+        if (Array.isArray(replaceFlowSteps) && fillInstrumentIds(replaceFlowSteps)) {
+          instrumentIdsFilled = true;
+        }
+      }
+      const payload = (action.payload && typeof action.payload === 'object')
+        ? (action.payload as Record<string, unknown>)
+        : {};
+      const newStep = parseJsonValueString(action.newStep || payload.new_step || payload.newStep) as
+        | Record<string, unknown>
+        | undefined;
+      if (newStep && fillInstrumentIds([newStep])) {
+        if (typeof action.newStep === 'string') {
+          action.newStep = newStep;
+        } else if (payload.new_step || payload.newStep) {
+          payload.new_step = newStep;
+          action.payload = payload;
+        }
+        instrumentIdsFilled = true;
+      }
+    });
+    if (instrumentIdsFilled) {
+      upsertSuggestedFix(
+        actionsJson,
+        `Filled connect/disconnect instrumentIds with workspace alias "${preferredInstrumentId}" for direct chat apply compatibility.`
+      );
+      finalText = rebuildTextWithActionsJson(finalText, actionsJson);
+    }
+  }
+
+  let commands = collectCommandsFromActions(actionsJson);
+  const requiresHostedScpiGate = shouldHardGateHostedScpiApply(
+    assistantMode,
+    flowContext?.backend,
+    commands,
+    options?.toolTrace
+  );
+  if (requiresHostedScpiGate) {
+    const materialized = hasHostedToolCall(options?.toolTrace, [
+      'materialize_scpi_command',
+      'materialize_scpi_commands',
+      'finalize_scpi_commands',
+    ]);
+    const verified = hasHostedToolCall(options?.toolTrace, ['verify_scpi_commands', 'finalize_scpi_commands']);
+    const verifyRequired = commands.some((command) => !isHostedPreverifiedScpiCommand(command));
+    if (!materialized || (verifyRequired && !verified)) {
+      const missing: string[] = [];
+      if (!materialized) missing.push('MCP exact materialization');
+      if (verifyRequired && !verified) missing.push('MCP exact verification');
+      if (Array.isArray(actionsJson.actions) && actionsJson.actions.length > 0) {
+        actionsJson.actions = [];
+        upsertFinding(
+          actionsJson,
+          verifyRequired
+            ? 'Apply was disabled because SCPI-bearing output did not use MCP exact materialization and verification before returning JSON.'
+            : 'Apply was disabled because SCPI-bearing output did not use MCP exact materialization before returning JSON.'
+        );
+        upsertSuggestedFix(
+          actionsJson,
+          verifyRequired
+            ? `Before returning applyable SCPI steps, call finalize_scpi_commands or materialize_scpi_command/materialize_scpi_commands, then verify_scpi_commands for uncertain commands. Missing for this turn: ${missing.join(' and ')}.`
+            : `Before returning applyable SCPI steps, call finalize_scpi_commands or materialize_scpi_command/materialize_scpi_commands. Missing for this turn: ${missing.join(' and ')}.`
+        );
+        warnings.push(
+          `Hosted SCPI apply disabled because the response skipped ${missing.join(' and ')}.`
+        );
+        finalText = rebuildTextWithActionsJson(finalText, actionsJson);
+      }
+      commands = [];
+    }
+  }
   if (commands.length) {
     const isAlwaysValid = (cmd: string) => {
       const lower = cmd.toLowerCase();
       return ALWAYS_VALID_PREFIXES.some((p) => lower.startsWith(p)) || lower.startsWith('*');
     };
-
-    const clientHeaders = new Set(
-      (flowContext?.scpiContext || [])
-        .map((c) => (c && typeof c === 'object' ? (c as Record<string, unknown>).header : null))
-        .filter((h): h is string => !!h)
-        .map((h) => normalizeCommandHeader(h))
-    );
-
-    const toVerify = commands.filter((cmd) => {
-      const norm = normalizeCommandHeader(cmd);
-      if (clientHeaders.has(norm)) return false;
-      return !isAlwaysValid(cmd);
-    });
+    const toVerify = Array.from(new Set(commands.filter((cmd) => !isAlwaysValid(cmd))));
 
     const verification = await verifyScpiCommands({
-      commands: toVerify.map(normalizeCommandHeader),
+      commands: toVerify,
       modelFamily: flowContext?.modelFamily,
+      requireExactSyntax: true,
     });
     verificationRows = verification.data as Array<Record<string, unknown>>;
     const failures = verificationRows.filter((item) => item.verified !== true);
 
     if (failures.length) {
-      // Prefix fallback: treat group headers as valid if they prefix any known command
-      const idx = await getCommandIndex();
-      const allHeaders = idx.getAllHeaders().map((h) => h.toLowerCase());
       failures.forEach((f) => {
-        const h = String(f.command || '').toLowerCase();
-        const isPrefix = allHeaders.some((ah) => ah.startsWith(h));
-        if (!isPrefix) {
-          warnings.push(`Unverified command: ${String(f.command || '')}`);
-        }
+        errors.push(`Unverified command: ${String(f.command || '')}`);
       });
+      if (Array.isArray(actionsJson.actions) && actionsJson.actions.length > 0) {
+        actionsJson.actions = [];
+        upsertFinding(
+          actionsJson,
+          'Apply was disabled because one or more SCPI commands did not exactly match the uploaded source-of-truth command library.'
+        );
+        upsertSuggestedFix(
+          actionsJson,
+          'Use exact verified SCPI syntax from the uploaded command library. If exact syntax cannot be verified, reply with no actions and say not verified.'
+        );
+        finalText = rebuildTextWithActionsJson(finalText, actionsJson);
+      }
     }
   }
 
   const prose = finalText.replace(/ACTIONS_JSON:[\s\S]*$/i, '').trim();
-  if (prose.length > 400) {
+  const maxProseCharsRaw = Number(process.env.MCP_POSTCHECK_MAX_PROSE_CHARS || 400);
+  const maxProseChars = Number.isFinite(maxProseCharsRaw) ? Math.max(400, Math.floor(maxProseCharsRaw)) : 400;
+  if (prose.length > maxProseChars) {
+    warnings.push(`Prose exceeded ${maxProseChars} characters and was truncated.`);
     const actionsBlockMatch = finalText.match(/ACTIONS_JSON:[\s\S]*$/i);
     const actionsBlock = actionsBlockMatch?.[0] || '';
-    const truncated = prose.slice(0, 400);
+    const truncated = prose.slice(0, maxProseChars);
     const lastBoundary = Math.max(
       truncated.lastIndexOf('. '),
       truncated.lastIndexOf('.\n')
     );
     const proseFixed =
-      lastBoundary > 200 ? truncated.slice(0, lastBoundary + 1).trim() : `${truncated.trim()}...`;
+      lastBoundary > Math.floor(maxProseChars / 2)
+        ? truncated.slice(0, lastBoundary + 1).trim()
+        : `${truncated.trim()}...`;
     finalText = actionsBlock ? `${proseFixed}\n\n${actionsBlock.trim()}` : proseFixed;
   }
   if (

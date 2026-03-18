@@ -1,0 +1,310 @@
+{
+  "timestamp": "2026-03-17T23:02:53.882Z",
+  "requestId": "1773788544951-eldpcq",
+  "provider": "openai",
+  "model": "gpt-5.4",
+  "outputMode": "steps_json",
+  "deviceType": "SCOPE",
+  "modelFamily": "MSO4/5/6 Series",
+  "backend": "pyvisa",
+  "userMessage": "Set CH1 200mV DC 50ohm VDD_CORE, CH2 500mV DC 50ohm VDD_IO, CH3 1V DC 50ohm VDD_PHY, CH4 2V DC 1Mohm PGOOD signal. Set trigger on CH4 rising edge 1V normal mode. Single sequence acquisition record length 10 million samples. Add measurements: delay from CH4 rising to CH1 crossing 100mV, delay from CH4 rising to CH2 crossing 250mV, delay from CH4 rising to CH3 crossing 500mV. Add pk2pk and mean on CH1 CH2 CH3. Query all delay and measurement results saving to named variables. Save all 4 channels as binary files. Take screenshot.",
+  "flowContext": {
+    "stepCount": 0,
+    "stepTypes": [],
+    "validationErrors": []
+  },
+  "scpiContextHits": 0,
+  "toolCalls": [],
+  "postCheck": {
+    "errors": [],
+    "warnings": [],
+    "autoRepairTriggered": false
+  },
+  "response": {
+    "text": "Here is a TekAutomate Steps UI flow for your MSO4/5/6 Series scope request. All steps use real TekAutomate step types and SCPI commands.\n\n```json\n{\n  \"steps\": [\n    {\n      \"type\": \"connect\",\n      \"label\": \"Connect to Scope\",\n      \"params\": {\n        \"instrumentIds\": [],\n        \"printIdn\": true\n      }\n    },\n    {\n      \"type\": \"write\",\n      \"label\": \"Set CH1 200mV DC 50Ω VDD_CORE\",\n      \"params\": {\n        \"command\": \"CH1:SCA 0.2;CH1:COUP DC;CH1:IMP 50;CH1:LAB 'VDD_CORE'\"\n      }\n    },\n    {\n      \"type\": \"write\",\n      \"label\": \"Set CH2 500mV DC 50Ω VDD_IO\",\n      \"params\": {\n        \"command\": \"CH2:SCA 0.5;CH2:COUP DC;CH2:IMP 50;CH2:LAB 'VDD_IO'\"\n      }\n    },\n    {\n      \"type\": \"write\",\n      \"label\": \"Set CH3 1V DC 50Ω VDD_PHY\",\n      \"params\": {\n        \"command\": \"CH3:SCA 1;CH3:COUP DC;CH3:IMP 50;CH3:LAB 'VDD_PHY'\"\n      }\n    },\n    {\n      \"type\": \"write\",\n      \"label\": \"Set CH4 2V DC 1MΩ PGOOD\",\n      \"params\": {\n        \"command\": \"CH4:SCA 2;CH4:COUP DC;CH4:IMP 1E6;CH4:LAB 'PGOOD'\"\n      }\n    },\n    {\n      \"type\": \"write\",\n      \"label\": \"Set Trigger on CH4 Rising Edge 1V Normal Mode\",\n      \"params\": {\n        \"command\": \"TRIG:A:EDGE:SOU CH4;TRIG:A:EDGE:SLO RIS;TRIG:A:LEV1 1;TRIG:A:MODE NORM\"\n      }\n    },\n    {\n      \"type\": \"write\",\n      \"label\": \"Set Single Sequence Acquisition, 10M Record Length\",\n      \"params\": {\n        \"command\": \"ACQ:STOPA SEQ;HOR:RECO 10000000\"\n      }\n    },\n    {\n      \"type\": \"write\",\n      \"label\": \"Add Delay Measurement: CH4 Rising to CH1 100mV\",\n      \"params\": {\n        \"command\": \"MEASU:ADDMEAS DELAY;MEASU:MEAS1:SOURCE1 CH4;MEASU:MEAS1:SOURCE2 CH1;MEASU:MEAS1:EDGE1 RIS;MEASU:MEAS1:EDGE2 CROSS;MEASU:MEAS1:THRESH2 0.1\"\n      }\n    },\n    {\n      \"type\": \"write\",\n      \"label\": \"Add Delay Measurement: CH4 Rising to CH2 250mV\",\n      \"params\": {\n        \"command\": \"MEASU:ADDMEAS DELAY;MEASU:MEAS2:SOURCE1 CH4;MEASU:MEAS2:SOURCE2 CH2;MEASU:MEAS2:EDGE1 RIS;MEASU:MEAS2:EDGE2 CROSS;MEASU:MEAS2:THRESH2 0.25\"\n      }\n    },\n    {\n      \"type\": \"write\",\n      \"label\": \"Add Delay Measurement: CH4 Rising to CH3 500mV\",\n      \"params\": {\n        \"command\": \"MEASU:ADDMEAS DELAY;MEASU:MEAS3:SOURCE1 CH4;MEASU:MEAS3:SOURCE2 CH3;MEASU:MEAS3:EDGE1 RIS;MEASU:MEAS3:EDGE2 CROSS;MEASU:MEAS3:THRESH2 0.5\"\n      }\n    },\n    {\n      \"type\": \"write\",\n      \"label\": \"Add Pk2Pk and Mean on CH1\",\n      \"params\": {\n        \"command\": \"MEASU:ADDMEAS PK2PK;MEASU:MEAS4:SOURCE1 CH1;MEASU:ADDMEAS MEAN;MEASU:MEAS5:SOURCE1 CH1\"\n      }\n    },\n    {\n      \"type\": \"write\",\n      \"label\": \"Add Pk2Pk and Mean on CH2\",\n      \"params\": {\n        \"command\": \"MEASU:ADDMEAS PK2PK;MEASU:MEAS6:SOURCE1 CH2;MEASU:ADDMEAS MEAN;MEASU:MEAS7:SOURCE1 CH2\"\n      }\n    },\n    {\n      \"type\": \"write\",\n      \"label\": \"Add Pk2Pk and Mean on CH3\",\n      \"params\": {\n        \"command\": \"MEASU:ADDMEAS PK2PK;MEASU:MEAS8:SOURCE1 CH3;MEASU:ADDMEAS MEAN;MEASU:MEAS9:SOURCE1 CH3\"\n      }\n    },\n    {\n      \"type\": \"write\",\n      \"label\": \"Start Single Acquisition\",\n      \"params\": {\n        \"command\": \"ACQ:STATE ON\"\n      }\n    },\n    {\n      \"type\": \"sleep\",\n      \"label\": \"Wait for Acquisition\",\n      \"params\": {\n        \"duration\": 1.0\n      }\n    },\n    {\n      \"type\": \"query\",\n      \"label\": \"Query Delay CH4→CH1\",\n      \"params\": {\n        \"command\": \"MEASU:MEAS1:RESU:CURR?\",\n        \"saveAs\": \"delay_ch4_ch1\"\n      }\n    },\n    {\n      \"type\": \"query\",\n      \"label\": \"Query Delay CH4→CH2\",\n      \"params\": {\n        \"command\": \"MEASU:MEAS2:RESU:CURR?\",\n        \"saveAs\": \"delay_ch4_ch2\"\n      }\n    },\n    {\n      \"type\": \"query\",\n      \"label\": \"Query Delay CH4→CH3\",\n      \"params\": {\n        \"command\": \"MEASU:MEAS3:RESU:CURR?\",\n        \"saveAs\": \"delay_ch4_ch3\"\n      }\n    },\n    {\n      \"type\": \"query\",\n      \"label\": \"Query CH1 Pk2Pk\",\n      \"params\": {\n        \"command\": \"MEASU:MEAS4:RESU:CURR?\",\n        \"saveAs\": \"ch1_pk2pk\"\n      }\n    },\n    {\n      \"type\": \"query\",\n      \"label\": \"Query CH1 Mean\",\n      \"params\": {\n        \"command\": \"MEASU:MEAS5:RESU:CURR?\",\n        \"saveAs\": \"ch1_mean\"\n      }\n    },\n    {\n      \"type\": \"query\",\n      \"label\": \"Query CH2 Pk2Pk\",\n      \"params\": {\n        \"command\": \"MEASU:MEAS6:RESU:CURR?\",\n        \"saveAs\": \"ch2_pk2pk\"\n      }\n    },\n    {\n      \"type\": \"query\",\n      \"label\": \"Query CH2 Mean\",\n      \"params\": {\n        \"command\": \"MEASU:MEAS7:RESU:CURR?\",\n        \"saveAs\": \"ch2_mean\"\n      }\n    },\n    {\n      \"type\": \"query\",\n      \"label\": \"Query CH3 Pk2Pk\",\n      \"params\": {\n        \"command\": \"MEASU:MEAS8:RESU:CURR?\",\n        \"saveAs\": \"ch3_pk2pk\"\n      }\n    },\n    {\n      \"type\": \"query\",\n      \"label\": \"Query CH3 Mean\",\n      \"params\": {\n        \"command\": \"MEASU:MEAS9:RESU:CURR?\",\n        \"saveAs\": \"ch3_mean\"\n      }\n    },\n    {\n      \"type\": \"save_waveform\",\n      \"label\": \"Save CH1 Waveform\",\n      \"params\": {\n        \"source\": \"CH1\",\n        \"filename\": \"ch1.bin\",\n        \"format\": \"bin\"\n      }\n    },\n    {\n      \"type\": \"save_waveform\",\n      \"label\": \"Save CH2 Waveform\",\n      \"params\": {\n        \"source\": \"CH2\",\n        \"filename\": \"ch2.bin\",\n        \"format\": \"bin\"\n      }\n    },\n    {\n      \"type\": \"save_waveform\",\n      \"label\": \"Save CH3 Waveform\",\n      \"params\": {\n        \"source\": \"CH3\",\n        \"filename\": \"ch3.bin\",\n        \"format\": \"bin\"\n      }\n    },\n    {\n      \"type\": \"save_waveform\",\n      \"label\": \"Save CH4 Waveform\",\n      \"params\": {\n        \"source\": \"CH4\",\n        \"filename\": \"ch4.bin\",\n        \"format\": \"bin\"\n      }\n    },\n    {\n      \"type\": \"save_screenshot\",\n      \"label\": \"Save Screenshot\",\n      \"params\": {\n        \"filename\": \"capture.png\",\n        \"scopeType\": \"modern\",\n        \"method\": \"pc_transfer\"\n      }\n    },\n    {\n      \"type\": \"disconnect\",\n      \"label\": \"Disconnect\",\n      \"params\": {\n        \"instrumentIds\": []\n      }\n    }\n  ]\n}\n```\n\nThis flow configures all channels, trigger, acquisition, measurements, queries results to variables, saves waveforms, and takes a screenshot as requested.\n\nACTIONS_JSON: {\"summary\":\"Parsed full flow JSON from assistant output.\",\"findings\":[],\"suggestedFixes\":[],\"actions\":[{\"type\":\"replace_flow\",\"flow\":{\"name\":\"Generated Flow\",\"description\":\"Generated by assistant\",\"backend\":\"pyvisa\",\"deviceType\":\"SCOPE\",\"steps\":[{\"id\":\"s1\",\"type\":\"connect\",\"label\":\"Connect to Scope\",\"params\":{\"instrumentIds\":[],\"printIdn\":true}},{\"id\":\"s2\",\"type\":\"write\",\"label\":\"Set CH1 200mV DC 50Ω VDD_CORE\",\"params\":{\"command\":\"CH1:SCA 0.2;CH1:COUP DC;CH1:IMP 50;CH1:LAB 'VDD_CORE'\"}},{\"id\":\"s3\",\"type\":\"write\",\"label\":\"Set CH2 500mV DC 50Ω VDD_IO\",\"params\":{\"command\":\"CH2:SCA 0.5;CH2:COUP DC;CH2:IMP 50;CH2:LAB 'VDD_IO'\"}},{\"id\":\"s4\",\"type\":\"write\",\"label\":\"Set CH3 1V DC 50Ω VDD_PHY\",\"params\":{\"command\":\"CH3:SCA 1;CH3:COUP DC;CH3:IMP 50;CH3:LAB 'VDD_PHY'\"}},{\"id\":\"s5\",\"type\":\"write\",\"label\":\"Set CH4 2V DC 1MΩ PGOOD\",\"params\":{\"command\":\"CH4:SCA 2;CH4:COUP DC;CH4:IMP 1E6;CH4:LAB 'PGOOD'\"}},{\"id\":\"s6\",\"type\":\"write\",\"label\":\"Set Trigger on CH4 Rising Edge 1V Normal Mode\",\"params\":{\"command\":\"TRIG:A:EDGE:SOU CH4;TRIG:A:EDGE:SLO RIS;TRIG:A:LEV1 1;TRIG:A:MODE NORM\"}},{\"id\":\"s7\",\"type\":\"write\",\"label\":\"Set Single Sequence Acquisition, 10M Record Length\",\"params\":{\"command\":\"ACQ:STOPA SEQ;HOR:RECO 10000000\"}},{\"id\":\"s8\",\"type\":\"write\",\"label\":\"Add Delay Measurement: CH4 Rising to CH1 100mV\",\"params\":{\"command\":\"MEASU:ADDMEAS DELAY;MEASU:MEAS1:SOURCE1 CH4;MEASU:MEAS1:SOURCE2 CH1;MEASU:MEAS1:EDGE1 RIS;MEASU:MEAS1:EDGE2 CROSS;MEASU:MEAS1:THRESH2 0.1\"}},{\"id\":\"s9\",\"type\":\"write\",\"label\":\"Add Delay Measurement: CH4 Rising to CH2 250mV\",\"params\":{\"command\":\"MEASU:ADDMEAS DELAY;MEASU:MEAS2:SOURCE1 CH4;MEASU:MEAS2:SOURCE2 CH2;MEASU:MEAS2:EDGE1 RIS;MEASU:MEAS2:EDGE2 CROSS;MEASU:MEAS2:THRESH2 0.25\"}},{\"id\":\"s10\",\"type\":\"write\",\"label\":\"Add Delay Measurement: CH4 Rising to CH3 500mV\",\"params\":{\"command\":\"MEASU:ADDMEAS DELAY;MEASU:MEAS3:SOURCE1 CH4;MEASU:MEAS3:SOURCE2 CH3;MEASU:MEAS3:EDGE1 RIS;MEASU:MEAS3:EDGE2 CROSS;MEASU:MEAS3:THRESH2 0.5\"}},{\"id\":\"s11\",\"type\":\"write\",\"label\":\"Add Pk2Pk and Mean on CH1\",\"params\":{\"command\":\"MEASU:ADDMEAS PK2PK;MEASU:MEAS4:SOURCE1 CH1;MEASU:ADDMEAS MEAN;MEASU:MEAS5:SOURCE1 CH1\"}},{\"id\":\"s12\",\"type\":\"write\",\"label\":\"Add Pk2Pk and Mean on CH2\",\"params\":{\"command\":\"MEASU:ADDMEAS PK2PK;MEASU:MEAS6:SOURCE1 CH2;MEASU:ADDMEAS MEAN;MEASU:MEAS7:SOURCE1 CH2\"}},{\"id\":\"s13\",\"type\":\"write\",\"label\":\"Add Pk2Pk and Mean on CH3\",\"params\":{\"command\":\"MEASU:ADDMEAS PK2PK;MEASU:MEAS8:SOURCE1 CH3;MEASU:ADDMEAS MEAN;MEASU:MEAS9:SOURCE1 CH3\"}},{\"id\":\"s14\",\"type\":\"write\",\"label\":\"Start Single Acquisition\",\"params\":{\"command\":\"ACQ:STATE ON\"}},{\"id\":\"s15\",\"type\":\"sleep\",\"label\":\"Wait for Acquisition\",\"params\":{\"duration\":1}},{\"id\":\"s16\",\"type\":\"query\",\"label\":\"Query Delay CH4→CH1\",\"params\":{\"command\":\"MEASU:MEAS1:RESU:CURR?\",\"saveAs\":\"delay_ch4_ch1\"}},{\"id\":\"s17\",\"type\":\"query\",\"label\":\"Query Delay CH4→CH2\",\"params\":{\"command\":\"MEASU:MEAS2:RESU:CURR?\",\"saveAs\":\"delay_ch4_ch2\"}},{\"id\":\"s18\",\"type\":\"query\",\"label\":\"Query Delay CH4→CH3\",\"params\":{\"command\":\"MEASU:MEAS3:RESU:CURR?\",\"saveAs\":\"delay_ch4_ch3\"}},{\"id\":\"s19\",\"type\":\"query\",\"label\":\"Query CH1 Pk2Pk\",\"params\":{\"command\":\"MEASU:MEAS4:RESU:CURR?\",\"saveAs\":\"ch1_pk2pk\"}},{\"id\":\"s20\",\"type\":\"query\",\"label\":\"Query CH1 Mean\",\"params\":{\"command\":\"MEASU:MEAS5:RESU:CURR?\",\"saveAs\":\"ch1_mean\"}},{\"id\":\"s21\",\"type\":\"query\",\"label\":\"Query CH2 Pk2Pk\",\"params\":{\"command\":\"MEASU:MEAS6:RESU:CURR?\",\"saveAs\":\"ch2_pk2pk\"}},{\"id\":\"s22\",\"type\":\"query\",\"label\":\"Query CH2 Mean\",\"params\":{\"command\":\"MEASU:MEAS7:RESU:CURR?\",\"saveAs\":\"ch2_mean\"}},{\"id\":\"s23\",\"type\":\"query\",\"label\":\"Query CH3 Pk2Pk\",\"params\":{\"command\":\"MEASU:MEAS8:RESU:CURR?\",\"saveAs\":\"ch3_pk2pk\"}},{\"id\":\"s24\",\"type\":\"query\",\"label\":\"Query CH3 Mean\",\"params\":{\"command\":\"MEASU:MEAS9:RESU:CURR?\",\"saveAs\":\"ch3_mean\"}},{\"id\":\"s25\",\"type\":\"save_waveform\",\"label\":\"Save CH1 Waveform\",\"params\":{\"source\":\"CH1\",\"filename\":\"ch1.bin\",\"format\":\"bin\"}},{\"id\":\"s26\",\"type\":\"save_waveform\",\"label\":\"Save CH2 Waveform\",\"params\":{\"source\":\"CH2\",\"filename\":\"ch2.bin\",\"format\":\"bin\"}},{\"id\":\"s27\",\"type\":\"save_waveform\",\"label\":\"Save CH3 Waveform\",\"params\":{\"source\":\"CH3\",\"filename\":\"ch3.bin\",\"format\":\"bin\"}},{\"id\":\"s28\",\"type\":\"save_waveform\",\"label\":\"Save CH4 Waveform\",\"params\":{\"source\":\"CH4\",\"filename\":\"ch4.bin\",\"format\":\"bin\"}},{\"id\":\"s29\",\"type\":\"save_screenshot\",\"label\":\"Save Screenshot\",\"params\":{\"filename\":\"capture.png\",\"scopeType\":\"modern\",\"method\":\"pc_transfer\"}},{\"id\":\"s30\",\"type\":\"disconnect\",\"label\":\"Disconnect\",\"params\":{\"instrumentIds\":[]}}]}}]}",
+    "actionsJson": {
+      "summary": "Parsed full flow JSON from assistant output.",
+      "findings": [],
+      "suggestedFixes": [],
+      "actions": [
+        {
+          "type": "replace_flow",
+          "flow": {
+            "name": "Generated Flow",
+            "description": "Generated by assistant",
+            "backend": "pyvisa",
+            "deviceType": "SCOPE",
+            "steps": [
+              {
+                "id": "s1",
+                "type": "connect",
+                "label": "Connect to Scope",
+                "params": {
+                  "instrumentIds": [],
+                  "printIdn": true
+                }
+              },
+              {
+                "id": "s2",
+                "type": "write",
+                "label": "Set CH1 200mV DC 50Ω VDD_CORE",
+                "params": {
+                  "command": "CH1:SCA 0.2;CH1:COUP DC;CH1:IMP 50;CH1:LAB 'VDD_CORE'"
+                }
+              },
+              {
+                "id": "s3",
+                "type": "write",
+                "label": "Set CH2 500mV DC 50Ω VDD_IO",
+                "params": {
+                  "command": "CH2:SCA 0.5;CH2:COUP DC;CH2:IMP 50;CH2:LAB 'VDD_IO'"
+                }
+              },
+              {
+                "id": "s4",
+                "type": "write",
+                "label": "Set CH3 1V DC 50Ω VDD_PHY",
+                "params": {
+                  "command": "CH3:SCA 1;CH3:COUP DC;CH3:IMP 50;CH3:LAB 'VDD_PHY'"
+                }
+              },
+              {
+                "id": "s5",
+                "type": "write",
+                "label": "Set CH4 2V DC 1MΩ PGOOD",
+                "params": {
+                  "command": "CH4:SCA 2;CH4:COUP DC;CH4:IMP 1E6;CH4:LAB 'PGOOD'"
+                }
+              },
+              {
+                "id": "s6",
+                "type": "write",
+                "label": "Set Trigger on CH4 Rising Edge 1V Normal Mode",
+                "params": {
+                  "command": "TRIG:A:EDGE:SOU CH4;TRIG:A:EDGE:SLO RIS;TRIG:A:LEV1 1;TRIG:A:MODE NORM"
+                }
+              },
+              {
+                "id": "s7",
+                "type": "write",
+                "label": "Set Single Sequence Acquisition, 10M Record Length",
+                "params": {
+                  "command": "ACQ:STOPA SEQ;HOR:RECO 10000000"
+                }
+              },
+              {
+                "id": "s8",
+                "type": "write",
+                "label": "Add Delay Measurement: CH4 Rising to CH1 100mV",
+                "params": {
+                  "command": "MEASU:ADDMEAS DELAY;MEASU:MEAS1:SOURCE1 CH4;MEASU:MEAS1:SOURCE2 CH1;MEASU:MEAS1:EDGE1 RIS;MEASU:MEAS1:EDGE2 CROSS;MEASU:MEAS1:THRESH2 0.1"
+                }
+              },
+              {
+                "id": "s9",
+                "type": "write",
+                "label": "Add Delay Measurement: CH4 Rising to CH2 250mV",
+                "params": {
+                  "command": "MEASU:ADDMEAS DELAY;MEASU:MEAS2:SOURCE1 CH4;MEASU:MEAS2:SOURCE2 CH2;MEASU:MEAS2:EDGE1 RIS;MEASU:MEAS2:EDGE2 CROSS;MEASU:MEAS2:THRESH2 0.25"
+                }
+              },
+              {
+                "id": "s10",
+                "type": "write",
+                "label": "Add Delay Measurement: CH4 Rising to CH3 500mV",
+                "params": {
+                  "command": "MEASU:ADDMEAS DELAY;MEASU:MEAS3:SOURCE1 CH4;MEASU:MEAS3:SOURCE2 CH3;MEASU:MEAS3:EDGE1 RIS;MEASU:MEAS3:EDGE2 CROSS;MEASU:MEAS3:THRESH2 0.5"
+                }
+              },
+              {
+                "id": "s11",
+                "type": "write",
+                "label": "Add Pk2Pk and Mean on CH1",
+                "params": {
+                  "command": "MEASU:ADDMEAS PK2PK;MEASU:MEAS4:SOURCE1 CH1;MEASU:ADDMEAS MEAN;MEASU:MEAS5:SOURCE1 CH1"
+                }
+              },
+              {
+                "id": "s12",
+                "type": "write",
+                "label": "Add Pk2Pk and Mean on CH2",
+                "params": {
+                  "command": "MEASU:ADDMEAS PK2PK;MEASU:MEAS6:SOURCE1 CH2;MEASU:ADDMEAS MEAN;MEASU:MEAS7:SOURCE1 CH2"
+                }
+              },
+              {
+                "id": "s13",
+                "type": "write",
+                "label": "Add Pk2Pk and Mean on CH3",
+                "params": {
+                  "command": "MEASU:ADDMEAS PK2PK;MEASU:MEAS8:SOURCE1 CH3;MEASU:ADDMEAS MEAN;MEASU:MEAS9:SOURCE1 CH3"
+                }
+              },
+              {
+                "id": "s14",
+                "type": "write",
+                "label": "Start Single Acquisition",
+                "params": {
+                  "command": "ACQ:STATE ON"
+                }
+              },
+              {
+                "id": "s15",
+                "type": "sleep",
+                "label": "Wait for Acquisition",
+                "params": {
+                  "duration": 1
+                }
+              },
+              {
+                "id": "s16",
+                "type": "query",
+                "label": "Query Delay CH4→CH1",
+                "params": {
+                  "command": "MEASU:MEAS1:RESU:CURR?",
+                  "saveAs": "delay_ch4_ch1"
+                }
+              },
+              {
+                "id": "s17",
+                "type": "query",
+                "label": "Query Delay CH4→CH2",
+                "params": {
+                  "command": "MEASU:MEAS2:RESU:CURR?",
+                  "saveAs": "delay_ch4_ch2"
+                }
+              },
+              {
+                "id": "s18",
+                "type": "query",
+                "label": "Query Delay CH4→CH3",
+                "params": {
+                  "command": "MEASU:MEAS3:RESU:CURR?",
+                  "saveAs": "delay_ch4_ch3"
+                }
+              },
+              {
+                "id": "s19",
+                "type": "query",
+                "label": "Query CH1 Pk2Pk",
+                "params": {
+                  "command": "MEASU:MEAS4:RESU:CURR?",
+                  "saveAs": "ch1_pk2pk"
+                }
+              },
+              {
+                "id": "s20",
+                "type": "query",
+                "label": "Query CH1 Mean",
+                "params": {
+                  "command": "MEASU:MEAS5:RESU:CURR?",
+                  "saveAs": "ch1_mean"
+                }
+              },
+              {
+                "id": "s21",
+                "type": "query",
+                "label": "Query CH2 Pk2Pk",
+                "params": {
+                  "command": "MEASU:MEAS6:RESU:CURR?",
+                  "saveAs": "ch2_pk2pk"
+                }
+              },
+              {
+                "id": "s22",
+                "type": "query",
+                "label": "Query CH2 Mean",
+                "params": {
+                  "command": "MEASU:MEAS7:RESU:CURR?",
+                  "saveAs": "ch2_mean"
+                }
+              },
+              {
+                "id": "s23",
+                "type": "query",
+                "label": "Query CH3 Pk2Pk",
+                "params": {
+                  "command": "MEASU:MEAS8:RESU:CURR?",
+                  "saveAs": "ch3_pk2pk"
+                }
+              },
+              {
+                "id": "s24",
+                "type": "query",
+                "label": "Query CH3 Mean",
+                "params": {
+                  "command": "MEASU:MEAS9:RESU:CURR?",
+                  "saveAs": "ch3_mean"
+                }
+              },
+              {
+                "id": "s25",
+                "type": "save_waveform",
+                "label": "Save CH1 Waveform",
+                "params": {
+                  "source": "CH1",
+                  "filename": "ch1.bin",
+                  "format": "bin"
+                }
+              },
+              {
+                "id": "s26",
+                "type": "save_waveform",
+                "label": "Save CH2 Waveform",
+                "params": {
+                  "source": "CH2",
+                  "filename": "ch2.bin",
+                  "format": "bin"
+                }
+              },
+              {
+                "id": "s27",
+                "type": "save_waveform",
+                "label": "Save CH3 Waveform",
+                "params": {
+                  "source": "CH3",
+                  "filename": "ch3.bin",
+                  "format": "bin"
+                }
+              },
+              {
+                "id": "s28",
+                "type": "save_waveform",
+                "label": "Save CH4 Waveform",
+                "params": {
+                  "source": "CH4",
+                  "filename": "ch4.bin",
+                  "format": "bin"
+                }
+              },
+              {
+                "id": "s29",
+                "type": "save_screenshot",
+                "label": "Save Screenshot",
+                "params": {
+                  "filename": "capture.png",
+                  "scopeType": "modern",
+                  "method": "pc_transfer"
+                }
+              },
+              {
+                "id": "s30",
+                "type": "disconnect",
+                "label": "Disconnect",
+                "params": {
+                  "instrumentIds": []
+                }
+              }
+            ]
+          }
+        }
+      ]
+    },
+    "stepCount": 1,
+    "stepTypes": [
+      "replace_flow"
+    ]
+  },
+  "durationMs": 28931,
+  "ok": true
+}

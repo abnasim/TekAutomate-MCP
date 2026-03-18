@@ -1,0 +1,81 @@
+{
+  "timestamp": "2026-03-18T21:55:43.803Z",
+  "requestId": "1773870943703-c6u7qo",
+  "provider": "openai",
+  "model": "gpt-5.4",
+  "outputMode": "steps_json",
+  "deviceType": "AFG",
+  "modelFamily": "AFG31000",
+  "backend": "pyvisa",
+  "userMessage": "Set sine wave 1kHz 2Vpp 50ohm output on",
+  "flowContext": {
+    "stepCount": 0,
+    "stepTypes": [],
+    "validationErrors": []
+  },
+  "scpiContextHits": 0,
+  "toolCalls": [],
+  "postCheck": {
+    "errors": [],
+    "warnings": [],
+    "autoRepairTriggered": false
+  },
+  "response": {
+    "text": "ACTIONS_JSON: {\"summary\":\"Built 4 verified planner steps without a model call.\",\"findings\":[],\"suggestedFixes\":[\"Filled connect/disconnect instrumentIds with workspace alias \\\"afg1\\\" for direct chat apply compatibility.\"],\"actions\":[{\"type\":\"replace_flow\",\"flow\":{\"name\":\"AFG Planner Flow\",\"description\":\"Set sine wave 1kHz 2Vpp 50ohm output on\",\"backend\":\"pyvisa\",\"deviceType\":\"AFG\",\"steps\":[{\"id\":\"1\",\"type\":\"connect\",\"label\":\"Connect\",\"params\":{\"instrumentIds\":[\"afg1\"],\"printIdn\":true}},{\"id\":\"2\",\"type\":\"write\",\"label\":\"Write SOURce1:FREQuency:FIXed\",\"params\":{\"command\":\"SOURce1:FREQuency:FIXed 1000;SOURce1:VOLTage:LEVel:IMMediate:AMPLitude 2;OUTPut1:IMPedance 50;OUTPut1:STATe ON\"}},{\"id\":\"3\",\"type\":\"disconnect\",\"label\":\"Disconnect\",\"params\":{\"instrumentIds\":[\"afg1\"]}}]}}]}",
+    "actionsJson": {
+      "summary": "Built 4 verified planner steps without a model call.",
+      "findings": [],
+      "suggestedFixes": [
+        "Filled connect/disconnect instrumentIds with workspace alias \"afg1\" for direct chat apply compatibility."
+      ],
+      "actions": [
+        {
+          "type": "replace_flow",
+          "flow": {
+            "name": "AFG Planner Flow",
+            "description": "Set sine wave 1kHz 2Vpp 50ohm output on",
+            "backend": "pyvisa",
+            "deviceType": "AFG",
+            "steps": [
+              {
+                "id": "1",
+                "type": "connect",
+                "label": "Connect",
+                "params": {
+                  "instrumentIds": [
+                    "afg1"
+                  ],
+                  "printIdn": true
+                }
+              },
+              {
+                "id": "2",
+                "type": "write",
+                "label": "Write SOURce1:FREQuency:FIXed",
+                "params": {
+                  "command": "SOURce1:FREQuency:FIXed 1000;SOURce1:VOLTage:LEVel:IMMediate:AMPLitude 2;OUTPut1:IMPedance 50;OUTPut1:STATe ON"
+                }
+              },
+              {
+                "id": "3",
+                "type": "disconnect",
+                "label": "Disconnect",
+                "params": {
+                  "instrumentIds": [
+                    "afg1"
+                  ]
+                }
+              }
+            ]
+          }
+        }
+      ]
+    },
+    "stepCount": 1,
+    "stepTypes": [
+      "replace_flow"
+    ]
+  },
+  "durationMs": 100,
+  "ok": true
+}

@@ -1,0 +1,31 @@
+{
+  "timestamp": "2026-03-18T08:38:20.737Z",
+  "requestId": "1773823090080-vzp6bo",
+  "provider": "openai",
+  "model": "gpt-5.4",
+  "outputMode": "steps_json",
+  "deviceType": "SCOPE",
+  "modelFamily": "MSO4/5/6 Series",
+  "backend": "pyvisa",
+  "userMessage": "Set CH1 to 500mV DC 50 ohm",
+  "flowContext": {
+    "stepCount": 0,
+    "stepTypes": [],
+    "validationErrors": []
+  },
+  "scpiContextHits": 0,
+  "toolCalls": [],
+  "postCheck": {
+    "errors": [],
+    "warnings": [],
+    "autoRepairTriggered": false
+  },
+  "response": {
+    "text": "I can’t safely emit applyable TekAutomate flow JSON for this yet.\n\nReason: the preloaded verified SCPI candidates for this turn only include `TRIGger:B:RESET` and unrelated `POWer:...` commands. They do not include verified CH1 input settings for:\n- vertical scale / 500 mV\n- coupling / DC\n- termination / 50 ohm\n\nPer your runtime rules, I must fail closed rather than guess SCPI for MSO4/5/6.\n\nPlease provide MCP-verified CH1 command records for the needed headers, or enable the exact lookup for this turn, and I can immediately return a valid `steps_json` flow.",
+    "actionsJson": null,
+    "stepCount": 0,
+    "stepTypes": []
+  },
+  "durationMs": 10657,
+  "ok": true
+}

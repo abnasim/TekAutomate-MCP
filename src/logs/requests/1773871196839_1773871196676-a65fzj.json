@@ -1,0 +1,98 @@
+{
+  "timestamp": "2026-03-18T21:59:56.839Z",
+  "requestId": "1773871196676-a65fzj",
+  "provider": "openai",
+  "model": "gpt-5.4",
+  "outputMode": "steps_json",
+  "deviceType": "SCOPE",
+  "modelFamily": "MSO4/5/6 Series",
+  "backend": "pyvisa",
+  "userMessage": "Add hold time measurement between CH2 falling and CH1 rising edges",
+  "flowContext": {
+    "stepCount": 0,
+    "stepTypes": [],
+    "validationErrors": []
+  },
+  "scpiContextHits": 0,
+  "toolCalls": [],
+  "postCheck": {
+    "errors": [],
+    "warnings": [],
+    "autoRepairTriggered": false
+  },
+  "response": {
+    "text": "ACTIONS_JSON: {\"summary\":\"Built a server-side verified common TekAutomate flow.\",\"findings\":[],\"suggestedFixes\":[\"Filled connect/disconnect instrumentIds with workspace alias \\\"scope1\\\" for direct chat apply compatibility.\"],\"actions\":[{\"type\":\"replace_flow\",\"flow\":{\"name\":\"Generated Flow\",\"description\":\"Common TekAutomate scope flow built server-side from verified commands.\",\"backend\":\"pyvisa\",\"deviceType\":\"SCOPE\",\"steps\":[{\"id\":\"1\",\"type\":\"connect\",\"label\":\"Connect\",\"params\":{\"instrumentIds\":[\"scope1\"],\"printIdn\":true}},{\"id\":\"2\",\"type\":\"write\",\"label\":\"Clear existing measurements\",\"params\":{\"command\":\"MEASUrement:DELETEALL\"}},{\"id\":\"3\",\"type\":\"group\",\"label\":\"Add setup/hold measurements\",\"params\":{},\"collapsed\":false,\"children\":[{\"id\":\"sh1\",\"type\":\"write\",\"label\":\"Add hold measurement CH2 to CH1\",\"params\":{\"command\":\"MEASUrement:MEAS1:TYPe HOLD;MEASUrement:MEAS1:SOUrce1 CH2;MEASUrement:MEAS1:SOUrce2 CH1\"}}]},{\"id\":\"4\",\"type\":\"disconnect\",\"label\":\"Disconnect\",\"params\":{\"instrumentIds\":[\"scope1\"]}}]}}]}",
+    "actionsJson": {
+      "summary": "Built a server-side verified common TekAutomate flow.",
+      "findings": [],
+      "suggestedFixes": [
+        "Filled connect/disconnect instrumentIds with workspace alias \"scope1\" for direct chat apply compatibility."
+      ],
+      "actions": [
+        {
+          "type": "replace_flow",
+          "flow": {
+            "name": "Generated Flow",
+            "description": "Common TekAutomate scope flow built server-side from verified commands.",
+            "backend": "pyvisa",
+            "deviceType": "SCOPE",
+            "steps": [
+              {
+                "id": "1",
+                "type": "connect",
+                "label": "Connect",
+                "params": {
+                  "instrumentIds": [
+                    "scope1"
+                  ],
+                  "printIdn": true
+                }
+              },
+              {
+                "id": "2",
+                "type": "write",
+                "label": "Clear existing measurements",
+                "params": {
+                  "command": "MEASUrement:DELETEALL"
+                }
+              },
+              {
+                "id": "3",
+                "type": "group",
+                "label": "Add setup/hold measurements",
+                "params": {},
+                "collapsed": false,
+                "children": [
+                  {
+                    "id": "sh1",
+                    "type": "write",
+                    "label": "Add hold measurement CH2 to CH1",
+                    "params": {
+                      "command": "MEASUrement:MEAS1:TYPe HOLD;MEASUrement:MEAS1:SOUrce1 CH2;MEASUrement:MEAS1:SOUrce2 CH1"
+                    }
+                  }
+                ]
+              },
+              {
+                "id": "4",
+                "type": "disconnect",
+                "label": "Disconnect",
+                "params": {
+                  "instrumentIds": [
+                    "scope1"
+                  ]
+                }
+              }
+            ]
+          }
+        }
+      ]
+    },
+    "stepCount": 1,
+    "stepTypes": [
+      "replace_flow"
+    ]
+  },
+  "durationMs": 163,
+  "ok": true
+}

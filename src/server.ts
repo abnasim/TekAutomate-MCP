@@ -69,7 +69,7 @@ function logRequest(payload: {
   requestId: string;
   startedAt: number;
   req: McpChatRequest;
-  result?: { text: string; errors: string[]; warnings?: string[] };
+  result?: { text: string; displayText?: string; errors: string[]; warnings?: string[] };
   ok: boolean;
 }) {
   ensureLogDir();
@@ -159,6 +159,32 @@ function sendSseStart(res: http.ServerResponse) {
 function sseWrite(res: http.ServerResponse, event: string, data: unknown) {
   res.write(`event: ${event}\n`);
   res.write(`data: ${typeof data === 'string' ? data : JSON.stringify(data)}\n\n`);
+}
+
+function parseProviderError(status: number, raw: string): { code: string; message: string; hint: string } {
+  let code = `http_${status}`;
+  let message = raw || `Provider error ${status}`;
+  let type = '';
+  try {
+    const j = JSON.parse(raw) as Record<string, unknown>;
+    const err = (j.error && typeof j.error === 'object' ? j.error : j) as Record<string, unknown>;
+    code = String(err.code || err.type || code);
+    message = String(err.message || message);
+    type = String(err.type || '');
+  } catch {
+    // Keep defaults if body is not JSON.
+  }
+
+  const k = `${code} ${type} ${message}`.toLowerCase();
+  let hint = 'Check provider/key/model configuration.';
+  if (k.includes('insufficient_quota') || k.includes('quota')) {
+    hint = 'Key is valid but project quota/budget is exhausted or not enabled for this key.';
+  } else if (k.includes('invalid_api_key') || k.includes('authentication') || k.includes('unauthorized')) {
+    hint = 'Invalid API key or provider mismatch.';
+  } else if (k.includes('model_not_found') || k.includes('not_permitted') || k.includes('permission')) {
+    hint = 'Model is not available for this key/account.';
+  }
+  return { code, message, hint };
 }
 
 export async function createServer(port = 8787): Promise<http.Server> {
@@ -286,10 +312,14 @@ export async function createServer(port = 8787): Promise<http.Server> {
       const requestId = `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
       try {
         const body = (await readJsonBody(req)) as unknown as McpChatRequest;
-        if (!body?.userMessage || !body?.provider || !body?.apiKey || !body?.model) {
+        const normalizedUserMessage = typeof body?.userMessage === 'string' ? body.userMessage.trim() : '';
+        if (!normalizedUserMessage || !body?.provider || !body?.apiKey || !body?.model) {
           sendJson(res, 400, { ok: false, error: 'Invalid request payload' });
           return;
         }
+        body.userMessage = normalizedUserMessage;
+        const hasAssistantRoute = typeof body.openaiAssistantId === 'string' && body.openaiAssistantId.trim().length > 0;
+        console.log(`[MCP] /ai/chat requestId=${requestId} openaiAssistantId=${hasAssistantRoute ? '(set)' : '(none)'} userMessageLen=${body.userMessage?.length ?? 0}`);
         const result = await runToolLoop(body);
         lastAiDebug = {
           timestamp: new Date().toISOString(),
@@ -306,6 +336,7 @@ export async function createServer(port = 8787): Promise<http.Server> {
           },
           response: {
             text: result.text,
+            displayText: result.displayText,
             errors: result.errors,
           },
           prompts: result.debug
@@ -314,6 +345,7 @@ export async function createServer(port = 8787): Promise<http.Server> {
                 systemPrompt: result.debug.systemPrompt,
                 userPrompt: result.debug.userPrompt,
                 developerPrompt: (result.debug as Record<string, unknown>).developerPrompt,
+                providerRequest: (result.debug as Record<string, unknown>).providerRequest,
                 shortcutResponse: result.debug.shortcutResponse,
               }
             : undefined,
@@ -339,6 +371,8 @@ export async function createServer(port = 8787): Promise<http.Server> {
         sendJson(res, 200, {
           ok: true,
           text: result.text,
+          displayText: result.displayText,
+          openaiThreadId: result.assistantThreadId,
           errors: result.errors,
           warnings: result.warnings,
           metrics: result.metrics,
@@ -365,6 +399,151 @@ export async function createServer(port = 8787): Promise<http.Server> {
           result: err instanceof Error ? { text: err.message, errors: [err.message] } : undefined,
           ok: false,
         });
+        sendJson(res, 500, {
+          ok: false,
+          error: err instanceof Error ? err.message : 'Server error',
+        });
+      }
+      return;
+    }
+
+    if (req.method === 'POST' && req.url === '/ai/key-test') {
+      try {
+        const body = (await readJsonBody(req)) as {
+          provider?: 'openai' | 'anthropic';
+          apiKey?: string;
+          model?: string;
+        };
+        const provider = body?.provider;
+        const apiKey = String(body?.apiKey || '').trim();
+        const model = String(body?.model || '').trim();
+        if (!provider || !apiKey || !model) {
+          sendJson(res, 400, { ok: false, error: 'Missing provider, apiKey, or model.' });
+          return;
+        }
+
+        if (provider === 'openai') {
+          const openaiRes = await fetch('https://api.openai.com/v1/responses', {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+              Authorization: `Bearer ${apiKey}`,
+            },
+            body: JSON.stringify({
+              model,
+              input: 'ping',
+              max_output_tokens: 16,
+            }),
+          });
+          if (!openaiRes.ok) {
+            const raw = await openaiRes.text();
+            const parsed = parseProviderError(openaiRes.status, raw);
+            sendJson(res, openaiRes.status, { ok: false, provider, model, ...parsed });
+            return;
+          }
+        } else {
+          const anthRes = await fetch('https://api.anthropic.com/v1/messages', {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+              'x-api-key': apiKey,
+              'anthropic-version': '2023-06-01',
+            },
+            body: JSON.stringify({
+              model,
+              max_tokens: 16,
+              messages: [{ role: 'user', content: 'ping' }],
+            }),
+          });
+          if (!anthRes.ok) {
+            const raw = await anthRes.text();
+            const parsed = parseProviderError(anthRes.status, raw);
+            sendJson(res, anthRes.status, { ok: false, provider, model, ...parsed });
+            return;
+          }
+        }
+
+        sendJson(res, 200, {
+          ok: true,
+          provider,
+          model,
+          reachable: true,
+          message: 'Provider/key/model accepted.',
+        });
+      } catch (err) {
+        sendJson(res, 500, {
+          ok: false,
+          error: err instanceof Error ? err.message : 'Server error',
+        });
+      }
+      return;
+    }
+
+    if (req.method === 'POST' && req.url === '/ai/models') {
+      try {
+        const body = (await readJsonBody(req)) as {
+          provider?: 'openai' | 'anthropic';
+          apiKey?: string;
+        };
+        const provider = body?.provider;
+        const apiKey = String(body?.apiKey || '').trim();
+        if (!provider || !apiKey) {
+          sendJson(res, 400, { ok: false, error: 'Missing provider or apiKey.' });
+          return;
+        }
+
+        if (provider === 'openai') {
+          const modelsRes = await fetch('https://api.openai.com/v1/models', {
+            method: 'GET',
+            headers: {
+              Authorization: `Bearer ${apiKey}`,
+            },
+          });
+          const raw = await modelsRes.text();
+          if (!modelsRes.ok) {
+            const parsed = parseProviderError(modelsRes.status, raw);
+            sendJson(res, modelsRes.status, { ok: false, provider, ...parsed });
+            return;
+          }
+          let ids: string[] = [];
+          try {
+            const json = JSON.parse(raw) as { data?: Array<{ id?: string }> };
+            ids = (json.data || [])
+              .map((m) => String(m?.id || '').trim())
+              .filter(Boolean)
+              .sort((a, b) => a.localeCompare(b));
+          } catch {
+            ids = [];
+          }
+          sendJson(res, 200, { ok: true, provider, models: ids });
+          return;
+        }
+
+        const anthRes = await fetch('https://api.anthropic.com/v1/models', {
+          method: 'GET',
+          headers: {
+            'x-api-key': apiKey,
+            'anthropic-version': '2023-06-01',
+          },
+        });
+        const anthRaw = await anthRes.text();
+        if (!anthRes.ok) {
+          const parsed = parseProviderError(anthRes.status, anthRaw);
+          sendJson(res, anthRes.status, { ok: false, provider, ...parsed });
+          return;
+        }
+        let ids: string[] = [];
+        try {
+          const json = JSON.parse(anthRaw) as { data?: Array<{ id?: string }> };
+          ids = (json.data || [])
+            .map((m) => String(m?.id || '').trim())
+            .filter(Boolean)
+            .sort((a, b) => a.localeCompare(b));
+        } catch {
+          ids = [];
+        }
+        sendJson(res, 200, { ok: true, provider, models: ids });
+      } catch (err) {
         sendJson(res, 500, {
           ok: false,
           error: err instanceof Error ? err.message : 'Server error',

@@ -15,9 +15,12 @@ export interface ToolResult<T = unknown> {
 export interface McpChatRequest {
   userMessage: string;
   outputMode: 'steps_json' | 'blockly_xml';
+  intent?: 'default' | 'command_explain';
   provider: 'openai' | 'anthropic';
   apiKey: string;
   model: string;
+  openaiAssistantId?: string;
+  openaiThreadId?: string;
   scpiContext?: unknown[];
   tmContext?: unknown[];
   history?: Array<{ role: 'user' | 'assistant'; content: string }>;
