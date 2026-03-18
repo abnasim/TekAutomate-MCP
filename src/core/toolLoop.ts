@@ -2696,6 +2696,11 @@ function resolveOpenAiMaxOutputTokens(): number {
   return Math.max(256, Math.floor(raw));
 }
 
+function buildOpenAiCompletionTokenOption(model: string): Record<string, number> {
+  const max = resolveOpenAiMaxOutputTokens();
+  return /^gpt-5/i.test(model) ? { max_completion_tokens: max } : { max_tokens: max };
+}
+
 function resolveHostedResponseTemperature(req: McpChatRequest): number {
   if (isExplainOnlyCommandAsk(req)) return 0.4;
   return req.outputMode === 'steps_json' ? 0.1 : 0.5;
@@ -3679,13 +3684,14 @@ async function runOpenAiResponses(
     } else {
       console.log('[MCP] OpenAI route: direct (Chat Completions one-shot)');
       const openAiBase = process.env.OPENAI_BASE_URL || 'https://api.openai.com';
+      const model = resolveOpenAiModel(req);
       providerRequest = {
-        model: resolveOpenAiModel(req),
+        model,
         messages: [
           { role: 'system', content: `${instructions}\n\n${developerPrompt}` },
           { role: 'user', content: req.userMessage },
         ],
-        max_tokens: resolveOpenAiMaxOutputTokens(),
+        ...buildOpenAiCompletionTokenOption(model),
       };
       const res = await fetch(`${openAiBase}/v1/chat/completions`, {
         method: 'POST',
@@ -4018,13 +4024,14 @@ async function runOpenAiToolLoop(
   let providerRequest: Record<string, unknown>;
   console.log('[MCP] OpenAI route: direct (Chat Completions one-shot)');
   const openAiBase = process.env.OPENAI_BASE_URL || 'https://api.openai.com';
+  const model = resolveOpenAiModel(req);
   providerRequest = {
-    model: resolveOpenAiModel(req),
+    model,
     messages: [
       { role: 'system', content: systemPrompt },
       { role: 'user', content: userPrompt },
     ],
-    max_tokens: resolveOpenAiMaxOutputTokens(),
+    ...buildOpenAiCompletionTokenOption(model),
   };
   const res = await fetch(`${openAiBase}/v1/chat/completions`, {
     method: 'POST',
@@ -4283,6 +4290,14 @@ export async function runToolLoop(req: McpChatRequest): Promise<ToolLoopResult> 
   }
 
   const plannerOutput = await planIntent(req);
+  console.log(
+    '[PLANNER] deviceType:',
+    req.flowContext.deviceType || 'SCOPE',
+    'resolvedCount:',
+    plannerOutput?.resolvedCommands?.length || 0,
+    'unresolvedCount:',
+    plannerOutput?.unresolved?.length || 0
+  );
   const plannerShortcut =
     plannerOutput.resolvedCommands.length > 0 && plannerOutput.unresolved.length === 0
       ? buildActionsFromPlanner(plannerOutput, req)

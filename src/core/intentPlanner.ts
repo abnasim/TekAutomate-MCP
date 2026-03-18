@@ -1026,7 +1026,10 @@ export async function resolveBusCommands(
   if (!hasBusDecodeDetails(bus)) return [];
 
   const out: ResolvedCommand[] = [];
-  const displayStateRecord = findExactHeader(index, 'DISplay:WAVEView<x>:BUS:B<x>:STATE', sourceFile);
+  const displayStateRecord =
+    sourceFile === 'MSO_DPO_5k_7k_70K.json'
+      ? null
+      : findExactHeader(index, 'DISplay:WAVEView<x>:BUS:B<x>:STATE', sourceFile);
   const pushBusDisplayState = () => {
     if (displayStateRecord) {
       out.push(
@@ -1600,6 +1603,31 @@ export async function resolveSmuCommands(
         materialize(senseRecord, ':SENSe:FUNCtion', `"${smu.measureFunction}"`, 'SMU_MEASURE')
       );
     }
+    const measureHeader =
+      smu.measureFunction === 'CURRent'
+        ? ':MEASure:CURRent:DC'
+        : smu.measureFunction === 'VOLTage'
+          ? ':MEASure:VOLTage:DC'
+          : smu.measureFunction === 'RESistance'
+            ? ':MEASure:RESistance'
+            : smu.measureFunction === 'POWer'
+              ? ':MEASure:POWer'
+              : undefined;
+    if (measureHeader) {
+      const measureRecord = findExactHeader(index, measureHeader, sourceFile);
+      if (measureRecord) {
+        out.push(
+          materialize(
+            measureRecord,
+            `${measureHeader}?`,
+            undefined,
+            'SMU_MEASURE',
+            'query',
+            `smu_${smu.measureFunction.toLowerCase()}`
+          )
+        );
+      }
+    }
   }
   if (smu.sweepStart !== undefined) {
     const startRecord = findExactHeader(index, ':SOURce:VOLTage:STARt', sourceFile);
@@ -1980,14 +2008,6 @@ export function parseAwgIntent(message: string): ParsedAwgIntent | undefined {
 }
 
 export function parseSmuIntent(message: string): ParsedSmuIntent | undefined {
-  if (
-    !/\bsmu\b|source measure|keithley|measure current|measure voltage|source current|source voltage/i.test(
-      message
-    )
-  ) {
-    return undefined;
-  }
-
   const isCurrentSource = /\b(source|force)\s+current\b|current\s+source\b/i.test(message);
   const voltageMatch = message.match(/(-?\d+(?:\.\d+)?)\s*V\b(?!\s*pp)/i);
   const currentMatch = message.match(/(-?\d+(?:\.\d+)?)\s*(mA|A|uA)\b/i);
@@ -2003,6 +2023,20 @@ export function parseSmuIntent(message: string): ParsedSmuIntent | undefined {
   const measureCurrent = /\b(measure|query)\s+curr/i.test(message);
   const measureResistance = /\b(measure|query)\s+res/i.test(message);
   const measurePower = /\b(measure|query)\s+power/i.test(message);
+
+  if (
+    voltageMatch === null &&
+    currentMatch === null &&
+    complianceMatch === null &&
+    sweepMatch === null &&
+    outputOn === undefined &&
+    !measureVoltage &&
+    !measureCurrent &&
+    !measureResistance &&
+    !measurePower
+  ) {
+    return undefined;
+  }
 
   return {
     sourceFunction: isCurrentSource ? 'CURRent' : 'VOLTage',
@@ -2383,7 +2417,14 @@ function findExactHeader(
     .getEntries()
     .filter((entry) => headersEquivalent(entry.header, header));
 
-  return matches.find((entry) => entry.sourceFile === sourceFile) ?? matches[0] ?? null;
+  const sourceMatch = matches.find((entry) => entry.sourceFile === sourceFile) ?? null;
+  if (sourceFile === 'MSO_DPO_5k_7k_70K.json') {
+    const legacyOverride =
+      matches.find((entry) => entry.sourceFile === 'legacy_scope_manual_overrides.json') ?? null;
+    return sourceMatch ?? legacyOverride;
+  }
+
+  return sourceMatch ?? matches[0] ?? null;
 }
 
 function materialize(
