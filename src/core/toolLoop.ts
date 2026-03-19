@@ -4576,13 +4576,9 @@ function isNonActionableModelResponse(text: string, errors: string[]): boolean {
   const body = String(text || '');
   const missingActions = !hasActionsJsonPayload(body);
   const emptyActions = hasEmptyActionsJson(body);
-  const verificationGap = looksLikeUnverifiedGapResponse(body);
   const parseFailed = (errors || []).some((error) => /ACTIONS_JSON parse failed/i.test(String(error || '')));
-  const noActionSignals =
-    /\b(no actionable|no action(?:s)? generated|could not build|unable to build|cannot build|insufficient info to build)\b/i.test(
-      body
-    );
-  return missingActions || emptyActions || verificationGap || parseFailed || noActionSignals;
+  // In MCP+AI mode, keep AI as primary. Only fallback when output is truly non-actionable.
+  return missingActions || emptyActions || parseFailed;
 }
 
 function isExplainOnlyCommandAsk(req: McpChatRequest): boolean {
