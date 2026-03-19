@@ -450,9 +450,14 @@ function normalizeHeaderForMatch(command: string): string {
     .split('?')[0]
     .trim()
     .split(/\s/)[0]
-    .replace(/CH\d+/gi, 'CH<x>')
-    .replace(/MEAS\d+/gi, 'MEAS<x>')
-    .replace(/PLOT\d+/gi, 'PLOT<x>')
+    .replace(/TRIGger:(A|B)\b/gi, 'TRIGger:{A|B}')
+    .replace(/\bCH\d+\b/gi, 'CH<x>')
+    .replace(/\bMEAS\d+\b/gi, 'MEAS<x>')
+    .replace(/\bPLOT\d+\b/gi, 'PLOT<x>')
+    .replace(/\bB\d+\b/gi, 'B<x>')
+    .replace(/\bSEARCH\d+\b/gi, 'SEARCH<x>')
+    .replace(/\bREF\d+\b/gi, 'REF<x>')
+    .replace(/\bWAVEVIEW\d+\b/gi, 'WAVEView<x>')
     .replace(/SOUrce\d+/gi, 'SOUrce<x>')
     .toLowerCase();
 }
@@ -536,7 +541,7 @@ function detectFastFrameCount(req: McpChatRequest): number {
 }
 
 function isValidationRequest(req: McpChatRequest): boolean {
-  return /\b(validate|validation|review|check flow|does this look right|does this look good|looks good|briefly)\b/i.test(
+  return /\b(validate|validation|verify|verification|review|check flow|is this flow good|is this good|does this look right|does this look good|looks good|briefly)\b/i.test(
     req.userMessage
   );
 }
@@ -4009,6 +4014,7 @@ export function buildAssistantUserPrompt(
     `Backend: ${fc.backend || 'pyvisa'}, DeviceType: ${fc.deviceType || 'SCOPE'}, ModelFamily: ${fc.modelFamily || 'unknown'}.`,
     `Flow size: ${flatSteps.length} steps. Types: ${topStepTypes.join(', ') || '(empty)'}.`,
   ];
+  const flowValidateMode = isFlowValidationRequest(req);
   const schemaLines = [
     'TekAutomate schema rules:',
     '- Your true job is to build or edit directly applyable TekAutomate Steps UI flows or valid Blockly XML, not generic workflow descriptions.',
@@ -4105,6 +4111,34 @@ export function buildAssistantUserPrompt(
   // avoid duplicating it in this prompt body.
   if (req.flowContext.selectedStep) {
     lines.push('Selected step:', JSON.stringify(req.flowContext.selectedStep));
+  }
+  if (flowValidateMode) {
+    const flowCommandSnapshot = flatSteps.length
+      ? flatSteps
+          .slice(0, 80)
+          .map((step) => {
+            const id = String(step.id || '?');
+            const type = String(step.type || 'unknown');
+            const label = String(step.label || '').trim();
+            const params = (step.params && typeof step.params === 'object')
+              ? (step.params as Record<string, unknown>)
+              : {};
+            const command = typeof params.command === 'string' ? params.command : '';
+            const commands = Array.isArray(params.commands)
+              ? (params.commands as unknown[]).map((v) => String(v)).filter(Boolean)
+              : [];
+            const saveAs = typeof params.saveAs === 'string' ? params.saveAs : '';
+            const descriptor = command
+              ? ` command=${command}`
+              : commands.length
+                ? ` commands=${commands.join(' ; ')}`
+                : '';
+            const querySave = saveAs ? ` saveAs=${saveAs}` : '';
+            return `- [${id}] ${type}${label ? ` "${label}"` : ''}${descriptor}${querySave}`;
+          })
+          .join('\n')
+      : '- (empty flow)';
+    lines.push('Flow command snapshot (for strict verification):', flowCommandSnapshot);
   }
   if (flowCommandIssues.length) {
     lines.push(`Precomputed flow command findings:\n${flowCommandIssues.map((x) => `- ${x}`).join('\n')}`);
@@ -4500,6 +4534,7 @@ function canShortcut(plannerOutput: PlannerOutput, req: McpChatRequest): boolean
 }
 
 function shouldUseCompactDeveloperContext(req: McpChatRequest): boolean {
+  if (isFlowValidationRequest(req)) return false;
   const hasThread = Boolean(String(req.openaiThreadId || '').trim());
   const hasHistory = Array.isArray(req.history) && req.history.length > 0;
   if (!hasThread && !hasHistory) return false;
@@ -4618,6 +4653,53 @@ async function runOpenAiToolLoop(
       developerPrompt.includes('PLANNER RESOLVED')
     );
     console.log('[MCP] OpenAI route: assistant (Responses + tools)');
+    const preferHostedOneShot =
+      req.mode === 'mcp_ai' &&
+      isHostedStructuredBuildRequest(req) &&
+      !isFlowValidationRequest(req) &&
+      !isExplainOnlyCommandAsk(req) &&
+      !isFollowUpCorrectionRequest(req);
+    if (preferHostedOneShot) {
+      console.log('[MCP] OpenAI fast-path: one-shot hosted response (no tool loop)');
+      const oneShotStartedAt = Date.now();
+      const oneShot = await runOpenAiHostedResponse(req, assistantPrompt, {
+        tools: [],
+        developerMessage: developerPrompt,
+      });
+      const oneShotHasStructuredOutput =
+        hasActionsJsonPayload(oneShot.text) ||
+        /```json\s*[\s\S]*```/i.test(String(oneShot.text || ''));
+      if (oneShotHasStructuredOutput) {
+        return {
+          text: oneShot.text,
+          assistantThreadId: oneShot.responseId,
+          metrics: {
+            totalMs: 0,
+            usedShortcut: false,
+            provider: 'openai',
+            iterations: 1,
+            toolCalls: 0,
+            toolMs: 0,
+            modelMs: Date.now() - oneShotStartedAt,
+            promptChars: {
+              system: systemPrompt.length,
+              user: assistantPrompt.length,
+            },
+          },
+          debug: {
+            promptFileText: modePrompt,
+            systemPrompt,
+            developerPrompt,
+            userPrompt: assistantPrompt,
+            rawOutput: oneShot.raw,
+            providerRequest: oneShot.requestPayload,
+            toolDefinitions: [],
+            toolTrace: [],
+          },
+        };
+      }
+      console.log('[MCP] OpenAI fast-path fallback: response lacked structured output, running tool loop.');
+    }
     const preloadedContext = await preloadSourceOfTruthContext(req, toolTrace);
     if (preloadedContext.contextText) {
       assistantPrompt = `${assistantPrompt}\n\n${preloadedContext.contextText}`;
@@ -5025,10 +5107,11 @@ export async function runToolLoop(req: McpChatRequest): Promise<ToolLoopResult> 
     };
   }
   const allowMissingActionsJson = explainOnlyMode;
-  const flowCommandIssues = isFlowValidationRequest(req)
+  const flowValidateMode = isFlowValidationRequest(req);
+  const flowCommandIssues = flowValidateMode
     ? await detectFlowCommandIssues(req)
     : [];
-  if (isFlowValidationRequest(req) && flowCommandIssues.length > 0) {
+  if (flowValidateMode && flowCommandIssues.length > 0) {
     const text =
       `Found ${flowCommandIssues.length} flow command issue(s).\n` +
       `ACTIONS_JSON: ${JSON.stringify({
@@ -5069,16 +5152,29 @@ export async function runToolLoop(req: McpChatRequest): Promise<ToolLoopResult> 
   }
   const reasoningMode = isReasoningRequest(req.userMessage);
   const followUpCorrectionMode = isFollowUpCorrectionRequest(req);
+  const allowDeterministicShortcut = mcpOnlyMode;
   const commonServerShortcut =
-    explainOnlyMode || (reasoningMode && !buildHeavyMode) || followUpCorrectionMode || forceToolCallMode
+    !allowDeterministicShortcut ||
+    explainOnlyMode ||
+    (reasoningMode && !buildHeavyMode) ||
+    followUpCorrectionMode ||
+    forceToolCallMode
       ? null
       : await buildPyvisaCommonServerShortcut(req);
   const fastFrameShortcut =
-    explainOnlyMode || (reasoningMode && !buildHeavyMode) || followUpCorrectionMode || forceToolCallMode
+    !allowDeterministicShortcut ||
+    explainOnlyMode ||
+    (reasoningMode && !buildHeavyMode) ||
+    followUpCorrectionMode ||
+    forceToolCallMode
       ? null
       : buildPyvisaFastFrameShortcut(req);
   const measurementShortcut =
-    explainOnlyMode || (reasoningMode && !buildHeavyMode) || followUpCorrectionMode || forceToolCallMode
+    !allowDeterministicShortcut ||
+    explainOnlyMode ||
+    (reasoningMode && !buildHeavyMode) ||
+    followUpCorrectionMode ||
+    forceToolCallMode
       ? null
       : await buildPyvisaMeasurementShortcut(req);
   const shortcut = explainOnlyMode
@@ -5087,11 +5183,19 @@ export async function runToolLoop(req: McpChatRequest): Promise<ToolLoopResult> 
         commonServerShortcut ||
         fastFrameShortcut ||
         measurementShortcut ||
-        ((reasoningMode && !buildHeavyMode) || followUpCorrectionMode || forceToolCallMode ? null : buildTmDevicesMeasurementShortcut(req))
+        (
+          !allowDeterministicShortcut ||
+          (reasoningMode && !buildHeavyMode) ||
+          followUpCorrectionMode ||
+          forceToolCallMode
+            ? null
+            : buildTmDevicesMeasurementShortcut(req)
+        )
       );
   const shouldUseShortcut = explainOnlyMode
     ? false
     : (
+        allowDeterministicShortcut &&
         (!reasoningMode || buildHeavyMode) &&
         !followUpCorrectionMode &&
         !forceToolCallMode &&
@@ -5160,13 +5264,14 @@ export async function runToolLoop(req: McpChatRequest): Promise<ToolLoopResult> 
       canShortcut: shortcutEligible,
     });
     plannerShortcut =
+      allowDeterministicShortcut &&
       shortcutEligible &&
       plannerOutput.resolvedCommands.length > 0 &&
       plannerOutput.unresolved.length === 0
         ? buildActionsFromPlanner(plannerOutput, req)
         : null;
   }
-  if (!explainOnlyMode && plannerShortcut) {
+  if (!explainOnlyMode && allowDeterministicShortcut && plannerShortcut) {
     const checked = await postCheckResponse(plannerShortcut, {
       backend: req.flowContext.backend,
       modelFamily: req.flowContext.modelFamily,
@@ -5320,6 +5425,55 @@ export async function runToolLoop(req: McpChatRequest): Promise<ToolLoopResult> 
       },
       debug: {
         toolTrace: [],
+      },
+    };
+  }
+  if (flowValidateMode && flowCommandIssues.length === 0) {
+    const flatSteps = flattenSteps(Array.isArray(req.flowContext.steps) ? req.flowContext.steps : []);
+    const firstType = flatSteps.length ? String(flatSteps[0].type || '').toLowerCase() : '';
+    const lastType = flatSteps.length ? String(flatSteps[flatSteps.length - 1].type || '').toLowerCase() : '';
+    const findings: string[] = [];
+    if (flatSteps.length && firstType !== 'connect') {
+      findings.push('Flow does not start with connect.');
+    }
+    if (flatSteps.length && lastType !== 'disconnect') {
+      findings.push('Flow does not end with disconnect.');
+    }
+    const text =
+      `Flow verification passed: ${flatSteps.length} step(s) checked, 0 SCPI/header issues found.\n` +
+      `ACTIONS_JSON: ${JSON.stringify({
+        summary: 'Flow commands verified against command index.',
+        findings,
+        suggestedFixes: findings.length
+          ? ['Keep connect as first step and disconnect as last step for full-run flows.']
+          : [],
+        actions: [],
+      })}`;
+    return {
+      text,
+      displayText: text,
+      assistantThreadId: resolveOpenAiResponseCursor(req) || undefined,
+      errors: [],
+      warnings: [],
+      metrics: {
+        totalMs: Date.now() - startedAt,
+        usedShortcut: true,
+        provider: req.provider,
+        iterations: 0,
+        toolCalls: 1,
+        toolMs: 0,
+        modelMs: 0,
+        promptChars: { system: 0, user: 0 },
+      },
+      debug: {
+        shortcutResponse: text,
+        toolTrace: [
+          {
+            tool: 'detectFlowCommandIssues',
+            args: {},
+            result: { count: 0, issues: [] },
+          },
+        ],
       },
     };
   }
