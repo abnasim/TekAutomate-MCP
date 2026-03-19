@@ -1321,7 +1321,7 @@ function buildWriteStep(id: string, label: string, commands: string[]): Record<s
     };
   }
 
-  const maxConcatCommands = 3;
+  const maxConcatCommands = PLANNER_MAX_CONCAT_COMMANDS;
   if (commands.length > maxConcatCommands) {
     const chunks = chunkCommands(commands, maxConcatCommands);
     return {
@@ -1519,6 +1519,37 @@ function isOpcCapableWriteCommand(command: string): boolean {
   );
 }
 
+const PLANNER_MAX_CONCAT_COMMANDS = 2;
+
+function plannerWriteBucket(command: string): string {
+  const normalized = normalizePlannerCommand(command);
+  if (!normalized) return 'UNKNOWN';
+
+  if (/^BUS:B\d+:/.test(normalized)) {
+    const bus = normalized.match(/^BUS:(B\d+)/)?.[1] || 'B?';
+    return `BUS:${bus}`;
+  }
+  if (/^DISPLAY:WAVEVIEW\d+:BUS:B\d+:/.test(normalized)) {
+    const bus = normalized.match(/:BUS:(B\d+):/)?.[1] || 'B?';
+    return `DISPLAY_BUS:${bus}`;
+  }
+  if (/^TRIGGER:A:BUS:B\d+:/.test(normalized)) {
+    const bus = normalized.match(/^TRIGGER:A:BUS:(B\d+):/)?.[1] || 'B?';
+    return `TRIGGER_BUS:${bus}`;
+  }
+  if (/^TRIGGER:A:BUS:SOURCE\s+B\d+\b/.test(normalized)) {
+    const bus = normalized.match(/\b(B\d+)\b/)?.[1] || 'B?';
+    return `TRIGGER_BUS:${bus}`;
+  }
+  if (/^TRIGGER:/.test(normalized)) return 'TRIGGER_GENERIC';
+  if (/^ACQUIRE:/.test(normalized)) return 'ACQUIRE';
+  if (/^MEASUREMENT:ADDMEAS\b/.test(normalized)) return 'MEAS_ADD';
+  if (/^MEASUREMENT:MEAS\d+:SOURCE1\b/.test(normalized)) return 'MEAS_SOURCE';
+  if (/^MEASUREMENT:/.test(normalized)) return 'MEAS_OTHER';
+  if (/^DISPLAY:/.test(normalized)) return 'DISPLAY_OTHER';
+  return normalized.split(':')[0] || 'UNKNOWN';
+}
+
 function chunkCommands(commands: string[], size: number): string[][] {
   const chunks: string[][] = [];
   for (let i = 0; i < commands.length; i += size) {
@@ -1569,7 +1600,10 @@ function buildActionsFromPlanner(
 
   const flushPendingWrites = () => {
     if (!pendingWrites.length) return;
-    const writeChunks = chunkCommands(pendingWrites.splice(0, pendingWrites.length), 3);
+    const writeChunks = chunkCommands(
+      pendingWrites.splice(0, pendingWrites.length),
+      PLANNER_MAX_CONCAT_COMMANDS
+    );
     pendingWriteGroup = null;
     for (const [index, chunk] of writeChunks.entries()) {
       const baseLabel = buildPlannerStepLabel(chunk[0]);
@@ -1645,10 +1679,11 @@ function buildActionsFromPlanner(
       continue;
     }
 
-    if (pendingWriteGroup && pendingWriteGroup !== command.group) {
+    const currentWriteBucket = plannerWriteBucket(command.concreteCommand);
+    if (pendingWriteGroup && pendingWriteGroup !== currentWriteBucket) {
       flushPendingWrites();
     }
-    pendingWriteGroup = command.group;
+    pendingWriteGroup = currentWriteBucket;
     pendingWrites.push(command.concreteCommand);
   }
 
