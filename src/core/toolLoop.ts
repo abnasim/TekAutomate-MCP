@@ -1550,8 +1550,7 @@ function derivePlannerInstrumentId(req: McpChatRequest): string {
 
 function buildPlannerStepLabel(command: string): string {
   const header = command.trim().split(/\s+/)[0] || command;
-  if (/\?$/.test(header)) return `Query ${header}`;
-  return `Write ${header}`;
+  return header;
 }
 
 function normalizePlannerCommand(command: string): string {
