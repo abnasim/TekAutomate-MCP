@@ -44,7 +44,7 @@ Valid values for the top-level `"deviceType"` field:
 
 ### Timing / Utility
 - `sleep`: `{duration:0.5}`
-- `error_check`: `{command:"ALLEV?"}`
+- `error_check`: `{command:"*ESR?"}`
 - `comment`: `{text:"Documentation note"}`
 - `python`: `{code:"print(f'Value: {var}')"}` — ONLY when user explicitly requests Python
 
@@ -119,6 +119,7 @@ ACTIONS_JSON:
 - NEVER output steps as fenced JSON code blocks in prose
 - NEVER output raw Python unless explicitly requested by user
 - NEVER use deprecated `sweep` step type
+- Do not auto-insert `*OPC?` unless the flow includes an OPC-capable operation and explicit completion sync intent.
 
 ## Screenshot Rule (MANDATORY)
 ALWAYS use `save_screenshot` step type for screenshots. NEVER use raw `write` steps for screenshot capture.

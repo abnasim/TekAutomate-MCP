@@ -7,6 +7,7 @@ import { getCommandIndex } from './commandIndex';
 import { buildCommandGroupSeedQuery, suggestCommandGroups } from './commandGroups';
 import { planIntent, type PlannerOutput } from './intentPlanner';
 import { probeCommandProxy } from './instrumentProxy';
+import { decodeCommandStatus, decodeStatusFromText } from './statusDecoder';
 
 interface ToolLoopResult {
   text: string;
@@ -60,6 +61,7 @@ interface HostedResponsesRequestOptions {
   previousResponseId?: string;
   tools?: HostedToolDefinition[];
   toolChoice?: string | Record<string, unknown>;
+  developerMessage?: string;
 }
 
 interface HostedPreloadContext {
@@ -567,6 +569,7 @@ async function buildPyvisaMeasurementShortcut(req: McpChatRequest): Promise<stri
   if (backend === 'tm_devices') return null; // handled by other shortcut
   const deviceType = (req.flowContext.deviceType || 'SCOPE').toUpperCase();
   if (deviceType !== 'SCOPE') return null;
+  const isLegacyDpoFamily = /\b(DPO|5K|7K|70K)\b/i.test(String(req.flowContext.modelFamily || ''));
 
   const existingSteps = Array.isArray(req.flowContext.steps) ? req.flowContext.steps : [];
   const flatSteps = flattenSteps(existingSteps);
@@ -719,16 +722,31 @@ async function buildPyvisaMeasurementShortcut(req: McpChatRequest): Promise<stri
 
   for (const { measurement, slot, saveAsName } of measurementSlots) {
     const addCommands = await finalizeShortcutCommands(req, [
-      {
-        header: 'MEASUrement:MEAS<x>:TYPe',
-        concreteHeader: `MEASUrement:MEAS${slot}:TYPe`,
-        value: measurement,
-      },
-      {
-        header: 'MEASUrement:MEAS<x>:SOURCE',
-        concreteHeader: `MEASUrement:MEAS${slot}:SOURCE`,
-        value: defaultChannel,
-      },
+      ...(isLegacyDpoFamily
+        ? ([
+            {
+              header: 'MEASUrement:MEAS<x>:TYPe',
+              concreteHeader: `MEASUrement:MEAS${slot}:TYPe`,
+              value: measurement,
+            },
+            {
+              header: 'MEASUrement:MEAS<x>:SOURCE',
+              concreteHeader: `MEASUrement:MEAS${slot}:SOURCE`,
+              value: defaultChannel,
+            },
+          ] satisfies ShortcutFinalizeItem[])
+        : ([
+            {
+              header: 'MEASUrement:ADDMEAS',
+              concreteHeader: 'MEASUrement:ADDMEAS',
+              value: measurement,
+            },
+            {
+              header: 'MEASUrement:MEAS<x>:SOUrce<x>',
+              concreteHeader: `MEASUrement:MEAS${slot}:SOUrce1`,
+              value: defaultChannel,
+            },
+          ] satisfies ShortcutFinalizeItem[])),
     ]);
     if (!addCommands) return null;
 
@@ -870,6 +888,12 @@ function buildPyvisaFastFrameShortcut(req: McpChatRequest): string | null {
       label: `Set FastFrame Count to ${count}`,
       params: { command: `HORizontal:FASTframe:COUNt ${count}` },
     },
+    {
+      id: 'ff3',
+      type: 'query',
+      label: 'Query FastFrame frames acquired',
+      params: { command: 'ACQuire:NUMFRAMESACQuired?', saveAs: 'fastframe_frames_acquired' },
+    },
   ];
 
   if (!existingSteps.length) {
@@ -889,12 +913,11 @@ function buildPyvisaFastFrameShortcut(req: McpChatRequest): string | null {
 
   const actions: Record<string, unknown>[] = [];
   if (insertAfterId) {
-    // Insert in reverse order at the same anchor so final order is ff1 then ff2.
+    // Insert in reverse order at the same anchor so final order is ff1 then ff2 then ff3.
     // This avoids depending on generated IDs from newly inserted steps.
-    actions.push(
-      { type: 'insert_step_after', targetStepId: insertAfterId, newStep: fastFrameSteps[1] },
-      { type: 'insert_step_after', targetStepId: insertAfterId, newStep: fastFrameSteps[0] }
-    );
+    for (let i = fastFrameSteps.length - 1; i >= 0; i -= 1) {
+      actions.push({ type: 'insert_step_after', targetStepId: insertAfterId, newStep: fastFrameSteps[i] });
+    }
   } else {
     actions.push(...fastFrameSteps.map((step) => ({ type: 'insert_step_after', targetStepId: null, newStep: step })));
   }
@@ -1018,8 +1041,17 @@ function detectWaveformSources(message: string): string[] {
   if (/\bsave both channels\b/i.test(text)) {
     return ['CH1', 'CH2'];
   }
+  const contextualMatches = Array.from(
+    text.matchAll(/\bsave\b[^.]*?\b(CH[1-8])\b[^.]*?\bwaveform\b|\bwaveform\b[^.]*?\b(CH[1-8])\b/gi)
+  )
+    .map((m) => m[1] || m[2])
+    .filter((v): v is string => Boolean(v))
+    .map((v) => v.toUpperCase());
+  if (contextualMatches.length) {
+    return Array.from(new Set(contextualMatches));
+  }
   const matches = Array.from(text.matchAll(/\bCH([1-8])\b/g)).map((m) => `CH${m[1]}`);
-  if (/\bwaveform\b/i.test(text) && matches.length) {
+  if (/\bwaveform\b/i.test(text) && /\bsave\b/i.test(text) && matches.length) {
     return Array.from(new Set(matches));
   }
   return [];
@@ -1273,8 +1305,9 @@ async function finalizeShortcutCommands(
 }
 
 function buildWriteStep(id: string, label: string, commands: string[]): Record<string, unknown> {
-  if (commands.length > 4) {
-    const chunks = chunkCommands(commands, 4);
+  const maxConcatCommands = 3;
+  if (commands.length > maxConcatCommands) {
+    const chunks = chunkCommands(commands, maxConcatCommands);
     return {
       id,
       type: 'group',
@@ -1372,11 +1405,20 @@ function detectDirectExecution(
   ) {
     return { type: 'query', command: '*IDN?' };
   }
-  if (/^(check errors?|query allev|error queue|any errors?)$/i.test(msg)) {
-    return { type: 'error_check', command: 'ALLEV?' };
+  if (/^(check errors?|query allev|error queue|any errors?|query esr|\*esr\??|event status)$/i.test(msg)) {
+    return { type: 'query', command: '*ESR?' };
   }
   if (/^(wait for opc|\*opc\??|opc query)$/i.test(msg)) {
     return { type: 'query', command: '*OPC?' };
+  }
+  if (/^(busy\??|query busy|instrument busy)$/i.test(msg)) {
+    return { type: 'query', command: 'BUSY?' };
+  }
+  if (/^(event\??|query event)$/i.test(msg)) {
+    return { type: 'query', command: 'EVENT?' };
+  }
+  if (/^(evmsg\??|query evmsg|event message)$/i.test(msg)) {
+    return { type: 'query', command: 'EVMsg?' };
   }
   if (/^(query esr|\*esr\??|event status)$/i.test(msg)) {
     return { type: 'query', command: '*ESR?' };
@@ -1386,6 +1428,30 @@ function detectDirectExecution(
   }
 
   return null;
+}
+
+function normalizeScopeModelFamily(req: McpChatRequest): string {
+  const current = String(req.flowContext?.modelFamily || '').trim();
+  if (current && !/^(unknown|scope|oscilloscope)$/i.test(current)) {
+    return current;
+  }
+  const aliasHint = String(req.flowContext?.alias || '').trim();
+  if (/(MSO|DPO|TDS|AFG|AWG|SMU|RSA|70K|7K|5K)/i.test(aliasHint)) {
+    return aliasHint;
+  }
+  return current || '';
+}
+
+function shouldAskScopePlatform(req: McpChatRequest): boolean {
+  const deviceType = String(req.flowContext?.deviceType || 'SCOPE').toUpperCase();
+  if (deviceType !== 'SCOPE') return false;
+  const modelFamily = normalizeScopeModelFamily(req);
+  if (modelFamily && !/^(unknown|scope|oscilloscope)$/i.test(modelFamily)) return false;
+  const message = String(req.userMessage || '');
+  if (/\b(MSO|DPO|70K|7K|5K)\b/i.test(message)) return false;
+  return /\b(set|configure|trigger|measurement|measure|decode|search|fastframe|save waveform|scpi|flow)\b/i.test(
+    message
+  );
 }
 
 function derivePlannerInstrumentId(req: McpChatRequest): string {
@@ -1422,37 +1488,55 @@ function buildActionsFromPlanner(
   if ((req.outputMode || '') !== 'steps_json') return null;
   if (!plannerOutput.resolvedCommands.length) return null;
 
-  const instrumentId = derivePlannerInstrumentId(req);
-  const steps: Array<Record<string, unknown>> = [
-    {
-      id: '1',
-      type: 'connect',
-      label: 'Connect',
-      params: { instrumentIds: [instrumentId], printIdn: true },
-    },
-  ];
+  const existingSteps = Array.isArray(req.flowContext.steps)
+    ? (req.flowContext.steps as Array<Record<string, unknown>>)
+    : [];
+  const hasExistingSteps = existingSteps.length > 0;
+  const forceReplaceFlow =
+    /\breplace(?:\s+the)?\s+(?:current\s+)?flow\b/i.test(String(req.userMessage || '')) ||
+    /\bfrom scratch\b|\bnew flow\b|\bwipe\b/i.test(String(req.userMessage || ''));
 
-  let nextId = 2;
+  const instrumentId = derivePlannerInstrumentId(req);
+  const flowSteps: Array<Record<string, unknown>> = hasExistingSteps
+    ? []
+    : [
+        {
+          id: '1',
+          type: 'connect',
+          label: 'Connect',
+          params: { instrumentIds: [instrumentId], printIdn: true },
+        },
+      ];
+
+  let nextId = hasExistingSteps ? 1 : 2;
   const nextStepId = () => String(nextId++);
   const pendingWrites: string[] = [];
+  const plannedNewSteps: Array<Record<string, unknown>> = [];
+  const collectStep = (step: Record<string, unknown>) => {
+    if (hasExistingSteps) {
+      plannedNewSteps.push(step);
+    } else {
+      flowSteps.push(step);
+    }
+  };
 
   const flushPendingWrites = () => {
     if (!pendingWrites.length) return;
-    const writeChunks = chunkCommands(pendingWrites.splice(0, pendingWrites.length), 4);
+    const writeChunks = chunkCommands(pendingWrites.splice(0, pendingWrites.length), 3);
     for (const [index, chunk] of writeChunks.entries()) {
       const baseLabel = buildPlannerStepLabel(chunk[0]);
       const label =
         writeChunks.length > 1
           ? `${baseLabel} (${index + 1}/${writeChunks.length})`
           : baseLabel;
-      steps.push(buildWriteStep(nextStepId(), label, chunk));
+      collectStep(buildWriteStep(nextStepId(), label, chunk));
     }
   };
 
   for (const command of plannerOutput.resolvedCommands) {
     if (command.header.startsWith('STEP:') && command.stepType) {
       flushPendingWrites();
-      steps.push({
+      collectStep({
         id: nextStepId(),
         type: command.stepType,
         label: command.concreteCommand.replace(/^save_/, '').replace(/_/g, ' '),
@@ -1461,9 +1545,20 @@ function buildActionsFromPlanner(
       continue;
     }
 
+    if (command.group === 'ERROR_CHECK') {
+      flushPendingWrites();
+      collectStep({
+        id: nextStepId(),
+        type: 'query',
+        label: 'Read event status',
+        params: { command: command.concreteCommand, saveAs: command.saveAs || 'error_status' },
+      });
+      continue;
+    }
+
     if (command.commandType === 'query' || /\?$/.test(command.concreteCommand.trim())) {
       flushPendingWrites();
-      steps.push(
+      collectStep(
         buildQueryStep(
           nextStepId(),
           buildPlannerStepLabel(command.concreteCommand),
@@ -1479,15 +1574,19 @@ function buildActionsFromPlanner(
 
   flushPendingWrites();
 
-  steps.push({
-    id: nextStepId(),
-    type: 'disconnect',
-    label: 'Disconnect',
-    params: {},
-  });
+  if (!hasExistingSteps) {
+    flowSteps.push({
+      id: nextStepId(),
+      type: 'disconnect',
+      label: 'Disconnect',
+      params: {},
+    });
+  }
 
-  const actions = [
-    {
+  const actions: Array<Record<string, unknown>> = [];
+
+  if (!hasExistingSteps || forceReplaceFlow) {
+    actions.push({
       type: 'replace_flow',
       flow: {
         name: `${String(req.flowContext.deviceType || 'Instrument')} Planner Flow`,
@@ -1496,10 +1595,36 @@ function buildActionsFromPlanner(
         deviceType: req.flowContext.deviceType || 'SCOPE',
         deviceDriver: req.flowContext.deviceDriver,
         visaBackend: req.flowContext.visaBackend,
-        steps,
+        steps: flowSteps,
       },
-    },
-  ];
+    });
+  } else {
+    const selectedStepId =
+      req.flowContext.selectedStepId && String(req.flowContext.selectedStepId).trim()
+        ? String(req.flowContext.selectedStepId).trim()
+        : null;
+    const disconnectStep = existingSteps.find((step) => String(step.type || '').toLowerCase() === 'disconnect');
+    const fallbackTarget =
+      selectedStepId ||
+      (disconnectStep ? String(disconnectStep.id || '') : '') ||
+      String(existingSteps[existingSteps.length - 1]?.id || '') ||
+      '1';
+    let targetStepId = fallbackTarget;
+    const plannerInsertTs = Date.now();
+
+    plannedNewSteps.forEach((step, idx) => {
+      const plannerStepId = `planner_${plannerInsertTs}_${idx + 1}`;
+      actions.push({
+        type: 'insert_step_after',
+        targetStepId,
+        newStep: {
+          ...step,
+          id: plannerStepId,
+        },
+      });
+      targetStepId = plannerStepId;
+    });
+  }
 
   return `ACTIONS_JSON: ${JSON.stringify({
     summary: `Built ${plannerOutput.resolvedCommands.length} verified planner steps without a model call.`,
@@ -1524,6 +1649,11 @@ async function buildPyvisaCommonServerShortcut(req: McpChatRequest): Promise<str
 
   const existingSteps = Array.isArray(req.flowContext.steps) ? (req.flowContext.steps as Array<Record<string, unknown>>) : [];
   const hasExistingSteps = existingSteps.length > 0;
+  const isLegacyDpoFamily = /\b(DPO|5K|7K|70K)\b/i.test(String(req.flowContext.modelFamily || ''));
+  const forceReplaceFlow =
+    /\bdisconnect\b/i.test(message) ||
+    /\breplace(?:\s+the)?\s+(?:current\s+)?flow\b/i.test(message) ||
+    /\bfrom scratch\b|\bfull workflow\b|\bfull flow\b/i.test(message);
   const insertAfterId =
     (req.flowContext.selectedStepId && String(req.flowContext.selectedStepId)) ||
     (existingSteps.find((step) => String(step.type || '').toLowerCase() === 'connect')?.id as string | undefined) ||
@@ -1572,6 +1702,55 @@ async function buildPyvisaCommonServerShortcut(req: McpChatRequest): Promise<str
       label: 'Recall session',
       params: { recallType: 'SESSION', filePath: recallSessionPath },
     });
+  }
+
+  const wantsIdn = /\b(idn|identify)\b|\*idn\?/i.test(message);
+  const wantsOptions = /\boptions?\b|\*opt\?/i.test(message);
+  const wantsEsr = /\b(esr|event status)\b|\*esr\?/i.test(message);
+  const wantsOpc = /\b(opc|operation complete)\b|\*opc\?/i.test(message);
+  const wantsErrorQueue =
+    /\b(error queue|allev|any errors?|check errors?|esr)\b/i.test(message);
+  if (wantsIdn || wantsOptions || wantsEsr || wantsOpc || wantsErrorQueue) {
+    if (wantsIdn) {
+      steps.push({
+        id: nextStepId(),
+        type: 'query',
+        label: 'Read instrument ID',
+        params: { command: '*IDN?', saveAs: 'idn' },
+      });
+    }
+    if (wantsOptions) {
+      steps.push({
+        id: nextStepId(),
+        type: 'query',
+        label: 'Read installed options',
+        params: { command: '*OPT?', saveAs: 'options' },
+      });
+    }
+    if (wantsEsr) {
+      steps.push({
+        id: nextStepId(),
+        type: 'query',
+        label: 'Read event status',
+        params: { command: '*ESR?', saveAs: 'esr' },
+      });
+    }
+    if (wantsOpc) {
+      steps.push({
+        id: nextStepId(),
+        type: 'query',
+        label: 'Read operation complete',
+        params: { command: '*OPC?', saveAs: 'opc' },
+      });
+    }
+    if (wantsErrorQueue) {
+      steps.push({
+        id: nextStepId(),
+        type: 'query',
+        label: 'Read event status for errors',
+        params: { command: '*ESR?', saveAs: 'error_status' },
+      });
+    }
   }
 
   for (const config of channelConfigs) {
@@ -1980,16 +2159,31 @@ async function buildPyvisaCommonServerShortcut(req: McpChatRequest): Promise<str
     const queryChildren: Array<Record<string, unknown>> = [];
     for (const { measurement, channel } of normalizedScopedMeasurements) {
       const addCommands = await finalizeShortcutCommands(req, [
-        {
-          header: 'MEASUrement:MEAS<x>:TYPe',
-          concreteHeader: `MEASUrement:MEAS${measurementSlot}:TYPe`,
-          value: measurement,
-        },
-        {
-          header: 'MEASUrement:MEAS<x>:SOURCE',
-          concreteHeader: `MEASUrement:MEAS${measurementSlot}:SOURCE`,
-          value: channel,
-        },
+        ...(isLegacyDpoFamily
+          ? ([
+              {
+                header: 'MEASUrement:MEAS<x>:TYPe',
+                concreteHeader: `MEASUrement:MEAS${measurementSlot}:TYPe`,
+                value: measurement,
+              },
+              {
+                header: 'MEASUrement:MEAS<x>:SOURCE',
+                concreteHeader: `MEASUrement:MEAS${measurementSlot}:SOURCE`,
+                value: channel,
+              },
+            ] satisfies ShortcutFinalizeItem[])
+          : ([
+              {
+                header: 'MEASUrement:ADDMEAS',
+                concreteHeader: 'MEASUrement:ADDMEAS',
+                value: measurement,
+              },
+              {
+                header: 'MEASUrement:MEAS<x>:SOUrce<x>',
+                concreteHeader: `MEASUrement:MEAS${measurementSlot}:SOUrce1`,
+                value: channel,
+              },
+            ] satisfies ShortcutFinalizeItem[])),
       ]);
       if (!addCommands) return null;
       addChildren.push(buildWriteStep(`m${measurementSlot}`, `Add ${measurement.toLowerCase()} measurement on ${channel}`, addCommands));
@@ -2142,11 +2336,17 @@ async function buildPyvisaCommonServerShortcut(req: McpChatRequest): Promise<str
 
     for (const measurementRequest of setupHoldMeasurements) {
       const addCommands = await finalizeShortcutCommands(req, [
-        {
-          header: 'MEASUrement:MEAS<x>:TYPe',
-          concreteHeader: `MEASUrement:MEAS${measurementSlot}:TYPe`,
-          value: measurementRequest.measurement,
-        },
+        ...(isLegacyDpoFamily
+          ? ([{
+              header: 'MEASUrement:MEAS<x>:TYPe',
+              concreteHeader: `MEASUrement:MEAS${measurementSlot}:TYPe`,
+              value: measurementRequest.measurement,
+            }] satisfies ShortcutFinalizeItem[])
+          : ([{
+              header: 'MEASUrement:ADDMEAS',
+              concreteHeader: 'MEASUrement:ADDMEAS',
+              value: measurementRequest.measurement,
+            }] satisfies ShortcutFinalizeItem[])),
         {
           header: 'MEASUrement:MEAS<x>:SOUrce<x>',
           concreteHeader: `MEASUrement:MEAS${measurementSlot}:SOUrce1`,
@@ -2212,9 +2412,9 @@ async function buildPyvisaCommonServerShortcut(req: McpChatRequest): Promise<str
   if (/\berror queue\b|\bprint any errors\b|\bcheck.*errors?\b/i.test(message)) {
     steps.push({
       id: nextStepId(),
-      type: 'error_check',
-      label: 'Check error queue',
-      params: { command: 'ALLEV?' },
+      type: 'query',
+      label: 'Read event status for errors',
+      params: { command: '*ESR?', saveAs: 'error_status' },
     });
   }
 
@@ -2279,7 +2479,7 @@ async function buildPyvisaCommonServerShortcut(req: McpChatRequest): Promise<str
   }
 
   const actions =
-    hasExistingSteps && insertAfterId
+    hasExistingSteps && insertAfterId && !forceReplaceFlow
       ? (() => {
           const inserts: Array<Record<string, unknown>> = [];
           let currentTarget = insertAfterId;
@@ -2297,7 +2497,7 @@ async function buildPyvisaCommonServerShortcut(req: McpChatRequest): Promise<str
           type: 'replace_flow',
           flow: {
             name: 'Generated Flow',
-            description: 'Common TekAutomate scope flow built server-side from verified commands.',
+            description: 'Common TekAutomate scope flow built server-side.',
             backend,
             deviceType: req.flowContext.deviceType || 'SCOPE',
             steps,
@@ -2309,7 +2509,7 @@ async function buildPyvisaCommonServerShortcut(req: McpChatRequest): Promise<str
   }
 
   return `ACTIONS_JSON: ${JSON.stringify({
-    summary: 'Built a server-side verified common TekAutomate flow.',
+    summary: 'Built a server-side common TekAutomate flow.',
     findings: [],
     suggestedFixes: [],
     actions,
@@ -2540,6 +2740,28 @@ function buildSystemPrompt(modePrompt: string, outputMode: 'steps_json' | 'block
   ].join('\n');
 }
 
+function buildAttachmentContext(req: McpChatRequest): string {
+  const attachments = Array.isArray(req.attachments) ? req.attachments : [];
+  if (!attachments.length) return '';
+  const lines: string[] = ['Attached files from user (treat as additional context):'];
+  attachments.slice(0, 6).forEach((file, index) => {
+    const name = String(file?.name || `file_${index + 1}`);
+    const mimeType = String(file?.mimeType || 'application/octet-stream');
+    const size = Number(file?.size || 0);
+    lines.push(`${index + 1}. ${name} (${mimeType}, ${size} bytes)`);
+    const excerpt = String(file?.textExcerpt || '').trim();
+    if (excerpt) {
+      const clipped = excerpt.length > 2000 ? `${excerpt.slice(0, 2000)}...[truncated]` : excerpt;
+      lines.push(`   text excerpt:\n${clipped}`);
+    } else if (mimeType.startsWith('image/')) {
+      lines.push('   image attachment included.');
+    } else if (mimeType === 'application/pdf' || name.toLowerCase().endsWith('.pdf')) {
+      lines.push('   pdf attachment included (no inline text extracted).');
+    }
+  });
+  return lines.join('\n');
+}
+
 function buildUserPrompt(req: McpChatRequest, flowCommandIssues: string[] = []): string {
   const fc = req.flowContext;
   const rc = req.runContext;
@@ -2594,6 +2816,11 @@ function buildUserPrompt(req: McpChatRequest, flowCommandIssues: string[] = []):
     req.userMessage,
   ];
 
+  const attachmentContext = buildAttachmentContext(req);
+  if (attachmentContext) {
+    parts.push(attachmentContext);
+  }
+
   if (fc.selectedStep) {
     parts.push(`## Selected Step (user is focused on this)\n${JSON.stringify(fc.selectedStep, null, 2)}`);
   } else if (fc.selectedStepId) {
@@ -2621,6 +2848,10 @@ function buildUserPrompt(req: McpChatRequest, flowCommandIssues: string[] = []):
           ? `...${rc.auditOutput.slice(-600)}`
           : rc.auditOutput;
       parts.push(`Audit output${logReviewMode ? ' (full)' : ''}:\n${audit}`);
+    }
+    const decodedStatus = decodeStatusFromText(`${rc.logTail || ''}\n${rc.auditOutput || ''}`);
+    if (decodedStatus.length > 0) {
+      parts.push(`Decoded status/error hints:\n${decodedStatus.map((line) => `- ${line}`).join('\n')}`);
     }
   }
 
@@ -2651,7 +2882,7 @@ function buildUserPrompt(req: McpChatRequest, flowCommandIssues: string[] = []):
 }
 
 function shouldUseOpenAiAssistant(req: McpChatRequest): boolean {
-  return req.provider === 'openai' && typeof req.openaiAssistantId === 'string' && req.openaiAssistantId.trim().length > 0;
+  return req.provider === 'openai';
 }
 
 const SERVER_DEFAULT_ASSISTANT_TOKEN = '__SERVER_DEFAULT_ASSISTANT__';
@@ -2682,12 +2913,27 @@ function resolveOpenAiResponseCursor(req: McpChatRequest): string {
   return requested;
 }
 
+function isReasoningRequest(message: string): boolean {
+  const text = String(message || '').trim();
+  if (!text) return false;
+  return /\b(best|recommend|suggest|how should|what.*setting|how(?:\b|.*capture|.*set\s*up)|explain|why|difference|when.*use|optimal|ideal|tradeoff|should i|compare|reliable|catch|intermittent|glitch)\b/i.test(
+    text
+  );
+}
+
+function resolveIntentRoutedModel(req: McpChatRequest): string {
+  if (isReasoningRequest(req.userMessage)) {
+    return String(process.env.OPENAI_REASONING_MODEL || 'gpt-5.4').trim();
+  }
+  return String(process.env.OPENAI_FLOW_MODEL || 'gpt-5.4-nano').trim();
+}
+
 function resolveHostedAssistantModel(req: McpChatRequest): string {
   const requested = String(req.model || '').trim();
-  if (requested) return requested;
+  if (requested) return resolveIntentRoutedModel(req);
   const envModel = String(process.env.OPENAI_ASSISTANT_MODEL || '').trim();
   if (envModel) return envModel;
-  return 'gpt-4.1';
+  return resolveIntentRoutedModel(req);
 }
 
 function resolveOpenAiMaxOutputTokens(): number {
@@ -2709,6 +2955,25 @@ function resolveHostedResponseTemperature(req: McpChatRequest): number {
 function hostedModelSupportsTemperature(model: string): boolean {
   const normalized = String(model || '').trim().toLowerCase();
   return !/^gpt-5([.-]|$)/.test(normalized);
+}
+
+function hostedModelSupportsReasoningEffort(model: string): boolean {
+  const normalized = String(model || '').trim().toLowerCase();
+  return /^gpt-5([.-]|$)/.test(normalized);
+}
+
+function resolveHostedReasoningEffort(req: McpChatRequest, model: string): 'low' | 'medium' | 'high' | '' {
+  if (!hostedModelSupportsReasoningEffort(model)) return '';
+  return isReasoningRequest(req.userMessage) ? 'high' : 'medium';
+}
+
+function isUnsupportedReasoningEffortError(status: number, errText: string): boolean {
+  if (status !== 400) return false;
+  const lower = String(errText || '').toLowerCase();
+  return (
+    lower.includes('reasoning.effort') &&
+    (lower.includes('unsupported_parameter') || lower.includes('not supported'))
+  );
 }
 
 function isHostedStructuredBuildRequest(req: McpChatRequest): boolean {
@@ -2984,7 +3249,7 @@ function detectRelevantScpiGroups(userMessage: string): string[] {
 function isCommonPreverifiedScpiRequest(userMessage: string, groups: string[]): boolean {
   if (!groups.length) return false;
   const text = userMessage.toLowerCase();
-  if (/\bcan\b|\bi2c\b|\buart\b|\bspi\b|\bsearch\b|\bmark\b|\bdelay\b|\bsetup time\b|\bhold time\b|\beye\b|\bjitter\b|\bmask\b/i.test(text)) {
+  if (/\bcan\b|\bi2c\b|\buart\b|\bspi\b|\bsearch\b|\bmark\b|\bdelay\b|\bsetup time\b|\bhold time\b|\beye\b|\bjitter\b|\bmask\b|\bglitch\b|\bpulse\s*width\b|\bpulsewidth\b|\brunt\b|\btimeout\b|\btransition\b|\bwindow\b|\blogic\b/i.test(text)) {
     return false;
   }
   return groups.every((group) => ['Vertical', 'Trigger', 'Acquisition', 'Horizontal', 'Measurement', 'Save and Recall'].includes(group));
@@ -3007,7 +3272,10 @@ function buildScpiBm25Queries(
 
   push(userMessage, 'both');
   if (relevantGroups.includes('Vertical')) push('channel scale coupling termination label bandwidth deskew', 'set');
-  if (relevantGroups.includes('Trigger')) push('trigger edge source slope level mode holdoff', 'set');
+  if (relevantGroups.includes('Trigger')) {
+    push('trigger edge source slope level mode holdoff', 'set');
+    push('trigger pulsewidth source when lowlimit highlimit polarity width glitch runt timeout transition window logic', 'set');
+  }
   if (relevantGroups.includes('Acquisition')) push('acquire stopafter state mode numavg sequence', 'set');
   if (relevantGroups.includes('Horizontal')) push('horizontal recordlength fastframe scale position', 'set');
   if (relevantGroups.includes('Measurement')) push('measurement add source results currentacq mean', 'both');
@@ -3054,6 +3322,14 @@ function buildScpiPreloadQueries(userMessage: string): Array<{
     push({ header: 'TRIGger:{A|B}:EDGE:SOUrce' });
     push({ header: 'TRIGger:{A|B}:EDGE:SLOpe' });
     push({ header: 'TRIGger:A:MODe' });
+    push({ header: 'TRIGger:{A|B}:TYPe' });
+    if (/\bglitch\b|\bpulse\s*width\b|\bpulsewidth\b|\bintermittent\b|\b50\s*ns\b|\bns\b/i.test(userMessage)) {
+      push({ header: 'TRIGger:{A|B}:PULSEWidth:SOUrce' });
+      push({ header: 'TRIGger:{A|B}:PULSEWidth:WHEn' });
+      push({ header: 'TRIGger:{A|B}:PULSEWidth:LOWLimit' });
+      push({ header: 'TRIGger:{A|B}:PULSEWidth:HIGHLimit' });
+      push({ header: 'TRIGger:{A|B}:PULSEWidth:POLarity' });
+    }
     if (/\blevel\b/i.test(userMessage)) {
       push({ query: 'trigger edge level', commandType: 'set' });
     }
@@ -3064,7 +3340,7 @@ function buildScpiPreloadQueries(userMessage: string): Array<{
   }
   if (/\bmeasure|\bmeasurement|\bpk2pk\b|\bmean\b|\bdelay\b|\bquery all results\b/i.test(userMessage)) {
     push({ header: 'MEASUrement:ADDMEAS' });
-    push({ header: 'MEASUrement:MEAS<x>:SOURCE' });
+    push({ header: 'MEASUrement:MEAS<x>:SOUrce1' });
     push({ header: 'MEASUrement:MEAS<x>:RESUlts:CURRentacq:MEAN' });
     if (/\bdelay\b/i.test(userMessage)) {
       push({ query: 'measurement delay source threshold crossing', commandType: 'set' });
@@ -3427,16 +3703,19 @@ export function buildAssistantUserPrompt(
     '- Use label for step display text. Do not use name or title as a step field.',
     '- For query steps, use params.command, never params.query, and always include params.saveAs.',
     '- Query steps should be query-only. Do not prepend setup writes or semicolon-chained non-query commands before the final ? command.',
+    '- For status/error checks, prefer *ESR? as the default command. Use ALLEV? only when the user explicitly asks for event-queue detail.',
+    '- Do not add *OPC? by default. Use *OPC? only after OPC-capable operations and when completion sync is explicitly requested.',
     '- Canonical headers returned by search_scpi/get_command_by_header are authoritative templates. If the retrieved header uses placeholders like CH<x>, MEAS<x>, REF<x>, BUS<x>, SEARCH<x>, or PLOT<x>, instantiate only those placeholders (for example CH1, MEAS1) and keep the rest of the header unchanged.',
     '- After retrieving a canonical SCPI record for any write/query step, prefer finalize_scpi_commands for the whole set of commands you need in this turn. If you only need one command, materialize_scpi_command is acceptable. Pass the verified header plus placeholder bindings and argument values. If the user already specified a concrete instance like CH1, MEAS1, B1, or SEARCH1, pass that as concreteHeader so MCP can infer bindings deterministically. Copy the returned command verbatim into params.command instead of typing the final SCPI yourself.',
     '- Do not mutate literal tokens such as SOURCE, EDGE, RESULTS, MODE, or LEVEL into indexed variants unless the retrieved syntax itself contains that indexed form.',
     '- For any SCPI-bearing build/edit request, use source-of-truth retrieval first. Call search_scpi and/or file_search before proposing write/query steps unless MCP already preloaded verified command candidates for this turn.',
+    '- Never ask the user to paste SCPI command strings when MCP lookup/materialization tools can retrieve the verified syntax.',
     '- For tm_devices build/edit requests, use source-of-truth retrieval first. Call search_tm_devices before proposing tm_device_command steps unless MCP already preloaded verified method candidates for this turn.',
     '- After retrieving a verified tm_devices methodPath, call materialize_tm_devices_call and copy the returned code verbatim into tm_device_command params.code instead of composing Python from memory.',
-    '- Do not emit applyable write/query/tm_device_command steps from memory or guesswork when retrieval did not verify the syntax/path.',
+    '- Prefer retrieved source-backed syntax before composing applyable write/query/tm_device_command steps.',
     '- Do not treat prompt files, golden examples, templates, or general knowledge-base prose as proof of exact SCPI syntax. For exact SCPI verification, rely on MCP command-library tool results and their command JSON records.',
     '- When MCP returns command records, use their detailed description, argument descriptions, validValues, relatedCommands, manualReference, and example text to choose the right verified command instead of relying on a stripped header match alone.',
-    '- Use exact verified long-form SCPI syntax when known. Do not guess short mnemonics like SCA, COUP, IMP, RESU:CURR, or similar abbreviations unless that exact form is verified.',
+    '- Use exact long-form SCPI syntax when known. Avoid guessing ambiguous short mnemonics like SCA, COUP, or IMP.',
     '- Combine related same-subsystem setup commands into one write step using semicolons when it keeps the flow compact.',
     '- Keep compact combined setup writes to 4 commands or fewer per step.',
     '- For sleep steps, use duration, never seconds.',
@@ -3455,11 +3734,15 @@ export function buildAssistantUserPrompt(
       resolveHostedVectorStoreId()
         ? 'Hosted file_search is available for this turn. Use file_search first for source discovery when the preloaded MCP results are incomplete or too narrow.'
         : 'Hosted file_search is not configured for this turn, so rely on MCP retrieval for source discovery.',
-      'Treat file_search results as source discovery only. For any applyable SCPI or tm_devices output, only MCP exact lookup, materialization, and verification are authoritative.',
+      'Treat file_search results as source discovery only. Prefer MCP lookup/materialization for final applyable SCPI or tm_devices output.',
       'When MCP returns command records, use their detailed description, argument descriptions, validValues, relatedCommands, manualReference, and example text to disambiguate the right verified command before building steps.',
-      'Only emit structured flow JSON when it can be applied by TekAutomate as-is.',
-      'If SCPI or tm_devices syntax is not verified by retrieved MCP tool results for this turn, fail closed instead of guessing.',
-    'When multiple related SCPI headers or concrete commands are needed, prefer get_commands_by_header_batch and finalize_scpi_commands to reduce tool chatter.',
+      'Emit structured flow JSON for all verified portions even when some requested commands remain unverified.',
+      'If SCPI syntax is available in the planner context (PLANNER RESOLVED section), use it immediately.',
+      'If preloaded MCP verification is insufficient, proactively continue with tool calls (search_scpi, get_command_by_header, get_commands_by_header_batch, file_search as needed) before failing.',
+      'Build what you can verify; only fail closed for specific commands not in planner context AND not findable via tool call.',
+      'When verification is partial, include applyable actions for verified commands and add comment-step placeholders for manual completion of unverified parts.',
+      'Never ask the user for SCPI strings when search_scpi/get_command_by_header can resolve them.',
+      'When multiple related SCPI headers or concrete commands are needed, prefer get_commands_by_header_batch and finalize_scpi_commands to reduce tool chatter.',
       'If the stored prompt allows structured output, prefer a single parseable ```json``` block unless multiple smaller blocks are genuinely clearer.'
     );
   } else {
@@ -3473,7 +3756,7 @@ export function buildAssistantUserPrompt(
       '- No citations, footnotes, or reference markers like [1] or [2].',
       '- Keep any non-JSON narrative short when structured output is included.',
       ...schemaLines,
-      '- Never invent commands. If not verifiable, explicitly say not verified.',
+      '- Never invent commands. If uncertain, prefer safe common commands and clearly state assumptions.',
       '- If you return actions, `newStep` and `flow` must be real JSON objects, not JSON-encoded strings.',
       '- Never use `param: "params"`; set one concrete field per `set_step_param`, or use `replace_step`.'
     );
@@ -3502,6 +3785,10 @@ export function buildAssistantUserPrompt(
   }
   if (flowCommandIssues.length) {
     lines.push(`Precomputed flow command findings:\n${flowCommandIssues.map((x) => `- ${x}`).join('\n')}`);
+  }
+  const attachmentContext = buildAttachmentContext(req);
+  if (attachmentContext) {
+    lines.push(attachmentContext);
   }
   if (isExplainOnly) {
     lines.push(
@@ -3555,6 +3842,8 @@ export function buildHostedOpenAiResponsesRequest(
 ): Record<string, unknown> {
   const hostedModel = resolveHostedAssistantModel(req);
   const promptId = resolveOpenAiPromptId(req);
+  const canAttachHostedPrompt = hostedModelSupportsReasoningEffort(hostedModel);
+  const effectivePromptId = canAttachHostedPrompt ? promptId : '';
   const promptVersion = resolveOpenAiPromptVersion();
   const previousResponseId = options.previousResponseId ?? resolveOpenAiResponseCursor(req);
   const historyInput =
@@ -3567,17 +3856,26 @@ export function buildHostedOpenAiResponsesRequest(
             content: String(h.content || '').slice(0, 2000),
           }))
           .filter((h) => h.content.trim().length > 0);
+  const developerMessage = String(options.developerMessage || '').trim();
+  const initialInput = options.inputOverride || [
+    ...(developerMessage
+      ? [{ role: 'developer', content: developerMessage }]
+      : []),
+    ...historyInput.map((h) => ({ role: h.role, content: h.content })),
+    { role: 'user', content: assistantPrompt },
+  ];
   const requestPayload: Record<string, unknown> = {
     model: hostedModel,
-    input: options.inputOverride || [
-      ...historyInput.map((h) => ({ role: h.role, content: h.content })),
-      { role: 'user', content: assistantPrompt },
-    ],
+    input: initialInput,
     store: true,
     stream: false,
   };
   if (hostedModelSupportsTemperature(hostedModel)) {
     requestPayload.temperature = resolveHostedResponseTemperature(req);
+  }
+  const reasoningEffort = resolveHostedReasoningEffort(req, hostedModel);
+  if (reasoningEffort) {
+    requestPayload.reasoning = { effort: reasoningEffort };
   }
   if (Array.isArray(options.tools) && options.tools.length > 0) {
     requestPayload.tools = options.tools;
@@ -3585,10 +3883,10 @@ export function buildHostedOpenAiResponsesRequest(
   if (options.toolChoice) {
     requestPayload.tool_choice = options.toolChoice;
   }
-  if (promptId) {
+  if (effectivePromptId) {
     requestPayload.prompt = promptVersion
-      ? { id: promptId, version: promptVersion }
-      : { id: promptId };
+      ? { id: effectivePromptId, version: promptVersion }
+      : { id: effectivePromptId };
   }
   if (previousResponseId) {
     requestPayload.previous_response_id = previousResponseId;
@@ -3608,9 +3906,20 @@ async function runOpenAiHostedResponse(
 }> {
   const openAiBase = process.env.OPENAI_BASE_URL || 'https://api.openai.com';
   const requestPayload = buildHostedOpenAiResponsesRequest(req, assistantPrompt, options);
+  const hostedModel = resolveHostedAssistantModel(req);
+  const canAttachHostedPrompt = hostedModelSupportsReasoningEffort(hostedModel);
   const promptConfig = requestPayload.prompt as Record<string, unknown> | undefined;
-  if (usesServerDefaultHostedPrompt(req) && !promptConfig?.id) {
+  const reasoningCfg = requestPayload.reasoning as Record<string, unknown> | undefined;
+  console.log(
+    `[MCP] OpenAI hosted responses: model ${hostedModel}${reasoningCfg?.effort ? ` reasoning=${String(reasoningCfg.effort)}` : ''}`
+  );
+  if (usesServerDefaultHostedPrompt(req) && canAttachHostedPrompt && !promptConfig?.id) {
     throw new Error('OPENAI_PROMPT_ID is required for hosted server-default assistant mode. Set a real pmpt_... value in mcp-server/.env or send a prompt ID directly.');
+  }
+  if (usesServerDefaultHostedPrompt(req) && !canAttachHostedPrompt) {
+    console.log(
+      `[MCP] OpenAI hosted responses: skipping prompt attachment for model ${hostedModel} (reasoning-effort incompatible); using inline context`
+    );
   }
   if (promptConfig?.id) {
     console.log(
@@ -3619,7 +3928,7 @@ async function runOpenAiHostedResponse(
   } else if (String(req.openaiAssistantId || '').trim().length > 0) {
     console.log('[MCP] OpenAI hosted responses: no prompt ID configured; using inline request prompt only');
   }
-  const res = await fetch(`${openAiBase}/v1/responses`, {
+  let res = await fetch(`${openAiBase}/v1/responses`, {
     method: 'POST',
     headers: {
       Authorization: `Bearer ${req.apiKey}`,
@@ -3628,7 +3937,36 @@ async function runOpenAiHostedResponse(
     body: JSON.stringify(requestPayload),
   });
   if (!res.ok) {
-    const errText = await res.text();
+    let errText = await res.text();
+    if (isUnsupportedReasoningEffortError(res.status, errText) && requestPayload.prompt) {
+      console.log(
+        `[MCP] OpenAI hosted responses: retrying without prompt for model ${hostedModel} after reasoning.effort incompatibility`
+      );
+      const fallbackPayload: Record<string, unknown> = { ...requestPayload };
+      delete fallbackPayload.prompt;
+      res = await fetch(`${openAiBase}/v1/responses`, {
+        method: 'POST',
+        headers: {
+          Authorization: `Bearer ${req.apiKey}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(fallbackPayload),
+      });
+      if (res.ok) {
+        const json = (await res.json()) as Record<string, unknown>;
+        const responseId = String(json.id || '').trim();
+        if (!responseId) {
+          throw new Error('OpenAI Responses response missing id.');
+        }
+        return {
+          text: extractOpenAiResponseText(json),
+          raw: json,
+          requestPayload: fallbackPayload,
+          responseId,
+        };
+      }
+      errText = await res.text();
+    }
     throw new Error(`OpenAI Responses error ${res.status}: ${errText}`);
   }
   const json = (await res.json()) as Record<string, unknown>;
@@ -3659,12 +3997,21 @@ async function runOpenAiResponses(
   const assistantPrompt = buildAssistantUserPrompt(req, flowCommandIssues, {
     hostedPromptConfigured: useHostedAssistant && Boolean(resolveOpenAiPromptId(req)),
   });
-  const developerPrompt = useHostedAssistant
-    ? 'Hosted assistant mode: compact prompt only.'
-    : isExplainOnlyCommandAsk(req)
-      ? 'Command explanation mode. Return plain text guidance only.'
-      : await buildContext(req);
+  const compactDeveloperContext = shouldUseCompactDeveloperContext(req);
+  const developerPrompt = isExplainOnlyCommandAsk(req)
+    ? 'Command explanation mode. Return plain text guidance only.'
+    : await buildContext(req, { compact: compactDeveloperContext });
   console.log('[DEBUG] developer message:', String(developerPrompt || '').slice(0, 2000));
+  if (useHostedAssistant) {
+    console.log(
+      '[HOSTED] developer message length:',
+      developerPrompt.length,
+      'compact:',
+      compactDeveloperContext,
+      'hasPlannerSection:',
+      developerPrompt.includes('PLANNER RESOLVED')
+    );
+  }
   const toolDefinitions: Array<{ name: string; description: string }> = [];
   const toolTrace: NonNullable<ToolLoopResult['debug']>['toolTrace'] = [];
 
@@ -3676,7 +4023,9 @@ async function runOpenAiResponses(
   try {
     if (useHostedAssistant) {
       console.log('[MCP] OpenAI route: assistant (Responses)');
-      const hosted = await runOpenAiHostedResponse(req, assistantPrompt);
+      const hosted = await runOpenAiHostedResponse(req, assistantPrompt, {
+        developerMessage: developerPrompt,
+      });
       providerRequest = hosted.requestPayload;
       json = hosted.raw;
       content = hosted.text;
@@ -3787,6 +4136,53 @@ function shouldAttemptShortcutFirst(req: McpChatRequest): boolean {
   );
 }
 
+function isExactScpiLookupRequest(req: McpChatRequest): boolean {
+  const msg = String(req.userMessage || '').toLowerCase().trim();
+  if (!msg) return false;
+  const lookupIntent =
+    /^(what(?:'s| is)|which|lookup|look up|show|list|find)\b/.test(msg) &&
+    /\b(command|scpi|syntax|header|query)\b/.test(msg);
+  const explicitLookup =
+    /\b(what(?:'s| is)?\s+the\s+(?:scpi\s+)?command\s+for|scpi\s+for|command\s+for)\b/.test(msg) ||
+    /\b(show|list)\b.*\b(related commands?|all commands?)\b/.test(msg);
+  const flowEditIntent = /\b(add|insert|set|configure|build|create|make|update|fix|change|apply|run)\b/.test(msg);
+  const followUpNegationIntent = /\b(don['’]?t|do not|skip|these|that one|this one|use this|not this)\b/.test(msg);
+  const reasoningIntent = isReasoningRequest(msg) || /\b(troubleshoot|diagnose|why|recommend|best|optimal)\b/.test(msg);
+  return (lookupIntent || explicitLookup) && !flowEditIntent && !followUpNegationIntent && !reasoningIntent;
+}
+
+function shouldAllowPlannerOnlyShortcut(req: McpChatRequest): boolean {
+  // Planner-only shortcut should be very narrow: exact SCPI lookup asks.
+  // All recommendation, diagnostic, and composition asks should go through AI.
+  return isExactScpiLookupRequest(req);
+}
+
+function shouldUseCompactDeveloperContext(req: McpChatRequest): boolean {
+  const hasThread = Boolean(String(req.openaiThreadId || '').trim());
+  const hasHistory = Array.isArray(req.history) && req.history.length > 0;
+  if (!hasThread && !hasHistory) return false;
+  const msg = String(req.userMessage || '').trim();
+  if (!msg) return false;
+  const likelyBigRebuild = /\b(build|create|replace|from scratch|new flow|full flow)\b/i.test(msg);
+  if (likelyBigRebuild) return false;
+  return msg.length <= 260;
+}
+
+function isFollowUpCorrectionRequest(req: McpChatRequest): boolean {
+  const msg = String(req.userMessage || '').toLowerCase().trim();
+  if (!msg) return false;
+  const hasHistory = Array.isArray(req.history) && req.history.length > 0;
+  if (!hasHistory) return false;
+
+  const correctionWords =
+    /\b(don['’]?t|do not|stop|skip|no|wrong|not this|use this|keep|append|add to existing|extend|continue|why did|wiped|removed)\b/.test(
+      msg
+    );
+  const referentialWords = /\b(this|that|these|those|previous|last|above|again|same)\b/.test(msg);
+  const shortFollowUp = msg.length <= 180;
+  return shortFollowUp && (correctionWords || referentialWords);
+}
+
 function hasActionsJsonPayload(text: string): boolean {
   return /ACTIONS_JSON\s*:\s*\{[\s\S]*"actions"\s*:/i.test(text);
 }
@@ -3794,6 +4190,14 @@ function hasActionsJsonPayload(text: string): boolean {
 function isExplainOnlyCommandAsk(req: McpChatRequest): boolean {
   if (req.intent === 'command_explain') return true;
   const msg = req.userMessage.toLowerCase();
+  const flowEditIntent = /\b(add|insert|set|configure|build|create|make|update|fix|change|apply|replace|delete|remove)\b/.test(
+    msg
+  );
+  const explanationIntent =
+    /\b(explain|explanation|reasoning|rationale|why|walk me through|walkthrough|how does|how do|how can)\b/.test(
+      msg
+    ) || isReasoningRequest(msg);
+  if (explanationIntent && !flowEditIntent) return true;
   return (
     msg.includes('command lookup request') &&
     msg.includes('focused command explanation') &&
@@ -3819,7 +4223,7 @@ function resolveOpenAiModel(req: McpChatRequest): string {
   const requested = String(req.model || '').trim();
   if (requested) return requested;
   const envDefault = String(process.env.OPENAI_DEFAULT_MODEL || '').trim();
-  return envDefault || 'gpt-4o';
+  return envDefault || 'gpt-5.4-nano';
 }
 
 async function runOpenAiToolLoop(
@@ -3836,11 +4240,23 @@ async function runOpenAiToolLoop(
   const systemPrompt = buildSystemPrompt(modePrompt, req.outputMode);
   const userPrompt = buildUserPrompt(req, flowCommandIssues);
   const useHostedAssistant = shouldUseOpenAiAssistant(req);
+  const compactDeveloperContext = shouldUseCompactDeveloperContext(req);
+  const developerPrompt = isExplainOnlyCommandAsk(req)
+    ? 'Command explanation mode. Return plain text guidance only.'
+    : await buildContext(req, { compact: compactDeveloperContext });
   let assistantPrompt = buildAssistantUserPrompt(req, flowCommandIssues, {
     hostedPromptConfigured: useHostedAssistant && Boolean(resolveOpenAiPromptId(req)),
   });
   const toolTrace: NonNullable<ToolLoopResult['debug']>['toolTrace'] = [];
   if (useHostedAssistant) {
+    console.log(
+      '[HOSTED] developer message length:',
+      developerPrompt.length,
+      'compact:',
+      compactDeveloperContext,
+      'hasPlannerSection:',
+      developerPrompt.includes('PLANNER RESOLVED')
+    );
     console.log('[MCP] OpenAI route: assistant (Responses + tools)');
     const preloadedContext = await preloadSourceOfTruthContext(req, toolTrace);
     if (preloadedContext.contextText) {
@@ -3883,6 +4299,7 @@ async function runOpenAiToolLoop(
         previousResponseId,
         tools: hostedTools,
         toolChoice: toolChoice || 'auto',
+        developerMessage: developerPrompt,
       });
       totalModelMs += Date.now() - modelStartedAt;
       providerRequests.push(hosted.requestPayload);
@@ -3955,6 +4372,7 @@ async function runOpenAiToolLoop(
         const hostedFinal = await runOpenAiHostedResponse(req, assistantPrompt, {
           inputOverride: buildHostedFinalAnswerInput(toolOutputs),
           previousResponseId,
+          developerMessage: developerPrompt,
         });
         totalModelMs += Date.now() - modelStartedAt;
         providerRequests.push(hostedFinal.requestPayload);
@@ -3978,6 +4396,7 @@ async function runOpenAiToolLoop(
       const hosted = await runOpenAiHostedResponse(req, assistantPrompt, {
         inputOverride: buildHostedFinalAnswerInput(pendingToolOutputs),
         previousResponseId,
+        developerMessage: developerPrompt,
       });
       totalModelMs += Date.now() - modelStartedAt;
       providerRequests.push(hosted.requestPayload);
@@ -4007,6 +4426,7 @@ async function runOpenAiToolLoop(
       debug: {
         promptFileText: modePrompt,
         systemPrompt: 'Hosted assistant mode (system prompt handled by assistant).',
+        developerPrompt,
         userPrompt: assistantPrompt,
         rawOutput: latestJson,
         providerRequest:
@@ -4142,8 +4562,15 @@ async function runAnthropicToolLoop(
 
 export async function runToolLoop(req: McpChatRequest): Promise<ToolLoopResult> {
   const startedAt = Date.now();
+  const explainOnlyMode = isExplainOnlyCommandAsk(req);
+  const forceToolCallMode = Boolean(req.toolCallMode);
+  const normalizedModelFamily = normalizeScopeModelFamily(req);
+  if (normalizedModelFamily && normalizedModelFamily !== req.flowContext.modelFamily) {
+    req.flowContext.modelFamily = normalizedModelFamily;
+  }
   console.log('[DEBUG] deviceType:', req.flowContext.deviceType || 'SCOPE');
-  const directExec = detectDirectExecution(req);
+  console.log('[DEBUG] toolCallMode:', forceToolCallMode);
+  const directExec = forceToolCallMode ? null : detectDirectExecution(req);
   if (directExec) {
     if (req.instrumentEndpoint) {
       const result = await probeCommandProxy(req.instrumentEndpoint, directExec.command);
@@ -4151,7 +4578,10 @@ export async function runToolLoop(req: McpChatRequest): Promise<ToolLoopResult> 
         result.ok && result.data && typeof result.data === 'object' && typeof result.data.response === 'string'
           ? result.data.response
           : '';
-      const finalText = `${directExec.command}: ${responseText}`.trim();
+      const decoded = decodeCommandStatus(directExec.command, responseText);
+      const finalText = decoded.length > 0
+        ? `${directExec.command}: ${responseText}\nDecoded:\n- ${decoded.join('\n- ')}`.trim()
+        : `${directExec.command}: ${responseText}`.trim();
       return {
         text: finalText,
         displayText: finalText,
@@ -4201,7 +4631,33 @@ export async function runToolLoop(req: McpChatRequest): Promise<ToolLoopResult> 
       startedAt,
     });
   }
-  const allowMissingActionsJson = isExplainOnlyCommandAsk(req);
+
+  if (!forceToolCallMode && shouldAskScopePlatform(req)) {
+    const text =
+      'Need your scope platform to choose the right command family. Are you on DPO 5k/7k/70k, or newer MSO series (2/4/5/6/7)?';
+    return {
+      text,
+      displayText: text,
+      assistantThreadId: resolveOpenAiResponseCursor(req) || undefined,
+      errors: [],
+      warnings: [],
+      metrics: {
+        totalMs: Date.now() - startedAt,
+        usedShortcut: true,
+        provider: req.provider,
+        iterations: 0,
+        toolCalls: 0,
+        toolMs: 0,
+        modelMs: 0,
+        promptChars: { system: 0, user: 0 },
+      },
+      debug: {
+        shortcutResponse: text,
+        toolTrace: [],
+      },
+    };
+  }
+  const allowMissingActionsJson = explainOnlyMode;
   const flowCommandIssues = isFlowValidationRequest(req)
     ? await detectFlowCommandIssues(req)
     : [];
@@ -4244,17 +4700,42 @@ export async function runToolLoop(req: McpChatRequest): Promise<ToolLoopResult> 
       },
     };
   }
-  const commonServerShortcut = await buildPyvisaCommonServerShortcut(req);
-  const measurementShortcut = await buildPyvisaMeasurementShortcut(req);
-  const shortcut =
-    commonServerShortcut ||
-    measurementShortcut ||
-    buildTmDevicesMeasurementShortcut(req);
-  const shouldUseShortcut =
-    Boolean(commonServerShortcut) ||
-    shouldAttemptShortcutFirst(req) ||
-    (Boolean(shortcut) && isHostedStructuredBuildRequest(req));
-  if (shortcut && shouldUseShortcut) {
+  const reasoningMode = isReasoningRequest(req.userMessage);
+  const followUpCorrectionMode = isFollowUpCorrectionRequest(req);
+  const commonServerShortcut =
+    explainOnlyMode || reasoningMode || followUpCorrectionMode || forceToolCallMode
+      ? null
+      : await buildPyvisaCommonServerShortcut(req);
+  const fastFrameShortcut =
+    explainOnlyMode || reasoningMode || followUpCorrectionMode || forceToolCallMode
+      ? null
+      : buildPyvisaFastFrameShortcut(req);
+  const measurementShortcut =
+    explainOnlyMode || reasoningMode || followUpCorrectionMode || forceToolCallMode
+      ? null
+      : await buildPyvisaMeasurementShortcut(req);
+  const shortcut = explainOnlyMode
+    ? null
+    : (
+        commonServerShortcut ||
+        fastFrameShortcut ||
+        measurementShortcut ||
+        (reasoningMode || followUpCorrectionMode || forceToolCallMode ? null : buildTmDevicesMeasurementShortcut(req))
+      );
+  const shouldUseShortcut = explainOnlyMode
+    ? false
+    : (
+        !reasoningMode &&
+        !followUpCorrectionMode &&
+        !forceToolCallMode &&
+        (
+          Boolean(commonServerShortcut) ||
+          Boolean(fastFrameShortcut) ||
+          shouldAttemptShortcutFirst(req) ||
+          (Boolean(shortcut) && isHostedStructuredBuildRequest(req))
+        )
+      );
+  if (!explainOnlyMode && shortcut && shouldUseShortcut) {
     const checked = await postCheckResponse(shortcut, {
       backend: req.flowContext.backend,
       modelFamily: req.flowContext.modelFamily,
@@ -4289,20 +4770,25 @@ export async function runToolLoop(req: McpChatRequest): Promise<ToolLoopResult> 
     };
   }
 
-  const plannerOutput = await planIntent(req);
-  console.log(
-    '[PLANNER] deviceType:',
-    req.flowContext.deviceType || 'SCOPE',
-    'resolvedCount:',
-    plannerOutput?.resolvedCommands?.length || 0,
-    'unresolvedCount:',
-    plannerOutput?.unresolved?.length || 0
-  );
-  const plannerShortcut =
-    plannerOutput.resolvedCommands.length > 0 && plannerOutput.unresolved.length === 0
-      ? buildActionsFromPlanner(plannerOutput, req)
-      : null;
-  if (plannerShortcut) {
+  let plannerShortcut: string | null = null;
+  if (!explainOnlyMode && !reasoningMode && !followUpCorrectionMode && !forceToolCallMode) {
+    const plannerOutput = await planIntent(req);
+    console.log(
+      '[PLANNER] deviceType:',
+      req.flowContext.deviceType || 'SCOPE',
+      'resolvedCount:',
+      plannerOutput?.resolvedCommands?.length || 0,
+      'unresolvedCount:',
+      plannerOutput?.unresolved?.length || 0
+    );
+    plannerShortcut =
+      shouldAllowPlannerOnlyShortcut(req) &&
+      plannerOutput.resolvedCommands.length > 0 &&
+      plannerOutput.unresolved.length === 0
+        ? buildActionsFromPlanner(plannerOutput, req)
+        : null;
+  }
+  if (!explainOnlyMode && plannerShortcut) {
     const checked = await postCheckResponse(plannerShortcut, {
       backend: req.flowContext.backend,
       modelFamily: req.flowContext.modelFamily,
@@ -4337,7 +4823,7 @@ export async function runToolLoop(req: McpChatRequest): Promise<ToolLoopResult> 
     };
   }
 
-  const loopResult = shouldUseTools(req)
+  const loopResult = (forceToolCallMode || shouldUseTools(req))
     ? await runOpenAiToolLoop(req, flowCommandIssues, isHostedStructuredBuildRequest(req) ? 4 : 3)
     : await runOpenAiResponses(req, flowCommandIssues);
   const assistantMode = Boolean(loopResult.assistantThreadId);

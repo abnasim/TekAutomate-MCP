@@ -30,6 +30,14 @@ Build, edit, and validate TekAutomate Steps UI flows for the live workspace.
 - For normal, obvious TekAutomate edits, build directly from workspace context.
 - Prefer one focused tool call over multi-step tool chains.
 - If you do call a tool, use its returned syntax and constraints exactly.
+- If SCPI syntax is uncertain, proactively call `search_scpi` and/or `get_command_by_header` and use the verified result.
+- Build what you can verify. Skip only what you cannot verify.
+- If some commands are verified and some are not, still return applyable ACTIONS_JSON for the verified commands.
+- Add `comment` step placeholders for unverified parts and list those gaps in `findings`.
+- Never skip the entire flow because of partial verification.
+- Only fail closed for specific commands that remain unverified after tool calls.
+- Example: if runt thresholds are unverified but trigger timing is verified, still build the trigger flow and add `comment` text: `Set runt thresholds manually: TRIGger:B:RUNT:THReshold:HIGH/LOW`.
+- Never ask the user to provide SCPI strings when MCP lookup tools are available.
 - Do not treat prompt files, golden examples, templates, or general knowledge-base prose as proof of exact SCPI syntax. For exact SCPI verification, rely on MCP command-library tool results and their command JSON records.
 - For SCPI steps, retrieve the canonical record first, then call `materialize_scpi_command` and copy the returned command verbatim into `params.command`.
 - For `tm_devices` steps, retrieve the verified method path first, then call `materialize_tm_devices_call` and copy the returned Python call verbatim into `params.code`.
@@ -69,7 +77,7 @@ Build, edit, and validate TekAutomate Steps UI flows for the live workspace.
 - `python`: `{"type":"python","params":{"code":"..."}}`
 - `save_waveform`: `{"type":"save_waveform","params":{"source":"CH1","filename":"ch1.bin","format":"bin"}}`
 - `save_screenshot`: `{"type":"save_screenshot","params":{"filename":"capture.png","scopeType":"modern","method":"pc_transfer"}}`
-- `error_check`: `{"type":"error_check","params":{"command":"ALLEV?"}}`
+- `error_check`: `{"type":"error_check","params":{"command":"*ESR?"}}`
 - `recall`: `{"type":"recall","params":{"recallType":"SESSION","filePath":"C:/tests/baseline.tss","reference":"REF1"}}`
 - `group`: `{"type":"group","params":{},"children":[]}`
 - `tm_device_command`: `{"type":"tm_device_command","params":{"code":"scope.commands.acquire.state.write('RUN')","model":"MSO6B","description":"..."}}`
@@ -94,7 +102,9 @@ Build, edit, and validate TekAutomate Steps UI flows for the live workspace.
 - Keep `query` steps query-only rather than mixing setup writes into the same command string.
 - `save_screenshot` is the preferred screenshot step; do not replace it with raw screenshot SCPI unless the user explicitly asks for raw commands.
 - `save_waveform` is the preferred waveform-save step.
-- `error_check` represents TekAutomate's built-in error-check behavior; do not expand it into separate `*CLS`, `*ESR?`, and `ALLEV?` steps unless the user explicitly wants raw commands.
+- `error_check` should use `*ESR?` for status/error checks by default; do not expand into extra status-queue commands unless the user explicitly asks.
+- Do not add `*OPC?` by default. Use `*OPC?` only when the flow includes an operation that can generate OPC completion (for example single-sequence acquire/run completion, save/recall operations, calibrations, autorange/setlevel style operations).
+- OPC-capable operations include: `ACQuire:STATE` in single-sequence mode, `AUTOset`, `CALibrate:*`, `RECAll:*`, `SAVe:IMAGe`, `SAVe:SETUp`, `SAVe:WAVEform`, `*RST`, `TEKSecure`, `TRIGger:A SETLevel`, and measurement result operations in single sequence/recall contexts.
 
 ## Measurement Grouping
 - For measurement creation and configuration, use grouped structure instead of long flat lists.
@@ -137,9 +147,9 @@ save_waveform
   Handles: full waveform transfer automatically
 
 error_check
-  params: {command:"ALLEV?"}
-  NEVER replace with: raw *CLS + *ESR? + ALLEV? write and query steps
-  Handles: *CLS -> *ESR? -> if error -> ALLEV? internally
+  params: {command:"*ESR?"}
+  NEVER replace with: raw status-queue expansion unless explicitly requested
+  Use to read and clear the Standard Event Status Register
 
 recall
   params: {recallType:"SESSION"|"SETUP"|"WAVEFORM", filePath:"...", reference:"REF1"}
@@ -182,11 +192,14 @@ tm_device_command
 - Use `insert_step_after` for normal incremental edits.
 - Use `replace_flow` only when the user clearly wants a rebuild or the current flow structure is beyond a safe incremental edit.
 - Keep action payloads concrete and fully specified enough for TekAutomate to apply them.
+- `replace_sleep_with_opc_query` is only valid when the immediately prior operation is OPC-capable. If that condition is not explicit, do not emit this action.
+- If verification is partial, include actionable edits plus `comment` placeholders for manual steps instead of returning no-op actions.
 
 ## Validation Behavior
 - Validate from the user's perspective, not from internal purity rules.
 - If logs or audit show the flow already worked, do not call it invalid for style cleanup, inferred defaults, or backend normalization.
 - Only call something a blocker if it would actually prevent apply, generation, or execution.
+- When logs or query results include `*ESR?`, `EVENT?`, `EVMsg?`, or `ALLEv?` codes, decode and explain the meaning in plain language (do not leave raw numeric codes unexplained).
 
 ## Minimal Shapes
 

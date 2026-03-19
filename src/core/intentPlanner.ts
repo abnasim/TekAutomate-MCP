@@ -216,6 +216,11 @@ export interface ParsedRecallIntent {
   sessionPath?: string;
 }
 
+export interface ParsedStatusIntent {
+  esr?: boolean;
+  opc?: boolean;
+}
+
 export interface PlannerIntent {
   deviceType: DetectedDeviceType;
   modelFamily: string;
@@ -237,6 +242,7 @@ export interface PlannerIntent {
   rsa?: ParsedRsaIntent;
   save?: ParsedSaveIntent;
   recall?: ParsedRecallIntent;
+  status?: ParsedStatusIntent;
   errorCheck?: boolean;
   reset?: boolean;
   idn?: boolean;
@@ -428,7 +434,8 @@ const SAVE_PATH_REGEX = /C:\/\S+\.set\b/i;
 const RECALL_FACTORY_REGEX = /\b(factory\s+defaults?|reset)\b/i;
 const RECALL_SESSION_REGEX = /C:\/\S+\.tss\b/i;
 const IDN_REGEX = /\b(idn|\*idn|identify)\b/i;
-const ERROR_CHECK_REGEX = /\b(error check|error queue|allev|system error|check errors)\b/i;
+const ERROR_CHECK_REGEX = /\b(error check|error queue|allev|system error|check errors|esr)\b/i;
+const STATUS_QUERY_REGEX = /\b(status quer(?:y|ies)|status checks?|check status|event status|esr|opc)\b/i;
 
 interface IntentAliasMaps {
   measurementAliases: Map<string, string>;
@@ -501,6 +508,7 @@ export async function parseIntent(
 
   const save = parseSaveIntent(message, { channels });
   const recall = parseRecallIntent(message);
+  const status = parseStatusIntent(message);
   const errorCheck = ERROR_CHECK_REGEX.test(message) || undefined;
   const reset = RECALL_FACTORY_REGEX.test(message) || undefined;
   const idn = IDN_REGEX.test(message) || undefined;
@@ -562,6 +570,7 @@ export async function parseIntent(
     if (save.waveformSources && save.waveformSources.length > 0) groups.push('WAVEFORM_TRANSFER');
   }
   if (recall) groups.push('RECALL');
+  if (status) groups.push('STATUS');
   if (errorCheck) groups.push('ERROR_CHECK');
   if (idn) groups.push('IEEE488');
   if (reset) groups.push('SYSTEM');
@@ -587,6 +596,7 @@ export async function parseIntent(
     rsa,
     save,
     recall,
+    status,
     errorCheck,
     reset,
     idn,
@@ -658,15 +668,27 @@ export async function planIntent(
     ...(await resolveHorizontalCommands(index, intent.fastFrame, sourceFile)),
     ...(await resolveSearchCommands(index, intent.search, sourceFile)),
     ...(await resolveBusCommands(index, intent.bus, sourceFile)),
+    ...(await resolveStatusCommands(index, intent.status, sourceFile)),
+    ...(await resolveErrorCheckCommands(index, intent.errorCheck, sourceFile)),
+    ...(await resolveIeee488Commands(index, { idn: intent.idn }, sourceFile)),
     ...(await resolveAfgCommands(index, intent.afg, sourceFile)),
     ...(await resolveAwgCommands(index, intent.awg, sourceFile)),
     ...(await resolveSmuCommands(index, intent.smu, sourceFile)),
     ...(await resolveSaveCommands(intent.save, intent.modelFamily))
   );
 
+  const seenResolved = new Set<string>();
+  const dedupedResolved: ResolvedCommand[] = [];
+  for (const command of resolvedCommands) {
+    const key = `${command.commandType}|${command.concreteCommand.trim().toLowerCase()}|${String(command.saveAs || '').toLowerCase()}`;
+    if (seenResolved.has(key)) continue;
+    seenResolved.add(key);
+    dedupedResolved.push(command);
+  }
+
   return {
     intent,
-    resolvedCommands,
+    resolvedCommands: dedupedResolved,
     unresolved: intent.unresolved,
   };
 }
@@ -1393,6 +1415,61 @@ export async function resolveSaveCommands(
   }
 
   return out;
+}
+
+export async function resolveStatusCommands(
+  index: CommandIndex,
+  status: ParsedStatusIntent | undefined,
+  sourceFile: string
+): Promise<ResolvedCommand[]> {
+  if (!status) return [];
+  const out: ResolvedCommand[] = [];
+
+  if (status.esr) {
+    const esrRecord = findExactHeader(index, '*ESR?', sourceFile);
+    if (esrRecord) {
+      out.push(materialize(esrRecord, '*ESR?', undefined, 'STATUS', 'query', 'status_esr'));
+    } else {
+      out.push(buildSyntheticQuery('*ESR?', 'STATUS', 'status_esr'));
+    }
+  }
+
+  if (status.opc) {
+    const opcRecord = findExactHeader(index, '*OPC?', sourceFile);
+    if (opcRecord) {
+      out.push(materialize(opcRecord, '*OPC?', undefined, 'STATUS', 'query', 'status_opc'));
+    } else {
+      out.push(buildSyntheticQuery('*OPC?', 'STATUS', 'status_opc'));
+    }
+  }
+
+  return out;
+}
+
+export async function resolveErrorCheckCommands(
+  index: CommandIndex,
+  errorCheck: boolean | undefined,
+  sourceFile: string
+): Promise<ResolvedCommand[]> {
+  if (!errorCheck) return [];
+  const esrRecord = findExactHeader(index, '*ESR?', sourceFile);
+  if (esrRecord) {
+    return [materialize(esrRecord, '*ESR?', undefined, 'ERROR_CHECK', 'query', 'error_status')];
+  }
+  return [buildSyntheticQuery('*ESR?', 'ERROR_CHECK', 'error_status')];
+}
+
+export async function resolveIeee488Commands(
+  index: CommandIndex,
+  ieee: { idn?: boolean } | undefined,
+  sourceFile: string
+): Promise<ResolvedCommand[]> {
+  if (!ieee?.idn) return [];
+  const idnRecord = findExactHeader(index, '*IDN?', sourceFile);
+  if (idnRecord) {
+    return [materialize(idnRecord, '*IDN?', undefined, 'IEEE488', 'query', 'idn')];
+  }
+  return [buildSyntheticQuery('*IDN?', 'IEEE488', 'idn')];
 }
 
 export async function resolveAfgCommands(
@@ -2154,6 +2231,18 @@ export function parseRecallIntent(message: string): ParsedRecallIntent | undefin
   return Object.keys(recall).length > 0 ? recall : undefined;
 }
 
+export function parseStatusIntent(message: string): ParsedStatusIntent | undefined {
+  if (!STATUS_QUERY_REGEX.test(message)) return undefined;
+  const status: ParsedStatusIntent = {};
+  if (/\besr\b|\bevent status\b|\bstatus quer(?:y|ies)\b|\bstatus checks?\b|\bcheck status\b/i.test(message)) {
+    status.esr = true;
+  }
+  if (/\bopc\b|\boperation complete\b/i.test(message)) {
+    status.opc = true;
+  }
+  return Object.keys(status).length > 0 ? status : undefined;
+}
+
 function normalizeMessage(message: string): string {
   return message.replace(/\s+/g, ' ').trim();
 }
@@ -2451,6 +2540,26 @@ function materialize(
     examples: transformExamples(record.codeExamples),
     notes: record.notes,
     relatedCommands: record.relatedCommands,
+  };
+}
+
+function buildSyntheticQuery(
+  command: string,
+  group: IntentGroup,
+  saveAs?: string
+): ResolvedCommand {
+  return {
+    group,
+    header: command.replace(/\?$/, ''),
+    concreteCommand: command,
+    commandType: 'query',
+    saveAs,
+    verified: true,
+    sourceFile: 'synthetic_common',
+    syntax: { query: command },
+    arguments: [],
+    examples: [{ scpi: command }],
+    notes: ['Synthetic fallback for standard IEEE/status query.'],
   };
 }
 

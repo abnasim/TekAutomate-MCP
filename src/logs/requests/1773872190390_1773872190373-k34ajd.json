@@ -1,0 +1,123 @@
+{
+  "timestamp": "2026-03-18T22:16:30.390Z",
+  "requestId": "1773872190373-k34ajd",
+  "provider": "openai",
+  "model": "gpt-5.4-nano",
+  "outputMode": "steps_json",
+  "deviceType": "SCOPE",
+  "modelFamily": "MSO4/5/6 Series",
+  "backend": "pyvisa",
+  "userMessage": "Save all 4 channels as binary waveforms and take a screenshot",
+  "flowContext": {
+    "stepCount": 0,
+    "stepTypes": [],
+    "validationErrors": []
+  },
+  "scpiContextHits": 0,
+  "toolCalls": [],
+  "postCheck": {
+    "errors": [],
+    "warnings": [],
+    "autoRepairTriggered": false
+  },
+  "response": {
+    "text": "ACTIONS_JSON: {\"summary\":\"Built a server-side verified common TekAutomate flow.\",\"findings\":[],\"suggestedFixes\":[\"Filled connect/disconnect instrumentIds with workspace alias \\\"scope1\\\" for direct chat apply compatibility.\"],\"actions\":[{\"type\":\"replace_flow\",\"flow\":{\"name\":\"Generated Flow\",\"description\":\"Common TekAutomate scope flow built server-side from verified commands.\",\"backend\":\"pyvisa\",\"deviceType\":\"SCOPE\",\"steps\":[{\"id\":\"1\",\"type\":\"connect\",\"label\":\"Connect\",\"params\":{\"instrumentIds\":[\"scope1\"],\"printIdn\":true}},{\"id\":\"2\",\"type\":\"save_waveform\",\"label\":\"Save CH1 waveform\",\"params\":{\"source\":\"CH1\",\"filename\":\"ch1.bin\",\"format\":\"bin\"}},{\"id\":\"3\",\"type\":\"save_waveform\",\"label\":\"Save CH2 waveform\",\"params\":{\"source\":\"CH2\",\"filename\":\"ch2.bin\",\"format\":\"bin\"}},{\"id\":\"4\",\"type\":\"save_waveform\",\"label\":\"Save CH3 waveform\",\"params\":{\"source\":\"CH3\",\"filename\":\"ch3.bin\",\"format\":\"bin\"}},{\"id\":\"5\",\"type\":\"save_waveform\",\"label\":\"Save CH4 waveform\",\"params\":{\"source\":\"CH4\",\"filename\":\"ch4.bin\",\"format\":\"bin\"}},{\"id\":\"6\",\"type\":\"save_screenshot\",\"label\":\"Save screenshot\",\"params\":{\"filename\":\"capture.png\",\"scopeType\":\"modern\",\"method\":\"pc_transfer\"}},{\"id\":\"7\",\"type\":\"disconnect\",\"label\":\"Disconnect\",\"params\":{\"instrumentIds\":[\"scope1\"]}}]}}]}",
+    "actionsJson": {
+      "summary": "Built a server-side verified common TekAutomate flow.",
+      "findings": [],
+      "suggestedFixes": [
+        "Filled connect/disconnect instrumentIds with workspace alias \"scope1\" for direct chat apply compatibility."
+      ],
+      "actions": [
+        {
+          "type": "replace_flow",
+          "flow": {
+            "name": "Generated Flow",
+            "description": "Common TekAutomate scope flow built server-side from verified commands.",
+            "backend": "pyvisa",
+            "deviceType": "SCOPE",
+            "steps": [
+              {
+                "id": "1",
+                "type": "connect",
+                "label": "Connect",
+                "params": {
+                  "instrumentIds": [
+                    "scope1"
+                  ],
+                  "printIdn": true
+                }
+              },
+              {
+                "id": "2",
+                "type": "save_waveform",
+                "label": "Save CH1 waveform",
+                "params": {
+                  "source": "CH1",
+                  "filename": "ch1.bin",
+                  "format": "bin"
+                }
+              },
+              {
+                "id": "3",
+                "type": "save_waveform",
+                "label": "Save CH2 waveform",
+                "params": {
+                  "source": "CH2",
+                  "filename": "ch2.bin",
+                  "format": "bin"
+                }
+              },
+              {
+                "id": "4",
+                "type": "save_waveform",
+                "label": "Save CH3 waveform",
+                "params": {
+                  "source": "CH3",
+                  "filename": "ch3.bin",
+                  "format": "bin"
+                }
+              },
+              {
+                "id": "5",
+                "type": "save_waveform",
+                "label": "Save CH4 waveform",
+                "params": {
+                  "source": "CH4",
+                  "filename": "ch4.bin",
+                  "format": "bin"
+                }
+              },
+              {
+                "id": "6",
+                "type": "save_screenshot",
+                "label": "Save screenshot",
+                "params": {
+                  "filename": "capture.png",
+                  "scopeType": "modern",
+                  "method": "pc_transfer"
+                }
+              },
+              {
+                "id": "7",
+                "type": "disconnect",
+                "label": "Disconnect",
+                "params": {
+                  "instrumentIds": [
+                    "scope1"
+                  ]
+                }
+              }
+            ]
+          }
+        }
+      ]
+    },
+    "stepCount": 1,
+    "stepTypes": [
+      "replace_flow"
+    ]
+  },
+  "durationMs": 17,
+  "ok": true
+}

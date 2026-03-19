@@ -109,6 +109,21 @@ function upsertFinding(actionsJson: Record<string, unknown>, message: string): v
   actionsJson.findings = next;
 }
 
+function sanitizeSuggestedFixes(actionsJson: Record<string, unknown>): boolean {
+  const current = Array.isArray(actionsJson.suggestedFixes)
+    ? (actionsJson.suggestedFixes as unknown[]).map((item) => String(item || '').trim()).filter(Boolean)
+    : [];
+  if (!current.length) return false;
+
+  const conversationalPattern =
+    /^(if you tell me|if you share|if you provide|if you want,?\s*i can|i can .* if you|let me know and i can)\b/i;
+  const filtered = current.filter((line) => !conversationalPattern.test(line));
+
+  if (filtered.length === current.length) return false;
+  actionsJson.suggestedFixes = filtered;
+  return true;
+}
+
 function hasHostedToolCall(
   toolTrace: Array<Record<string, unknown>> | undefined,
   names: string[]
@@ -124,10 +139,12 @@ function shouldHardGateHostedScpiApply(
   commands: string[],
   toolTrace: Array<Record<string, unknown>> | undefined
 ): boolean {
-  if (!assistantMode) return false;
-  if (!commands.length) return false;
-  if (!Array.isArray(toolTrace) || toolTrace.length === 0) return false;
-  return String(backend || '').toLowerCase() !== 'tm_devices';
+  // Disabled by product decision: do not block apply based on hosted tool-call materialization/verification.
+  void assistantMode;
+  void backend;
+  void commands;
+  void toolTrace;
+  return false;
 }
 
 function isHostedPreverifiedScpiCommand(command: string): boolean {
@@ -148,6 +165,238 @@ function isHostedPreverifiedScpiCommand(command: string): boolean {
     /^measurement:meas\d+:results:currentacq:mean$/i.test(header) ||
     header.startsWith('*')
   );
+}
+
+function ensureReplaceFlowStepIds(actionsJson: Record<string, unknown>): boolean {
+  const actions = Array.isArray(actionsJson.actions)
+    ? (actionsJson.actions as Array<Record<string, unknown>>)
+    : [];
+  if (!actions.length) return false;
+
+  let changed = false;
+
+  actions.forEach((action, actionIndex) => {
+    const actionType = String(action.action_type || action.type || '');
+    if (actionType !== 'replace_flow') return;
+
+    const steps = extractReplaceFlowSteps(action);
+    if (!Array.isArray(steps) || !steps.length) return;
+
+    let seq = 1;
+    const seen = new Set<string>();
+
+    const assignIds = (nodes: Array<Record<string, unknown>>, prefix = `s${actionIndex + 1}`) => {
+      nodes.forEach((node) => {
+        const type = String(node.type || '').toLowerCase();
+        const isGroup = type === 'group';
+        const basePrefix = isGroup ? `g${actionIndex + 1}` : prefix;
+        const currentId = String(node.id || '').trim();
+        const needsNewId = !currentId || seen.has(currentId);
+        if (needsNewId) {
+          let candidate = `${basePrefix}_${seq++}`;
+          while (seen.has(candidate)) {
+            candidate = `${basePrefix}_${seq++}`;
+          }
+          node.id = candidate;
+          seen.add(candidate);
+          changed = true;
+        } else {
+          seen.add(currentId);
+        }
+
+        if (Array.isArray(node.children) && node.children.length) {
+          assignIds(node.children as Array<Record<string, unknown>>, `s${actionIndex + 1}`);
+        }
+      });
+    };
+
+    assignIds(steps);
+  });
+
+  return changed;
+}
+
+function ensureReplaceFlowUniqueSaveAs(actionsJson: Record<string, unknown>): boolean {
+  const actions = Array.isArray(actionsJson.actions)
+    ? (actionsJson.actions as Array<Record<string, unknown>>)
+    : [];
+  if (!actions.length) return false;
+
+  let changed = false;
+  const used = new Set<string>();
+
+  const normalizeKey = (value: string): string => value.trim().toLowerCase();
+
+  const dedupeName = (raw: string): string => {
+    const base = raw.trim() || 'result';
+    const baseKey = normalizeKey(base);
+    if (!used.has(baseKey)) {
+      used.add(baseKey);
+      return base;
+    }
+    let idx = 2;
+    let candidate = `${base}_${idx}`;
+    while (used.has(normalizeKey(candidate))) {
+      idx += 1;
+      candidate = `${base}_${idx}`;
+    }
+    used.add(normalizeKey(candidate));
+    changed = true;
+    return candidate;
+  };
+
+  const visit = (nodes: Array<Record<string, unknown>>) => {
+    nodes.forEach((node) => {
+      const type = String(node.type || '').toLowerCase();
+      const params =
+        node.params && typeof node.params === 'object' && !Array.isArray(node.params)
+          ? (node.params as Record<string, unknown>)
+          : null;
+      if (params && (type === 'query' || type === 'set_and_query')) {
+        const current = typeof params.saveAs === 'string' ? params.saveAs : '';
+        if (!current.trim()) {
+          params.saveAs = dedupeName('result');
+          changed = true;
+        } else {
+          const next = dedupeName(current);
+          if (next !== current) params.saveAs = next;
+        }
+      }
+      if (Array.isArray(node.children) && node.children.length) {
+        visit(node.children as Array<Record<string, unknown>>);
+      }
+    });
+  };
+
+  actions.forEach((action) => {
+    const actionType = String(action.action_type || action.type || '');
+    if (actionType !== 'replace_flow') return;
+    const steps = extractReplaceFlowSteps(action);
+    if (Array.isArray(steps) && steps.length) visit(steps);
+  });
+
+  return changed;
+}
+
+function collectExistingSaveAsFromSteps(steps: Array<Record<string, unknown>>): Set<string> {
+  const used = new Set<string>();
+  const walk = (nodes: Array<Record<string, unknown>>) => {
+    nodes.forEach((node) => {
+      const params =
+        node.params && typeof node.params === 'object' && !Array.isArray(node.params)
+          ? (node.params as Record<string, unknown>)
+          : null;
+      if (params && typeof params.saveAs === 'string' && params.saveAs.trim()) {
+        used.add(params.saveAs.trim().toLowerCase());
+      }
+      if (Array.isArray(node.children) && node.children.length) {
+        walk(node.children as Array<Record<string, unknown>>);
+      }
+    });
+  };
+  walk(steps);
+  return used;
+}
+
+function synthesizeApplyActionsFromSuggestions(
+  actionsJson: Record<string, unknown>,
+  originalSteps?: Array<Record<string, unknown>>
+): boolean {
+  const actions = Array.isArray(actionsJson.actions)
+    ? (actionsJson.actions as Array<Record<string, unknown>>)
+    : [];
+  if (actions.length > 0) return false;
+  if (!Array.isArray(originalSteps) || !originalSteps.length) return false;
+
+  const suggestions = Array.isArray(actionsJson.suggestedFixes)
+    ? (actionsJson.suggestedFixes as unknown[]).map((item) => String(item || '')).filter(Boolean)
+    : [];
+  if (!suggestions.length) return false;
+
+  const wantsOpc = suggestions.some((line) => /\badd\b[\s\S]*\*?\s*opc\?/i.test(line) || /\badd\b[\s\S]*\bopc\b/i.test(line));
+  if (!wantsOpc) return false;
+
+  const flat: Array<Record<string, unknown>> = [];
+  const flatten = (nodes: Array<Record<string, unknown>>) => {
+    nodes.forEach((node) => {
+      flat.push(node);
+      if (Array.isArray(node.children) && node.children.length) {
+        flatten(node.children as Array<Record<string, unknown>>);
+      }
+    });
+  };
+  flatten(originalSteps);
+
+  const hasOpcCapableOperation = flat.some((step) => {
+    const type = String(step.type || '').toLowerCase();
+    if (type !== 'write' && type !== 'set_and_query' && type !== 'query') return false;
+    const params =
+      step.params && typeof step.params === 'object' && !Array.isArray(step.params)
+        ? (step.params as Record<string, unknown>)
+        : null;
+    const command = String(params?.command || '');
+    if (!command) return false;
+    return (
+      /\bACQuire:STOPAfter\s+SEQuence\b/i.test(command) ||
+      /\bACQuire:STATE\s+(ON|RUN|1)\b/i.test(command) ||
+      /\bAUTOset\b/i.test(command) ||
+      /\bCALibrate:/i.test(command) ||
+      /\bRECAll:/i.test(command) ||
+      /\bSAVe:/i.test(command) ||
+      /\*RST\b/i.test(command) ||
+      /\bTEKSecure\b/i.test(command) ||
+      /\bTRIGger:A\s+SETLevel\b/i.test(command)
+    );
+  });
+  if (!hasOpcCapableOperation) return false;
+
+  const pickTargetId = (): string => {
+    const withId = flat.filter((step) => typeof step.id === 'string' && String(step.id || '').trim());
+    const lastWrite = [...withId].reverse().find((step) => {
+      const type = String(step.type || '').toLowerCase();
+      return type === 'write' || type === 'set_and_query';
+    });
+    if (lastWrite?.id) return String(lastWrite.id);
+
+    const lastConnect = [...withId].reverse().find((step) => String(step.type || '').toLowerCase() === 'connect');
+    if (lastConnect?.id) return String(lastConnect.id);
+
+    const lastNonDisconnect = [...withId].reverse().find((step) => String(step.type || '').toLowerCase() !== 'disconnect');
+    if (lastNonDisconnect?.id) return String(lastNonDisconnect.id);
+
+    return withId.length ? String(withId[withId.length - 1].id) : '';
+  };
+
+  const targetId = pickTargetId();
+  if (!targetId) return false;
+
+  const usedSaveAs = collectExistingSaveAsFromSteps(originalSteps);
+  let saveAs = 'opc';
+  let idx = 2;
+  while (usedSaveAs.has(saveAs.toLowerCase())) {
+    saveAs = `opc_${idx}`;
+    idx += 1;
+  }
+
+  actionsJson.actions = [
+    {
+      id: mkId('a_opc'),
+      type: 'insert_step_after',
+      targetStepId: targetId,
+      newStep: {
+        id: mkId('s_opc'),
+        type: 'query',
+        label: 'Query OPC',
+        params: {
+          command: '*OPC?',
+          saveAs,
+        },
+      },
+    },
+  ];
+  upsertFinding(actionsJson, 'Converted suggestion into an applyable action.');
+  upsertSuggestedFix(actionsJson, 'Applied suggestion as an insert_step_after action for *OPC? query.');
+  return true;
 }
 
 /** Normalize assistant-style actions (action_type, target_step_id, payload.new_step) for frontend and validator. */
@@ -218,7 +467,7 @@ function splitCommandParts(raw: string): string[] {
 
 function enforceConcatCapInSteps(
   steps: Array<Record<string, unknown>>,
-  cap = 4
+  cap = 3
 ): { steps: Array<Record<string, unknown>>; changed: boolean } {
   let changed = false;
   const out = steps.flatMap((step) => {
@@ -649,6 +898,27 @@ export async function postCheckResponse(
     );
   const assistantMode =
     options?.assistantMode === true || (options?.assistantMode !== false && rawLooksLikeAssistant);
+
+  // Always heal structural replace_flow issues before any validator pass.
+  const idsHealedGlobal = ensureReplaceFlowStepIds(actionsJson);
+  const saveAsHealedGlobal = ensureReplaceFlowUniqueSaveAs(actionsJson);
+  const suggestionsSanitizedGlobal = sanitizeSuggestedFixes(actionsJson);
+  if (idsHealedGlobal) {
+    upsertSuggestedFix(
+      actionsJson,
+      'Auto-repaired missing/duplicate step ids in replace_flow actions for apply compatibility.'
+    );
+  }
+  if (saveAsHealedGlobal) {
+    upsertSuggestedFix(
+      actionsJson,
+      'Auto-repaired duplicate or missing saveAs variables in replace_flow query steps.'
+    );
+  }
+  if (idsHealedGlobal || saveAsHealedGlobal || suggestionsSanitizedGlobal) {
+    finalText = rebuildTextWithActionsJson(finalText, actionsJson);
+  }
+
   if (assistantMode) {
     if (rawLooksLikeAssistant && options?.assistantMode !== true) {
       console.log('[MCP] postCheck: using lenient path (detected assistant-style JSON)');
@@ -667,6 +937,14 @@ export async function postCheckResponse(
     });
     const validData = payloadValidation.data as { valid: boolean; errors: string[] };
     if (!validData.valid) errors.push(...validData.errors);
+  }
+
+  const synthesizedFromSuggestions = synthesizeApplyActionsFromSuggestions(
+    actionsJson,
+    flowContext?.originalSteps
+  );
+  if (synthesizedFromSuggestions) {
+    finalText = rebuildTextWithActionsJson(finalText, actionsJson);
   }
 
   const actionRows = Array.isArray(actionsJson.actions)
@@ -692,6 +970,7 @@ export async function postCheckResponse(
   // Group-aware post-check: for long flat replace_flow payloads, auto-suggest a grouped rewrite.
   let regroupedAny = false;
   let concatSplitAny = false;
+  let actionStepConcatSplitAny = false;
   let measurementGroupedAny = false;
   actionRows.forEach((action) => {
     const actionType = String(action.action_type || action.type || '');
@@ -708,7 +987,7 @@ export async function postCheckResponse(
       }
     }
 
-    const concatFixed = enforceConcatCapInSteps(nextSteps, 4);
+    const concatFixed = enforceConcatCapInSteps(nextSteps, 3);
     if (concatFixed.changed) {
       nextSteps = concatFixed.steps;
       concatSplitAny = true;
@@ -734,15 +1013,39 @@ export async function postCheckResponse(
       action.payload = payload;
     }
   });
+  actionRows.forEach((action) => {
+    const payload = (action.payload && typeof action.payload === 'object')
+      ? (action.payload as Record<string, unknown>)
+      : {};
+    const newStep = parseJsonValueString(action.newStep || payload.new_step || payload.newStep) as
+      | Record<string, unknown>
+      | undefined;
+    if (!newStep) return;
+
+    const fixed = enforceConcatCapInSteps([newStep], 3);
+    if (!fixed.changed || !fixed.steps.length) return;
+
+    const repairedStep = fixed.steps[0];
+    if (typeof action.newStep === 'string' || Object.prototype.hasOwnProperty.call(action, 'newStep')) {
+      action.newStep = repairedStep;
+    } else if (Object.prototype.hasOwnProperty.call(payload, 'new_step')) {
+      payload.new_step = repairedStep;
+      action.payload = payload;
+    } else if (Object.prototype.hasOwnProperty.call(payload, 'newStep')) {
+      payload.newStep = repairedStep;
+      action.payload = payload;
+    }
+    actionStepConcatSplitAny = true;
+  });
   if (regroupedAny) {
     // Auto-grouping applied; no warning so logs stay clean (behavior is silent improvement).
     finalText = rebuildTextWithActionsJson(finalText, actionsJson);
   }
-  if (concatSplitAny) {
-    warnings.push('Detected over-concatenated SCPI command strings; split into grouped steps (max 4 per step).');
+  if (concatSplitAny || actionStepConcatSplitAny) {
+    warnings.push('Detected over-concatenated SCPI command strings; split into grouped steps (max 3 per step).');
     upsertSuggestedFix(
       actionsJson,
-      'Long semicolon command chains were split and grouped for readability (max 4 commands per step).'
+      'Long semicolon command chains were split and grouped for readability (max 3 commands per step).'
     );
     finalText = rebuildTextWithActionsJson(finalText, actionsJson);
   }
@@ -895,7 +1198,7 @@ export async function postCheckResponse(
         );
         upsertSuggestedFix(
           actionsJson,
-          'Use exact verified SCPI syntax from the uploaded command library. If exact syntax cannot be verified, reply with no actions and say not verified.'
+          'Use source-backed SCPI syntax from the command library. If a command remains uncertain, avoid applying that command until clarified.'
         );
         finalText = rebuildTextWithActionsJson(finalText, actionsJson);
       }

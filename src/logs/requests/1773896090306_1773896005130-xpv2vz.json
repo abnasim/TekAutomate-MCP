@@ -1,0 +1,199 @@
+{
+  "timestamp": "2026-03-19T04:54:50.306Z",
+  "requestId": "1773896005130-xpv2vz",
+  "provider": "openai",
+  "model": "gpt-5.4",
+  "outputMode": "steps_json",
+  "deviceType": "SCOPE",
+  "modelFamily": "MSO4/5/6 Series",
+  "backend": "pyvisa",
+  "userMessage": "My signal has intermittent glitches around 50ns wide on CH2. How should I set up the trigger to catch them reliably?\nMake sure to add two reliability steps if missing:\n\nACQuire:STOPAfter SEQuence\nACQuire:STATE RUN",
+  "flowContext": {
+    "stepCount": 0,
+    "stepTypes": [],
+    "validationErrors": []
+  },
+  "scpiContextHits": 0,
+  "toolCalls": [],
+  "postCheck": {
+    "errors": [],
+    "warnings": [
+      "Detected over-concatenated SCPI command strings; split into grouped steps (max 3 per step)."
+    ],
+    "autoRepairTriggered": false
+  },
+  "response": {
+    "text": "I built a single-sequence CH2 pulse-width trigger flow for sub-50 ns glitches and added the two acquisition reliability steps.\n\nACTIONS_JSON: {\"summary\":\"Create a new pyvisa scope flow that configures an A pulse-width trigger on CH2 for pulses shorter than 50 ns, reads back the key trigger settings, enables single-sequence acquisition, and arms the scope.\",\"findings\":[\"Polarity for the glitch was not specified, so the flow leaves the existing pulse-width polarity unchanged.\"],\"suggestedFixes\":[\"If the glitches are known to be only positive or only negative, add the matching TRIGger:A:PULSEWidth:POLarity command for better selectivity.\",\"Auto-repaired missing/duplicate step ids in replace_flow actions for apply compatibility.\",\"Long semicolon command chains were split and grouped for readability (max 3 commands per step).\",\"Filled connect/disconnect instrumentIds with workspace alias \\\"MSO6B\\\" for direct chat apply compatibility.\"],\"actions\":[{\"type\":\"replace_flow\",\"flow\":{\"name\":\"Catch CH2 50 ns Glitches\",\"description\":\"Configure a CH2 pulse-width trigger for glitches shorter than 50 ns, verify the setup, enable single-sequence capture, and arm the scope.\",\"backend\":\"pyvisa\",\"deviceType\":\"SCOPE\",\"steps\":[{\"type\":\"connect\",\"label\":\"Connect\",\"params\":{\"instrumentIds\":[\"MSO6B\"],\"printIdn\":true},\"id\":\"s1_1\"},{\"id\":\"g_auto_1\",\"type\":\"group\",\"label\":\"Channel / Bus Configuration\",\"params\":{},\"collapsed\":false,\"children\":[{\"id\":\"g_concat_sutpjn\",\"type\":\"group\",\"label\":\"Configure A Pulse-Width Trigger\",\"params\":{},\"collapsed\":false,\"children\":[{\"type\":\"write\",\"label\":\"Configure A Pulse-Width Trigger\",\"params\":{\"command\":\"TRIGger:A:TYPe WIDth\"},\"id\":\"s1_2\"},{\"type\":\"write\",\"label\":\"Configure A Pulse-Width Trigger\",\"params\":{\"command\":\"TRIGger:A:PULSEWidth:SOUrce CH2\"},\"id\":\"cmd_uy0npx\"},{\"type\":\"write\",\"label\":\"Configure A Pulse-Width Trigger\",\"params\":{\"command\":\"TRIGger:A:PULSEWidth:WHEn LESSthan\"},\"id\":\"cmd_rzq77r\"},{\"type\":\"write\",\"label\":\"Configure A Pulse-Width Trigger\",\"params\":{\"command\":\"TRIGger:A:PULSEWidth:LOWLimit 50.0E-9\"},\"id\":\"cmd_cl3lym\"}]}]},{\"id\":\"g_auto_2\",\"type\":\"group\",\"label\":\"Trigger / Acquisition\",\"params\":{},\"collapsed\":false,\"children\":[{\"type\":\"write\",\"label\":\"Auto Set Trigger Level\",\"params\":{\"command\":\"TRIGger:A SETLevel\"},\"id\":\"s1_3\"},{\"type\":\"query\",\"label\":\"Read Trigger Type\",\"params\":{\"command\":\"TRIGger:A:TYPe?\",\"saveAs\":\"trigger_a_type\"},\"id\":\"s1_4\"},{\"type\":\"query\",\"label\":\"Read Pulse-Width Source\",\"params\":{\"command\":\"TRIGger:A:PULSEWidth:SOUrce?\",\"saveAs\":\"trigger_a_pulsewidth_source\"},\"id\":\"s1_5\"},{\"type\":\"query\",\"label\":\"Read Pulse-Width Condition\",\"params\":{\"command\":\"TRIGger:A:PULSEWidth:WHEn?\",\"saveAs\":\"trigger_a_pulsewidth_when\"},\"id\":\"s1_6\"},{\"type\":\"query\",\"label\":\"Read Pulse-Width Limit\",\"params\":{\"command\":\"TRIGger:A:PULSEWidth:LOWLimit?\",\"saveAs\":\"trigger_a_pulsewidth_lowlimit\"},\"id\":\"s1_7\"},{\"type\":\"write\",\"label\":\"Stop After One Acquisition\",\"params\":{\"command\":\"ACQuire:STOPAfter SEQuence\"},\"id\":\"s1_8\"},{\"type\":\"write\",\"label\":\"Arm Acquisition\",\"params\":{\"command\":\"ACQuire:STATE RUN\"},\"id\":\"s1_9\"}]},{\"type\":\"disconnect\",\"label\":\"Disconnect\",\"params\":{\"instrumentIds\":[\"MSO6B\"]},\"id\":\"s1_10\"}]}}]}",
+    "actionsJson": {
+      "summary": "Create a new pyvisa scope flow that configures an A pulse-width trigger on CH2 for pulses shorter than 50 ns, reads back the key trigger settings, enables single-sequence acquisition, and arms the scope.",
+      "findings": [
+        "Polarity for the glitch was not specified, so the flow leaves the existing pulse-width polarity unchanged."
+      ],
+      "suggestedFixes": [
+        "If the glitches are known to be only positive or only negative, add the matching TRIGger:A:PULSEWidth:POLarity command for better selectivity.",
+        "Auto-repaired missing/duplicate step ids in replace_flow actions for apply compatibility.",
+        "Long semicolon command chains were split and grouped for readability (max 3 commands per step).",
+        "Filled connect/disconnect instrumentIds with workspace alias \"MSO6B\" for direct chat apply compatibility."
+      ],
+      "actions": [
+        {
+          "type": "replace_flow",
+          "flow": {
+            "name": "Catch CH2 50 ns Glitches",
+            "description": "Configure a CH2 pulse-width trigger for glitches shorter than 50 ns, verify the setup, enable single-sequence capture, and arm the scope.",
+            "backend": "pyvisa",
+            "deviceType": "SCOPE",
+            "steps": [
+              {
+                "type": "connect",
+                "label": "Connect",
+                "params": {
+                  "instrumentIds": [
+                    "MSO6B"
+                  ],
+                  "printIdn": true
+                },
+                "id": "s1_1"
+              },
+              {
+                "id": "g_auto_1",
+                "type": "group",
+                "label": "Channel / Bus Configuration",
+                "params": {},
+                "collapsed": false,
+                "children": [
+                  {
+                    "id": "g_concat_sutpjn",
+                    "type": "group",
+                    "label": "Configure A Pulse-Width Trigger",
+                    "params": {},
+                    "collapsed": false,
+                    "children": [
+                      {
+                        "type": "write",
+                        "label": "Configure A Pulse-Width Trigger",
+                        "params": {
+                          "command": "TRIGger:A:TYPe WIDth"
+                        },
+                        "id": "s1_2"
+                      },
+                      {
+                        "type": "write",
+                        "label": "Configure A Pulse-Width Trigger",
+                        "params": {
+                          "command": "TRIGger:A:PULSEWidth:SOUrce CH2"
+                        },
+                        "id": "cmd_uy0npx"
+                      },
+                      {
+                        "type": "write",
+                        "label": "Configure A Pulse-Width Trigger",
+                        "params": {
+                          "command": "TRIGger:A:PULSEWidth:WHEn LESSthan"
+                        },
+                        "id": "cmd_rzq77r"
+                      },
+                      {
+                        "type": "write",
+                        "label": "Configure A Pulse-Width Trigger",
+                        "params": {
+                          "command": "TRIGger:A:PULSEWidth:LOWLimit 50.0E-9"
+                        },
+                        "id": "cmd_cl3lym"
+                      }
+                    ]
+                  }
+                ]
+              },
+              {
+                "id": "g_auto_2",
+                "type": "group",
+                "label": "Trigger / Acquisition",
+                "params": {},
+                "collapsed": false,
+                "children": [
+                  {
+                    "type": "write",
+                    "label": "Auto Set Trigger Level",
+                    "params": {
+                      "command": "TRIGger:A SETLevel"
+                    },
+                    "id": "s1_3"
+                  },
+                  {
+                    "type": "query",
+                    "label": "Read Trigger Type",
+                    "params": {
+                      "command": "TRIGger:A:TYPe?",
+                      "saveAs": "trigger_a_type"
+                    },
+                    "id": "s1_4"
+                  },
+                  {
+                    "type": "query",
+                    "label": "Read Pulse-Width Source",
+                    "params": {
+                      "command": "TRIGger:A:PULSEWidth:SOUrce?",
+                      "saveAs": "trigger_a_pulsewidth_source"
+                    },
+                    "id": "s1_5"
+                  },
+                  {
+                    "type": "query",
+                    "label": "Read Pulse-Width Condition",
+                    "params": {
+                      "command": "TRIGger:A:PULSEWidth:WHEn?",
+                      "saveAs": "trigger_a_pulsewidth_when"
+                    },
+                    "id": "s1_6"
+                  },
+                  {
+                    "type": "query",
+                    "label": "Read Pulse-Width Limit",
+                    "params": {
+                      "command": "TRIGger:A:PULSEWidth:LOWLimit?",
+                      "saveAs": "trigger_a_pulsewidth_lowlimit"
+                    },
+                    "id": "s1_7"
+                  },
+                  {
+                    "type": "write",
+                    "label": "Stop After One Acquisition",
+                    "params": {
+                      "command": "ACQuire:STOPAfter SEQuence"
+                    },
+                    "id": "s1_8"
+                  },
+                  {
+                    "type": "write",
+                    "label": "Arm Acquisition",
+                    "params": {
+                      "command": "ACQuire:STATE RUN"
+                    },
+                    "id": "s1_9"
+                  }
+                ]
+              },
+              {
+                "type": "disconnect",
+                "label": "Disconnect",
+                "params": {
+                  "instrumentIds": [
+                    "MSO6B"
+                  ]
+                },
+                "id": "s1_10"
+              }
+            ]
+          }
+        }
+      ]
+    },
+    "stepCount": 1,
+    "stepTypes": [
+      "replace_flow"
+    ]
+  },
+  "durationMs": 85176,
+  "ok": true
+}
