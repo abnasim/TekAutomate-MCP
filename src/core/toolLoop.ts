@@ -2948,7 +2948,8 @@ function resolveIntentRoutedModel(req: McpChatRequest): string {
 
 function resolveHostedAssistantModel(req: McpChatRequest): string {
   const requested = String(req.model || '').trim();
-  if (requested) return resolveIntentRoutedModel(req);
+  // Respect the UI-selected model when explicitly provided.
+  if (requested) return requested;
   const envModel = String(process.env.OPENAI_ASSISTANT_MODEL || '').trim();
   if (envModel) return envModel;
   return resolveIntentRoutedModel(req);
@@ -4860,8 +4861,9 @@ export async function runToolLoop(req: McpChatRequest): Promise<ToolLoopResult> 
     };
   }
 
+  const maxToolRounds = forceToolCallMode ? 8 : (isHostedStructuredBuildRequest(req) ? 4 : 3);
   const loopResult = (forceToolCallMode || shouldUseTools(req))
-    ? await runOpenAiToolLoop(req, flowCommandIssues, isHostedStructuredBuildRequest(req) ? 4 : 3)
+    ? await runOpenAiToolLoop(req, flowCommandIssues, maxToolRounds)
     : await runOpenAiResponses(req, flowCommandIssues);
   const assistantMode = Boolean(loopResult.assistantThreadId);
   const checkedPass1 = await postCheckResponse(loopResult.text, {
@@ -4895,7 +4897,6 @@ export async function runToolLoop(req: McpChatRequest): Promise<ToolLoopResult> 
     !allowMissingActionsJson &&
     !explainOnlyMode &&
     !followUpCorrectionMode &&
-    !forceToolCallMode &&
     (hasEmptyActionsJson(checked.text) || looksLikeUnverifiedGapResponse(checked.text));
   if (shouldTryPlannerGapFill) {
     const plannerOutput = await planIntent(req);

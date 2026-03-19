@@ -1291,8 +1291,9 @@ export async function postCheckResponse(
   }
 
   const prose = finalText.replace(/ACTIONS_JSON:[\s\S]*$/i, '').trim();
-  const maxProseCharsRaw = Number(process.env.MCP_POSTCHECK_MAX_PROSE_CHARS || 400);
-  const maxProseChars = Number.isFinite(maxProseCharsRaw) ? Math.max(400, Math.floor(maxProseCharsRaw)) : 400;
+  // Keep narrative clipping conservative but not overly aggressive for hosted answers.
+  const maxProseCharsRaw = Number(process.env.MCP_POSTCHECK_MAX_PROSE_CHARS || 1200);
+  const maxProseChars = Number.isFinite(maxProseCharsRaw) ? Math.max(600, Math.floor(maxProseCharsRaw)) : 1200;
   if (prose.length > maxProseChars) {
     warnings.push(`Prose exceeded ${maxProseChars} characters and was truncated.`);
     const actionsBlockMatch = finalText.match(/ACTIONS_JSON:[\s\S]*$/i);
