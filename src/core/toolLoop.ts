@@ -1446,6 +1446,66 @@ function detectDirectExecution(
   return null;
 }
 
+async function buildMcpOnlyExplainApplyResponse(req: McpChatRequest): Promise<string | null> {
+  const userMessage = String(req.userMessage || '').trim();
+  if (!userMessage) return null;
+
+  const commandIndex = await getCommandIndex();
+  const candidates = commandIndex.searchByQuery(userMessage, req.flowContext.modelFamily, 5);
+  if (!candidates.length) return null;
+
+  const best = candidates[0];
+  const lower = userMessage.toLowerCase();
+  const prefersQuery =
+    /\b(query|read|status|value|what is|what's|current)\b/.test(lower) &&
+    !/\b(set|write|force|enable|disable|run|start|stop|trigger)\b/.test(lower);
+
+  const command =
+    (prefersQuery ? best.syntax.query : best.syntax.set) ||
+    best.syntax.query ||
+    best.syntax.set ||
+    best.header;
+  if (!command) return null;
+
+  const isQuery = /\?$/.test(command.trim());
+  const safeSaveAs = best.header
+    .replace(/[^A-Za-z0-9]+/g, '_')
+    .replace(/^_+|_+$/g, '')
+    .toLowerCase() || 'result';
+
+  const newStep = isQuery
+    ? {
+        type: 'query',
+        label: best.shortDescription || `Query ${best.header}`,
+        params: { command, saveAs: safeSaveAs },
+      }
+    : {
+        type: 'write',
+        label: best.shortDescription || `Set ${best.header}`,
+        params: { command },
+      };
+
+  const summaryText =
+    `Verified command: ${best.header}${best.syntax.set ? ` (set: ${best.syntax.set})` : ''}` +
+    `${best.syntax.query ? ` (query: ${best.syntax.query})` : ''}.`;
+
+  return `${summaryText}\n\nACTIONS_JSON: ${JSON.stringify({
+    summary: `Verified ${best.header} from source command index.`,
+    findings: [
+      best.shortDescription || `Matched ${best.header}.`,
+      'Apply will append one step to your flow (it does not auto-run).',
+    ],
+    suggestedFixes: [],
+    actions: [
+      {
+        type: 'insert_step_after',
+        targetStepId: null,
+        newStep,
+      },
+    ],
+  })}`;
+}
+
 function normalizeScopeModelFamily(req: McpChatRequest): string {
   const current = String(req.flowContext?.modelFamily || '').trim();
   if (current && !/^(unknown|scope|oscilloscope)$/i.test(current)) {
@@ -5031,7 +5091,7 @@ export async function runToolLoop(req: McpChatRequest): Promise<ToolLoopResult> 
 
   let plannerShortcut: string | null = null;
   let plannerOutputCache: PlannerOutput | null = null;
-  if (!explainOnlyMode && (!reasoningMode || buildHeavyMode) && !followUpCorrectionMode && !forceToolCallMode) {
+  if (!explainOnlyMode) {
     const plannerOutput = await planIntent(req);
     plannerOutputCache = plannerOutput;
     console.log(
@@ -5096,6 +5156,44 @@ export async function runToolLoop(req: McpChatRequest): Promise<ToolLoopResult> 
   // MCP-only mode is deterministic/local by design:
   // never call external model providers from here.
   if (mcpOnlyMode) {
+    if (explainOnlyMode) {
+      const explainApply = await buildMcpOnlyExplainApplyResponse(req);
+      if (explainApply) {
+        const checked = await postCheckResponse(explainApply, {
+          backend: req.flowContext.backend,
+          modelFamily: req.flowContext.modelFamily,
+          originalSteps: req.flowContext.steps,
+          scpiContext: req.scpiContext as Array<Record<string, unknown>>,
+          alias: req.flowContext.alias,
+          instrumentMap: req.flowContext.instrumentMap as Array<Record<string, unknown>> | undefined,
+        }, { allowMissingActionsJson: false });
+        return {
+          text: checked.text,
+          displayText: checked.text,
+          assistantThreadId: resolveOpenAiResponseCursor(req) || undefined,
+          errors: checked.errors,
+          warnings: checked.warnings,
+          metrics: {
+            totalMs: Date.now() - startedAt,
+            usedShortcut: true,
+            provider: req.provider,
+            iterations: 0,
+            toolCalls: 0,
+            toolMs: 0,
+            modelMs: 0,
+            promptChars: {
+              system: 0,
+              user: 0,
+            },
+          },
+          debug: {
+            shortcutResponse: checked.text,
+            toolTrace: [],
+          },
+        };
+      }
+    }
+
     const plannerOutput = plannerOutputCache || await planIntent(req);
     const unresolved = plannerOutput.unresolved || [];
     const deterministicActions =

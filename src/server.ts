@@ -313,7 +313,13 @@ export async function createServer(port = 8787): Promise<http.Server> {
       try {
         const body = (await readJsonBody(req)) as unknown as McpChatRequest;
         const normalizedUserMessage = typeof body?.userMessage === 'string' ? body.userMessage.trim() : '';
-        if (!normalizedUserMessage || !body?.provider || !body?.apiKey || !body?.model) {
+        const mode = body?.mode === 'mcp_only' ? 'mcp_only' : 'mcp_ai';
+        if (mode === 'mcp_only') {
+          body.provider = (body.provider || 'openai') as McpChatRequest['provider'];
+          body.model = body.model || 'gpt-5.4-mini';
+          body.apiKey = body.apiKey || '__mcp_only__';
+        }
+        if (!normalizedUserMessage || !body?.provider || !body?.model || (mode !== 'mcp_only' && !body?.apiKey)) {
           sendJson(res, 400, { ok: false, error: 'Invalid request payload' });
           return;
         }

@@ -17,6 +17,7 @@ export interface McpChatRequest {
   attachments?: McpChatAttachment[];
   outputMode: 'steps_json' | 'blockly_xml';
   intent?: 'default' | 'command_explain';
+  mode?: 'mcp_only' | 'mcp_ai';
   provider: 'openai' | 'anthropic';
   apiKey: string;
   model: string;
