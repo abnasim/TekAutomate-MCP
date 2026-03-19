@@ -163,7 +163,7 @@ tm_device_command
 - Use exact verified long-form SCPI syntax when known. Do not guess shortened mnemonics just to make a command look plausible.
 - Treat canonical headers such as `CH<x>:...`, `MEAS<x>:...`, `BUS<x>:...`, or `TRIGger:{A|B}:...` as templates. Instantiate only those documented placeholders and keep literal tokens unchanged.
 - Combine related same-subsystem setup commands into one `write` step using semicolons when that keeps the flow compact.
-- Keep compact combined setup writes to 4 commands or fewer per step.
+- Keep compact combined setup writes to 3 commands or fewer per step.
 - Keep `query` steps query-only instead of mixing setup writes into the same command string.
 - Use `save_waveform` for waveform saving whenever it fits.
 - Use `save_screenshot` for screenshots whenever it fits.

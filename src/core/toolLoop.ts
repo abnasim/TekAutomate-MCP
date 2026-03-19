@@ -1550,6 +1550,7 @@ function derivePlannerInstrumentId(req: McpChatRequest): string {
 
 function buildPlannerStepLabel(command: string): string {
   const header = command.trim().split(/\s+/)[0] || command;
+  if (/\?$/.test(header)) return `Read ${header.replace(/\?$/, '')}`;
   return header;
 }
 
@@ -4571,6 +4572,19 @@ function looksLikeUnverifiedGapResponse(text: string): boolean {
   return /\b(not verified|could not verify|verification is insufficient|unverified)\b/i.test(String(text || ''));
 }
 
+function isNonActionableModelResponse(text: string, errors: string[]): boolean {
+  const body = String(text || '');
+  const missingActions = !hasActionsJsonPayload(body);
+  const emptyActions = hasEmptyActionsJson(body);
+  const verificationGap = looksLikeUnverifiedGapResponse(body);
+  const parseFailed = (errors || []).some((error) => /ACTIONS_JSON parse failed/i.test(String(error || '')));
+  const noActionSignals =
+    /\b(no actionable|no action(?:s)? generated|could not build|unable to build|cannot build|insufficient info to build)\b/i.test(
+      body
+    );
+  return missingActions || emptyActions || verificationGap || parseFailed || noActionSignals;
+}
+
 function isExplainOnlyCommandAsk(req: McpChatRequest): boolean {
   if (req.intent === 'command_explain') return true;
   const msg = req.userMessage.toLowerCase();
@@ -5518,7 +5532,7 @@ export async function runToolLoop(req: McpChatRequest): Promise<ToolLoopResult> 
     !allowMissingActionsJson &&
     !explainOnlyMode &&
     !followUpCorrectionMode &&
-    (hasEmptyActionsJson(checked.text) || looksLikeUnverifiedGapResponse(checked.text));
+    isNonActionableModelResponse(checked.text, checked.errors);
   if (shouldTryPlannerGapFill) {
     const plannerOutput = await planIntent(req);
     if (plannerOutput.resolvedCommands.length > 0) {

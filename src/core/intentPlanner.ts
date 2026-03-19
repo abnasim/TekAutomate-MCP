@@ -1277,6 +1277,21 @@ export async function resolveBusCommands(
         );
       }
     }
+    if (wantsReadBack) {
+      pushQuery('BUS:B<x>:TYPe', `BUS:${bus.bus}:TYPe`, 'BUS_DECODE', `bus_${bus.bus.toLowerCase()}_type`);
+      if (bus.source1) {
+        pushQuery('BUS:B<x>:CAN:SOUrce', `BUS:${bus.bus}:CAN:SOUrce`, 'BUS_DECODE', `can_source_${bus.bus.toLowerCase()}`);
+      }
+      if (bus.bitrateBps !== undefined) {
+        pushQuery('BUS:B<x>:CAN:BITRate:VALue', `BUS:${bus.bus}:CAN:BITRate:VALue`, 'BUS_DECODE', `can_bitrate_${bus.bus.toLowerCase()}`);
+      }
+      if (bus.standard) {
+        pushQuery('BUS:B<x>:CAN:STANDard', `BUS:${bus.bus}:CAN:STANDard`, 'BUS_DECODE', `can_std_${bus.bus.toLowerCase()}`);
+      }
+      if (bus.dataPhaseBitrateBps !== undefined) {
+        pushQuery('BUS:B<x>:CAN:FD:BITRate:CUSTom', `BUS:${bus.bus}:CAN:FD:BITRate:CUSTom`, 'BUS_DECODE', `can_fd_bitrate_${bus.bus.toLowerCase()}`);
+      }
+    }
     pushBusDisplayState();
     return out;
   }
@@ -1363,6 +1378,23 @@ export async function resolveBusCommands(
         );
       }
     }
+    if (wantsReadBack) {
+      pushQuery('BUS:B<x>:TYPe', `BUS:${bus.bus}:TYPe`, 'BUS_DECODE', `bus_${bus.bus.toLowerCase()}_type`);
+      if (bus.source1) {
+        pushQuery('BUS:B<x>:SPI:CLOCk:SOUrce', `BUS:${bus.bus}:SPI:CLOCk:SOUrce`, 'BUS_DECODE', `spi_clk_${bus.bus.toLowerCase()}`);
+      }
+      if (bus.source2) {
+        pushQuery('BUS:B<x>:SPI:DATa:IN:SOUrce', `BUS:${bus.bus}:SPI:DATa:IN:SOUrce`, 'BUS_DECODE', `spi_data_in_${bus.bus.toLowerCase()}`);
+      }
+      if (bus.source3) {
+        pushQuery('BUS:B<x>:SPI:DATa:OUT:SOUrce', `BUS:${bus.bus}:SPI:DATa:OUT:SOUrce`, 'BUS_DECODE', `spi_data_out_${bus.bus.toLowerCase()}`);
+      }
+      if (bus.triggerCondition) {
+        pushQuery('TRIGger:A:TYPe', 'TRIGger:A:TYPe', 'TRIGGER', 'trigger_type');
+        pushQuery('TRIGger:{A|B}:BUS:SOUrce', 'TRIGger:A:BUS:SOUrce', 'TRIGGER', `trigger_bus_${bus.bus.toLowerCase()}`);
+        pushQuery('TRIGger:{A|B}:BUS:B<x>:SPI:CONDition', `TRIGger:A:BUS:${bus.bus}:SPI:CONDition`, 'TRIGGER', `spi_cond_${bus.bus.toLowerCase()}`);
+      }
+    }
     pushBusDisplayState();
     return out;
   }
@@ -1427,6 +1459,29 @@ export async function resolveBusCommands(
             'TRIGGER'
           )
         );
+      }
+    }
+    if (wantsReadBack) {
+      pushQuery('BUS:B<x>:TYPe', `BUS:${bus.bus}:TYPe`, 'BUS_DECODE', `bus_${bus.bus.toLowerCase()}_type`);
+      if (bus.source1) {
+        pushQuery('BUS:B<x>:RS232C:SOUrce', `BUS:${bus.bus}:RS232C:SOUrce`, 'BUS_DECODE', `uart_source_${bus.bus.toLowerCase()}`);
+      }
+      if (bus.baudRate !== undefined) {
+        pushQuery('BUS:B<x>:RS232C:BITRate:CUSTom', `BUS:${bus.bus}:RS232C:BITRate:CUSTom`, 'BUS_DECODE', `uart_baud_${bus.bus.toLowerCase()}`);
+      }
+      if (bus.dataBits !== undefined) {
+        pushQuery('BUS:B<x>:RS232C:DATaBits', `BUS:${bus.bus}:RS232C:DATaBits`, 'BUS_DECODE', `uart_data_bits_${bus.bus.toLowerCase()}`);
+      }
+      if (bus.stopBits) {
+        pushQuery('BUS:B<x>:RS232C:STOPBits', `BUS:${bus.bus}:RS232C:STOPBits`, 'BUS_DECODE', `uart_stop_bits_${bus.bus.toLowerCase()}`);
+      }
+      if (bus.parity) {
+        pushQuery('BUS:B<x>:RS232C:PARity', `BUS:${bus.bus}:RS232C:PARity`, 'BUS_DECODE', `uart_parity_${bus.bus.toLowerCase()}`);
+      }
+      if (bus.triggerCondition) {
+        pushQuery('TRIGger:A:TYPe', 'TRIGger:A:TYPe', 'TRIGGER', 'trigger_type');
+        pushQuery('TRIGger:{A|B}:BUS:SOUrce', 'TRIGger:A:BUS:SOUrce', 'TRIGGER', `trigger_bus_${bus.bus.toLowerCase()}`);
+        pushQuery('TRIGger:{A|B}:BUS:B<x>:RS232C:CONDition', `TRIGger:A:BUS:${bus.bus}:RS232C:CONDition`, 'TRIGGER', `uart_cond_${bus.bus.toLowerCase()}`);
       }
     }
     pushBusDisplayState();
@@ -2232,7 +2287,7 @@ export function parseBusIntent(
     }
   }
 
-  if (/\bread\s*(?:it\s*)?back\b|\breadback\b|\bverify\b|\bquery\b/i.test(message)) {
+  if (/\bread\s*(?:it\s*)?back\b|\breadback\b|\bverify\b|\bverification\b|\bquery\b|\bcheck\b|\bconfirm\b|\bread\s+the\s+settings\b|\bread\s+trigger\b/i.test(message)) {
     bus.readBackRequested = true;
   }
 
