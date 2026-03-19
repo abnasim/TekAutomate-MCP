@@ -1557,6 +1557,7 @@ function buildActionsFromPlanner(
   let nextId = hasExistingSteps ? 1 : 2;
   const nextStepId = () => String(nextId++);
   const pendingWrites: string[] = [];
+  let pendingWriteGroup: string | null = null;
   const plannedNewSteps: Array<Record<string, unknown>> = [];
   const collectStep = (step: Record<string, unknown>) => {
     if (hasExistingSteps) {
@@ -1569,6 +1570,7 @@ function buildActionsFromPlanner(
   const flushPendingWrites = () => {
     if (!pendingWrites.length) return;
     const writeChunks = chunkCommands(pendingWrites.splice(0, pendingWrites.length), 3);
+    pendingWriteGroup = null;
     for (const [index, chunk] of writeChunks.entries()) {
       const baseLabel = buildPlannerStepLabel(chunk[0]);
       const label =
@@ -1643,6 +1645,10 @@ function buildActionsFromPlanner(
       continue;
     }
 
+    if (pendingWriteGroup && pendingWriteGroup !== command.group) {
+      flushPendingWrites();
+    }
+    pendingWriteGroup = command.group;
     pendingWrites.push(command.concreteCommand);
   }
 

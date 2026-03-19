@@ -494,10 +494,14 @@ export async function parseIntent(
   const aliasMaps = await getIntentAliasMaps();
 
   const channels = deviceType === 'SCOPE' ? parseChannelIntent(message) : [];
-  const trigger = deviceType === 'SCOPE' ? parseTriggerIntent(message, aliasMaps) : undefined;
+  let trigger = deviceType === 'SCOPE' ? parseTriggerIntent(message, aliasMaps) : undefined;
   const triggerB = deviceType === 'SCOPE' ? parseSecondaryTriggerIntent(message, aliasMaps) : undefined;
   const buses = deviceType === 'SCOPE' ? parseBusIntents(message, aliasMaps) : [];
   const primaryBus = buses[0];
+  // Prefer protocol/bus trigger synthesis when bus-specific trigger intent is present.
+  if (buses.some((bus) => Boolean(bus.triggerCondition))) {
+    trigger = undefined;
+  }
   const measurements =
     deviceType === 'SCOPE' ? parseMeasurementIntent(message, { channels, bus: primaryBus }, aliasMaps) : [];
   const acquisition = deviceType === 'SCOPE' ? parseAcquisitionIntent(message, aliasMaps) : undefined;
@@ -814,7 +818,8 @@ export async function resolveTriggerCommands(
   }
 
   const out: ResolvedCommand[] = [];
-  if (trigger.type) {
+  const validTriggerTypes = new Set(['EDGE', 'WIDth', 'TIMEOut', 'RUNt', 'WINdow', 'LOGIc', 'SETHold', 'BUS', 'TRANsition']);
+  if (trigger.type && validTriggerTypes.has(trigger.type)) {
     const typeRecord = findExactHeader(index, 'TRIGger:A:TYPe', sourceFile);
     if (typeRecord) {
       out.push(materialize(typeRecord, 'TRIGger:A:TYPe', trigger.type, 'TRIGGER'));
@@ -1073,9 +1078,22 @@ export async function resolveBusCommands(
 
   const typeRecord = findExactHeader(index, 'BUS:B<x>:TYPe', sourceFile);
   const triggerTypeRecord = findExactHeader(index, 'TRIGger:A:TYPe', sourceFile);
+  const triggerBusSourceRecord = findExactHeader(index, 'TRIGger:{A|B}:BUS:SOUrce', sourceFile);
   const pushBusTriggerType = () => {
     if (triggerTypeRecord) {
       out.push(materialize(triggerTypeRecord, 'TRIGger:A:TYPe', 'BUS', 'TRIGGER'));
+    }
+  };
+  const pushBusTriggerSource = () => {
+    if (triggerBusSourceRecord) {
+      out.push(
+        materialize(
+          triggerBusSourceRecord,
+          'TRIGger:A:BUS:SOUrce',
+          bus.bus || 'B1',
+          'TRIGGER'
+        )
+      );
     }
   };
 
@@ -1121,6 +1139,7 @@ export async function resolveBusCommands(
     }
     if (bus.triggerCondition || bus.triggerDirection || bus.triggerAddress !== undefined) {
       pushBusTriggerType();
+      pushBusTriggerSource();
       const conditionRecord = findExactHeader(index, 'TRIGger:{A|B}:BUS:B<x>:I2C:CONDition', sourceFile);
       if (conditionRecord) {
         out.push(
@@ -1154,7 +1173,7 @@ export async function resolveBusCommands(
         }
         const valueRecord = findExactHeader(index, 'TRIGger:{A|B}:BUS:B<x>:I2C:ADDRess:VALue', sourceFile);
         if (valueRecord) {
-          const addressValue = `"${(bus.triggerAddress & 0x7f).toString(2).padStart(7, '0')}"`;
+          const addressValue = `"${(bus.triggerAddress & 0xff).toString(2).padStart(8, '0')}"`;
           out.push(
             materialize(
               valueRecord,
@@ -1294,6 +1313,7 @@ export async function resolveBusCommands(
     }
     if (bus.triggerCondition) {
       pushBusTriggerType();
+      pushBusTriggerSource();
       const conditionRecord = findExactHeader(index, 'TRIGger:{A|B}:BUS:B<x>:SPI:CONDition', sourceFile);
       if (conditionRecord) {
         out.push(
@@ -1359,6 +1379,7 @@ export async function resolveBusCommands(
     }
     if (bus.triggerCondition) {
       pushBusTriggerType();
+      pushBusTriggerSource();
       const conditionRecord = findExactHeader(index, 'TRIGger:{A|B}:BUS:B<x>:RS232C:CONDition', sourceFile);
       if (conditionRecord) {
         out.push(
@@ -1899,7 +1920,13 @@ export function parseMeasurementIntent(
 
   for (const clause of clauses) {
     const sanitizedClause = clause.replace(/\bactive\s+(?:high|low)\b/gi, ' ');
-    const matchedMeasurementTypes = matchAliasValues(sanitizedClause, aliasMaps.measurementAliases);
+    let matchedMeasurementTypes = matchAliasValues(sanitizedClause, aliasMaps.measurementAliases);
+    if (/\bactive\s+low\b/i.test(clause)) {
+      matchedMeasurementTypes = matchedMeasurementTypes.filter((type) => type !== 'LOW');
+    }
+    if (/\bactive\s+high\b/i.test(clause)) {
+      matchedMeasurementTypes = matchedMeasurementTypes.filter((type) => type !== 'HIGH');
+    }
     if (!isMeasurementClause(clause) && matchedMeasurementTypes.length === 0) continue;
     const clauseSource = parseMeasurementSource(clause) ?? defaultSource;
 
@@ -2088,7 +2115,7 @@ export function parseBusIntent(
 
   if (bus.protocol === 'UART' || bus.protocol === 'RS232' || bus.protocol === 'RS232C') {
     if (/\btrigger\b[^.]*\bstart\s*bit\b/i.test(message) || /\bstart\s*bit\b/i.test(message)) {
-      bus.triggerCondition = 'START';
+      bus.triggerCondition = 'STARt';
     }
   }
 
