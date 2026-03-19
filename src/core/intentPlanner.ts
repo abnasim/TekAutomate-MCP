@@ -102,6 +102,7 @@ export interface ParsedBusIntent {
   bus?: string;
   source1?: string;
   source2?: string;
+  source3?: string;
   clockSource?: string;
   dataSource?: string;
   bitrateBps?: number;
@@ -117,6 +118,9 @@ export interface ParsedBusIntent {
   stopBits?: 'ONE' | 'TWO';
   parity?: 'NONe' | 'EVEN' | 'ODD';
   slope?: 'RISe' | 'FALL';
+  triggerCondition?: string;
+  triggerAddress?: number;
+  triggerDirection?: 'READ' | 'WRITE';
 }
 
 export interface ParsedAcquisitionIntent {
@@ -230,7 +234,7 @@ export interface PlannerIntent {
   trigger?: ParsedTriggerIntent;
   triggerB?: ParsedTriggerIntent;
   measurements: ParsedMeasurementIntent[];
-  bus?: ParsedBusIntent;
+  buses: ParsedBusIntent[];
   acquisition?: ParsedAcquisitionIntent;
   horizontal?: ParsedHorizontalIntent;
   fastFrame?: ParsedFastFrameIntent;
@@ -492,15 +496,16 @@ export async function parseIntent(
   const channels = deviceType === 'SCOPE' ? parseChannelIntent(message) : [];
   const trigger = deviceType === 'SCOPE' ? parseTriggerIntent(message, aliasMaps) : undefined;
   const triggerB = deviceType === 'SCOPE' ? parseSecondaryTriggerIntent(message, aliasMaps) : undefined;
-  const bus = deviceType === 'SCOPE' ? parseBusIntent(message, aliasMaps) : undefined;
+  const buses = deviceType === 'SCOPE' ? parseBusIntents(message, aliasMaps) : [];
+  const primaryBus = buses[0];
   const measurements =
-    deviceType === 'SCOPE' ? parseMeasurementIntent(message, { channels, bus }, aliasMaps) : [];
+    deviceType === 'SCOPE' ? parseMeasurementIntent(message, { channels, bus: primaryBus }, aliasMaps) : [];
   const acquisition = deviceType === 'SCOPE' ? parseAcquisitionIntent(message, aliasMaps) : undefined;
   const horizontal = deviceType === 'SCOPE' ? parseHorizontalIntent(message) : undefined;
   const fastFrame = deviceType === 'SCOPE' ? parseFastFrameIntent(message) : undefined;
   const math = deviceType === 'SCOPE' ? parseMathIntent(message) : undefined;
   const cursor = deviceType === 'SCOPE' ? parseCursorIntent(message) : undefined;
-  const search = deviceType === 'SCOPE' ? parseSearchIntent(message, bus) : undefined;
+  const search = deviceType === 'SCOPE' ? parseSearchIntent(message, primaryBus) : undefined;
 
   const afg = deviceType === 'AFG' ? parseAfgIntent(message) : undefined;
   const awg = deviceType === 'AWG' ? parseAwgIntent(message) : undefined;
@@ -521,7 +526,7 @@ export async function parseIntent(
     if (trigger) groups.push('TRIGGER');
     if (triggerB) groups.push('TRIGGER_B');
     if (measurements.length > 0) groups.push('MEASUREMENT');
-    if (bus) groups.push('BUS_DECODE');
+    if (buses.length > 0) groups.push('BUS_DECODE');
     if (acquisition) groups.push('ACQUISITION');
     if (horizontal) groups.push('HORIZONTAL');
     if (fastFrame) groups.push('FASTFRAME');
@@ -584,7 +589,7 @@ export async function parseIntent(
     trigger,
     triggerB,
     measurements,
-    bus,
+    buses,
     acquisition,
     horizontal,
     fastFrame,
@@ -668,7 +673,7 @@ export async function planIntent(
     ...(await resolveAcquisitionCommands(index, intent.acquisition, sourceFile)),
     ...(await resolveHorizontalCommands(index, intent.fastFrame, sourceFile)),
     ...(await resolveSearchCommands(index, intent.search, sourceFile)),
-    ...(await resolveBusCommands(index, intent.bus, sourceFile)),
+    ...(await Promise.all(intent.buses.map((bus) => resolveBusCommands(index, bus, sourceFile)))).flat(),
     ...(await resolveStatusCommands(index, intent.status, sourceFile)),
     ...(await resolveErrorCheckCommands(index, intent.errorCheck, sourceFile)),
     ...(await resolveIeee488Commands(index, { idn: intent.idn }, sourceFile)),
@@ -1067,6 +1072,12 @@ export async function resolveBusCommands(
   };
 
   const typeRecord = findExactHeader(index, 'BUS:B<x>:TYPe', sourceFile);
+  const triggerTypeRecord = findExactHeader(index, 'TRIGger:A:TYPe', sourceFile);
+  const pushBusTriggerType = () => {
+    if (triggerTypeRecord) {
+      out.push(materialize(triggerTypeRecord, 'TRIGger:A:TYPe', 'BUS', 'TRIGGER'));
+    }
+  };
 
   if (bus.protocol === 'I2C') {
     if (typeRecord) out.push(materialize(typeRecord, `BUS:${bus.bus}:TYPe`, 'I2C', 'BUS_DECODE'));
@@ -1106,6 +1117,53 @@ export async function resolveBusCommands(
             'BUS_DECODE'
           )
         );
+      }
+    }
+    if (bus.triggerCondition || bus.triggerDirection || bus.triggerAddress !== undefined) {
+      pushBusTriggerType();
+      const conditionRecord = findExactHeader(index, 'TRIGger:{A|B}:BUS:B<x>:I2C:CONDition', sourceFile);
+      if (conditionRecord) {
+        out.push(
+          materialize(
+            conditionRecord,
+            `TRIGger:A:BUS:${bus.bus}:I2C:CONDition`,
+            bus.triggerCondition ?? 'ADDRess',
+            'TRIGGER'
+          )
+        );
+      }
+      if (bus.triggerDirection) {
+        const directionRecord = findExactHeader(index, 'TRIGger:{A|B}:BUS:B<x>:I2C:DATa:DIRection', sourceFile);
+        if (directionRecord) {
+          out.push(
+            materialize(
+              directionRecord,
+              `TRIGger:A:BUS:${bus.bus}:I2C:DATa:DIRection`,
+              bus.triggerDirection,
+              'TRIGGER'
+            )
+          );
+        }
+      }
+      if (bus.triggerAddress !== undefined) {
+        const modeRecord = findExactHeader(index, 'TRIGger:{A|B}:BUS:B<x>:I2C:ADDRess:MODe', sourceFile);
+        if (modeRecord) {
+          out.push(
+            materialize(modeRecord, `TRIGger:A:BUS:${bus.bus}:I2C:ADDRess:MODe`, 'ADDR7', 'TRIGGER')
+          );
+        }
+        const valueRecord = findExactHeader(index, 'TRIGger:{A|B}:BUS:B<x>:I2C:ADDRess:VALue', sourceFile);
+        if (valueRecord) {
+          const addressValue = `"${(bus.triggerAddress & 0x7f).toString(2).padStart(7, '0')}"`;
+          out.push(
+            materialize(
+              valueRecord,
+              `TRIGger:A:BUS:${bus.bus}:I2C:ADDRess:VALue`,
+              addressValue,
+              'TRIGGER'
+            )
+          );
+        }
       }
     }
     pushBusDisplayState();
@@ -1189,9 +1247,28 @@ export async function resolveBusCommands(
       }
     }
     if (bus.source2) {
-      const dataSourceRecord = findExactHeader(index, 'BUS:B<x>:SPI:DATa:SOUrce', sourceFile);
-      if (dataSourceRecord) {
-        out.push(materialize(dataSourceRecord, `BUS:${bus.bus}:SPI:DATa:SOUrce`, bus.source2, 'BUS_DECODE'));
+      const mosiSourceRecord =
+        findExactHeader(index, 'BUS:B<x>:SPI:MOSi:INPut', sourceFile) ??
+        findExactHeader(index, 'BUS:B<x>:SPI:DATa:IN:SOUrce', sourceFile) ??
+        findExactHeader(index, 'BUS:B<x>:SPI:DATa:SOUrce', sourceFile);
+      if (mosiSourceRecord) {
+        const sourceHeader = headersEquivalent(mosiSourceRecord.header, 'BUS:B<x>:SPI:MOSi:INPut')
+          ? `BUS:${bus.bus}:SPI:MOSi:INPut`
+          : headersEquivalent(mosiSourceRecord.header, 'BUS:B<x>:SPI:DATa:IN:SOUrce')
+            ? `BUS:${bus.bus}:SPI:DATa:IN:SOUrce`
+            : `BUS:${bus.bus}:SPI:DATa:SOUrce`;
+        out.push(materialize(mosiSourceRecord, sourceHeader, bus.source2, 'BUS_DECODE'));
+      }
+    }
+    if (bus.source3) {
+      const misoSourceRecord =
+        findExactHeader(index, 'BUS:B<x>:SPI:MISo:INPut', sourceFile) ??
+        findExactHeader(index, 'BUS:B<x>:SPI:DATa:OUT:SOUrce', sourceFile);
+      if (misoSourceRecord) {
+        const sourceHeader = headersEquivalent(misoSourceRecord.header, 'BUS:B<x>:SPI:MISo:INPut')
+          ? `BUS:${bus.bus}:SPI:MISo:INPut`
+          : `BUS:${bus.bus}:SPI:DATa:OUT:SOUrce`;
+        out.push(materialize(misoSourceRecord, sourceHeader, bus.source3, 'BUS_DECODE'));
       }
     }
     if (bus.chipSelect) {
@@ -1211,6 +1288,20 @@ export async function resolveBusCommands(
             `BUS:${bus.bus}:SPI:SELect:POLarity`,
             bus.selectPolarity,
             'BUS_DECODE'
+          )
+        );
+      }
+    }
+    if (bus.triggerCondition) {
+      pushBusTriggerType();
+      const conditionRecord = findExactHeader(index, 'TRIGger:{A|B}:BUS:B<x>:SPI:CONDition', sourceFile);
+      if (conditionRecord) {
+        out.push(
+          materialize(
+            conditionRecord,
+            `TRIGger:A:BUS:${bus.bus}:SPI:CONDition`,
+            bus.triggerCondition,
+            'TRIGGER'
           )
         );
       }
@@ -1264,6 +1355,20 @@ export async function resolveBusCommands(
       const parityRecord = findExactHeader(index, 'BUS:B<x>:RS232C:PARity', sourceFile);
       if (parityRecord) {
         out.push(materialize(parityRecord, `BUS:${bus.bus}:RS232C:PARity`, bus.parity, 'BUS_DECODE'));
+      }
+    }
+    if (bus.triggerCondition) {
+      pushBusTriggerType();
+      const conditionRecord = findExactHeader(index, 'TRIGger:{A|B}:BUS:B<x>:RS232C:CONDition', sourceFile);
+      if (conditionRecord) {
+        out.push(
+          materialize(
+            conditionRecord,
+            `TRIGger:A:BUS:${bus.bus}:RS232C:CONDition`,
+            bus.triggerCondition,
+            'TRIGGER'
+          )
+        );
       }
     }
     pushBusDisplayState();
@@ -1793,7 +1898,8 @@ export function parseMeasurementIntent(
   const defaultSource = context.channels[0]?.channel;
 
   for (const clause of clauses) {
-    const matchedMeasurementTypes = matchAliasValues(clause, aliasMaps.measurementAliases);
+    const sanitizedClause = clause.replace(/\bactive\s+(?:high|low)\b/gi, ' ');
+    const matchedMeasurementTypes = matchAliasValues(sanitizedClause, aliasMaps.measurementAliases);
     if (!isMeasurementClause(clause) && matchedMeasurementTypes.length === 0) continue;
     const clauseSource = parseMeasurementSource(clause) ?? defaultSource;
 
@@ -1811,7 +1917,45 @@ export function parseMeasurementIntent(
   return measurements;
 }
 
-export function parseBusIntent(message: string, aliasMaps: IntentAliasMaps): ParsedBusIntent | undefined {
+export function parseBusIntents(message: string, aliasMaps: IntentAliasMaps): ParsedBusIntent[] {
+  const intents: ParsedBusIntent[] = [];
+  const busAnchors = Array.from(message.matchAll(/\bon\s+(B[1-4])\b/gi));
+
+  if (busAnchors.length > 0) {
+    for (let index = 0; index < busAnchors.length; index += 1) {
+      const anchor = busAnchors[index];
+      const segmentStart = index === 0 ? 0 : (anchor.index ?? 0);
+      const segmentEnd = busAnchors[index + 1]?.index ?? message.length;
+      const segment = message.slice(segmentStart, segmentEnd);
+      const forcedBusSlot = anchor[1].toUpperCase();
+      const parsed = parseBusIntent(segment, aliasMaps, forcedBusSlot);
+      if (parsed) intents.push(parsed);
+    }
+  } else {
+    const parsed = parseBusIntent(message, aliasMaps);
+    if (parsed) intents.push(parsed);
+  }
+
+  const deduped = new Map<string, ParsedBusIntent>();
+  for (const intent of intents) {
+    const key = [
+      intent.bus || '',
+      intent.protocol,
+      intent.source1 || '',
+      intent.source2 || '',
+      intent.source3 || '',
+      intent.chipSelect || '',
+    ].join('|');
+    if (!deduped.has(key)) deduped.set(key, intent);
+  }
+  return Array.from(deduped.values());
+}
+
+export function parseBusIntent(
+  message: string,
+  aliasMaps: IntentAliasMaps,
+  forcedBusSlot?: string
+): ParsedBusIntent | undefined {
   const protocol = matchFirstAliasValue(message, aliasMaps.busProtocolAliases);
   if (!protocol) return undefined;
 
@@ -1820,18 +1964,47 @@ export function parseBusIntent(message: string, aliasMaps: IntentAliasMaps): Par
   };
 
   const busSlotMatch = message.match(BUS_SLOT_REGEX);
-  if (busSlotMatch) bus.bus = busSlotMatch[1].toUpperCase();
+  if (forcedBusSlot) bus.bus = forcedBusSlot.toUpperCase();
+  else if (busSlotMatch) bus.bus = busSlotMatch[1].toUpperCase();
 
   const clockMatch = message.match(/\bclock\s+(CH[1-4])\b/i);
-  if (clockMatch) {
+  const reverseClockMatch = message.match(/\b(CH[1-4])\s+clock\b/i);
+  const spiLeadingClockMatch = message.match(/\bspi\s+(CH[1-4])\s+clock\b/i);
+  const pairedClockDataMatch = message.match(/\b(CH[1-4])\s+clock\s+(CH[1-4])\s+data\b/i);
+  if (pairedClockDataMatch) {
+    bus.clockSource = pairedClockDataMatch[1].toUpperCase();
+    bus.source1 = bus.clockSource;
+    bus.dataSource = pairedClockDataMatch[2].toUpperCase();
+    bus.source2 = bus.dataSource;
+  } else if (clockMatch) {
     bus.clockSource = clockMatch[1].toUpperCase();
+    bus.source1 = bus.clockSource;
+  } else if (reverseClockMatch) {
+    bus.clockSource = reverseClockMatch[1].toUpperCase();
+    bus.source1 = bus.clockSource;
+  } else if (spiLeadingClockMatch) {
+    bus.clockSource = spiLeadingClockMatch[1].toUpperCase();
     bus.source1 = bus.clockSource;
   }
 
   const dataMatch = message.match(/\bdata\s+(CH[1-4])\b/i);
+  const reverseDataMatch = message.match(/\b(CH[1-4])\s+data\b/i);
   if (dataMatch) {
     bus.dataSource = dataMatch[1].toUpperCase();
     bus.source2 = bus.dataSource;
+  } else if (reverseDataMatch) {
+    bus.dataSource = reverseDataMatch[1].toUpperCase();
+    bus.source2 = bus.dataSource;
+  }
+
+  const mosiMatch = message.match(/\bmosi(?:\s+(?:is|on|source))?\s*(CH[1-4])\b/i);
+  if (mosiMatch) bus.source2 = mosiMatch[1].toUpperCase();
+  const misoMatch = message.match(/\bmiso(?:\s+(?:is|on|source))?\s*(CH[1-4])\b/i);
+  if (misoMatch) bus.source3 = misoMatch[1].toUpperCase();
+
+  const sourceMatch = message.match(/\bsource\s+(CH[1-4])\b/i);
+  if (sourceMatch && (bus.protocol === 'UART' || bus.protocol === 'RS232' || bus.protocol === 'RS232C')) {
+    bus.source1 = sourceMatch[1].toUpperCase();
   }
 
   if (!bus.source1) {
@@ -1846,6 +2019,10 @@ export function parseBusIntent(message: string, aliasMaps: IntentAliasMaps): Par
 
   const bitrateMatch = message.match(BITRATE_REGEX);
   if (bitrateMatch) bus.bitrateBps = toBitrate(bitrateMatch[1], bitrateMatch[2]);
+  if (bus.protocol === 'I2C' && bus.bitrateBps === undefined) {
+    const i2cRateMatch = message.match(/(\d+(?:\.\d+)?)\s*(khz|mhz)\b/i);
+    if (i2cRateMatch) bus.bitrateBps = toHz(i2cRateMatch[1], i2cRateMatch[2]);
+  }
 
   const dataPhaseMatch = message.match(/data\s+phase\s+(\d+(?:\.\d+)?)\s*(kbps|mbps)\b/i);
   if (dataPhaseMatch) {
@@ -1883,6 +2060,9 @@ export function parseBusIntent(message: string, aliasMaps: IntentAliasMaps): Par
     bus.baudRate = /baud/i.test(baudMatch[2])
       ? Number(baudMatch[1])
       : toBitrate(baudMatch[1], baudMatch[2]);
+  } else if (/uart|rs232/i.test(message)) {
+    const commonBaudMatch = message.match(/\b(1200|2400|4800|9600|19200|38400|57600|115200|230400|460800|921600)\b/);
+    if (commonBaudMatch) bus.baudRate = Number(commonBaudMatch[1]);
   }
 
   const dataBitsMatch = message.match(/\b([789])\s*data\s*bits?\b/i);
@@ -1905,6 +2085,30 @@ export function parseBusIntent(message: string, aliasMaps: IntentAliasMaps): Par
 
   if (/\brising\b|\brise\b/i.test(message)) bus.slope = 'RISe';
   else if (/\bfalling\b|\bfall\b/i.test(message)) bus.slope = 'FALL';
+
+  if (bus.protocol === 'UART' || bus.protocol === 'RS232' || bus.protocol === 'RS232C') {
+    if (/\btrigger\b[^.]*\bstart\s*bit\b/i.test(message) || /\bstart\s*bit\b/i.test(message)) {
+      bus.triggerCondition = 'START';
+    }
+  }
+
+  if (bus.protocol === 'I2C') {
+    if (/\btrigger\b[^.]*\baddress\b/i.test(message) || /\baddress\s+0x[0-9a-f]+\b/i.test(message)) {
+      bus.triggerCondition = 'ADDRess';
+    }
+    if (/\bread\b/i.test(message)) bus.triggerDirection = 'READ';
+    else if (/\bwrite\b/i.test(message)) bus.triggerDirection = 'WRITE';
+    const addressHexMatch = message.match(/\baddress\s+0x([0-9a-f]+)\b/i);
+    if (addressHexMatch) {
+      bus.triggerAddress = Number.parseInt(addressHexMatch[1], 16);
+    }
+  }
+
+  if (bus.protocol === 'SPI') {
+    if (/\btrigger\b[^.]*\bss\b/i.test(message) || /\bon\s+ss\b/i.test(message)) {
+      bus.triggerCondition = 'SS';
+    }
+  }
 
   return bus;
 }
@@ -2335,9 +2539,23 @@ function parseTriggerClause(
   clause: string,
   aliasMaps: IntentAliasMaps
 ): ParsedTriggerIntent | undefined {
+  if (
+    /\b(start\s*bit|address|read|write|ss|chip\s*select)\b/i.test(clause) &&
+    /\b(i2c|spi|uart|rs-?232|can|lin|arinc|mil)\b/i.test(clause)
+  ) {
+    return undefined;
+  }
+
   const trigger: ParsedTriggerIntent = {};
   const matchedType = matchFirstAliasValue(clause, aliasMaps.triggerTypeAliases);
-  if (matchedType) trigger.type = matchedType as ParsedTriggerIntent['type'];
+  if (
+    matchedType &&
+    ['EDGE', 'WIDth', 'TIMEOut', 'RUNt', 'WINdow', 'LOGIc', 'SETHold', 'BUS', 'TRANsition'].includes(
+      matchedType
+    )
+  ) {
+    trigger.type = matchedType as ParsedTriggerIntent['type'];
+  }
 
   const sourceMatch = clause.match(TRIGGER_SOURCE_REGEX);
   if (sourceMatch) trigger.source = sourceMatch[1].toUpperCase();
@@ -2499,7 +2717,7 @@ function dedupeGroups(groups: IntentGroup[]): IntentGroup[] {
 function buildBindings(intent: PlannerIntent): Record<string, string> {
   const bindings: Record<string, string> = {};
   if (intent.channels[0]?.channel) bindings['CH<x>'] = intent.channels[0].channel;
-  if (intent.bus?.bus) bindings['B<x>'] = intent.bus.bus;
+  if (intent.buses[0]?.bus) bindings['B<x>'] = intent.buses[0].bus;
   return bindings;
 }
 
@@ -2639,6 +2857,7 @@ function hasBusDecodeDetails(bus: ParsedBusIntent): boolean {
   return Boolean(
     bus.source1 ||
       bus.source2 ||
+      bus.source3 ||
       bus.clockSource ||
       bus.dataSource ||
       bus.bitrateBps !== undefined ||
@@ -2651,8 +2870,12 @@ function hasBusDecodeDetails(bus: ParsedBusIntent): boolean {
       bus.selectPolarity ||
       bus.baudRate !== undefined ||
       bus.dataBits !== undefined ||
+      bus.stopBits ||
       bus.parity ||
-      bus.slope
+      bus.slope ||
+      bus.triggerCondition ||
+      bus.triggerAddress !== undefined ||
+      bus.triggerDirection
   );
 }
 
