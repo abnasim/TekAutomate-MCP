@@ -1305,6 +1305,22 @@ async function finalizeShortcutCommands(
 }
 
 function buildWriteStep(id: string, label: string, commands: string[]): Record<string, unknown> {
+  if (commands.some(isAcquireStateRunCommand) && commands.length > 1) {
+    return {
+      id,
+      type: 'group',
+      label,
+      params: {},
+      collapsed: false,
+      children: commands.map((command, index) => ({
+        id: `${id}_${index + 1}`,
+        type: 'write',
+        label: `${label} (${index + 1}/${commands.length})`,
+        params: { command },
+      })),
+    };
+  }
+
   const maxConcatCommands = 3;
   if (commands.length > maxConcatCommands) {
     const chunks = chunkCommands(commands, maxConcatCommands);
@@ -1473,6 +1489,36 @@ function buildPlannerStepLabel(command: string): string {
   return `Write ${header}`;
 }
 
+function normalizePlannerCommand(command: string): string {
+  return String(command || '').trim().replace(/\s+/g, ' ').toUpperCase();
+}
+
+function isAcquireStateRunCommand(command: string): boolean {
+  const normalized = normalizePlannerCommand(command);
+  return /^ACQUIRE:STATE\s+(RUN|ON|1)\b/.test(normalized);
+}
+
+function isOpcCapableWriteCommand(command: string): boolean {
+  const normalized = normalizePlannerCommand(command);
+  return (
+    isAcquireStateRunCommand(normalized) ||
+    /^AUTOSET(\s|:).*EXECUTE\b/.test(normalized) ||
+    /^CALIBRATE:INTERNAL(:START)?\b/.test(normalized) ||
+    /^CALIBRATE:FACTORY\s+(START|CONTINUE|PREVIOUS)\b/.test(normalized) ||
+    /^CH[1-8]:PROBE:(AUTOZERO|DEGAUSS)\s+EXECUTE\b/.test(normalized) ||
+    /^DIAG:STATE\s+EXECUTE\b/.test(normalized) ||
+    /^FACTORY\b/.test(normalized) ||
+    /^RECALL:SETUP\b/.test(normalized) ||
+    /^RECALL:WAVEFORM\b/.test(normalized) ||
+    /^\*RST\b/.test(normalized) ||
+    /^SAVE:IMAGE\b/.test(normalized) ||
+    /^SAVE:SETUP\b/.test(normalized) ||
+    /^SAVE:WAVEFORM\b/.test(normalized) ||
+    /^TEKSECURE\b/.test(normalized) ||
+    /^TRIGGER:A\s+SETLEVEL\b/.test(normalized)
+  );
+}
+
 function chunkCommands(commands: string[], size: number): string[][] {
   const chunks: string[][] = [];
   for (let i = 0; i < commands.length; i += size) {
@@ -1566,6 +1612,34 @@ function buildActionsFromPlanner(
           command.saveAs
         )
       );
+      continue;
+    }
+
+    if (isAcquireStateRunCommand(command.concreteCommand)) {
+      flushPendingWrites();
+      collectStep(
+        buildWriteStep(
+          nextStepId(),
+          buildPlannerStepLabel(command.concreteCommand),
+          [command.concreteCommand]
+        )
+      );
+      collectStep(
+        buildQueryStep(nextStepId(), 'Wait for acquisition complete', '*OPC?', 'acq_complete')
+      );
+      continue;
+    }
+
+    if (isOpcCapableWriteCommand(command.concreteCommand)) {
+      flushPendingWrites();
+      collectStep(
+        buildWriteStep(
+          nextStepId(),
+          buildPlannerStepLabel(command.concreteCommand),
+          [command.concreteCommand]
+        )
+      );
+      collectStep(buildQueryStep(nextStepId(), 'Read operation complete', '*OPC?', 'opc'));
       continue;
     }
 

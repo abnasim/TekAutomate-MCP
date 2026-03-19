@@ -100,11 +100,42 @@ Build, edit, and validate TekAutomate Steps UI flows for the live workspace.
 - Combine related same-subsystem setup commands into one `write` step using semicolons when it keeps the flow compact and readable.
 - Keep compact combined setup writes to 4 commands or fewer per step. If more are needed, split into multiple steps and group them.
 - Keep `query` steps query-only rather than mixing setup writes into the same command string.
+- Never semicolon-chain `ACQuire:STATE RUN` with any other command. It must be its own `write` step.
 - `save_screenshot` is the preferred screenshot step; do not replace it with raw screenshot SCPI unless the user explicitly asks for raw commands.
 - `save_waveform` is the preferred waveform-save step.
 - `error_check` should use `*ESR?` for status/error checks by default; do not expand into extra status-queue commands unless the user explicitly asks.
-- Do not add `*OPC?` by default. Use `*OPC?` only when the flow includes an operation that can generate OPC completion (for example single-sequence acquire/run completion, save/recall operations, calibrations, autorange/setlevel style operations).
-- OPC-capable operations include: `ACQuire:STATE` in single-sequence mode, `AUTOset`, `CALibrate:*`, `RECAll:*`, `SAVe:IMAGe`, `SAVe:SETUp`, `SAVe:WAVEform`, `*RST`, `TEKSecure`, `TRIGger:A SETLevel`, and measurement result operations in single sequence/recall contexts.
+- Use `*OPC?` only after OPC-supported operations (listed below). For everything else, use `sleep` if a wait is needed.
+
+## OPC-Supported Commands
+Use `query` step with `params.command: "*OPC?"` and `params.saveAs: "opc"` (or `acq_complete` for acquisition completion) immediately after these commands only:
+- `ACQuire:STATE RUN` (only when in single-sequence mode)
+- `AUTOset EXECute`
+- `CALibrate:INTERNal`
+- `CALibrate:INTERNal:STARt`
+- `CALibrate:FACtory STARt`
+- `CALibrate:FACtory CONTinue`
+- `CALibrate:FACtory PREVious`
+- `CH<x>:PRObe:AUTOZero EXECute`
+- `CH<x>:PRObe:DEGAUss EXECute`
+- `DIAg:STATE EXECute`
+- `FACtory`
+- `MEASUrement:MEAS<x>:RESUlts` (single-sequence or waveform recall contexts)
+- `RECAll:SETUp`
+- `RECAll:WAVEform`
+- `*RST`
+- `SAVe:IMAGe`
+- `SAVe:SETUp`
+- `SAVe:WAVEform`
+- `TEKSecure`
+- `TRIGger:A SETLevel`
+
+Never use `*OPC?` after:
+- Channel setup (`CH<x>:SCAle`, `CH<x>:COUPling`, etc.)
+- Trigger configuration (`TRIGger:A:EDGE:*`, etc.)
+- Bus configuration (`BUS:B<x>:*`)
+- Measurement creation (`MEASUrement:ADDMEAS`)
+- Display commands
+- Any query command
 
 ## Measurement Grouping
 - For measurement creation and configuration, use grouped structure instead of long flat lists.
