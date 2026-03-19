@@ -1,0 +1,81 @@
+{
+  "timestamp": "2026-03-19T07:51:09.564Z",
+  "requestId": "1773906669494-g123jw",
+  "provider": "openai",
+  "model": "gpt-5.4",
+  "outputMode": "steps_json",
+  "deviceType": "SCOPE",
+  "modelFamily": "MSO4/5/6 Series",
+  "backend": "pyvisa",
+  "userMessage": "Set CH1 to 500mV DC 50 ohm",
+  "flowContext": {
+    "stepCount": 0,
+    "stepTypes": [],
+    "validationErrors": []
+  },
+  "scpiContextHits": 0,
+  "toolCalls": [],
+  "postCheck": {
+    "errors": [],
+    "warnings": [],
+    "autoRepairTriggered": false
+  },
+  "response": {
+    "text": "ACTIONS_JSON: {\"summary\":\"Built a server-side common TekAutomate flow.\",\"findings\":[],\"suggestedFixes\":[\"Filled connect/disconnect instrumentIds with workspace alias \\\"scope1\\\" for direct chat apply compatibility.\"],\"actions\":[{\"type\":\"replace_flow\",\"flow\":{\"name\":\"Generated Flow\",\"description\":\"Common TekAutomate scope flow built server-side.\",\"backend\":\"pyvisa\",\"deviceType\":\"SCOPE\",\"steps\":[{\"id\":\"1\",\"type\":\"connect\",\"label\":\"Connect\",\"params\":{\"instrumentIds\":[\"scope1\"],\"printIdn\":true}},{\"id\":\"2\",\"type\":\"write\",\"label\":\"Configure CH1\",\"params\":{\"command\":\"CH1:SCAle 0.5;CH1:COUPling DC;CH1:TERmination 50\"}},{\"id\":\"3\",\"type\":\"disconnect\",\"label\":\"Disconnect\",\"params\":{\"instrumentIds\":[\"scope1\"]}}]}}]}",
+    "actionsJson": {
+      "summary": "Built a server-side common TekAutomate flow.",
+      "findings": [],
+      "suggestedFixes": [
+        "Filled connect/disconnect instrumentIds with workspace alias \"scope1\" for direct chat apply compatibility."
+      ],
+      "actions": [
+        {
+          "type": "replace_flow",
+          "flow": {
+            "name": "Generated Flow",
+            "description": "Common TekAutomate scope flow built server-side.",
+            "backend": "pyvisa",
+            "deviceType": "SCOPE",
+            "steps": [
+              {
+                "id": "1",
+                "type": "connect",
+                "label": "Connect",
+                "params": {
+                  "instrumentIds": [
+                    "scope1"
+                  ],
+                  "printIdn": true
+                }
+              },
+              {
+                "id": "2",
+                "type": "write",
+                "label": "Configure CH1",
+                "params": {
+                  "command": "CH1:SCAle 0.5;CH1:COUPling DC;CH1:TERmination 50"
+                }
+              },
+              {
+                "id": "3",
+                "type": "disconnect",
+                "label": "Disconnect",
+                "params": {
+                  "instrumentIds": [
+                    "scope1"
+                  ]
+                }
+              }
+            ]
+          }
+        }
+      ]
+    },
+    "stepCount": 1,
+    "stepTypes": [
+      "replace_flow"
+    ]
+  },
+  "durationMs": 70,
+  "ok": true
+}

@@ -1333,7 +1333,7 @@ function buildWriteStep(id: string, label: string, commands: string[]): Record<s
       children: chunks.map((chunk, index) => ({
         id: `${id}_${index + 1}`,
         type: 'write',
-        label: chunks.length > 1 ? `${label} (${index + 1}/${chunks.length})` : label,
+        label,
         params: { command: chunk.join(';') },
       })),
     };
@@ -1742,10 +1742,7 @@ function buildActionsFromPlanner(
     pendingWriteGroup = null;
     for (const [index, chunk] of writeChunks.entries()) {
       const baseLabel = buildPlannerStepLabel(chunk[0]);
-      const label =
-        writeChunks.length > 1
-          ? `${baseLabel} (${index + 1}/${writeChunks.length})`
-          : baseLabel;
+      const label = baseLabel;
       collectStep(buildWriteStep(nextStepId(), label, chunk));
     }
   };

@@ -1,0 +1,115 @@
+{
+  "timestamp": "2026-03-19T08:04:35.071Z",
+  "requestId": "1773907445550-pzca6f",
+  "provider": "openai",
+  "model": "gpt-5.4",
+  "outputMode": "steps_json",
+  "deviceType": "SCOPE",
+  "modelFamily": "MSO4/5/6 Series",
+  "backend": "tm_devices",
+  "userMessage": "Configure edge trigger CH1 rising 1V using tm_devices",
+  "flowContext": {
+    "stepCount": 0,
+    "stepTypes": [],
+    "validationErrors": []
+  },
+  "scpiContextHits": 0,
+  "toolCalls": [],
+  "postCheck": {
+    "errors": [],
+    "warnings": [
+      "Hybrid planner gap-fill applied."
+    ],
+    "autoRepairTriggered": false
+  },
+  "response": {
+    "text": "ACTIONS_JSON: {\"summary\":\"Built 5 verified planner steps without a model call.\",\"findings\":[],\"suggestedFixes\":[\"Filled connect/disconnect instrumentIds with workspace alias \\\"scope1\\\" for direct chat apply compatibility.\"],\"actions\":[{\"type\":\"replace_flow\",\"flow\":{\"name\":\"SCOPE Planner Flow\",\"description\":\"Configure edge trigger CH1 rising 1V using tm_devices\",\"backend\":\"tm_devices\",\"deviceType\":\"SCOPE\",\"steps\":[{\"id\":\"1\",\"type\":\"connect\",\"label\":\"Connect\",\"params\":{\"instrumentIds\":[\"scope1\"],\"printIdn\":true}},{\"id\":\"2\",\"type\":\"write\",\"label\":\"Write CH1:SCAle\",\"params\":{\"command\":\"CH1:SCAle 1\"}},{\"id\":\"3\",\"type\":\"write\",\"label\":\"Write TRIGger:A:TYPe (1/4)\",\"params\":{\"command\":\"TRIGger:A:TYPe EDGE\"}},{\"id\":\"4\",\"type\":\"write\",\"label\":\"Write TRIGger:A:EDGE:SOUrce (2/4)\",\"params\":{\"command\":\"TRIGger:A:EDGE:SOUrce CH1\"}},{\"id\":\"5\",\"type\":\"write\",\"label\":\"Write TRIGger:A:EDGE:SLOpe (3/4)\",\"params\":{\"command\":\"TRIGger:A:EDGE:SLOpe RISe\"}},{\"id\":\"6\",\"type\":\"write\",\"label\":\"Write TRIGger:A:LEVel:CH1 (4/4)\",\"params\":{\"command\":\"TRIGger:A:LEVel:CH1 1\"}},{\"id\":\"7\",\"type\":\"disconnect\",\"label\":\"Disconnect\",\"params\":{\"instrumentIds\":[\"scope1\"]}}]}}]}",
+    "actionsJson": {
+      "summary": "Built 5 verified planner steps without a model call.",
+      "findings": [],
+      "suggestedFixes": [
+        "Filled connect/disconnect instrumentIds with workspace alias \"scope1\" for direct chat apply compatibility."
+      ],
+      "actions": [
+        {
+          "type": "replace_flow",
+          "flow": {
+            "name": "SCOPE Planner Flow",
+            "description": "Configure edge trigger CH1 rising 1V using tm_devices",
+            "backend": "tm_devices",
+            "deviceType": "SCOPE",
+            "steps": [
+              {
+                "id": "1",
+                "type": "connect",
+                "label": "Connect",
+                "params": {
+                  "instrumentIds": [
+                    "scope1"
+                  ],
+                  "printIdn": true
+                }
+              },
+              {
+                "id": "2",
+                "type": "write",
+                "label": "Write CH1:SCAle",
+                "params": {
+                  "command": "CH1:SCAle 1"
+                }
+              },
+              {
+                "id": "3",
+                "type": "write",
+                "label": "Write TRIGger:A:TYPe (1/4)",
+                "params": {
+                  "command": "TRIGger:A:TYPe EDGE"
+                }
+              },
+              {
+                "id": "4",
+                "type": "write",
+                "label": "Write TRIGger:A:EDGE:SOUrce (2/4)",
+                "params": {
+                  "command": "TRIGger:A:EDGE:SOUrce CH1"
+                }
+              },
+              {
+                "id": "5",
+                "type": "write",
+                "label": "Write TRIGger:A:EDGE:SLOpe (3/4)",
+                "params": {
+                  "command": "TRIGger:A:EDGE:SLOpe RISe"
+                }
+              },
+              {
+                "id": "6",
+                "type": "write",
+                "label": "Write TRIGger:A:LEVel:CH1 (4/4)",
+                "params": {
+                  "command": "TRIGger:A:LEVel:CH1 1"
+                }
+              },
+              {
+                "id": "7",
+                "type": "disconnect",
+                "label": "Disconnect",
+                "params": {
+                  "instrumentIds": [
+                    "scope1"
+                  ]
+                }
+              }
+            ]
+          }
+        }
+      ]
+    },
+    "stepCount": 1,
+    "stepTypes": [
+      "replace_flow"
+    ]
+  },
+  "durationMs": 29521,
+  "ok": true
+}

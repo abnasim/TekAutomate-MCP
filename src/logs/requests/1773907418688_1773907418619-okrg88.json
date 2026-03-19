@@ -1,0 +1,98 @@
+{
+  "timestamp": "2026-03-19T08:03:38.688Z",
+  "requestId": "1773907418619-okrg88",
+  "provider": "openai",
+  "model": "gpt-5.4",
+  "outputMode": "steps_json",
+  "deviceType": "SCOPE",
+  "modelFamily": "MSO4/5/6 Series",
+  "backend": "pyvisa",
+  "userMessage": "Set CH1 to 500mV DC 50 ohm",
+  "flowContext": {
+    "stepCount": 0,
+    "stepTypes": [],
+    "validationErrors": []
+  },
+  "scpiContextHits": 0,
+  "toolCalls": [],
+  "postCheck": {
+    "errors": [],
+    "warnings": [],
+    "autoRepairTriggered": false
+  },
+  "response": {
+    "text": "ACTIONS_JSON: {\"summary\":\"Built a server-side common TekAutomate flow.\",\"findings\":[],\"suggestedFixes\":[\"Filled connect/disconnect instrumentIds with workspace alias \\\"scope1\\\" for direct chat apply compatibility.\"],\"actions\":[{\"type\":\"replace_flow\",\"flow\":{\"name\":\"Generated Flow\",\"description\":\"Common TekAutomate scope flow built server-side.\",\"backend\":\"pyvisa\",\"deviceType\":\"SCOPE\",\"steps\":[{\"id\":\"1\",\"type\":\"connect\",\"label\":\"Connect\",\"params\":{\"instrumentIds\":[\"scope1\"],\"printIdn\":true}},{\"id\":\"2\",\"type\":\"group\",\"label\":\"Configure CH1\",\"params\":{},\"collapsed\":false,\"children\":[{\"id\":\"2_1\",\"type\":\"write\",\"label\":\"Configure CH1 (1/2)\",\"params\":{\"command\":\"CH1:SCAle 0.5;CH1:COUPling DC\"}},{\"id\":\"2_2\",\"type\":\"write\",\"label\":\"Configure CH1 (2/2)\",\"params\":{\"command\":\"CH1:TERmination 50\"}}]},{\"id\":\"3\",\"type\":\"disconnect\",\"label\":\"Disconnect\",\"params\":{\"instrumentIds\":[\"scope1\"]}}]}}]}",
+    "actionsJson": {
+      "summary": "Built a server-side common TekAutomate flow.",
+      "findings": [],
+      "suggestedFixes": [
+        "Filled connect/disconnect instrumentIds with workspace alias \"scope1\" for direct chat apply compatibility."
+      ],
+      "actions": [
+        {
+          "type": "replace_flow",
+          "flow": {
+            "name": "Generated Flow",
+            "description": "Common TekAutomate scope flow built server-side.",
+            "backend": "pyvisa",
+            "deviceType": "SCOPE",
+            "steps": [
+              {
+                "id": "1",
+                "type": "connect",
+                "label": "Connect",
+                "params": {
+                  "instrumentIds": [
+                    "scope1"
+                  ],
+                  "printIdn": true
+                }
+              },
+              {
+                "id": "2",
+                "type": "group",
+                "label": "Configure CH1",
+                "params": {},
+                "collapsed": false,
+                "children": [
+                  {
+                    "id": "2_1",
+                    "type": "write",
+                    "label": "Configure CH1 (1/2)",
+                    "params": {
+                      "command": "CH1:SCAle 0.5;CH1:COUPling DC"
+                    }
+                  },
+                  {
+                    "id": "2_2",
+                    "type": "write",
+                    "label": "Configure CH1 (2/2)",
+                    "params": {
+                      "command": "CH1:TERmination 50"
+                    }
+                  }
+                ]
+              },
+              {
+                "id": "3",
+                "type": "disconnect",
+                "label": "Disconnect",
+                "params": {
+                  "instrumentIds": [
+                    "scope1"
+                  ]
+                }
+              }
+            ]
+          }
+        }
+      ]
+    },
+    "stepCount": 1,
+    "stepTypes": [
+      "replace_flow"
+    ]
+  },
+  "durationMs": 69,
+  "ok": true
+}
