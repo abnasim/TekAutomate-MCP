@@ -122,6 +122,7 @@ export interface ParsedBusIntent {
   triggerCondition?: string;
   triggerAddress?: number;
   triggerDirection?: 'READ' | 'WRITE';
+  readBackRequested?: boolean;
 }
 
 export interface ParsedAcquisitionIntent {
@@ -1083,6 +1084,17 @@ export async function resolveBusCommands(
   const typeRecord = findExactHeader(index, 'BUS:B<x>:TYPe', sourceFile);
   const triggerTypeRecord = findExactHeader(index, 'TRIGger:A:TYPe', sourceFile);
   const triggerBusSourceRecord = findExactHeader(index, 'TRIGger:{A|B}:BUS:SOUrce', sourceFile);
+  const wantsReadBack = Boolean(bus.readBackRequested);
+  const pushQuery = (
+    headerTemplate: string,
+    concreteHeader: string,
+    group: IntentGroup,
+    saveAs?: string
+  ) => {
+    const record = findExactHeader(index, headerTemplate, sourceFile);
+    if (!record) return;
+    out.push(materialize(record, `${concreteHeader}?`, undefined, group, 'query', saveAs));
+  };
   const pushBusTriggerType = () => {
     if (triggerTypeRecord) {
       out.push(materialize(triggerTypeRecord, 'TRIGger:A:TYPe', 'BUS', 'TRIGGER'));
@@ -1186,6 +1198,27 @@ export async function resolveBusCommands(
               'TRIGGER'
             )
           );
+        }
+      }
+    }
+    if (wantsReadBack) {
+      pushQuery('BUS:B<x>:TYPe', `BUS:${bus.bus}:TYPe`, 'BUS_DECODE', `bus_${bus.bus.toLowerCase()}_type`);
+      if (bus.source1) {
+        pushQuery('BUS:B<x>:I2C:CLOCk:SOUrce', `BUS:${bus.bus}:I2C:CLOCk:SOUrce`, 'BUS_DECODE', `i2c_clk_${bus.bus.toLowerCase()}`);
+      }
+      if (bus.source2) {
+        pushQuery('BUS:B<x>:I2C:DATa:SOUrce', `BUS:${bus.bus}:I2C:DATa:SOUrce`, 'BUS_DECODE', `i2c_data_${bus.bus.toLowerCase()}`);
+      }
+      if (bus.triggerCondition || bus.triggerDirection || bus.triggerAddress !== undefined) {
+        pushQuery('TRIGger:A:TYPe', 'TRIGger:A:TYPe', 'TRIGGER', 'trigger_type');
+        pushQuery('TRIGger:{A|B}:BUS:SOUrce', 'TRIGger:A:BUS:SOUrce', 'TRIGGER', `trigger_bus_${bus.bus.toLowerCase()}`);
+        pushQuery('TRIGger:{A|B}:BUS:B<x>:I2C:CONDition', `TRIGger:A:BUS:${bus.bus}:I2C:CONDition`, 'TRIGGER', `i2c_cond_${bus.bus.toLowerCase()}`);
+        if (bus.triggerDirection) {
+          pushQuery('TRIGger:{A|B}:BUS:B<x>:I2C:DATa:DIRection', `TRIGger:A:BUS:${bus.bus}:I2C:DATa:DIRection`, 'TRIGGER', `i2c_dir_${bus.bus.toLowerCase()}`);
+        }
+        if (bus.triggerAddress !== undefined) {
+          pushQuery('TRIGger:{A|B}:BUS:B<x>:I2C:ADDRess:MODe', `TRIGger:A:BUS:${bus.bus}:I2C:ADDRess:MODe`, 'TRIGGER', `i2c_addr_mode_${bus.bus.toLowerCase()}`);
+          pushQuery('TRIGger:{A|B}:BUS:B<x>:I2C:ADDRess:VALue', `TRIGger:A:BUS:${bus.bus}:I2C:ADDRess:VALue`, 'TRIGGER', `i2c_addr_value_${bus.bus.toLowerCase()}`);
         }
       }
     }
@@ -1440,6 +1473,23 @@ export async function resolveBusCommands(
             'TRIGGER'
           )
         );
+      }
+    }
+    if (wantsReadBack) {
+      pushQuery('BUS:B<x>:TYPe', `BUS:${bus.bus}:TYPe`, 'BUS_DECODE', `bus_${bus.bus.toLowerCase()}_type`);
+      if (bus.source1) {
+        pushQuery('BUS:B<x>:LIN:SOUrce', `BUS:${bus.bus}:LIN:SOUrce`, 'BUS_DECODE', `lin_source_${bus.bus.toLowerCase()}`);
+      }
+      if (bus.baudRate !== undefined || bus.bitrateBps !== undefined) {
+        pushQuery('BUS:B<x>:LIN:BITRate:CUSTom', `BUS:${bus.bus}:LIN:BITRate:CUSTom`, 'BUS_DECODE', `lin_baud_${bus.bus.toLowerCase()}`);
+      }
+      if (bus.standard) {
+        pushQuery('BUS:B<x>:LIN:STANdard', `BUS:${bus.bus}:LIN:STANdard`, 'BUS_DECODE', `lin_std_${bus.bus.toLowerCase()}`);
+      }
+      if (bus.triggerCondition) {
+        pushQuery('TRIGger:A:TYPe', 'TRIGger:A:TYPe', 'TRIGGER', 'trigger_type');
+        pushQuery('TRIGger:{A|B}:BUS:SOUrce', 'TRIGger:A:BUS:SOUrce', 'TRIGGER', `trigger_bus_${bus.bus.toLowerCase()}`);
+        pushQuery('TRIGger:{A|B}:BUS:B<x>:LIN:CONDition', `TRIGger:A:BUS:${bus.bus}:LIN:CONDition`, 'TRIGGER', `lin_cond_${bus.bus.toLowerCase()}`);
       }
     }
     pushBusDisplayState();
@@ -2015,6 +2065,7 @@ export function parseBusIntent(
   const busSlotMatch = message.match(BUS_SLOT_REGEX);
   if (forcedBusSlot) bus.bus = forcedBusSlot.toUpperCase();
   else if (busSlotMatch) bus.bus = busSlotMatch[1].toUpperCase();
+  else bus.bus = 'B1';
 
   const clockMatch = message.match(/\bclock\s+(CH[1-4])\b/i);
   const reverseClockMatch = message.match(/\b(CH[1-4])\s+clock\b/i);
@@ -2179,6 +2230,10 @@ export function parseBusIntent(
     ) {
       bus.triggerCondition = 'FRAME';
     }
+  }
+
+  if (/\bread\s*(?:it\s*)?back\b|\breadback\b|\bverify\b|\bquery\b/i.test(message)) {
+    bus.readBackRequested = true;
   }
 
   return bus;

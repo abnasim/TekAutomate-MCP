@@ -98,7 +98,7 @@ Build, edit, and validate TekAutomate Steps UI flows for the live workspace.
 - `query` steps must include `params.saveAs`.
 - `group` must include both `params:{}` and `children:[...]`.
 - Combine related same-subsystem setup commands into one `write` step using semicolons when it keeps the flow compact and readable.
-- Keep compact combined setup writes to 4 commands or fewer per step. If more are needed, split into multiple steps and group them.
+- Keep compact combined setup writes to 3 commands or fewer per step. If more are needed, split into multiple steps and group them.
 - Keep `query` steps query-only rather than mixing setup writes into the same command string.
 - Never semicolon-chain `ACQuire:STATE RUN` with any other command. It must be its own `write` step.
 - `save_screenshot` is the preferred screenshot step; do not replace it with raw screenshot SCPI unless the user explicitly asks for raw commands.

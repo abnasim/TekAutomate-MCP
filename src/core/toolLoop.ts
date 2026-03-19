@@ -1583,7 +1583,7 @@ function isOpcCapableWriteCommand(command: string): boolean {
   );
 }
 
-const PLANNER_MAX_CONCAT_COMMANDS = 2;
+const PLANNER_MAX_CONCAT_COMMANDS = 3;
 
 const COMMAND_GROUPS = {
   TRIGGER: (cmd: string) => cmd.startsWith('TRIGGER:'),
@@ -1640,6 +1640,7 @@ function plannerCommandPriority(
   const normalized = normalizePlannerCommand(command.concreteCommand);
   const header = plannerCommandHeader(command.concreteCommand);
 
+  if (command.commandType === 'query' && header !== '*OPC?') return 70;
   if (/^CH\d:/.test(header)) return 20;
   if (header.startsWith('BUS:')) return 30;
   if (header.startsWith('TRIGGER:')) return 40;
@@ -1652,7 +1653,6 @@ function plannerCommandPriority(
     return 60;
   }
   if (header.startsWith('MEASUREMENT:')) return command.commandType === 'query' ? 70 : 65;
-  if (command.commandType === 'query') return 70;
   if (normalized.startsWith('SAVE:')) return 80;
   return 65;
 }
@@ -4045,7 +4045,7 @@ export function buildAssistantUserPrompt(
     '- When MCP returns command records, use their detailed description, argument descriptions, validValues, relatedCommands, manualReference, and example text to choose the right verified command instead of relying on a stripped header match alone.',
     '- Use exact long-form SCPI syntax when known. Avoid guessing ambiguous short mnemonics like SCA, COUP, or IMP.',
     '- Combine related same-subsystem setup commands into one write step using semicolons when it keeps the flow compact.',
-    '- Keep compact combined setup writes to 4 commands or fewer per step.',
+    '- Keep compact combined setup writes to 3 commands or fewer per step.',
     '- For sleep steps, use duration, never seconds.',
     '- For screenshot steps, use filename, never file_path, and default to scopeType:"modern" plus method:"pc_transfer" when not otherwise specified.',
     '- For waveform steps, prefer save_waveform over raw save SCPI and include source, filename, and format.',
@@ -5152,7 +5152,9 @@ export async function runToolLoop(req: McpChatRequest): Promise<ToolLoopResult> 
   const reasoningMode = isReasoningRequest(req.userMessage);
   const followUpCorrectionMode = isFollowUpCorrectionRequest(req);
   const allowDeterministicShortcut = mcpOnlyMode;
+  const allowLegacyDeterministicShortcuts = false;
   const commonServerShortcut =
+    !allowLegacyDeterministicShortcuts ||
     !allowDeterministicShortcut ||
     explainOnlyMode ||
     (reasoningMode && !buildHeavyMode) ||
@@ -5161,6 +5163,7 @@ export async function runToolLoop(req: McpChatRequest): Promise<ToolLoopResult> 
       ? null
       : await buildPyvisaCommonServerShortcut(req);
   const fastFrameShortcut =
+    !allowLegacyDeterministicShortcuts ||
     !allowDeterministicShortcut ||
     explainOnlyMode ||
     (reasoningMode && !buildHeavyMode) ||
@@ -5169,6 +5172,7 @@ export async function runToolLoop(req: McpChatRequest): Promise<ToolLoopResult> 
       ? null
       : buildPyvisaFastFrameShortcut(req);
   const measurementShortcut =
+    !allowLegacyDeterministicShortcuts ||
     !allowDeterministicShortcut ||
     explainOnlyMode ||
     (reasoningMode && !buildHeavyMode) ||
@@ -5183,6 +5187,7 @@ export async function runToolLoop(req: McpChatRequest): Promise<ToolLoopResult> 
         fastFrameShortcut ||
         measurementShortcut ||
         (
+          !allowLegacyDeterministicShortcuts ||
           !allowDeterministicShortcut ||
           (reasoningMode && !buildHeavyMode) ||
           followUpCorrectionMode ||
