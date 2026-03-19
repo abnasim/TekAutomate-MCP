@@ -3162,6 +3162,9 @@ function buildUserPrompt(req: McpChatRequest, flowCommandIssues: string[] = []):
     parts.push(
       'Validation scope: FLOW/STEP STRUCTURE ONLY. Ignore runtime logs, audit output, executor/network/environment failures, and host machine issues.'
     );
+    parts.push(
+      'Flow-review requirement: use the provided current steps JSON/IDs as authoritative context. Do not ask the user for step IDs when they are present in this request context.'
+    );
     if (flowCommandIssues.length) {
       parts.push(`Precomputed flow command findings:\n${flowCommandIssues.map((x) => `- ${x}`).join('\n')}`);
     }
@@ -4139,6 +4142,14 @@ export function buildAssistantUserPrompt(
           .join('\n')
       : '- (empty flow)';
     lines.push('Flow command snapshot (for strict verification):', flowCommandSnapshot);
+    lines.push(
+      'Flow review output policy:',
+      '- Treat current flowContext.steps as the editable source of truth (IDs and structure are already available).',
+      '- If you find real blockers/risky design issues, return concrete incremental ACTIONS_JSON edits (insert_step_after, set_step_param, replace_step, remove_step).',
+      '- Do not ask for step IDs or full flow JSON when they are already present in context.',
+      '- Use actions:[] only when the flow is structurally sound and no concrete fix is required.',
+      '- Keep findings specific and tied to concrete step defects (missing queries/saveAs, missing error_check, wrong ordering, invalid write/query mixing).'
+    );
   }
   if (flowCommandIssues.length) {
     lines.push(`Precomputed flow command findings:\n${flowCommandIssues.map((x) => `- ${x}`).join('\n')}`);
@@ -4618,6 +4629,18 @@ function getModePrompt(req: McpChatRequest): string {
       '  Set: `<set form>`',
       '  Query: `<query form>`',
       '  Notes: one concise line when needed.',
+    ].join('\n');
+  }
+  if (isFlowValidationRequest(req)) {
+    return [
+      loadPromptFile(req.outputMode),
+      '',
+      '# Flow Review Mode',
+      '- Review only flow/step structure from current workspace context.',
+      '- Ignore runtime/log/environment issues unless explicitly requested.',
+      '- Use current step IDs from context for concrete incremental edits when blockers exist.',
+      '- Prefer targeted fixes over full replace_flow for review requests.',
+      '- Return actions:[] only when no concrete blocker/risk requires edits.',
     ].join('\n');
   }
   return loadPromptFile(req.outputMode);
@@ -5120,7 +5143,7 @@ export async function runToolLoop(req: McpChatRequest): Promise<ToolLoopResult> 
   const flowCommandIssues = flowValidateMode
     ? await detectFlowCommandIssues(req)
     : [];
-  if (flowValidateMode && flowCommandIssues.length > 0) {
+  if (flowValidateMode && req.mode === 'mcp_only' && flowCommandIssues.length > 0) {
     const text =
       `Found ${flowCommandIssues.length} flow command issue(s).\n` +
       `ACTIONS_JSON: ${JSON.stringify({
@@ -5442,7 +5465,7 @@ export async function runToolLoop(req: McpChatRequest): Promise<ToolLoopResult> 
       },
     };
   }
-  if (flowValidateMode && flowCommandIssues.length === 0) {
+  if (flowValidateMode && req.mode === 'mcp_only' && flowCommandIssues.length === 0) {
     const flatSteps = flattenSteps(Array.isArray(req.flowContext.steps) ? req.flowContext.steps : []);
     const firstType = flatSteps.length ? String(flatSteps[0].type || '').toLowerCase() : '';
     const lastType = flatSteps.length ? String(flatSteps[flatSteps.length - 1].type || '').toLowerCase() : '';
