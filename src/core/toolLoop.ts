@@ -1521,33 +1521,78 @@ function isOpcCapableWriteCommand(command: string): boolean {
 
 const PLANNER_MAX_CONCAT_COMMANDS = 2;
 
+const COMMAND_GROUPS = {
+  TRIGGER: (cmd: string) => cmd.startsWith('TRIGGER:'),
+  BUS_CONFIG: (cmd: string) => cmd.startsWith('BUS:'),
+  DISPLAY: (cmd: string) => cmd.startsWith('DISPLAY:'),
+  ACQUIRE: (cmd: string) => cmd.startsWith('ACQUIRE:'),
+  MEASURE: (cmd: string) => cmd.startsWith('MEASUREMENT:'),
+  HORIZONTAL: (cmd: string) => cmd.startsWith('HORIZONTAL:'),
+  CHANNEL: (cmd: string) => /^CH\d:/.test(cmd),
+};
+
 function plannerWriteBucket(command: string): string {
   const normalized = normalizePlannerCommand(command);
   if (!normalized) return 'UNKNOWN';
 
-  if (/^BUS:B\d+:/.test(normalized)) {
+  if (COMMAND_GROUPS.BUS_CONFIG(normalized) && /^BUS:B\d+:/.test(normalized)) {
     const bus = normalized.match(/^BUS:(B\d+)/)?.[1] || 'B?';
     return `BUS:${bus}`;
   }
-  if (/^DISPLAY:WAVEVIEW\d+:BUS:B\d+:/.test(normalized)) {
+  if (COMMAND_GROUPS.DISPLAY(normalized) && /^DISPLAY:WAVEVIEW\d+:BUS:B\d+:/.test(normalized)) {
     const bus = normalized.match(/:BUS:(B\d+):/)?.[1] || 'B?';
     return `DISPLAY_BUS:${bus}`;
   }
-  if (/^TRIGGER:A:BUS:B\d+:/.test(normalized)) {
+  if (COMMAND_GROUPS.TRIGGER(normalized) && /^TRIGGER:A:BUS:B\d+:/.test(normalized)) {
     const bus = normalized.match(/^TRIGGER:A:BUS:(B\d+):/)?.[1] || 'B?';
     return `TRIGGER_BUS:${bus}`;
   }
-  if (/^TRIGGER:A:BUS:SOURCE\s+B\d+\b/.test(normalized)) {
+  if (COMMAND_GROUPS.TRIGGER(normalized) && /^TRIGGER:A:BUS:SOURCE\s+B\d+\b/.test(normalized)) {
     const bus = normalized.match(/\b(B\d+)\b/)?.[1] || 'B?';
     return `TRIGGER_BUS:${bus}`;
   }
-  if (/^TRIGGER:/.test(normalized)) return 'TRIGGER_GENERIC';
-  if (/^ACQUIRE:/.test(normalized)) return 'ACQUIRE';
-  if (/^MEASUREMENT:ADDMEAS\b/.test(normalized)) return 'MEAS_ADD';
-  if (/^MEASUREMENT:MEAS\d+:SOURCE1\b/.test(normalized)) return 'MEAS_SOURCE';
-  if (/^MEASUREMENT:/.test(normalized)) return 'MEAS_OTHER';
-  if (/^DISPLAY:/.test(normalized)) return 'DISPLAY_OTHER';
+  if (COMMAND_GROUPS.TRIGGER(normalized)) return 'TRIGGER_GENERIC';
+  if (COMMAND_GROUPS.ACQUIRE(normalized)) return 'ACQUIRE';
+  if (COMMAND_GROUPS.MEASURE(normalized) && /^MEASUREMENT:ADDMEAS\b/.test(normalized)) return 'MEAS_ADD';
+  if (COMMAND_GROUPS.MEASURE(normalized) && /^MEASUREMENT:MEAS\d+:SOURCE1\b/.test(normalized)) return 'MEAS_SOURCE';
+  if (COMMAND_GROUPS.MEASURE(normalized)) return 'MEAS_OTHER';
+  if (COMMAND_GROUPS.DISPLAY(normalized)) return 'DISPLAY_OTHER';
   return normalized.split(':')[0] || 'UNKNOWN';
+}
+
+function plannerCommandHeader(command: string): string {
+  return normalizePlannerCommand(command).split(/\s+/)[0] || '';
+}
+
+function plannerMergeFamily(command: string): string {
+  const normalized = normalizePlannerCommand(command);
+  const header = plannerCommandHeader(normalized);
+
+  const busMatch = header.match(/^BUS:(B\d+):(RS232C|I2C|SPI|CAN|LIN)\b/);
+  if (busMatch) return `BUS:${busMatch[1]}:${busMatch[2]}`;
+
+  const triggerBusMatch = header.match(/^TRIGGER:A:BUS:(B\d+):(RS232C|I2C|SPI|CAN|LIN)\b/);
+  if (triggerBusMatch) return `TRIGGER:${triggerBusMatch[1]}:${triggerBusMatch[2]}`;
+
+  const triggerSourceBusMatch = normalized.match(/^TRIGGER:A:BUS:SOURCE\s+(B\d+)\b/);
+  if (triggerSourceBusMatch) return `TRIGGER:${triggerSourceBusMatch[1]}`;
+
+  const measurementSlotMatch = header.match(/^MEASUREMENT:MEAS(\d+):/);
+  if (measurementSlotMatch) return `MEAS:${measurementSlotMatch[1]}`;
+
+  if (header.startsWith('MEASUREMENT:ADDMEAS')) return 'MEAS:ADD';
+
+  return header;
+}
+
+function canMergePlannerCommands(left: string, right: string): boolean {
+  if (!left || !right) return false;
+  if (isAcquireStateRunCommand(left) || isAcquireStateRunCommand(right)) return false;
+  if (plannerWriteBucket(left) !== plannerWriteBucket(right)) return false;
+  const leftHeader = plannerCommandHeader(left);
+  const rightHeader = plannerCommandHeader(right);
+  if (leftHeader === rightHeader) return true;
+  return plannerMergeFamily(left) === plannerMergeFamily(right);
 }
 
 function chunkCommands(commands: string[], size: number): string[][] {
@@ -1555,6 +1600,37 @@ function chunkCommands(commands: string[], size: number): string[][] {
   for (let i = 0; i < commands.length; i += size) {
     chunks.push(commands.slice(i, i + size));
   }
+  return chunks;
+}
+
+function chunkPlannerWriteCommands(commands: string[]): string[][] {
+  const chunks: string[][] = [];
+  let current: string[] = [];
+
+  const flushCurrent = () => {
+    if (!current.length) return;
+    chunks.push(current);
+    current = [];
+  };
+
+  for (const command of commands) {
+    if (!current.length) {
+      current.push(command);
+      continue;
+    }
+    const last = current[current.length - 1];
+    const canMerge =
+      current.length < PLANNER_MAX_CONCAT_COMMANDS &&
+      canMergePlannerCommands(last, command);
+    if (!canMerge) {
+      flushCurrent();
+      current.push(command);
+      continue;
+    }
+    current.push(command);
+  }
+
+  flushCurrent();
   return chunks;
 }
 
@@ -1600,9 +1676,8 @@ function buildActionsFromPlanner(
 
   const flushPendingWrites = () => {
     if (!pendingWrites.length) return;
-    const writeChunks = chunkCommands(
-      pendingWrites.splice(0, pendingWrites.length),
-      PLANNER_MAX_CONCAT_COMMANDS
+    const writeChunks = chunkPlannerWriteCommands(
+      pendingWrites.splice(0, pendingWrites.length)
     );
     pendingWriteGroup = null;
     for (const [index, chunk] of writeChunks.entries()) {
@@ -3031,9 +3106,15 @@ function resolveOpenAiResponseCursor(req: McpChatRequest): string {
 function isFlowBuildIntentMessage(message: string): boolean {
   const text = String(message || '').toLowerCase();
   if (!text.trim()) return false;
-  return /\b(set up|setup|configure|add|measure|capture|decode|trigger|single sequence|group each test|build (?:a )?flow|steps json|actions_json|scpi)\b/.test(
-    text
-  );
+  const explicitBuild =
+    /\b(set up|setup|set|configure|add|measure|capture|decode|trigger|single sequence|group each test|build (?:a )?flow|steps json|actions_json|scpi|enable|disable|output on|output off)\b/.test(
+      text
+    );
+  const leadingImperative =
+    /^(set|add|configure|build|create|save|recall|trigger|run|capture|enable|disable|insert|replace|remove)\b/.test(
+      text.trim()
+    );
+  return explicitBuild || leadingImperative;
 }
 
 function isReasoningRequest(message: string): boolean {
@@ -4291,6 +4372,25 @@ function shouldAllowPlannerOnlyShortcut(req: McpChatRequest): boolean {
   return isExactScpiLookupRequest(req);
 }
 
+function canShortcut(plannerOutput: PlannerOutput, req: McpChatRequest): boolean {
+  const resolvedCount = plannerOutput?.resolvedCommands?.length || 0;
+  const unresolvedCount = plannerOutput?.unresolved?.length || 0;
+  if (resolvedCount === 0 || unresolvedCount > 0) return false;
+  if (isExplainOnlyCommandAsk(req)) return false;
+  if (isFollowUpCorrectionRequest(req)) return false;
+
+  const backend = String(req.flowContext.backend || '').toLowerCase();
+  // Keep tm_devices on model/tool path until planner has deterministic tm_devices materialization.
+  if (backend === 'tm_devices') return false;
+
+  // Allow planner shortcut for deterministic build/edit flows across device families.
+  return (
+    isFlowBuildIntentMessage(req.userMessage) ||
+    shouldAttemptShortcutFirst(req) ||
+    isExactScpiLookupRequest(req)
+  );
+}
+
 function shouldUseCompactDeveloperContext(req: McpChatRequest): boolean {
   const hasThread = Boolean(String(req.openaiThreadId || '').trim());
   const hasHistory = Array.isArray(req.history) && req.history.length > 0;
@@ -4714,8 +4814,14 @@ async function runAnthropicToolLoop(
 
 export async function runToolLoop(req: McpChatRequest): Promise<ToolLoopResult> {
   const startedAt = Date.now();
+  const rawApiKey = String((req as { apiKey?: string }).apiKey || '').trim();
+  const mcpOnlyMode =
+    req.mode === 'mcp_only' ||
+    rawApiKey.length === 0 ||
+    rawApiKey === '__mcp_only__' ||
+    rawApiKey.toLowerCase() === 'undefined';
   const explainOnlyMode = isExplainOnlyCommandAsk(req);
-  const forceToolCallMode = Boolean(req.toolCallMode);
+  const forceToolCallMode = mcpOnlyMode ? false : Boolean(req.toolCallMode);
   const buildHeavyMode = isFlowBuildIntentMessage(req.userMessage);
   const normalizedModelFamily = normalizeScopeModelFamily(req);
   if (normalizedModelFamily && normalizedModelFamily !== req.flowContext.modelFamily) {
@@ -4924,8 +5030,10 @@ export async function runToolLoop(req: McpChatRequest): Promise<ToolLoopResult> 
   }
 
   let plannerShortcut: string | null = null;
+  let plannerOutputCache: PlannerOutput | null = null;
   if (!explainOnlyMode && (!reasoningMode || buildHeavyMode) && !followUpCorrectionMode && !forceToolCallMode) {
     const plannerOutput = await planIntent(req);
+    plannerOutputCache = plannerOutput;
     console.log(
       '[PLANNER] deviceType:',
       req.flowContext.deviceType || 'SCOPE',
@@ -4934,8 +5042,17 @@ export async function runToolLoop(req: McpChatRequest): Promise<ToolLoopResult> 
       'unresolvedCount:',
       plannerOutput?.unresolved?.length || 0
     );
+    const shortcutEligible = canShortcut(plannerOutput, req);
+    console.log('[SHORTCUT]', {
+      resolvedCount: plannerOutput.resolvedCommands.length,
+      unresolvedCount: plannerOutput.unresolved.length,
+      deviceType: req.flowContext.deviceType,
+      isReasoning: isReasoningRequest(req.userMessage),
+      isBuildHeavy: isFlowBuildIntentMessage(req.userMessage),
+      canShortcut: shortcutEligible,
+    });
     plannerShortcut =
-      shouldAllowPlannerOnlyShortcut(req) &&
+      shortcutEligible &&
       plannerOutput.resolvedCommands.length > 0 &&
       plannerOutput.unresolved.length === 0
         ? buildActionsFromPlanner(plannerOutput, req)
@@ -4971,6 +5088,91 @@ export async function runToolLoop(req: McpChatRequest): Promise<ToolLoopResult> 
       },
       debug: {
         shortcutResponse: plannerShortcut,
+        toolTrace: [],
+      },
+    };
+  }
+
+  // MCP-only mode is deterministic/local by design:
+  // never call external model providers from here.
+  if (mcpOnlyMode) {
+    const plannerOutput = plannerOutputCache || await planIntent(req);
+    const unresolved = plannerOutput.unresolved || [];
+    const deterministicActions =
+      plannerOutput.resolvedCommands.length > 0 && unresolved.length === 0
+        ? buildActionsFromPlanner(plannerOutput, req)
+        : null;
+
+    if (deterministicActions) {
+      const checked = await postCheckResponse(deterministicActions, {
+        backend: req.flowContext.backend,
+        modelFamily: req.flowContext.modelFamily,
+        originalSteps: req.flowContext.steps,
+        scpiContext: req.scpiContext as Array<Record<string, unknown>>,
+        alias: req.flowContext.alias,
+        instrumentMap: req.flowContext.instrumentMap as Array<Record<string, unknown>> | undefined,
+      }, { allowMissingActionsJson });
+      return {
+        text: checked.text,
+        displayText: deterministicActions,
+        assistantThreadId: resolveOpenAiResponseCursor(req) || undefined,
+        errors: checked.errors,
+        warnings: checked.warnings,
+        metrics: {
+          totalMs: Date.now() - startedAt,
+          usedShortcut: true,
+          provider: req.provider,
+          iterations: 0,
+          toolCalls: 0,
+          toolMs: 0,
+          modelMs: 0,
+          promptChars: {
+            system: 0,
+            user: 0,
+          },
+        },
+        debug: {
+          shortcutResponse: deterministicActions,
+          toolTrace: [],
+        },
+      };
+    }
+
+    const findings = unresolved.length
+      ? unresolved.slice(0, 12).map((u) => `Unresolved: ${u}`)
+      : ['No deterministic planner actions were generated for this request.'];
+    const response = `ACTIONS_JSON: ${JSON.stringify({
+      summary: unresolved.length
+        ? 'MCP-only planner could not fully resolve all commands.'
+        : 'MCP-only planner found no actionable deterministic flow changes.',
+      findings,
+      suggestedFixes: [
+        'Rephrase with explicit instrument intent, channels, and protocol details.',
+        'Use exact SCPI/measurement wording when possible for deterministic matching.',
+      ],
+      confidence: unresolved.length ? 'medium' : 'low',
+      actions: [],
+    })}`;
+    return {
+      text: response,
+      displayText: response,
+      assistantThreadId: resolveOpenAiResponseCursor(req) || undefined,
+      errors: [],
+      warnings: unresolved.length ? ['MCP-only mode skipped model fallback because request was partially unresolved.'] : [],
+      metrics: {
+        totalMs: Date.now() - startedAt,
+        usedShortcut: false,
+        provider: req.provider,
+        iterations: 0,
+        toolCalls: 0,
+        toolMs: 0,
+        modelMs: 0,
+        promptChars: {
+          system: 0,
+          user: 0,
+        },
+      },
+      debug: {
         toolTrace: [],
       },
     };
