@@ -1427,6 +1427,21 @@ export async function resolveBusCommands(
         out.push(materialize(standardRecord, `BUS:${bus.bus}:LIN:STANdard`, bus.standard, 'BUS_DECODE'));
       }
     }
+    if (bus.triggerCondition) {
+      pushBusTriggerType();
+      pushBusTriggerSource();
+      const conditionRecord = findExactHeader(index, 'TRIGger:{A|B}:BUS:B<x>:LIN:CONDition', sourceFile);
+      if (conditionRecord) {
+        out.push(
+          materialize(
+            conditionRecord,
+            `TRIGger:A:BUS:${bus.bus}:LIN:CONDition`,
+            bus.triggerCondition,
+            'TRIGGER'
+          )
+        );
+      }
+    }
     pushBusDisplayState();
   }
 
@@ -2094,9 +2109,16 @@ export function parseBusIntent(
     bus.baudRate = /baud/i.test(baudMatch[2])
       ? Number(baudMatch[1])
       : toBitrate(baudMatch[1], baudMatch[2]);
+  } else if (baudMatch && bus.protocol === 'LIN') {
+    bus.baudRate = /baud/i.test(baudMatch[2])
+      ? Number(baudMatch[1])
+      : toBitrate(baudMatch[1], baudMatch[2]);
   } else if (/uart|rs232/i.test(message)) {
     const commonBaudMatch = message.match(/\b(1200|2400|4800|9600|19200|38400|57600|115200|230400|460800|921600)\b/);
     if (commonBaudMatch) bus.baudRate = Number(commonBaudMatch[1]);
+  } else if (bus.protocol === 'LIN') {
+    const linBaudMatch = message.match(/\b(1200|2400|4800|9600|19200|38400|57600|115200)\b/);
+    if (linBaudMatch) bus.baudRate = Number(linBaudMatch[1]);
   }
 
   const dataBitsMatch = message.match(/\b([789])\s*data\s*bits?\b/i);
@@ -2141,6 +2163,21 @@ export function parseBusIntent(
   if (bus.protocol === 'SPI') {
     if (/\btrigger\b[^.]*\bss\b/i.test(message) || /\bon\s+ss\b/i.test(message)) {
       bus.triggerCondition = 'SS';
+    }
+  }
+
+  if (bus.protocol === 'LIN') {
+    if (/\blin\s*2(?:\.|x)\s*x?\b/i.test(message) || /\blin\s*2x\b/i.test(message)) {
+      bus.standard = 'LIN2X';
+    } else if (/\blin\s*1(?:\.|x)\s*x?\b/i.test(message) || /\blin\s*1x\b/i.test(message)) {
+      bus.standard = 'LIN1X';
+    }
+    if (
+      /\btrigger\b[^.]*\b(any|all)\s+lin\s+frame\b/i.test(message) ||
+      /\b(any|all)\s+lin\s+frame\b/i.test(message) ||
+      /\btrigger\b[^.]*\b(any|all)\s+frame\b/i.test(message)
+    ) {
+      bus.triggerCondition = 'FRAME';
     }
   }
 

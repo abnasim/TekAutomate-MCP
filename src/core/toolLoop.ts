@@ -1624,6 +1624,48 @@ function plannerCommandHeader(command: string): string {
   return normalizePlannerCommand(command).split(/\s+/)[0] || '';
 }
 
+function plannerCommandPriority(
+  command: PlannerOutput['resolvedCommands'][number]
+): number {
+  if (command.header.startsWith('STEP:')) {
+    if (command.stepType === 'save_waveform' || command.stepType === 'save_screenshot') return 80;
+    return 75;
+  }
+  if (command.group === 'ERROR_CHECK') return 75;
+
+  const normalized = normalizePlannerCommand(command.concreteCommand);
+  const header = plannerCommandHeader(command.concreteCommand);
+
+  if (/^CH\d:/.test(header)) return 20;
+  if (header.startsWith('BUS:')) return 30;
+  if (header.startsWith('TRIGGER:')) return 40;
+  if (header.startsWith('DISPLAY:')) return 50;
+  if (
+    header.startsWith('ACQUIRE:') ||
+    header.startsWith('HORIZONTAL:FASTFRAME') ||
+    header === '*OPC?'
+  ) {
+    return 60;
+  }
+  if (header.startsWith('MEASUREMENT:')) return command.commandType === 'query' ? 70 : 65;
+  if (command.commandType === 'query') return 70;
+  if (normalized.startsWith('SAVE:')) return 80;
+  return 65;
+}
+
+function sortPlannerResolvedCommands(
+  commands: PlannerOutput['resolvedCommands']
+): PlannerOutput['resolvedCommands'] {
+  return commands
+    .map((command, index) => ({ command, index }))
+    .sort((a, b) => {
+      const priorityDelta = plannerCommandPriority(a.command) - plannerCommandPriority(b.command);
+      if (priorityDelta !== 0) return priorityDelta;
+      return a.index - b.index;
+    })
+    .map((entry) => entry.command);
+}
+
 function plannerMergeFamily(command: string): string {
   const normalized = normalizePlannerCommand(command);
   const header = plannerCommandHeader(normalized);
@@ -1747,7 +1789,8 @@ function buildActionsFromPlanner(
     }
   };
 
-  for (const command of plannerOutput.resolvedCommands) {
+  const sortedResolvedCommands = sortPlannerResolvedCommands(plannerOutput.resolvedCommands);
+  for (const command of sortedResolvedCommands) {
     if (command.header.startsWith('STEP:') && command.stepType) {
       flushPendingWrites();
       collectStep({
