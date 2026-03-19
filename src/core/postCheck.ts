@@ -216,6 +216,84 @@ function ensureReplaceFlowStepIds(actionsJson: Record<string, unknown>): boolean
   return changed;
 }
 
+function ensureIncrementalActionStepIds(actionsJson: Record<string, unknown>): boolean {
+  const actions = Array.isArray(actionsJson.actions)
+    ? (actionsJson.actions as Array<Record<string, unknown>>)
+    : [];
+  if (!actions.length) return false;
+
+  const seen = new Set<string>();
+  let changed = false;
+  let seq = 1;
+
+  const nextId = (prefix = 's_fix'): string => {
+    let candidate = `${prefix}_${seq++}`;
+    while (seen.has(candidate)) {
+      candidate = `${prefix}_${seq++}`;
+    }
+    seen.add(candidate);
+    return candidate;
+  };
+
+  const reserveExistingIds = (nodes: Array<Record<string, unknown>>) => {
+    nodes.forEach((node) => {
+      const id = String(node.id || '').trim();
+      if (id) seen.add(id);
+      if (Array.isArray(node.children) && node.children.length) {
+        reserveExistingIds(node.children as Array<Record<string, unknown>>);
+      }
+    });
+  };
+
+  actions.forEach((action) => {
+    const actionType = String(action.action_type || action.type || '').toLowerCase();
+    if (actionType !== 'replace_flow') return;
+    const steps = extractReplaceFlowSteps(action);
+    if (Array.isArray(steps) && steps.length) reserveExistingIds(steps);
+  });
+
+  const assignNodeIds = (node: Record<string, unknown>) => {
+    const currentId = String(node.id || '').trim();
+    if (!currentId || seen.has(currentId)) {
+      node.id = nextId(String(node.type || '').toLowerCase() === 'group' ? 'g_fix' : 's_fix');
+      changed = true;
+    } else {
+      seen.add(currentId);
+    }
+    if (Array.isArray(node.children) && node.children.length) {
+      (node.children as Array<Record<string, unknown>>).forEach((child) => assignNodeIds(child));
+    }
+  };
+
+  actions.forEach((action) => {
+    const actionType = String(action.action_type || action.type || '').toLowerCase();
+    if (actionType !== 'insert_step_after' && actionType !== 'replace_step') return;
+
+    const payload =
+      action.payload && typeof action.payload === 'object'
+        ? (action.payload as Record<string, unknown>)
+        : {};
+    const newStep = parseJsonValueString(action.newStep || payload.new_step || payload.newStep) as
+      | Record<string, unknown>
+      | undefined;
+    if (!newStep) return;
+
+    assignNodeIds(newStep);
+
+    if (typeof action.newStep === 'string' || Object.prototype.hasOwnProperty.call(action, 'newStep')) {
+      action.newStep = newStep;
+    } else if (Object.prototype.hasOwnProperty.call(payload, 'new_step')) {
+      payload.new_step = newStep;
+      action.payload = payload;
+    } else if (Object.prototype.hasOwnProperty.call(payload, 'newStep')) {
+      payload.newStep = newStep;
+      action.payload = payload;
+    }
+  });
+
+  return changed;
+}
+
 function ensureReplaceFlowUniqueSaveAs(actionsJson: Record<string, unknown>): boolean {
   const actions = Array.isArray(actionsJson.actions)
     ? (actionsJson.actions as Array<Record<string, unknown>>)
@@ -901,6 +979,7 @@ export async function postCheckResponse(
 
   // Always heal structural replace_flow issues before any validator pass.
   const idsHealedGlobal = ensureReplaceFlowStepIds(actionsJson);
+  const incrementalIdsHealedGlobal = ensureIncrementalActionStepIds(actionsJson);
   const saveAsHealedGlobal = ensureReplaceFlowUniqueSaveAs(actionsJson);
   const suggestionsSanitizedGlobal = sanitizeSuggestedFixes(actionsJson);
   if (idsHealedGlobal) {
@@ -915,7 +994,13 @@ export async function postCheckResponse(
       'Auto-repaired duplicate or missing saveAs variables in replace_flow query steps.'
     );
   }
-  if (idsHealedGlobal || saveAsHealedGlobal || suggestionsSanitizedGlobal) {
+  if (incrementalIdsHealedGlobal) {
+    upsertSuggestedFix(
+      actionsJson,
+      'Auto-repaired missing/duplicate step ids in insert_step_after/replace_step actions for apply compatibility.'
+    );
+  }
+  if (idsHealedGlobal || incrementalIdsHealedGlobal || saveAsHealedGlobal || suggestionsSanitizedGlobal) {
     finalText = rebuildTextWithActionsJson(finalText, actionsJson);
   }
 

@@ -2913,12 +2913,30 @@ function resolveOpenAiResponseCursor(req: McpChatRequest): string {
   return requested;
 }
 
+function isFlowBuildIntentMessage(message: string): boolean {
+  const text = String(message || '').toLowerCase();
+  if (!text.trim()) return false;
+  return /\b(set up|setup|configure|add|measure|capture|decode|trigger|single sequence|group each test|build (?:a )?flow|steps json|actions_json|scpi)\b/.test(
+    text
+  );
+}
+
 function isReasoningRequest(message: string): boolean {
   const text = String(message || '').trim();
   if (!text) return false;
-  return /\b(best|recommend|suggest|how should|what.*setting|how(?:\b|.*capture|.*set\s*up)|explain|why|difference|when.*use|optimal|ideal|tradeoff|should i|compare|reliable|catch|intermittent|glitch)\b/i.test(
-    text
-  );
+  const buildIntent = isFlowBuildIntentMessage(text);
+  const leadingQuestion = /^(why|how|what|which|when)\b/i.test(text);
+  if (buildIntent && !leadingQuestion) return false;
+  const directBuildIntent =
+    /^(set|add|configure|build|create|save|recall|trigger|run|capture|enable|disable|insert|replace|remove)\b/i.test(
+      text
+    );
+  const reasoningCue =
+    /\b(best|recommend|suggest|how should|explain|why|difference|when to use|optimal|ideal|tradeoff|should i|compare|reliable|intermittent|glitch)\b/i.test(
+      text
+    );
+  const interrogativeCue = /\?/.test(text) || /^(why|how|what|when|which)\b/i.test(text);
+  return reasoningCue || (interrogativeCue && !directBuildIntent);
 }
 
 function resolveIntentRoutedModel(req: McpChatRequest): string {
@@ -4187,9 +4205,21 @@ function hasActionsJsonPayload(text: string): boolean {
   return /ACTIONS_JSON\s*:\s*\{[\s\S]*"actions"\s*:/i.test(text);
 }
 
+function hasEmptyActionsJson(text: string): boolean {
+  return /ACTIONS_JSON\s*:\s*\{[\s\S]*"actions"\s*:\s*\[\s*\]/i.test(text);
+}
+
+function looksLikeUnverifiedGapResponse(text: string): boolean {
+  return /\b(not verified|could not verify|verification is insufficient|unverified)\b/i.test(String(text || ''));
+}
+
 function isExplainOnlyCommandAsk(req: McpChatRequest): boolean {
   if (req.intent === 'command_explain') return true;
   const msg = req.userMessage.toLowerCase();
+  const commandLookupQuestion =
+    /^(what|which|how)\b[\s\S]*\b(command|scpi|header|syntax)\b[\s\S]*\?/i.test(msg) ||
+    /\bwhat(?:'s| is)\s+the\s+(?:scpi\s+)?command\b/i.test(msg) ||
+    /\bset(?:s|ting)?\s+or\s+quer(?:y|ies)\b/i.test(msg);
   const flowEditIntent = /\b(add|insert|set|configure|build|create|make|update|fix|change|apply|replace|delete|remove)\b/.test(
     msg
   );
@@ -4197,6 +4227,7 @@ function isExplainOnlyCommandAsk(req: McpChatRequest): boolean {
     /\b(explain|explanation|reasoning|rationale|why|walk me through|walkthrough|how does|how do|how can)\b/.test(
       msg
     ) || isReasoningRequest(msg);
+  if (commandLookupQuestion && !flowEditIntent) return true;
   if (explanationIntent && !flowEditIntent) return true;
   return (
     msg.includes('command lookup request') &&
@@ -4214,6 +4245,11 @@ function getModePrompt(req: McpChatRequest): string {
       '- Never output ACTIONS_JSON for this mode.',
       '- Do not propose flow apply actions unless explicitly requested.',
       '- Cover command purpose, parameters, valid values/ranges, set/query usage, and common mistakes.',
+      '- Preferred format:',
+      '  Command: `<HEADER>`',
+      '  Set: `<set form>`',
+      '  Query: `<query form>`',
+      '  Notes: one concise line when needed.',
     ].join('\n');
   }
   return loadPromptFile(req.outputMode);
@@ -4564,6 +4600,7 @@ export async function runToolLoop(req: McpChatRequest): Promise<ToolLoopResult> 
   const startedAt = Date.now();
   const explainOnlyMode = isExplainOnlyCommandAsk(req);
   const forceToolCallMode = Boolean(req.toolCallMode);
+  const buildHeavyMode = isFlowBuildIntentMessage(req.userMessage);
   const normalizedModelFamily = normalizeScopeModelFamily(req);
   if (normalizedModelFamily && normalizedModelFamily !== req.flowContext.modelFamily) {
     req.flowContext.modelFamily = normalizedModelFamily;
@@ -4703,15 +4740,15 @@ export async function runToolLoop(req: McpChatRequest): Promise<ToolLoopResult> 
   const reasoningMode = isReasoningRequest(req.userMessage);
   const followUpCorrectionMode = isFollowUpCorrectionRequest(req);
   const commonServerShortcut =
-    explainOnlyMode || reasoningMode || followUpCorrectionMode || forceToolCallMode
+    explainOnlyMode || (reasoningMode && !buildHeavyMode) || followUpCorrectionMode || forceToolCallMode
       ? null
       : await buildPyvisaCommonServerShortcut(req);
   const fastFrameShortcut =
-    explainOnlyMode || reasoningMode || followUpCorrectionMode || forceToolCallMode
+    explainOnlyMode || (reasoningMode && !buildHeavyMode) || followUpCorrectionMode || forceToolCallMode
       ? null
       : buildPyvisaFastFrameShortcut(req);
   const measurementShortcut =
-    explainOnlyMode || reasoningMode || followUpCorrectionMode || forceToolCallMode
+    explainOnlyMode || (reasoningMode && !buildHeavyMode) || followUpCorrectionMode || forceToolCallMode
       ? null
       : await buildPyvisaMeasurementShortcut(req);
   const shortcut = explainOnlyMode
@@ -4720,12 +4757,12 @@ export async function runToolLoop(req: McpChatRequest): Promise<ToolLoopResult> 
         commonServerShortcut ||
         fastFrameShortcut ||
         measurementShortcut ||
-        (reasoningMode || followUpCorrectionMode || forceToolCallMode ? null : buildTmDevicesMeasurementShortcut(req))
+        ((reasoningMode && !buildHeavyMode) || followUpCorrectionMode || forceToolCallMode ? null : buildTmDevicesMeasurementShortcut(req))
       );
   const shouldUseShortcut = explainOnlyMode
     ? false
     : (
-        !reasoningMode &&
+        (!reasoningMode || buildHeavyMode) &&
         !followUpCorrectionMode &&
         !forceToolCallMode &&
         (
@@ -4771,7 +4808,7 @@ export async function runToolLoop(req: McpChatRequest): Promise<ToolLoopResult> 
   }
 
   let plannerShortcut: string | null = null;
-  if (!explainOnlyMode && !reasoningMode && !followUpCorrectionMode && !forceToolCallMode) {
+  if (!explainOnlyMode && (!reasoningMode || buildHeavyMode) && !followUpCorrectionMode && !forceToolCallMode) {
     const plannerOutput = await planIntent(req);
     console.log(
       '[PLANNER] deviceType:',
@@ -4851,6 +4888,53 @@ export async function runToolLoop(req: McpChatRequest): Promise<ToolLoopResult> 
     errors: Array.from(new Set([...(checkedPass1.errors || []), ...(checkedPass2.errors || [])])),
     warnings: Array.from(new Set([...(checkedPass1.warnings || []), ...(checkedPass2.warnings || [])])),
   };
+
+  // Hybrid gap-fill: when hosted/model output fail-closes or returns no actions,
+  // try deterministic planner synthesis for resolvable commands.
+  const shouldTryPlannerGapFill =
+    !allowMissingActionsJson &&
+    !explainOnlyMode &&
+    !followUpCorrectionMode &&
+    !forceToolCallMode &&
+    (hasEmptyActionsJson(checked.text) || looksLikeUnverifiedGapResponse(checked.text));
+  if (shouldTryPlannerGapFill) {
+    const plannerOutput = await planIntent(req);
+    if (plannerOutput.resolvedCommands.length > 0) {
+      const plannerFill = buildActionsFromPlanner(plannerOutput, req);
+      if (plannerFill) {
+        const plannerChecked = await postCheckResponse(
+          plannerFill,
+          {
+            backend: req.flowContext.backend,
+            modelFamily: req.flowContext.modelFamily,
+            originalSteps: req.flowContext.steps,
+            scpiContext: req.scpiContext as Array<Record<string, unknown>>,
+            alias: req.flowContext.alias,
+            instrumentMap: req.flowContext.instrumentMap as Array<Record<string, unknown>> | undefined,
+          },
+          { allowMissingActionsJson }
+        );
+        if (!plannerChecked.errors.length) {
+          return {
+            text: plannerChecked.text,
+            displayText: plannerFill,
+            assistantThreadId: loopResult.assistantThreadId,
+            errors: [],
+            warnings: Array.from(new Set([...(checked.warnings || []), 'Hybrid planner gap-fill applied.'])),
+            metrics: {
+              ...loopResult.metrics,
+              totalMs: Date.now() - startedAt,
+              usedShortcut: true,
+            },
+            debug: {
+              ...loopResult.debug,
+              shortcutResponse: plannerFill,
+            },
+          };
+        }
+      }
+    }
+  }
 
   // If the model returned truncated/invalid ACTIONS_JSON, retry once with
   // a strict JSON-only instruction to recover actionable output.

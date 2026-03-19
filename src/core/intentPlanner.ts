@@ -114,6 +114,7 @@ export interface ParsedBusIntent {
   selectPolarity?: 'LOW' | 'HIGH';
   baudRate?: number;
   dataBits?: number;
+  stopBits?: 'ONE' | 'TWO';
   parity?: 'NONe' | 'EVEN' | 'ODD';
   slope?: 'RISe' | 'FALL';
 }
@@ -1244,10 +1245,18 @@ export async function resolveBusCommands(
       }
     }
     if (bus.dataBits !== undefined) {
-      const dataBitsRecord = findExactHeader(index, 'BUS:B<x>:RS232C:DATABits', sourceFile);
+      const dataBitsRecord = findExactHeader(index, 'BUS:B<x>:RS232C:DATaBits', sourceFile);
       if (dataBitsRecord) {
         out.push(
-          materialize(dataBitsRecord, `BUS:${bus.bus}:RS232C:DATABits`, String(bus.dataBits), 'BUS_DECODE')
+          materialize(dataBitsRecord, `BUS:${bus.bus}:RS232C:DATaBits`, String(bus.dataBits), 'BUS_DECODE')
+        );
+      }
+    }
+    if (bus.stopBits) {
+      const stopBitsRecord = findExactHeader(index, 'BUS:B<x>:RS232C:STOPBits', sourceFile);
+      if (stopBitsRecord) {
+        out.push(
+          materialize(stopBitsRecord, `BUS:${bus.bus}:RS232C:STOPBits`, bus.stopBits, 'BUS_DECODE')
         );
       }
     }
@@ -1879,6 +1888,16 @@ export function parseBusIntent(message: string, aliasMaps: IntentAliasMaps): Par
   const dataBitsMatch = message.match(/\b([789])\s*data\s*bits?\b/i);
   if (dataBitsMatch) {
     bus.dataBits = Number(dataBitsMatch[1]);
+  }
+  const stopBitsMatch = message.match(/\b([12])\s*stop\s*bits?\b/i);
+  if (stopBitsMatch) {
+    bus.stopBits = stopBitsMatch[1] === '2' ? 'TWO' : 'ONE';
+  }
+  const framingMatch = message.match(/\b([78])\s*n\s*([12])\b/i);
+  if (framingMatch) {
+    bus.dataBits = Number(framingMatch[1]);
+    bus.parity = 'NONe';
+    bus.stopBits = framingMatch[2] === '2' ? 'TWO' : 'ONE';
   }
   if (/\beven\s+parity\b|\bparity\s+even\b/i.test(message)) bus.parity = 'EVEN';
   else if (/\bodd\s+parity\b|\bparity\s+odd\b/i.test(message)) bus.parity = 'ODD';
