@@ -165,7 +165,7 @@ describe('behavioral.hostedResponses', () => {
     expect(prompt).toContain('Use this runtime message only for dynamic workspace context, current request details, and any preloaded verification findings for this turn.');
     expect(prompt).toContain('Hosted file_search is available for this turn.');
     expect(prompt).toContain('Treat file_search results as source discovery only.');
-    expect(prompt).toContain('If SCPI or tm_devices syntax is not verified by retrieved MCP tool results for this turn, fail closed instead of guessing.');
+    expect(prompt).toContain('If SCPI syntax is available in the planner context (PLANNER RESOLVED section), use it immediately.');
     expect(prompt).not.toContain('TekAutomate schema rules:');
     expect(prompt).not.toContain('Never invent pseudo-step types such as set_channel');
     expect(prompt).not.toContain('save_screenshot -> params { filename: "capture.png", scopeType: "modern|legacy", method: "pc_transfer" }');

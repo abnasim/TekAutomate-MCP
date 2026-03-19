@@ -1,0 +1,87 @@
+{
+  "timestamp": "2026-03-19T03:17:35.089Z",
+  "requestId": "1773890255046-nrd1n4",
+  "provider": "openai",
+  "model": "gpt-5.4",
+  "outputMode": "steps_json",
+  "deviceType": "SCOPE",
+  "modelFamily": "MSO4/5/6 Series",
+  "backend": "pyvisa",
+  "userMessage": "add few trigger commands few BUS and few cursor commands SCPI's",
+  "flowContext": {
+    "stepCount": 3,
+    "stepTypes": [
+      "connect",
+      "write",
+      "disconnect"
+    ],
+    "validationErrors": []
+  },
+  "scpiContextHits": 0,
+  "toolCalls": [],
+  "postCheck": {
+    "errors": [],
+    "warnings": [],
+    "autoRepairTriggered": false
+  },
+  "response": {
+    "text": "ACTIONS_JSON: {\"summary\":\"Built 1 verified planner steps without a model call.\",\"findings\":[],\"suggestedFixes\":[\"Filled connect/disconnect instrumentIds with workspace alias \\\"MSO6B\\\" for direct chat apply compatibility.\"],\"actions\":[{\"type\":\"replace_flow\",\"flow\":{\"name\":\"SCOPE Planner Flow\",\"description\":\"add few trigger commands few BUS and few cursor commands SCPI's\",\"backend\":\"pyvisa\",\"deviceType\":\"SCOPE\",\"deviceDriver\":\"MSO6B\",\"visaBackend\":\"system\",\"steps\":[{\"id\":\"1\",\"type\":\"connect\",\"label\":\"Connect\",\"params\":{\"instrumentIds\":[\"MSO6B\"],\"printIdn\":true}},{\"id\":\"2\",\"type\":\"write\",\"label\":\"Write TRIGger:A:TYPe\",\"params\":{\"command\":\"TRIGger:A:TYPe BUS\"}},{\"id\":\"3\",\"type\":\"disconnect\",\"label\":\"Disconnect\",\"params\":{\"instrumentIds\":[\"MSO6B\"]}}]}}]}",
+    "actionsJson": {
+      "summary": "Built 1 verified planner steps without a model call.",
+      "findings": [],
+      "suggestedFixes": [
+        "Filled connect/disconnect instrumentIds with workspace alias \"MSO6B\" for direct chat apply compatibility."
+      ],
+      "actions": [
+        {
+          "type": "replace_flow",
+          "flow": {
+            "name": "SCOPE Planner Flow",
+            "description": "add few trigger commands few BUS and few cursor commands SCPI's",
+            "backend": "pyvisa",
+            "deviceType": "SCOPE",
+            "deviceDriver": "MSO6B",
+            "visaBackend": "system",
+            "steps": [
+              {
+                "id": "1",
+                "type": "connect",
+                "label": "Connect",
+                "params": {
+                  "instrumentIds": [
+                    "MSO6B"
+                  ],
+                  "printIdn": true
+                }
+              },
+              {
+                "id": "2",
+                "type": "write",
+                "label": "Write TRIGger:A:TYPe",
+                "params": {
+                  "command": "TRIGger:A:TYPe BUS"
+                }
+              },
+              {
+                "id": "3",
+                "type": "disconnect",
+                "label": "Disconnect",
+                "params": {
+                  "instrumentIds": [
+                    "MSO6B"
+                  ]
+                }
+              }
+            ]
+          }
+        }
+      ]
+    },
+    "stepCount": 1,
+    "stepTypes": [
+      "replace_flow"
+    ]
+  },
+  "durationMs": 43,
+  "ok": true
+}

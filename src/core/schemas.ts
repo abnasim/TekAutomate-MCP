@@ -14,11 +14,13 @@ export interface ToolResult<T = unknown> {
 
 export interface McpChatRequest {
   userMessage: string;
+  attachments?: McpChatAttachment[];
   outputMode: 'steps_json' | 'blockly_xml';
   intent?: 'default' | 'command_explain';
   provider: 'openai' | 'anthropic';
   apiKey: string;
   model: string;
+  toolCallMode?: boolean;
   openaiAssistantId?: string;
   openaiThreadId?: string;
   scpiContext?: unknown[];
@@ -62,6 +64,14 @@ export interface McpChatRequest {
     visaResource: string;
     backend: string;
   };
+}
+
+export interface McpChatAttachment {
+  name: string;
+  mimeType: string;
+  size: number;
+  dataUrl?: string;
+  textExcerpt?: string;
 }
 
 export interface McpChatError {

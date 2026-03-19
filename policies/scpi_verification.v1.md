@@ -32,6 +32,9 @@ a `search_scpi` call before use. Build steps immediately when these are requeste
 For any command in the above families: **build the steps, do not call search_scpi.**
 Only call `search_scpi` for commands NOT in the above list.
 
+Important OPC rule: do not inject `*OPC?` as a generic status check. Use it only after operations that can generate OPC completion.
+Representative OPC-capable operations: `ACQuire:STATE` (single sequence), `AUTOset`, `CALibrate:*`, `RECAll:*`, `SAVe:IMAGe`, `SAVe:SETUp`, `SAVe:WAVEform`, `*RST`, `TEKSecure`, `TRIGger:A SETLevel`, and measurement-result operations in single-sequence or waveform-recall contexts.
+
 ## Knowledge Base Files (Background Context)
 The following uploaded files back the `search_scpi` and `get_command_by_header` tools:
 - `mso_2_4_5_6_7.json` — MSO 2/4/5/6/7 series scopes

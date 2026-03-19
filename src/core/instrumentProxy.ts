@@ -1,4 +1,5 @@
 import type { ToolResult } from './schemas';
+import { decodeCommandStatus, decodeStatusFromText } from './statusDecoder';
 
 interface Endpoint {
   executorUrl: string;
@@ -57,6 +58,7 @@ scope.close()
     data: {
       rawStdout: run.stdout,
       rawStderr: run.stderr,
+      decodedStatus: decodeStatusFromText(`${run.stdout}\n${run.stderr}`),
     },
     sourceMeta: [],
     warnings: [],
@@ -84,7 +86,11 @@ scope.close()
   }
   return {
     ok: true,
-    data: { response: run.stdout.trim(), stderr: run.stderr.trim() },
+    data: {
+      response: run.stdout.trim(),
+      stderr: run.stderr.trim(),
+      decodedStatus: decodeCommandStatus(command, run.stdout.trim()),
+    },
     sourceMeta: [],
     warnings: [],
   };

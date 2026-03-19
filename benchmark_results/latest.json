@@ -1,7 +1,7 @@
 {
-  "generatedAt": "2026-03-18T21:59:57.834Z",
+  "generatedAt": "2026-03-18T22:16:30.588Z",
   "host": "http://localhost:8787",
-  "model": "gpt-5.4",
+  "model": "gpt-5.4-nano",
   "totalCases": 40,
   "counts": {
     "PASS": 40,
@@ -20,7 +20,7 @@
       "actions": 1,
       "materializable": 1,
       "appliedSteps": 3,
-      "totalMs": 0,
+      "totalMs": 1,
       "tools": [],
       "errors": [],
       "warnings": []
@@ -52,7 +52,7 @@
       "actions": 1,
       "materializable": 1,
       "appliedSteps": 3,
-      "totalMs": 2,
+      "totalMs": 1,
       "tools": [],
       "errors": [],
       "warnings": []
@@ -68,7 +68,7 @@
       "actions": 1,
       "materializable": 1,
       "appliedSteps": 3,
-      "totalMs": 0,
+      "totalMs": 1,
       "tools": [],
       "errors": [],
       "warnings": []
@@ -84,7 +84,7 @@
       "actions": 1,
       "materializable": 1,
       "appliedSteps": 3,
-      "totalMs": 15,
+      "totalMs": 17,
       "tools": [],
       "errors": [],
       "warnings": []
@@ -100,7 +100,7 @@
       "actions": 1,
       "materializable": 1,
       "appliedSteps": 4,
-      "totalMs": 87,
+      "totalMs": 98,
       "tools": [],
       "errors": [],
       "warnings": []
@@ -116,7 +116,7 @@
       "actions": 1,
       "materializable": 1,
       "appliedSteps": 4,
-      "totalMs": 124,
+      "totalMs": 135,
       "tools": [],
       "errors": [],
       "warnings": []
@@ -132,7 +132,7 @@
       "actions": 1,
       "materializable": 1,
       "appliedSteps": 4,
-      "totalMs": 235,
+      "totalMs": 258,
       "tools": [],
       "errors": [],
       "warnings": [
@@ -150,7 +150,7 @@
       "actions": 1,
       "materializable": 1,
       "appliedSteps": 3,
-      "totalMs": 46,
+      "totalMs": 53,
       "tools": [],
       "errors": [],
       "warnings": []
@@ -166,7 +166,7 @@
       "actions": 1,
       "materializable": 1,
       "appliedSteps": 4,
-      "totalMs": 61,
+      "totalMs": 62,
       "tools": [],
       "errors": [],
       "warnings": []
@@ -182,7 +182,7 @@
       "actions": 1,
       "materializable": 1,
       "appliedSteps": 3,
-      "totalMs": 57,
+      "totalMs": 66,
       "tools": [],
       "errors": [],
       "warnings": []
@@ -198,7 +198,7 @@
       "actions": 1,
       "materializable": 1,
       "appliedSteps": 4,
-      "totalMs": 35,
+      "totalMs": 40,
       "tools": [],
       "errors": [],
       "warnings": []
@@ -214,7 +214,7 @@
       "actions": 1,
       "materializable": 1,
       "appliedSteps": 3,
-      "totalMs": 59,
+      "totalMs": 69,
       "tools": [],
       "errors": [],
       "warnings": []
@@ -230,7 +230,7 @@
       "actions": 1,
       "materializable": 1,
       "appliedSteps": 3,
-      "totalMs": 57,
+      "totalMs": 67,
       "tools": [],
       "errors": [],
       "warnings": []
@@ -246,7 +246,7 @@
       "actions": 1,
       "materializable": 1,
       "appliedSteps": 3,
-      "totalMs": 78,
+      "totalMs": 104,
       "tools": [],
       "errors": [],
       "warnings": []
@@ -262,7 +262,7 @@
       "actions": 1,
       "materializable": 1,
       "appliedSteps": 4,
-      "totalMs": 114,
+      "totalMs": 123,
       "tools": [],
       "errors": [],
       "warnings": []
@@ -278,7 +278,7 @@
       "actions": 1,
       "materializable": 1,
       "appliedSteps": 5,
-      "totalMs": 50,
+      "totalMs": 55,
       "tools": [],
       "errors": [],
       "warnings": []
@@ -294,7 +294,7 @@
       "actions": 1,
       "materializable": 1,
       "appliedSteps": 4,
-      "totalMs": 25,
+      "totalMs": 28,
       "tools": [],
       "errors": [],
       "warnings": []
@@ -310,7 +310,7 @@
       "actions": 1,
       "materializable": 1,
       "appliedSteps": 5,
-      "totalMs": 62,
+      "totalMs": 66,
       "tools": [],
       "errors": [],
       "warnings": []
@@ -326,7 +326,7 @@
       "actions": 1,
       "materializable": 1,
       "appliedSteps": 3,
-      "totalMs": 81,
+      "totalMs": 83,
       "tools": [],
       "errors": [],
       "warnings": []
@@ -342,7 +342,7 @@
       "actions": 1,
       "materializable": 1,
       "appliedSteps": 4,
-      "totalMs": 100,
+      "totalMs": 110,
       "tools": [],
       "errors": [],
       "warnings": []
@@ -358,7 +358,7 @@
       "actions": 1,
       "materializable": 1,
       "appliedSteps": 10,
-      "totalMs": 228,
+      "totalMs": 238,
       "tools": [],
       "errors": [],
       "warnings": []
@@ -374,7 +374,7 @@
       "actions": 1,
       "materializable": 1,
       "appliedSteps": 9,
-      "totalMs": 181,
+      "totalMs": 177,
       "tools": [],
       "errors": [],
       "warnings": []
@@ -390,7 +390,7 @@
       "actions": 1,
       "materializable": 1,
       "appliedSteps": 8,
-      "totalMs": 58,
+      "totalMs": 65,
       "tools": [],
       "errors": [],
       "warnings": []
@@ -406,7 +406,7 @@
       "actions": 1,
       "materializable": 1,
       "appliedSteps": 5,
-      "totalMs": 85,
+      "totalMs": 93,
       "tools": [],
       "errors": [],
       "warnings": []
@@ -422,7 +422,7 @@
       "actions": 1,
       "materializable": 1,
       "appliedSteps": 6,
-      "totalMs": 252,
+      "totalMs": 257,
       "tools": [],
       "errors": [],
       "warnings": []
@@ -438,7 +438,7 @@
       "actions": 1,
       "materializable": 1,
       "appliedSteps": 7,
-      "totalMs": 179,
+      "totalMs": 168,
       "tools": [],
       "errors": [],
       "warnings": []
@@ -454,7 +454,7 @@
       "actions": 1,
       "materializable": 1,
       "appliedSteps": 3,
-      "totalMs": 86,
+      "totalMs": 87,
       "tools": [],
       "errors": [],
       "warnings": []
@@ -470,7 +470,7 @@
       "actions": 1,
       "materializable": 1,
       "appliedSteps": 4,
-      "totalMs": 105,
+      "totalMs": 119,
       "tools": [],
       "errors": [],
       "warnings": []
@@ -486,7 +486,7 @@
       "actions": 1,
       "materializable": 1,
       "appliedSteps": 3,
-      "totalMs": 48,
+      "totalMs": 52,
       "tools": [],
       "errors": [],
       "warnings": []
@@ -502,7 +502,7 @@
       "actions": 1,
       "materializable": 1,
       "appliedSteps": 4,
-      "totalMs": 156,
+      "totalMs": 154,
       "tools": [],
       "errors": [],
       "warnings": []
@@ -518,7 +518,7 @@
       "actions": 1,
       "materializable": 1,
       "appliedSteps": 4,
-      "totalMs": 141,
+      "totalMs": 161,
       "tools": [],
       "errors": [],
       "warnings": []
@@ -534,7 +534,7 @@
       "actions": 1,
       "materializable": 1,
       "appliedSteps": 3,
-      "totalMs": 25,
+      "totalMs": 26,
       "tools": [],
       "errors": [],
       "warnings": []
@@ -550,7 +550,7 @@
       "actions": 1,
       "materializable": 1,
       "appliedSteps": 4,
-      "totalMs": 39,
+      "totalMs": 40,
       "tools": [],
       "errors": [],
       "warnings": []
@@ -566,7 +566,7 @@
       "actions": 1,
       "materializable": 1,
       "appliedSteps": 5,
-      "totalMs": 124,
+      "totalMs": 162,
       "tools": [],
       "errors": [],
       "warnings": []
@@ -582,7 +582,7 @@
       "actions": 1,
       "materializable": 1,
       "appliedSteps": 4,
-      "totalMs": 225,
+      "totalMs": 250,
       "tools": [],
       "errors": [],
       "warnings": []
@@ -614,7 +614,7 @@
       "actions": 1,
       "materializable": 1,
       "appliedSteps": 7,
-      "totalMs": 1,
+      "totalMs": 0,
       "tools": [],
       "errors": [],
       "warnings": []
@@ -630,7 +630,7 @@
       "actions": 1,
       "materializable": 1,
       "appliedSteps": 3,
-      "totalMs": 78,
+      "totalMs": 79,
       "tools": [],
       "errors": [],
       "warnings": []
@@ -646,7 +646,7 @@
       "actions": 1,
       "materializable": 1,
       "appliedSteps": 4,
-      "totalMs": 73,
+      "totalMs": 69,
       "tools": [],
       "errors": [],
       "warnings": []
