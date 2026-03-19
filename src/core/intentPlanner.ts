@@ -1,4 +1,5 @@
 import { getCommandIndex, type CommandArgument, type CommandCodeExample, type CommandIndex, type CommandRecord } from './commandIndex';
+import { checkPlannerConflicts, type ResourceConflict } from './conflictChecker';
 import type { McpChatRequest } from './schemas';
 
 export type IntentGroup =
@@ -294,6 +295,7 @@ export interface PlannerOutput {
   intent: PlannerIntent;
   resolvedCommands: ResolvedCommand[];
   unresolved: string[];
+  conflicts: ResourceConflict[];
 }
 
 interface ParseContext {
@@ -664,6 +666,7 @@ export async function planIntent(
   req: Pick<McpChatRequest, 'userMessage'> & Partial<Pick<McpChatRequest, 'flowContext'>>
 ): Promise<PlannerOutput> {
   const intent = await parseIntent(req);
+  const conflicts = checkPlannerConflicts(intent);
 
   const index = await getCommandIndex();
   const bindings = buildBindings(intent);
@@ -700,6 +703,7 @@ export async function planIntent(
     intent,
     resolvedCommands: dedupedResolved,
     unresolved: intent.unresolved,
+    conflicts,
   };
 }
 
@@ -1951,7 +1955,9 @@ export function parseBusIntents(message: string, aliasMaps: IntentAliasMaps): Pa
   if (busAnchors.length > 0) {
     for (let index = 0; index < busAnchors.length; index += 1) {
       const anchor = busAnchors[index];
-      const segmentStart = index === 0 ? 0 : (anchor.index ?? 0);
+      // Include a short prefix before "on Bx" so protocol tokens like
+      // "SPI on B3" are part of the same parse segment.
+      const segmentStart = Math.max(0, (anchor.index ?? 0) - 48);
       const segmentEnd = busAnchors[index + 1]?.index ?? message.length;
       const segment = message.slice(segmentStart, segmentEnd);
       const forcedBusSlot = anchor[1].toUpperCase();
@@ -1981,9 +1987,10 @@ export function parseBusIntents(message: string, aliasMaps: IntentAliasMaps): Pa
 export function parseBusIntent(
   message: string,
   aliasMaps: IntentAliasMaps,
-  forcedBusSlot?: string
+  forcedBusSlot?: string,
+  forcedProtocol?: ParsedBusIntent['protocol']
 ): ParsedBusIntent | undefined {
-  const protocol = matchFirstAliasValue(message, aliasMaps.busProtocolAliases);
+  const protocol = forcedProtocol || matchFirstAliasValue(message, aliasMaps.busProtocolAliases);
   if (!protocol) return undefined;
 
   const bus: ParsedBusIntent = {

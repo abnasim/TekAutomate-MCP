@@ -146,6 +146,35 @@ export async function buildContext(
     );
   }
 
+  if (plannerOutput.conflicts.length > 0) {
+    const errors = plannerOutput.conflicts.filter((conflict) => conflict.severity === 'ERROR');
+    const warnings = plannerOutput.conflicts.filter((conflict) => conflict.severity === 'WARNING');
+
+    if (errors.length > 0) {
+      sections.push(
+        '## RESOURCE CONFLICTS - MUST FIX\n\n' +
+          errors
+            .map(
+              (conflict) =>
+                `ERROR: ${conflict.message}\nSuggestion: ${conflict.suggestion || 'Adjust resource assignments.'}`
+            )
+            .join('\n\n')
+      );
+    }
+
+    if (warnings.length > 0) {
+      sections.push(
+        '## RESOURCE WARNINGS\n\n' +
+          warnings
+            .map(
+              (conflict) =>
+                `WARNING: ${conflict.message}\nSuggestion: ${conflict.suggestion || 'Review resource usage.'}`
+            )
+            .join('\n\n')
+      );
+    }
+  }
+
   sections.push(workspaceSection(req, compact));
 
   return sections.join('\n\n---\n\n');

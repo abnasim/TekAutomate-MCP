@@ -1873,9 +1873,17 @@ function buildActionsFromPlanner(
     });
   }
 
+  const conflictFindings = (plannerOutput.conflicts || []).map((conflict) => {
+    const scope = conflict.affectedResources.length
+      ? ` [${conflict.affectedResources.join(', ')}]`
+      : '';
+    const suggestion = conflict.suggestion ? ` Suggestion: ${conflict.suggestion}` : '';
+    return `${conflict.severity}: ${conflict.type}${scope} - ${conflict.message}${suggestion}`;
+  });
+
   return `ACTIONS_JSON: ${JSON.stringify({
     summary: `Built ${plannerOutput.resolvedCommands.length} verified planner steps without a model call.`,
-    findings: [],
+    findings: conflictFindings,
     suggestedFixes: [],
     actions,
   })}`;
