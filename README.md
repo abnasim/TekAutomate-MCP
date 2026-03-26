@@ -2,6 +2,82 @@
 
 This server is the AI orchestration layer for TekAutomate. It accepts full workspace context from the app, runs tool-assisted reasoning (or deterministic shortcuts), validates output, and returns applyable `ACTIONS_JSON`.
 
+## API
+
+Main API reference:
+- [MCP_API.md](/Users/u650455/Desktop/Tek_Automator/TekAutomate_publish_clean/MCP_API.md)
+
+Quick summary:
+- base API is custom HTTP today, not a standard MCP transport yet
+- main orchestration endpoint is `POST /ai/chat`
+- live and executor-backed tools are available through the server tool loop
+- external apps can call the hosted API directly
+
+### Main endpoints
+
+- `GET /health`
+- `GET /ai/debug/last`
+- `POST /ai/chat`
+- `POST /ai/responses-proxy`
+- `POST /ai/key-test`
+- `GET /ai/router/health` when router is enabled
+- `POST /ai/router` when router is enabled
+- `POST /ai/router/reload-providers` when router is enabled
+
+### How tool calls work
+
+Clients do not call individual tool functions as separate HTTP routes today.
+
+Instead:
+1. client sends a request to `POST /ai/chat`
+2. server builds context from flow, run, and instrument state
+3. internal tool loop decides which tools to call
+4. server returns final response text, warnings, errors, and metrics
+
+### Main tool groups
+
+Retrieval and lookup:
+- `smart_scpi_lookup`
+- `search_scpi`
+- `get_command_group`
+- `get_command_by_header`
+- `get_commands_by_header_batch`
+- `search_tm_devices`
+- `retrieve_rag_chunks`
+- `search_known_failures`
+- `get_template_examples`
+- `get_policy`
+- `list_valid_step_types`
+- `get_block_schema`
+
+Materialization and validation:
+- `materialize_scpi_command`
+- `materialize_scpi_commands`
+- `finalize_scpi_commands`
+- `materialize_tm_devices_call`
+- `validate_action_payload`
+- `validate_device_context`
+- `verify_scpi_commands`
+
+Live instrument tools:
+- `get_instrument_state`
+- `probe_command`
+- `send_scpi`
+- `capture_screenshot`
+- `get_visa_resources`
+- `get_environment`
+
+### Live mode context
+
+Live instrument calls depend on executor context such as:
+- `executorUrl`
+- `visaResource`
+- `backend`
+- `liveMode`
+- `outputMode`
+
+See [MCP_API.md](/Users/u650455/Desktop/Tek_Automator/TekAutomate_publish_clean/MCP_API.md) for request and response details.
+
 ## What it does
 
 - Hosts AI chat endpoint used by TekAutomate (`/ai/chat`).
@@ -83,6 +159,8 @@ Server tools are grouped into retrieval, materialization, validation, and live-i
 - Live instrument tools (via code executor):
 - `get_instrument_state`
 - `probe_command`
+- `send_scpi`
+- `capture_screenshot`
 - `get_visa_resources`
 - `get_environment`
 
