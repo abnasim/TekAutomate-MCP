@@ -12,6 +12,7 @@ import { getRagIndexes } from './core/ragIndex';
 import { getTemplateIndex } from './core/templateIndex';
 import fs from 'fs';
 import path from 'path';
+import util from 'util';
 import { fileURLToPath } from 'url';
 
 const __filename = fileURLToPath(import.meta.url);
@@ -21,9 +22,95 @@ const serverStartedAt = Date.now();
 let lastAiDebug: Record<string, unknown> | null = null;
 const REQUEST_LOG_DIR = path.join(__dirname, 'logs', 'requests');
 const MAX_LOG_FILES = 500;
+const MAX_IN_MEMORY_LOGS = 250;
+type LogLevel = 'log' | 'info' | 'warn' | 'error';
+type InMemoryLogEntry = {
+  timestamp: string;
+  level: LogLevel;
+  message: string;
+};
+const inMemoryLogs: InMemoryLogEntry[] = [];
+let consolePatched = false;
+
+function stringifyLogArgs(args: unknown[]): string {
+  return args
+    .map((arg) => {
+      if (typeof arg === 'string') return arg;
+      return util.inspect(arg, { depth: 4, breakLength: 120, colors: false });
+    })
+    .join(' ');
+}
+
+function appendInMemoryLog(level: LogLevel, args: unknown[]) {
+  inMemoryLogs.push({
+    timestamp: new Date().toISOString(),
+    level,
+    message: stringifyLogArgs(args),
+  });
+  if (inMemoryLogs.length > MAX_IN_MEMORY_LOGS) {
+    inMemoryLogs.splice(0, inMemoryLogs.length - MAX_IN_MEMORY_LOGS);
+  }
+}
+
+function patchConsoleOnce() {
+  if (consolePatched) return;
+  consolePatched = true;
+  const methods: LogLevel[] = ['log', 'info', 'warn', 'error'];
+  for (const method of methods) {
+    const original = console[method].bind(console);
+    console[method] = ((...args: unknown[]) => {
+      appendInMemoryLog(method, args);
+      original(...args);
+    }) as typeof console[typeof method];
+  }
+}
 
 function ensureLogDir() {
   fs.mkdirSync(REQUEST_LOG_DIR, { recursive: true });
+}
+
+function readRecentRequestSummaries(limit = 12): Array<Record<string, unknown>> {
+  try {
+    if (!fs.existsSync(REQUEST_LOG_DIR)) return [];
+    return fs
+      .readdirSync(REQUEST_LOG_DIR)
+      .map((name) => {
+        const full = path.join(REQUEST_LOG_DIR, name);
+        const stat = fs.statSync(full);
+        return { name, time: stat.mtimeMs, full };
+      })
+      .sort((a, b) => b.time - a.time)
+      .slice(0, limit)
+      .map((file) => {
+        try {
+          const raw = fs.readFileSync(file.full, 'utf8');
+          const parsed = JSON.parse(raw) as Record<string, unknown>;
+          return {
+            timestamp: parsed.timestamp,
+            requestId: parsed.requestId,
+            ok: parsed.ok,
+            provider: parsed.provider,
+            model: parsed.model,
+            backend: (parsed.flowContext as Record<string, unknown> | undefined)?.backend,
+            userMessage: parsed.userMessage,
+            durationMs: parsed.durationMs,
+            postCheckErrors:
+              ((parsed.postCheck as Record<string, unknown> | undefined)?.errors as unknown[]) || [],
+          };
+        } catch {
+          return {
+            timestamp: new Date(file.time).toISOString(),
+            requestId: file.name,
+            ok: false,
+            provider: '(unparsed)',
+            model: '(unparsed)',
+            userMessage: 'Failed to parse request log',
+          };
+        }
+      });
+  } catch {
+    return [];
+  }
 }
 
 function rotateLogs() {
@@ -239,6 +326,8 @@ function renderStatusPage() {
   const checks = [
     ['Health JSON', '/health'],
     ['Status JSON', '/status'],
+    ['Debug Console', '/debug'],
+    ['Log Feed JSON', '/logs'],
     ['Last AI Debug', '/ai/debug/last'],
   ];
   const items = checks
@@ -345,6 +434,186 @@ function renderStatusPage() {
 </html>`;
 }
 
+function renderDebugPage() {
+  const status = getStatusPayload();
+  const recentLogs = inMemoryLogs
+    .slice(-40)
+    .reverse()
+    .map(
+      (entry) =>
+        `<div class="line"><span class="ts">${escapeHtml(entry.timestamp)}</span> <span class="lvl ${entry.level}">${escapeHtml(entry.level.toUpperCase())}</span> <span class="msg">${escapeHtml(entry.message)}</span></div>`
+    )
+    .join('');
+  const requests = readRecentRequestSummaries(10)
+    .map((entry) => {
+      const errors = Array.isArray(entry.postCheckErrors) ? entry.postCheckErrors.length : 0;
+      return `<tr>
+        <td>${escapeHtml(String(entry.timestamp || ''))}</td>
+        <td>${escapeHtml(String(entry.ok ? 'ok' : 'error'))}</td>
+        <td>${escapeHtml(String(entry.provider || ''))}</td>
+        <td>${escapeHtml(String(entry.model || ''))}</td>
+        <td>${escapeHtml(String(entry.durationMs || ''))}</td>
+        <td>${escapeHtml(String(errors))}</td>
+        <td>${escapeHtml(String(entry.userMessage || ''))}</td>
+      </tr>`;
+    })
+    .join('');
+  const debugJson = escapeHtml(JSON.stringify(lastAiDebug || { ok: true, message: 'No debug payload yet.' }, null, 2));
+  return `<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <meta http-equiv="refresh" content="10" />
+  <title>TekAutomate MCP Debug</title>
+  <style>
+    :root {
+      --bg: #071018;
+      --panel: #0d1722;
+      --panel2: #101d2c;
+      --text: #d6e2f2;
+      --muted: #8ea0bd;
+      --accent: #39d0ff;
+      --green: #31d0aa;
+      --yellow: #ffd166;
+      --red: #ff6b6b;
+      --border: rgba(142, 160, 189, 0.18);
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      font-family: Consolas, Monaco, 'Courier New', monospace;
+      background: radial-gradient(circle at top, #112034, var(--bg));
+      color: var(--text);
+    }
+    main {
+      max-width: 1280px;
+      margin: 24px auto;
+      padding: 0 16px 24px;
+    }
+    .header, .panel {
+      background: rgba(13, 23, 34, 0.94);
+      border: 1px solid var(--border);
+      border-radius: 16px;
+      box-shadow: 0 20px 45px rgba(0, 0, 0, 0.24);
+    }
+    .header {
+      padding: 18px 20px;
+      margin-bottom: 16px;
+    }
+    .grid {
+      display: grid;
+      grid-template-columns: 1.1fr 0.9fr;
+      gap: 16px;
+    }
+    .panel { padding: 16px; }
+    .terminal {
+      background: #050b12;
+      border: 1px solid rgba(57, 208, 255, 0.12);
+      border-radius: 12px;
+      padding: 14px;
+      min-height: 420px;
+      overflow: auto;
+    }
+    .line { padding: 4px 0; border-bottom: 1px solid rgba(255,255,255,0.04); }
+    .ts { color: var(--muted); }
+    .lvl { display: inline-block; min-width: 52px; font-weight: 700; margin: 0 10px; }
+    .lvl.log, .lvl.info { color: var(--accent); }
+    .lvl.warn { color: var(--yellow); }
+    .lvl.error { color: var(--red); }
+    .msg { white-space: pre-wrap; word-break: break-word; }
+    .meta {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 10px;
+      margin-top: 10px;
+    }
+    .pill {
+      padding: 6px 10px;
+      border-radius: 999px;
+      background: rgba(49, 208, 170, 0.12);
+      color: var(--green);
+      border: 1px solid rgba(49, 208, 170, 0.18);
+      font-size: 12px;
+      font-weight: 700;
+    }
+    h1, h2 { margin: 0 0 10px; }
+    h1 { font-size: 28px; }
+    h2 { font-size: 16px; color: var(--accent); }
+    p, a, td, th { color: var(--muted); }
+    a { color: var(--accent); }
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      font-size: 12px;
+    }
+    th, td {
+      text-align: left;
+      padding: 8px 6px;
+      border-bottom: 1px solid rgba(255,255,255,0.06);
+      vertical-align: top;
+    }
+    pre {
+      margin: 0;
+      white-space: pre-wrap;
+      word-break: break-word;
+      background: #050b12;
+      border: 1px solid rgba(57, 208, 255, 0.12);
+      border-radius: 12px;
+      padding: 14px;
+      max-height: 360px;
+      overflow: auto;
+    }
+    @media (max-width: 980px) {
+      .grid { grid-template-columns: 1fr; }
+    }
+  </style>
+</head>
+<body>
+  <main>
+    <section class="header">
+      <h1>TekAutomate MCP Debug Console</h1>
+      <p>Auto-refreshes every 10 seconds. Use this page as a lightweight hosted debug terminal.</p>
+      <div class="meta">
+        <span class="pill">Status: ${escapeHtml(status.status)}</span>
+        <span class="pill">Uptime: ${status.uptimeSec}s</span>
+        <span class="pill">Port: ${status.port}</span>
+        <span class="pill">Router: ${status.routerEnabled ? 'enabled' : 'disabled'}</span>
+      </div>
+      <p><a href="/">Home</a> · <a href="/health">/health</a> · <a href="/status">/status</a> · <a href="/logs">/logs</a> · <a href="/ai/debug/last">/ai/debug/last</a></p>
+    </section>
+    <section class="grid">
+      <section class="panel">
+        <h2>Recent Server Logs</h2>
+        <div class="terminal">${recentLogs || '<div class="line"><span class="msg">No logs captured yet.</span></div>'}</div>
+      </section>
+      <section class="panel">
+        <h2>Latest AI Debug Payload</h2>
+        <pre>${debugJson}</pre>
+      </section>
+    </section>
+    <section class="panel" style="margin-top: 16px;">
+      <h2>Recent Requests</h2>
+      <table>
+        <thead>
+          <tr>
+            <th>Timestamp</th>
+            <th>Result</th>
+            <th>Provider</th>
+            <th>Model</th>
+            <th>ms</th>
+            <th>Errors</th>
+            <th>User Message</th>
+          </tr>
+        </thead>
+        <tbody>${requests || '<tr><td colspan="7">No request logs yet.</td></tr>'}</tbody>
+      </table>
+    </section>
+  </main>
+</body>
+</html>`;
+}
+
 function sendSseStart(res: http.ServerResponse) {
   res.statusCode = 200;
   res.setHeader('Content-Type', 'text/event-stream');
@@ -385,6 +654,7 @@ function parseProviderError(status: number, raw: string): { code: string; messag
 }
 
 export async function createServer(port = 8787): Promise<http.Server> {
+  patchConsoleOnce();
   // CRITICAL FIX: Initialize ALL indexes BEFORE creating HTTP server
   // Previously: initialization happened inside request handlers (race condition)
   const startInit = Date.now();
@@ -454,6 +724,11 @@ export async function createServer(port = 8787): Promise<http.Server> {
       return;
     }
 
+    if (req.method === 'GET' && req.url === '/debug') {
+      sendHtml(res, 200, renderDebugPage());
+      return;
+    }
+
     if (req.method === 'GET' && req.url === '/health') {
       sendJson(res, 200, getStatusPayload());
       return;
@@ -461,6 +736,15 @@ export async function createServer(port = 8787): Promise<http.Server> {
 
     if (req.method === 'GET' && req.url === '/status') {
       sendJson(res, 200, getStatusPayload());
+      return;
+    }
+
+    if (req.method === 'GET' && req.url === '/logs') {
+      sendJson(res, 200, {
+        ok: true,
+        logs: inMemoryLogs.slice(-120),
+        recentRequests: readRecentRequestSummaries(20),
+      });
       return;
     }
 

@@ -166,10 +166,14 @@ Useful hosted endpoints after deploy:
 
 - `/`
   - simple browser status page with uptime and links
+- `/debug`
+  - terminal-style hosted debug console with recent logs, last AI debug payload, and recent request summaries
 - `/health`
   - JSON health payload for Railway and monitoring
 - `/status`
   - same JSON status payload for manual checks
+- `/logs`
+  - JSON log feed with in-memory server logs and recent request summaries
 
 Suggested Railway environment variables:
 
