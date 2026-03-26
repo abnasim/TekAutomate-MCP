@@ -16,6 +16,7 @@ import { fileURLToPath } from 'url';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
+const serverStartedAt = Date.now();
 
 let lastAiDebug: Record<string, unknown> | null = null;
 const REQUEST_LOG_DIR = path.join(__dirname, 'logs', 'requests');
@@ -204,6 +205,146 @@ function sendJson(res: http.ServerResponse, status: number, payload: unknown) {
   res.end(JSON.stringify(payload));
 }
 
+function escapeHtml(value: string): string {
+  return value
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#39;');
+}
+
+function getStatusPayload() {
+  return {
+    ok: true,
+    status: 'ready',
+    service: 'TekAutomate MCP',
+    uptimeSec: Math.floor((Date.now() - serverStartedAt) / 1000),
+    routerEnabled: String(process.env.MCP_ROUTER_ENABLED || '').trim() === 'true',
+    providerSupplementsEnabled: providerSupplementsEnabled(),
+    port: Number(process.env.MCP_PORT || process.env.PORT || 8787),
+    timestamp: new Date().toISOString(),
+  };
+}
+
+function sendHtml(res: http.ServerResponse, status: number, html: string) {
+  res.statusCode = status;
+  res.setHeader('Content-Type', 'text/html; charset=utf-8');
+  res.setHeader('Access-Control-Allow-Origin', '*');
+  res.end(html);
+}
+
+function renderStatusPage() {
+  const status = getStatusPayload();
+  const checks = [
+    ['Health JSON', '/health'],
+    ['Status JSON', '/status'],
+    ['Last AI Debug', '/ai/debug/last'],
+  ];
+  const items = checks
+    .map(([label, href]) => `<li><a href="${href}">${escapeHtml(label)}</a></li>`)
+    .join('');
+  return `<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>TekAutomate MCP</title>
+  <style>
+    :root {
+      color-scheme: light dark;
+      --bg: #0b1220;
+      --panel: #111a2b;
+      --text: #e8edf7;
+      --muted: #9fb0d0;
+      --accent: #24c8db;
+      --ok: #34d399;
+    }
+    body {
+      margin: 0;
+      font-family: Arial, sans-serif;
+      background: linear-gradient(135deg, #0b1220, #16233c);
+      color: var(--text);
+    }
+    main {
+      max-width: 760px;
+      margin: 48px auto;
+      padding: 24px;
+    }
+    .card {
+      background: rgba(17, 26, 43, 0.92);
+      border: 1px solid rgba(159, 176, 208, 0.2);
+      border-radius: 18px;
+      padding: 24px;
+      box-shadow: 0 24px 60px rgba(0, 0, 0, 0.24);
+    }
+    h1 {
+      margin: 0 0 8px;
+      font-size: 32px;
+    }
+    p, li {
+      color: var(--muted);
+      line-height: 1.5;
+    }
+    .pill {
+      display: inline-block;
+      margin: 8px 0 18px;
+      padding: 6px 10px;
+      border-radius: 999px;
+      background: rgba(52, 211, 153, 0.14);
+      color: var(--ok);
+      font-weight: 700;
+      letter-spacing: 0.04em;
+      text-transform: uppercase;
+      font-size: 12px;
+    }
+    dl {
+      display: grid;
+      grid-template-columns: max-content 1fr;
+      gap: 8px 14px;
+      margin: 18px 0 24px;
+    }
+    dt {
+      color: var(--text);
+      font-weight: 700;
+    }
+    dd {
+      margin: 0;
+      color: var(--muted);
+    }
+    a {
+      color: var(--accent);
+    }
+    code {
+      background: rgba(159, 176, 208, 0.12);
+      padding: 2px 6px;
+      border-radius: 6px;
+    }
+  </style>
+</head>
+<body>
+  <main>
+    <section class="card">
+      <h1>TekAutomate MCP</h1>
+      <div class="pill">Service Healthy</div>
+      <p>This deployment is up and ready to serve TekAutomate MCP requests.</p>
+      <dl>
+        <dt>Status</dt><dd>${escapeHtml(status.status)}</dd>
+        <dt>Port</dt><dd>${status.port}</dd>
+        <dt>Router Enabled</dt><dd>${status.routerEnabled ? 'Yes' : 'No'}</dd>
+        <dt>Provider Supplements</dt><dd>${status.providerSupplementsEnabled ? 'Enabled' : 'Disabled'}</dd>
+        <dt>Uptime</dt><dd>${status.uptimeSec}s</dd>
+        <dt>Timestamp</dt><dd>${escapeHtml(status.timestamp)}</dd>
+      </dl>
+      <p>Useful endpoints:</p>
+      <ul>${items}</ul>
+      <p>TekAutomate clients can point their MCP URL to this server root, for example <code>${escapeHtml('https://your-mcp-host.example')}</code>.</p>
+    </section>
+  </main>
+</body>
+</html>`;
+}
+
 function sendSseStart(res: http.ServerResponse) {
   res.statusCode = 200;
   res.setHeader('Content-Type', 'text/event-stream');
@@ -308,8 +449,18 @@ export async function createServer(port = 8787): Promise<http.Server> {
       return;
     }
 
+    if (req.method === 'GET' && (req.url === '/' || req.url === '')) {
+      sendHtml(res, 200, renderStatusPage());
+      return;
+    }
+
     if (req.method === 'GET' && req.url === '/health') {
-      sendJson(res, 200, { ok: true, status: 'ready' });
+      sendJson(res, 200, getStatusPayload());
+      return;
+    }
+
+    if (req.method === 'GET' && req.url === '/status') {
+      sendJson(res, 200, getStatusPayload());
       return;
     }
 

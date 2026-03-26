@@ -141,12 +141,43 @@ localStorage.setItem('tekautomate.mcp.host', 'http://localhost:8787');
 ## Run locally
 
 ```bash
-cd mcp-server
 npm install
 npm run start
 ```
 
 Default port is `8787` unless `MCP_PORT` is set.
+
+## Deploy on Railway
+
+This repo is ready to deploy directly as a standalone Node service.
+
+Recommended Railway settings:
+
+- Root directory: repo root
+- Install command: `npm install`
+- Start command: `npm start`
+- Health check path: `/health`
+
+Included deploy helper:
+
+- `railway.json`
+
+Useful hosted endpoints after deploy:
+
+- `/`
+  - simple browser status page with uptime and links
+- `/health`
+  - JSON health payload for Railway and monitoring
+- `/status`
+  - same JSON status payload for manual checks
+
+Suggested Railway environment variables:
+
+- `OPENAI_SERVER_API_KEY`
+- `COMMAND_VECTOR_STORE_ID` (if using file search / vector retrieval)
+- `OPENAI_ASSISTANT_ID` (if using assistant-thread routing)
+- `MCP_ROUTER_ENABLED=true` (if you want router-backed tool hydration at boot)
+- `NODE_ENV=production`
 
 ## Environment variables
 
