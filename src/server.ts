@@ -653,7 +653,7 @@ function parseProviderError(status: number, raw: string): { code: string; messag
   return { code, message, hint };
 }
 
-export async function createServer(port = 8787): Promise<http.Server> {
+export async function createServer(port = 8787, host = '0.0.0.0'): Promise<http.Server> {
   patchConsoleOnce();
   // CRITICAL FIX: Initialize ALL indexes BEFORE creating HTTP server
   // Previously: initialization happened inside request handlers (race condition)
@@ -1135,7 +1135,7 @@ export async function createServer(port = 8787): Promise<http.Server> {
   });
 
   await new Promise<void>((resolve) => {
-    server.listen(port, () => resolve());
+    server.listen(port, host, () => resolve());
   });
   return server;
 }

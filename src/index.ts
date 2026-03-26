@@ -49,11 +49,12 @@ async function main() {
   }
 
   const port = Number(process.env.MCP_PORT || process.env.PORT || 8787);
+  const host = String(process.env.HOST || '0.0.0.0').trim() || '0.0.0.0';
 
-  createServer(port)
+  createServer(port, host)
     .then(() => {
       // eslint-disable-next-line no-console
-      console.log(`MCP server listening on http://localhost:${port}`);
+      console.log(`MCP server listening on http://${host}:${port}`);
     })
     .catch((err) => {
       // eslint-disable-next-line no-console
