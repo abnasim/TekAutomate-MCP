@@ -101,8 +101,46 @@ class _Handler(BaseHTTPRequestHandler):
         if self.path == "/stream":
             self._handle_sse()
             return
+        if self.path == "/scan":
+            self._handle_scan()
+            return
         self.send_response(404)
         self.end_headers()
+
+    def _handle_scan(self):
+        """Scan for VISA instruments and return results as JSON."""
+        self._emit("GET", "/scan", 200, "Scanning for VISA instruments...")
+        try:
+            from app.instrument_scanner import InstrumentScanThread, InstrumentInfo
+            instruments: list[dict] = []
+            scan_done = threading.Event()
+            scan_error_msg = [None]
+
+            scanner = InstrumentScanThread(query_idn=True, timeout_ms=3000)
+            scanner.instrument_found.connect(lambda info: instruments.append({
+                "resource": info.resource,
+                "identity": info.identity,
+                "manufacturer": info.manufacturer,
+                "model": info.model,
+                "serial": info.serial,
+                "firmware": info.firmware,
+                "reachable": info.reachable,
+                "connType": info.conn_type,
+            }))
+            scanner.scan_error.connect(lambda err: scan_error_msg.__setitem__(0, err))
+            scanner.scan_finished.connect(lambda _count: scan_done.set())
+            scanner.start()
+            scan_done.wait(timeout=30)
+
+            if scan_error_msg[0]:
+                self._json_response(200, {"ok": False, "error": scan_error_msg[0], "instruments": []})
+                self._emit("GET", "/scan", 200, f"Scan error: {scan_error_msg[0]}")
+            else:
+                self._json_response(200, {"ok": True, "instruments": instruments, "count": len(instruments)})
+                self._emit("GET", "/scan", 200, f"Scan complete: {len(instruments)} instrument(s) found")
+        except Exception as exc:
+            self._json_response(500, {"ok": False, "error": str(exc), "instruments": []})
+            self._emit("GET", "/scan", 500, f"Scan failed: {exc}")
 
     def _handle_sse(self):
         self.send_response(200)
