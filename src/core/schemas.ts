@@ -18,6 +18,7 @@ export interface McpChatRequest {
   userMessage: string;
   attachments?: McpChatAttachment[];
   outputMode: 'steps_json' | 'blockly_xml' | 'chat';
+  interactionMode?: 'build' | 'chat' | 'live';
   buildNew?: boolean;
   buildBrief?: {
     intent: string;
@@ -58,7 +59,7 @@ export interface McpChatRequest {
     firmware?: string;
     steps: Array<Record<string, unknown>>;
     selectedStepId: string | null;
-    executionSource: 'steps' | 'blockly';
+    executionSource: 'steps' | 'blockly' | 'live';
     deviceType?: string;
     deviceDriver?: string;
     visaBackend?: string;

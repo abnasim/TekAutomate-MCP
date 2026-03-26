@@ -29,9 +29,19 @@ export class CleanRouter {
     const msg = req.userMessage.toLowerCase().trim();
     const outputMode = req.outputMode;
     const isMcpOnly = this.isMcpOnlyMode(req);
+    const interactionMode = req.interactionMode;
     
     console.log(`[CLEAN_ROUTER] Routing decision for: "${msg}"`);
     console.log(`[CLEAN_ROUTER] Mode: ${outputMode}, MCP-only: ${isMcpOnly}`);
+
+    if (interactionMode === 'live') {
+      return {
+        route: 'smart_scpi',
+        confidence: 0.98,
+        reasoning: 'Live mode keeps conversational responses while routing through MCP tools',
+        forceToolCall: true
+      };
+    }
 
     // 1. Chat mode always uses AI + provider supplements
     if (outputMode === 'chat') {
@@ -135,6 +145,9 @@ export class CleanRouter {
    * Get tool call mode - clean logic without edge cases
    */
   getToolCallMode(req: McpChatRequest): boolean {
+    if (req.interactionMode === 'live') {
+      return true;
+    }
     const decision = this.makeRouteDecision(req);
     
     // Always force tool calls for SCPI and tm_devices queries

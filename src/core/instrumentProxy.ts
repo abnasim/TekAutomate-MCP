@@ -7,6 +7,9 @@ interface Endpoint {
   backend: string;
   liveMode?: boolean;
   outputMode?: InstrumentOutputMode;
+  scopeType?: 'modern' | 'legacy';
+  modelFamily?: string;
+  deviceDriver?: string;
 }
 
 interface RunPythonResult {
@@ -17,6 +20,7 @@ interface RunPythonResult {
   combinedOutput: string;
   transcript: Array<{ stream: string; line: string; timestamp?: number }>;
   durationSec?: number;
+  resultData?: unknown;
 }
 
 function resolveOutputMode(endpoint: Endpoint): InstrumentOutputMode {
@@ -25,6 +29,12 @@ function resolveOutputMode(endpoint: Endpoint): InstrumentOutputMode {
 
 function isLiveModeEnabled(endpoint: Endpoint): boolean {
   return endpoint.liveMode === true;
+}
+
+function inferScopeType(endpoint: Endpoint): 'modern' | 'legacy' {
+  if (endpoint.scopeType === 'modern' || endpoint.scopeType === 'legacy') return endpoint.scopeType;
+  const hint = `${endpoint.modelFamily || ''} ${endpoint.deviceDriver || ''}`.toLowerCase();
+  return /\b(dpo|5k|7k|70k)\b/.test(hint) ? 'legacy' : 'modern';
 }
 
 function buildRuntimeDetails(run: RunPythonResult, mode: InstrumentOutputMode): Record<string, unknown> {
@@ -104,6 +114,7 @@ async function runPython(
         ? (json.transcript as Array<{ stream: string; line: string; timestamp?: number }>)
         : [],
       durationSec: typeof json.duration_sec === 'number' ? json.duration_sec : undefined,
+      resultData: json.result_data,
     };
   } catch (err) {
     return {
@@ -113,6 +124,57 @@ async function runPython(
       error: err instanceof Error ? err.message : 'Executor unreachable',
       combinedOutput: '',
       transcript: [],
+      resultData: undefined,
+    };
+  }
+}
+
+async function runExecutorAction(
+  endpoint: Endpoint,
+  action: string,
+  payload: Record<string, unknown>,
+  timeoutSec = 60
+): Promise<RunPythonResult> {
+  try {
+    const res = await fetch(`${endpoint.executorUrl.replace(/\/$/, '')}/run`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        protocol_version: 1,
+        action,
+        timeout_sec: timeoutSec,
+        scope_visa: endpoint.visaResource,
+        ...payload,
+      }),
+    });
+    const json = (await res.json()) as Record<string, unknown>;
+    // The executor HTTP server flattens result_data into the top-level response body
+    // for capture_screenshot and send_scpi actions. Check both json.result_data
+    // AND the top-level json for payload fields like base64, responses, etc.
+    const resultData = json.result_data ??
+      (typeof json.base64 === 'string' ? json : undefined) ??
+      (Array.isArray(json.responses) ? json : undefined);
+    return {
+      ok: json.ok === true,
+      stdout: typeof json.stdout === 'string' ? json.stdout : '',
+      stderr: typeof json.stderr === 'string' ? json.stderr : '',
+      error: typeof json.error === 'string' ? json.error : undefined,
+      combinedOutput: typeof json.combined_output === 'string' ? json.combined_output : '',
+      transcript: Array.isArray(json.transcript)
+        ? (json.transcript as Array<{ stream: string; line: string; timestamp?: number }>)
+        : [],
+      durationSec: typeof json.duration_sec === 'number' ? json.duration_sec : undefined,
+      resultData,
+    };
+  } catch (err) {
+    return {
+      ok: false,
+      stdout: '',
+      stderr: '',
+      error: err instanceof Error ? err.message : 'Executor unreachable',
+      combinedOutput: '',
+      transcript: [],
+      resultData: undefined,
     };
   }
 }
@@ -121,22 +183,35 @@ export async function getInstrumentStateProxy(endpoint: Endpoint): Promise<ToolR
   if (!isLiveModeEnabled(endpoint)) {
     return { ok: false, data: {}, sourceMeta: [], warnings: ['live instrument mode is disabled'] };
   }
-  const code = `import pyvisa
-rm = pyvisa.ResourceManager()
-scope = rm.open_resource(${JSON.stringify(endpoint.visaResource)})
-print("IDN:", scope.query("*IDN?").strip())
-print("ESR:", scope.query("*ESR?").strip())
-print("ALLEV:", scope.query("ALLEV?").strip())
-scope.close()
-`;
-  const run = await runPython(endpoint, code, 45);
+  // Use send_scpi action instead of runPython to avoid opening a second VISA session
+  // that conflicts with the worker's cached session (causes TekScopePC crashes)
+  const run = await runExecutorAction(endpoint, 'send_scpi', {
+    commands: ['*IDN?', '*ESR?', 'ALLEV?'],
+    timeout_ms: 10000,
+  }, 45);
   if (!run.ok) {
     return { ok: false, data: {}, sourceMeta: [], warnings: ['code_executor not reachable'] };
   }
+  const payload = run.resultData && typeof run.resultData === 'object'
+    ? run.resultData as Record<string, unknown>
+    : null;
+  const responses = Array.isArray(payload?.responses) ? payload.responses as Array<Record<string, unknown>> : [];
+  const idnResp = responses.find((r) => String(r.command || '').includes('IDN'));
+  const esrResp = responses.find((r) => String(r.command || '').includes('ESR'));
+  const allevResp = responses.find((r) => String(r.command || '').includes('ALLEV'));
+  const statusText = [
+    idnResp ? `IDN: ${idnResp.response}` : '',
+    esrResp ? `ESR: ${esrResp.response}` : '',
+    allevResp ? `ALLEV: ${allevResp.response}` : '',
+  ].filter(Boolean).join('\n');
   return {
     ok: true,
     data: {
-      decodedStatus: decodeStatusFromText(`${run.stdout}\n${run.stderr}`),
+      idn: idnResp?.response,
+      esr: esrResp?.response,
+      allev: allevResp?.response,
+      responses,
+      decodedStatus: decodeStatusFromText(statusText),
       ...buildRuntimeDetails(run, resolveOutputMode(endpoint)),
     },
     sourceMeta: [],
@@ -151,29 +226,23 @@ export async function probeCommandProxy(
   if (!isLiveModeEnabled(endpoint)) {
     return { ok: false, data: {}, sourceMeta: [], warnings: ['live instrument mode is disabled'] };
   }
-  const code = `import pyvisa
-rm = pyvisa.ResourceManager()
-scope = rm.open_resource(${JSON.stringify(endpoint.visaResource)})
-cmd = ${JSON.stringify(command)}
-if "?" in cmd:
-    print(scope.query(cmd).strip())
-else:
-    scope.write(cmd)
-    print("OK")
-scope.close()
-`;
-  const run = await runPython(endpoint, code, 45);
+  const run = await runExecutorAction(endpoint, 'send_scpi', { commands: [command], timeout_ms: 5000 }, 45);
   if (!run.ok) {
     return { ok: false, data: {}, sourceMeta: [], warnings: ['code_executor not reachable'] };
   }
   const mode = resolveOutputMode(endpoint);
+  const directPayload =
+    run.resultData && typeof run.resultData === 'object'
+      ? (run.resultData as { responses?: Array<{ response?: string }> })
+      : null;
+  const response = directPayload?.responses?.[0]?.response;
   return {
     ok: true,
     data: {
-      response: run.stdout.trim(),
+      response: typeof response === 'string' ? response : run.stdout.trim(),
       stderr: run.stderr.trim(),
       error: run.error,
-      decodedStatus: decodeCommandStatus(command, run.stdout.trim()),
+      decodedStatus: decodeCommandStatus(command, typeof response === 'string' ? response : run.stdout.trim()),
       ...buildRuntimeDetails(run, mode),
     },
     sourceMeta: [],
@@ -230,4 +299,122 @@ print("python:", sys.version)
     sourceMeta: [],
     warnings: [],
   };
+}
+
+export async function sendScpiProxy(
+  endpoint: Endpoint,
+  commands: string[],
+  timeoutMs = 5000
+): Promise<ToolResult<Record<string, unknown>>> {
+  if (!isLiveModeEnabled(endpoint)) {
+    return { ok: false, data: {}, sourceMeta: [], warnings: ['live instrument mode is disabled'] };
+  }
+  const run = await runExecutorAction(endpoint, 'send_scpi', { commands, timeout_ms: timeoutMs }, Math.max(45, Math.ceil((timeoutMs * Math.max(commands.length, 1)) / 1000) + 5));
+  if (!run.ok) {
+    return {
+      ok: false,
+      data: {
+        commandsSent: commands,
+        stdout: run.stdout.trim(),
+        stderr: run.stderr.trim(),
+        error: run.error || 'Executor returned ok=false',
+        combinedOutput: run.combinedOutput,
+      },
+      sourceMeta: [],
+      warnings: ['send_scpi failed — check executor output above'],
+    };
+  }
+  const directPayload =
+    ((run as unknown as Record<string, unknown>).base64 && typeof (run as unknown as Record<string, unknown>).base64 === 'string'
+      ? (run as unknown as Record<string, unknown>)
+      : null) ??
+    (run.resultData && typeof run.resultData === 'object'
+      ? (run.resultData as Record<string, unknown>)
+      : null);
+  // Check for errors buried in the result even when ok=true
+  const hasError = Boolean(run.error) || Boolean(run.stderr.trim());
+  const warnings: string[] = [];
+  if (hasError) warnings.push('Executor returned warnings/errors — check stderr and error fields');
+  return {
+    ok: !run.error,
+    data: {
+      commandsSent: commands,
+      ...(directPayload || {}),
+      stdout: run.stdout.trim(),
+      stderr: run.stderr.trim(),
+      error: run.error,
+      ...buildRuntimeDetails(run, resolveOutputMode(endpoint)),
+    },
+    sourceMeta: [],
+    warnings,
+  };
+}
+
+export async function captureScreenshotProxy(endpoint: Endpoint): Promise<ToolResult<Record<string, unknown>>> {
+  if (!isLiveModeEnabled(endpoint)) {
+    return { ok: false, data: {}, sourceMeta: [], warnings: ['live instrument mode is disabled'] };
+  }
+  const scopeType = inferScopeType(endpoint);
+  const run = await runExecutorAction(endpoint, 'capture_screenshot', { scope_type: scopeType }, 90);
+  if (!run.ok) {
+    return { ok: false, data: {}, sourceMeta: [], warnings: ['code_executor not reachable'] };
+  }
+  const directPayload =
+    ((run as unknown as Record<string, unknown>).base64 && typeof (run as unknown as Record<string, unknown>).base64 === 'string'
+      ? (run as unknown as Record<string, unknown>)
+      : null) ??
+    (run.resultData && typeof run.resultData === 'object'
+      ? (run.resultData as Record<string, unknown>)
+      : null);
+  const marker = !directPayload
+    ? run.stdout
+        .split(/\r?\n/)
+        .find((line) => line.startsWith('__TEKA_CAPTURE__'))
+    : null;
+  if (!directPayload && !marker) {
+    return {
+      ok: false,
+      data: {
+        stderr: run.stderr.trim(),
+        error: run.error,
+        ...buildRuntimeDetails(run, resolveOutputMode(endpoint)),
+      },
+      sourceMeta: [],
+      warnings: ['capture_screenshot returned no image payload'],
+    };
+  }
+  try {
+    const parsed = (directPayload ??
+      JSON.parse(marker!.replace('__TEKA_CAPTURE__', '').trim())) as Record<string, unknown>;
+    // Keep base64 and mimeType at top level of data for extractImageFromToolResult.
+    // Omit dataUrl to avoid duplicating the (potentially large) base64 blob.
+    // Use lean runtime details (omit verbose stdout/stderr/transcript) since the
+    // image itself is the primary content and verbose details just bloat the payload.
+    const mode = resolveOutputMode(endpoint);
+    const leanRuntime: Record<string, unknown> = {
+      outputMode: mode,
+      durationSec: run.durationSec,
+    };
+    if (run.error) leanRuntime.error = run.error;
+    return {
+      ok: true,
+      data: {
+        ...parsed,
+        ...leanRuntime,
+      },
+      sourceMeta: [],
+      warnings: [],
+    };
+  } catch {
+    return {
+      ok: false,
+      data: {
+        stderr: run.stderr.trim(),
+        error: run.error,
+        ...buildRuntimeDetails(run, resolveOutputMode(endpoint)),
+      },
+      sourceMeta: [],
+      warnings: ['capture_screenshot returned invalid JSON payload'],
+    };
+  }
 }

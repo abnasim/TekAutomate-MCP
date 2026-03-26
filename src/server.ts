@@ -1,7 +1,11 @@
 import http from 'http';
 import { initCommandIndex } from './core/commandIndex';
-import { providerSupplementsEnabled } from './core/providerCatalog';
+import { initProviderCatalog, providerSupplementsEnabled } from './core/providerCatalog';
+import { initTmDevicesIndex } from './core/tmDevicesIndex';
+import { initRagIndexes } from './core/ragIndex';
+import { initTemplateIndex } from './core/templateIndex';
 import { runToolLoop } from './core/toolLoop';
+import { getToolDefinitions, runTool } from './tools/index';
 import type { McpChatRequest } from './core/schemas';
 import { bootRouter, createReloadProvidersHandler, createRouterHandler, getRouterHealth } from './core/routerIntegration';
 import { getCommandIndex } from './core/commandIndex';
@@ -9,108 +13,17 @@ import { getRagIndexes } from './core/ragIndex';
 import { getTemplateIndex } from './core/templateIndex';
 import fs from 'fs';
 import path from 'path';
-import util from 'util';
 import { fileURLToPath } from 'url';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
-const serverStartedAt = Date.now();
 
 let lastAiDebug: Record<string, unknown> | null = null;
 const REQUEST_LOG_DIR = path.join(__dirname, 'logs', 'requests');
 const MAX_LOG_FILES = 500;
-const MAX_IN_MEMORY_LOGS = 250;
-let startupState: 'starting' | 'ready' | 'error' = 'starting';
-let startupError: string | null = null;
-let startupInitPromise: Promise<void> | null = null;
-type LogLevel = 'log' | 'info' | 'warn' | 'error';
-type InMemoryLogEntry = {
-  timestamp: string;
-  level: LogLevel;
-  message: string;
-};
-const inMemoryLogs: InMemoryLogEntry[] = [];
-let consolePatched = false;
-
-function stringifyLogArgs(args: unknown[]): string {
-  return args
-    .map((arg) => {
-      if (typeof arg === 'string') return arg;
-      return util.inspect(arg, { depth: 4, breakLength: 120, colors: false });
-    })
-    .join(' ');
-}
-
-function appendInMemoryLog(level: LogLevel, args: unknown[]) {
-  inMemoryLogs.push({
-    timestamp: new Date().toISOString(),
-    level,
-    message: stringifyLogArgs(args),
-  });
-  if (inMemoryLogs.length > MAX_IN_MEMORY_LOGS) {
-    inMemoryLogs.splice(0, inMemoryLogs.length - MAX_IN_MEMORY_LOGS);
-  }
-}
-
-function patchConsoleOnce() {
-  if (consolePatched) return;
-  consolePatched = true;
-  const methods: LogLevel[] = ['log', 'info', 'warn', 'error'];
-  for (const method of methods) {
-    const original = console[method].bind(console);
-    console[method] = ((...args: unknown[]) => {
-      appendInMemoryLog(method, args);
-      original(...args);
-    }) as typeof console[typeof method];
-  }
-}
 
 function ensureLogDir() {
   fs.mkdirSync(REQUEST_LOG_DIR, { recursive: true });
-}
-
-function readRecentRequestSummaries(limit = 12): Array<Record<string, unknown>> {
-  try {
-    if (!fs.existsSync(REQUEST_LOG_DIR)) return [];
-    return fs
-      .readdirSync(REQUEST_LOG_DIR)
-      .map((name) => {
-        const full = path.join(REQUEST_LOG_DIR, name);
-        const stat = fs.statSync(full);
-        return { name, time: stat.mtimeMs, full };
-      })
-      .sort((a, b) => b.time - a.time)
-      .slice(0, limit)
-      .map((file) => {
-        try {
-          const raw = fs.readFileSync(file.full, 'utf8');
-          const parsed = JSON.parse(raw) as Record<string, unknown>;
-          return {
-            timestamp: parsed.timestamp,
-            requestId: parsed.requestId,
-            ok: parsed.ok,
-            provider: parsed.provider,
-            model: parsed.model,
-            backend: (parsed.flowContext as Record<string, unknown> | undefined)?.backend,
-            userMessage: parsed.userMessage,
-            durationMs: parsed.durationMs,
-            postCheckErrors:
-              ((parsed.postCheck as Record<string, unknown> | undefined)?.errors as unknown[]) || [],
-          };
-        } catch {
-          return {
-            timestamp: new Date(file.time).toISOString(),
-            requestId: file.name,
-            ok: false,
-            provider: '(unparsed)',
-            model: '(unparsed)',
-            userMessage: 'Failed to parse request log',
-          };
-        }
-      });
-  } catch {
-    return [];
-  }
 }
 
 function rotateLogs() {
@@ -292,331 +205,6 @@ function sendJson(res: http.ServerResponse, status: number, payload: unknown) {
   res.end(JSON.stringify(payload));
 }
 
-function escapeHtml(value: string): string {
-  return value
-    .replace(/&/g, '&amp;')
-    .replace(/</g, '&lt;')
-    .replace(/>/g, '&gt;')
-    .replace(/"/g, '&quot;')
-    .replace(/'/g, '&#39;');
-}
-
-function getStatusPayload() {
-  const warmMode = String(process.env.MCP_WARM_START_MODE || 'minimal').trim().toLowerCase() || 'minimal';
-  return {
-    ok: startupState !== 'error',
-    status: startupState,
-    service: 'TekAutomate MCP',
-    uptimeSec: Math.floor((Date.now() - serverStartedAt) / 1000),
-    routerEnabled: String(process.env.MCP_ROUTER_ENABLED || '').trim() === 'true',
-    providerSupplementsEnabled: providerSupplementsEnabled(),
-    warmStartMode: warmMode,
-    port: Number(process.env.MCP_PORT || process.env.PORT || 8787),
-    timestamp: new Date().toISOString(),
-    ...(startupError ? { startupError } : {}),
-  };
-}
-
-function sendHtml(res: http.ServerResponse, status: number, html: string) {
-  res.statusCode = status;
-  res.setHeader('Content-Type', 'text/html; charset=utf-8');
-  res.setHeader('Access-Control-Allow-Origin', '*');
-  res.end(html);
-}
-
-function renderStatusPage() {
-  const status = getStatusPayload();
-  const checks = [
-    ['Health JSON', '/health'],
-    ['Status JSON', '/status'],
-    ['Debug Console', '/debug'],
-    ['Log Feed JSON', '/logs'],
-    ['Last AI Debug', '/ai/debug/last'],
-  ];
-  const items = checks
-    .map(([label, href]) => `<li><a href="${href}">${escapeHtml(label)}</a></li>`)
-    .join('');
-  return `<!doctype html>
-<html lang="en">
-<head>
-  <meta charset="utf-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>TekAutomate MCP</title>
-  <style>
-    :root {
-      color-scheme: light dark;
-      --bg: #0b1220;
-      --panel: #111a2b;
-      --text: #e8edf7;
-      --muted: #9fb0d0;
-      --accent: #24c8db;
-      --ok: #34d399;
-    }
-    body {
-      margin: 0;
-      font-family: Arial, sans-serif;
-      background: linear-gradient(135deg, #0b1220, #16233c);
-      color: var(--text);
-    }
-    main {
-      max-width: 760px;
-      margin: 48px auto;
-      padding: 24px;
-    }
-    .card {
-      background: rgba(17, 26, 43, 0.92);
-      border: 1px solid rgba(159, 176, 208, 0.2);
-      border-radius: 18px;
-      padding: 24px;
-      box-shadow: 0 24px 60px rgba(0, 0, 0, 0.24);
-    }
-    h1 {
-      margin: 0 0 8px;
-      font-size: 32px;
-    }
-    p, li {
-      color: var(--muted);
-      line-height: 1.5;
-    }
-    .pill {
-      display: inline-block;
-      margin: 8px 0 18px;
-      padding: 6px 10px;
-      border-radius: 999px;
-      background: rgba(52, 211, 153, 0.14);
-      color: var(--ok);
-      font-weight: 700;
-      letter-spacing: 0.04em;
-      text-transform: uppercase;
-      font-size: 12px;
-    }
-    dl {
-      display: grid;
-      grid-template-columns: max-content 1fr;
-      gap: 8px 14px;
-      margin: 18px 0 24px;
-    }
-    dt {
-      color: var(--text);
-      font-weight: 700;
-    }
-    dd {
-      margin: 0;
-      color: var(--muted);
-    }
-    a {
-      color: var(--accent);
-    }
-    code {
-      background: rgba(159, 176, 208, 0.12);
-      padding: 2px 6px;
-      border-radius: 6px;
-    }
-  </style>
-</head>
-<body>
-  <main>
-    <section class="card">
-      <h1>TekAutomate MCP</h1>
-      <div class="pill">Service Healthy</div>
-      <p>This deployment is up and ready to serve TekAutomate MCP requests.</p>
-      <dl>
-        <dt>Status</dt><dd>${escapeHtml(status.status)}</dd>
-        <dt>Port</dt><dd>${status.port}</dd>
-        <dt>Router Enabled</dt><dd>${status.routerEnabled ? 'Yes' : 'No'}</dd>
-        <dt>Provider Supplements</dt><dd>${status.providerSupplementsEnabled ? 'Enabled' : 'Disabled'}</dd>
-        <dt>Uptime</dt><dd>${status.uptimeSec}s</dd>
-        <dt>Timestamp</dt><dd>${escapeHtml(status.timestamp)}</dd>
-      </dl>
-      <p>Useful endpoints:</p>
-      <ul>${items}</ul>
-      <p>TekAutomate clients can point their MCP URL to this server root, for example <code>${escapeHtml('https://your-mcp-host.example')}</code>.</p>
-    </section>
-  </main>
-</body>
-</html>`;
-}
-
-function renderDebugPage() {
-  const status = getStatusPayload();
-  const recentLogs = inMemoryLogs
-    .slice(-40)
-    .reverse()
-    .map(
-      (entry) =>
-        `<div class="line"><span class="ts">${escapeHtml(entry.timestamp)}</span> <span class="lvl ${entry.level}">${escapeHtml(entry.level.toUpperCase())}</span> <span class="msg">${escapeHtml(entry.message)}</span></div>`
-    )
-    .join('');
-  const requests = readRecentRequestSummaries(10)
-    .map((entry) => {
-      const errors = Array.isArray(entry.postCheckErrors) ? entry.postCheckErrors.length : 0;
-      return `<tr>
-        <td>${escapeHtml(String(entry.timestamp || ''))}</td>
-        <td>${escapeHtml(String(entry.ok ? 'ok' : 'error'))}</td>
-        <td>${escapeHtml(String(entry.provider || ''))}</td>
-        <td>${escapeHtml(String(entry.model || ''))}</td>
-        <td>${escapeHtml(String(entry.durationMs || ''))}</td>
-        <td>${escapeHtml(String(errors))}</td>
-        <td>${escapeHtml(String(entry.userMessage || ''))}</td>
-      </tr>`;
-    })
-    .join('');
-  const debugJson = escapeHtml(JSON.stringify(lastAiDebug || { ok: true, message: 'No debug payload yet.' }, null, 2));
-  return `<!doctype html>
-<html lang="en">
-<head>
-  <meta charset="utf-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <meta http-equiv="refresh" content="10" />
-  <title>TekAutomate MCP Debug</title>
-  <style>
-    :root {
-      --bg: #071018;
-      --panel: #0d1722;
-      --panel2: #101d2c;
-      --text: #d6e2f2;
-      --muted: #8ea0bd;
-      --accent: #39d0ff;
-      --green: #31d0aa;
-      --yellow: #ffd166;
-      --red: #ff6b6b;
-      --border: rgba(142, 160, 189, 0.18);
-    }
-    * { box-sizing: border-box; }
-    body {
-      margin: 0;
-      font-family: Consolas, Monaco, 'Courier New', monospace;
-      background: radial-gradient(circle at top, #112034, var(--bg));
-      color: var(--text);
-    }
-    main {
-      max-width: 1280px;
-      margin: 24px auto;
-      padding: 0 16px 24px;
-    }
-    .header, .panel {
-      background: rgba(13, 23, 34, 0.94);
-      border: 1px solid var(--border);
-      border-radius: 16px;
-      box-shadow: 0 20px 45px rgba(0, 0, 0, 0.24);
-    }
-    .header {
-      padding: 18px 20px;
-      margin-bottom: 16px;
-    }
-    .grid {
-      display: grid;
-      grid-template-columns: 1.1fr 0.9fr;
-      gap: 16px;
-    }
-    .panel { padding: 16px; }
-    .terminal {
-      background: #050b12;
-      border: 1px solid rgba(57, 208, 255, 0.12);
-      border-radius: 12px;
-      padding: 14px;
-      min-height: 420px;
-      overflow: auto;
-    }
-    .line { padding: 4px 0; border-bottom: 1px solid rgba(255,255,255,0.04); }
-    .ts { color: var(--muted); }
-    .lvl { display: inline-block; min-width: 52px; font-weight: 700; margin: 0 10px; }
-    .lvl.log, .lvl.info { color: var(--accent); }
-    .lvl.warn { color: var(--yellow); }
-    .lvl.error { color: var(--red); }
-    .msg { white-space: pre-wrap; word-break: break-word; }
-    .meta {
-      display: flex;
-      flex-wrap: wrap;
-      gap: 10px;
-      margin-top: 10px;
-    }
-    .pill {
-      padding: 6px 10px;
-      border-radius: 999px;
-      background: rgba(49, 208, 170, 0.12);
-      color: var(--green);
-      border: 1px solid rgba(49, 208, 170, 0.18);
-      font-size: 12px;
-      font-weight: 700;
-    }
-    h1, h2 { margin: 0 0 10px; }
-    h1 { font-size: 28px; }
-    h2 { font-size: 16px; color: var(--accent); }
-    p, a, td, th { color: var(--muted); }
-    a { color: var(--accent); }
-    table {
-      width: 100%;
-      border-collapse: collapse;
-      font-size: 12px;
-    }
-    th, td {
-      text-align: left;
-      padding: 8px 6px;
-      border-bottom: 1px solid rgba(255,255,255,0.06);
-      vertical-align: top;
-    }
-    pre {
-      margin: 0;
-      white-space: pre-wrap;
-      word-break: break-word;
-      background: #050b12;
-      border: 1px solid rgba(57, 208, 255, 0.12);
-      border-radius: 12px;
-      padding: 14px;
-      max-height: 360px;
-      overflow: auto;
-    }
-    @media (max-width: 980px) {
-      .grid { grid-template-columns: 1fr; }
-    }
-  </style>
-</head>
-<body>
-  <main>
-    <section class="header">
-      <h1>TekAutomate MCP Debug Console</h1>
-      <p>Auto-refreshes every 10 seconds. Use this page as a lightweight hosted debug terminal.</p>
-      <div class="meta">
-        <span class="pill">Status: ${escapeHtml(status.status)}</span>
-        <span class="pill">Uptime: ${status.uptimeSec}s</span>
-        <span class="pill">Port: ${status.port}</span>
-        <span class="pill">Router: ${status.routerEnabled ? 'enabled' : 'disabled'}</span>
-      </div>
-      <p><a href="/">Home</a> · <a href="/health">/health</a> · <a href="/status">/status</a> · <a href="/logs">/logs</a> · <a href="/ai/debug/last">/ai/debug/last</a></p>
-    </section>
-    <section class="grid">
-      <section class="panel">
-        <h2>Recent Server Logs</h2>
-        <div class="terminal">${recentLogs || '<div class="line"><span class="msg">No logs captured yet.</span></div>'}</div>
-      </section>
-      <section class="panel">
-        <h2>Latest AI Debug Payload</h2>
-        <pre>${debugJson}</pre>
-      </section>
-    </section>
-    <section class="panel" style="margin-top: 16px;">
-      <h2>Recent Requests</h2>
-      <table>
-        <thead>
-          <tr>
-            <th>Timestamp</th>
-            <th>Result</th>
-            <th>Provider</th>
-            <th>Model</th>
-            <th>ms</th>
-            <th>Errors</th>
-            <th>User Message</th>
-          </tr>
-        </thead>
-        <tbody>${requests || '<tr><td colspan="7">No request logs yet.</td></tr>'}</tbody>
-      </table>
-    </section>
-  </main>
-</body>
-</html>`;
-}
-
 function sendSseStart(res: http.ServerResponse) {
   res.statusCode = 200;
   res.setHeader('Content-Type', 'text/event-stream');
@@ -656,52 +244,41 @@ function parseProviderError(status: number, raw: string): { code: string; messag
   return { code, message, hint };
 }
 
-async function warmStartup(): Promise<void> {
-  if (startupInitPromise) return startupInitPromise;
-  startupInitPromise = (async () => {
-    patchConsoleOnce();
-    startupState = 'starting';
-    startupError = null;
-    const startInit = Date.now();
-    const warmMode = String(process.env.MCP_WARM_START_MODE || 'minimal').trim().toLowerCase() || 'minimal';
-    console.log(`[SERVER] Initializing indexes in background (mode=${warmMode})...`);
+export async function createServer(port = 8787): Promise<http.Server> {
+  // CRITICAL FIX: Initialize ALL indexes BEFORE creating HTTP server
+  // Previously: initialization happened inside request handlers (race condition)
+  const startInit = Date.now();
+  console.log('[SERVER] Initializing indexes before HTTP server starts...');
 
-    const tasks: Promise<unknown>[] = [initCommandIndex()];
-    const names = ['CommandIndex'];
-    if (warmMode === 'full') {
-      tasks.push(
-        import('./core/tmDevicesIndex').then(({ initTmDevicesIndex }) => initTmDevicesIndex()),
-        import('./core/ragIndex').then(({ initRagIndexes }) => initRagIndexes()),
-        import('./core/templateIndex').then(({ initTemplateIndex }) => initTemplateIndex())
-      );
-      names.push('TmDevicesIndex', 'RagIndexes', 'TemplateIndex');
-      if (providerSupplementsEnabled()) {
-        tasks.push(import('./core/providerCatalog').then(({ initProviderCatalog }) => initProviderCatalog()));
-        names.push('ProviderCatalog');
-      }
+  const results = await Promise.allSettled([
+    initCommandIndex(),
+    initTmDevicesIndex(),
+    initRagIndexes(),
+    initTemplateIndex(),
+    ...(providerSupplementsEnabled() ? [initProviderCatalog()] : []),
+  ]);
+
+  // Check for initialization failures
+  const failures = results
+    .map((r, i) => r.status === 'rejected' ? { index: i, error: r.reason } : null)
+    .filter((f): f is { index: number; error: unknown } => Boolean(f));
+
+  if (failures.length > 0) {
+    const names = ['CommandIndex', 'TmDevicesIndex', 'RagIndexes', 'TemplateIndex', 'ProviderCatalog'];
+    const failedNames = failures.map(f => names[f.index]).join(', ');
+    const error = new Error(`[CRITICAL] Initialization failed: ${failedNames}`);
+    console.error(error.message);
+    for (const failure of failures) {
+      console.error(`  ${names[failure.index]}: ${failure.error}`);
     }
+    throw error;
+  }
 
-    const results = await Promise.allSettled(tasks);
+  console.log(`✅ All indexes initialized in ${Date.now() - startInit}ms`);
 
-    const failures = results
-      .map((r, i) => (r.status === 'rejected' ? { index: i, error: r.reason } : null))
-      .filter((f): f is { index: number; error: unknown } => Boolean(f));
-
-    if (failures.length > 0) {
-      const failedNames = failures.map((f) => names[f.index]).join(', ');
-      const error = new Error(`[CRITICAL] Initialization failed: ${failedNames}`);
-      startupState = 'error';
-      startupError = error.message;
-      console.error(error.message);
-      for (const failure of failures) {
-        console.error(`  ${names[failure.index]}: ${failure.error}`);
-      }
-      throw error;
-    }
-
-    console.log(`✅ All indexes initialized in ${Date.now() - startInit}ms`);
-
-    if (String(process.env.MCP_ROUTER_ENABLED || '').trim() === 'true') {
+  // Now bootstrap router if enabled
+  if (String(process.env.MCP_ROUTER_ENABLED || '').trim() === 'true') {
+    try {
       const commandIndex = await getCommandIndex();
       const ragIndexes = await getRagIndexes();
       const templates = (await getTemplateIndex()).all().map((doc) => ({
@@ -715,19 +292,11 @@ async function warmStartup(): Promise<void> {
       }));
       const report = await bootRouter({ commandIndex, ragIndexes, templates });
       console.log(`[MCP:router] ${report.total} tools in ${report.durationMs}ms`);
+    } catch (error) {
+      console.error('[MCP:router] Boot failed:', error);
+      throw error;
     }
-
-    startupState = 'ready';
-  })().catch((error) => {
-    startupState = 'error';
-    startupError = error instanceof Error ? error.message : String(error);
-    throw error;
-  });
-  return startupInitPromise;
-}
-
-export async function createServer(port = 8787, host = '0.0.0.0'): Promise<http.Server> {
-  patchConsoleOnce();
+  }
 
   // NOW create the HTTP server (all indexes are ready)
   const server = http.createServer(async (req, res) => {
@@ -740,42 +309,8 @@ export async function createServer(port = 8787, host = '0.0.0.0'): Promise<http.
       return;
     }
 
-    if (req.method === 'GET' && (req.url === '/' || req.url === '')) {
-      sendHtml(res, 200, renderStatusPage());
-      return;
-    }
-
-    if (req.method === 'GET' && req.url === '/debug') {
-      sendHtml(res, 200, renderDebugPage());
-      return;
-    }
-
     if (req.method === 'GET' && req.url === '/health') {
-      sendJson(res, 200, getStatusPayload());
-      return;
-    }
-
-    if (req.method === 'GET' && req.url === '/status') {
-      sendJson(res, 200, getStatusPayload());
-      return;
-    }
-
-    if (req.method === 'GET' && req.url === '/logs') {
-      sendJson(res, 200, {
-        ok: true,
-        logs: inMemoryLogs.slice(-120),
-        recentRequests: readRecentRequestSummaries(20),
-      });
-      return;
-    }
-
-    if (startupState !== 'ready') {
-      const retryable = startupState === 'starting';
-      sendJson(res, retryable ? 503 : 500, {
-        ok: false,
-        error: retryable ? 'Server is still initializing.' : startupError || 'Server failed to initialize.',
-        status: startupState,
-      });
+      sendJson(res, 200, { ok: true, status: 'ready' });
       return;
     }
 
@@ -814,6 +349,87 @@ export async function createServer(port = 8787, host = '0.0.0.0'): Promise<http.
 
     if (req.method === 'GET' && req.url === '/ai/debug/last') {
       sendJson(res, 200, { ok: true, debug: lastAiDebug });
+      return;
+    }
+
+    // ── Tool endpoints: browser calls these directly, AI proxy not needed ──
+
+    if (req.method === 'GET' && req.url === '/tools/list') {
+      const tools = getToolDefinitions();
+      sendJson(res, 200, { ok: true, tools });
+      return;
+    }
+
+    // Disconnect live VISA session — call before switching away from live mode
+    if (req.method === 'POST' && req.url === '/tools/disconnect') {
+      try {
+        const body = (await readJsonBody(req)) as {
+          instrumentEndpoint?: { executorUrl: string; visaResource: string };
+        };
+        const ep = body?.instrumentEndpoint;
+        if (!ep?.executorUrl || !ep?.visaResource) {
+          sendJson(res, 400, { ok: false, error: 'Missing instrumentEndpoint (executorUrl, visaResource)' });
+          return;
+        }
+        const execRes = await fetch(`${ep.executorUrl.replace(/\/$/, '')}/run`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            protocol_version: 1,
+            action: 'disconnect',
+            scope_visa: ep.visaResource,
+          }),
+        });
+        const json = (await execRes.json()) as Record<string, unknown>;
+        sendJson(res, 200, { ok: json.ok === true, disconnected: ep.visaResource });
+      } catch (err) {
+        sendJson(res, 500, { ok: false, error: err instanceof Error ? err.message : 'Disconnect failed' });
+      }
+      return;
+    }
+
+    if (req.method === 'POST' && req.url === '/tools/execute') {
+      try {
+        const body = (await readJsonBody(req)) as {
+          tool: string;
+          args: Record<string, unknown>;
+          instrumentEndpoint?: {
+            executorUrl: string;
+            visaResource: string;
+            backend: string;
+            liveMode?: boolean;
+            outputMode?: 'clean' | 'verbose';
+          };
+          flowContext?: {
+            modelFamily?: string;
+            deviceDriver?: string;
+          };
+        };
+        const toolName = String(body.tool || '').trim();
+        if (!toolName) {
+          sendJson(res, 400, { ok: false, error: 'Missing tool name' });
+          return;
+        }
+        // Inject instrument endpoint for live tools
+        let args = body.args || {};
+        const liveTools = ['get_instrument_state', 'probe_command', 'send_scpi', 'capture_screenshot', 'get_visa_resources', 'get_environment'];
+        if (liveTools.includes(toolName) && body.instrumentEndpoint) {
+          args = {
+            executorUrl: body.instrumentEndpoint.executorUrl,
+            visaResource: body.instrumentEndpoint.visaResource,
+            backend: body.instrumentEndpoint.backend,
+            liveMode: body.instrumentEndpoint.liveMode === true,
+            outputMode: body.instrumentEndpoint.outputMode || 'verbose',
+            modelFamily: body.flowContext?.modelFamily,
+            deviceDriver: body.flowContext?.deviceDriver,
+            ...args,
+          };
+        }
+        const result = await runTool(toolName, args);
+        sendJson(res, 200, { ok: true, tool: toolName, result });
+      } catch (err) {
+        sendJson(res, 500, { ok: false, error: err instanceof Error ? err.message : 'Tool execution error' });
+      }
       return;
     }
 
@@ -982,6 +598,7 @@ export async function createServer(port = 8787, host = '0.0.0.0'): Promise<http.
           text: result.text,
           displayText: result.displayText,
           commands: result.commands, // Include commands for apply card
+          screenshots: (result as any).screenshots, // Live mode screenshots for UI update
           openaiThreadId: result.assistantThreadId,
           errors: result.errors,
           warnings: result.warnings,
@@ -1052,23 +669,38 @@ export async function createServer(port = 8787, host = '0.0.0.0'): Promise<http.
             return;
           }
         } else {
-          const anthRes = await fetch('https://api.anthropic.com/v1/messages', {
-            method: 'POST',
-            headers: {
-              'Content-Type': 'application/json',
-              'x-api-key': apiKey,
-              'anthropic-version': '2023-06-01',
-            },
-            body: JSON.stringify({
+          console.log(`[KEY-TEST] Testing Anthropic: model=${model} keyPrefix=${apiKey.slice(0, 10)}...`);
+          try {
+            const anthBase = process.env.ANTHROPIC_BASE_URL || 'https://api.anthropic.com';
+            const anthRes = await fetch(`${anthBase}/v1/messages`, {
+              method: 'POST',
+              headers: {
+                'Content-Type': 'application/json',
+                'x-api-key': apiKey,
+                'anthropic-version': '2023-06-01',
+              },
+              body: JSON.stringify({
+                model,
+                max_tokens: 16,
+                messages: [{ role: 'user', content: 'ping' }],
+              }),
+            });
+            if (!anthRes.ok) {
+              const raw = await anthRes.text();
+              console.log(`[KEY-TEST] Anthropic error ${anthRes.status}: ${raw.slice(0, 500)}`);
+              const parsed = parseProviderError(anthRes.status, raw);
+              sendJson(res, anthRes.status, { ok: false, provider, model, ...parsed });
+              return;
+            }
+            console.log('[KEY-TEST] Anthropic: OK');
+          } catch (anthErr) {
+            console.log(`[KEY-TEST] Anthropic fetch error: ${anthErr instanceof Error ? anthErr.message : String(anthErr)}`);
+            sendJson(res, 502, {
+              ok: false,
+              provider,
               model,
-              max_tokens: 16,
-              messages: [{ role: 'user', content: 'ping' }],
-            }),
-          });
-          if (!anthRes.ok) {
-            const raw = await anthRes.text();
-            const parsed = parseProviderError(anthRes.status, raw);
-            sendJson(res, anthRes.status, { ok: false, provider, model, ...parsed });
+              error: `Cannot reach Anthropic API: ${anthErr instanceof Error ? anthErr.message : String(anthErr)}`,
+            });
             return;
           }
         }
@@ -1129,7 +761,8 @@ export async function createServer(port = 8787, host = '0.0.0.0'): Promise<http.
           return;
         }
 
-        const anthRes = await fetch('https://api.anthropic.com/v1/models', {
+        const anthBase2 = process.env.ANTHROPIC_BASE_URL || 'https://api.anthropic.com';
+        const anthRes = await fetch(`${anthBase2}/v1/models`, {
           method: 'GET',
           headers: {
             'x-api-key': apiKey,
@@ -1166,10 +799,7 @@ export async function createServer(port = 8787, host = '0.0.0.0'): Promise<http.
   });
 
   await new Promise<void>((resolve) => {
-    server.listen(port, host, () => resolve());
-  });
-  void warmStartup().catch(() => {
-    // Startup errors are surfaced through /health, /status, /debug, and route guards.
+    server.listen(port, () => resolve());
   });
   return server;
 }

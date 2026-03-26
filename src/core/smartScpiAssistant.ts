@@ -7,6 +7,8 @@ interface SmartScpiRequest {
   query: string;
   modelFamily?: string;
   context?: string;
+  /** When 'build', skip conversational prompts and auto-select the best match */
+  mode?: 'build' | 'chat';
 }
 
 interface SmartScpiToolResult extends ToolResult<CommandSuggestion[]> {
@@ -195,19 +197,60 @@ export class SmartScpiAssistant {
 
       // Subject keyword matching
       const subjectWords = subject.split(/[_\s]+/).filter(w => w.length > 1); // Split on underscore or space
+      const headerLower = cmd.header.toLowerCase();
       for (const word of subjectWords) {
         if (text.includes(word)) score += 3;
-        if (cmd.header.toLowerCase().includes(word)) score += 5; // header match weighted higher
-        if (word === 'scale' && cmd.header.toLowerCase().includes('scale')) score += 10; // boost scale matches
-        if (word === 'horizontal' && cmd.header.toLowerCase().includes('horizontal')) score += 5;
-        if (word === 'mode' && cmd.header.toLowerCase().includes('mode')) score += 5;
+        if (headerLower.includes(word)) score += 8; // header match weighted much higher than description
+      }
+      // Direct header keyword boosts for common scope operations
+      const headerBoosts: Record<string, RegExp> = {
+        scale: /scale/i, offset: /offset/i, position: /position/i,
+        bandwidth: /bandwidth/i, coupling: /coupling/i, termination: /termination/i,
+        horizontal: /horizontal/i, trigger: /trigger/i, mode: /mode/i,
+        invert: /invert/i, probe: /probe/i, deskew: /deskew/i, label: /label/i,
+        recall: /recall/i, save: /save/i, fastframe: /fastframe/i,
+        edge: /edge/i, level: /level/i, slope: /slope/i,
+      };
+      for (const word of subjectWords) {
+        const boost = headerBoosts[word];
+        if (boost && boost.test(cmd.header)) score += 10;
+      }
+      // Full query word matching against header (catch words the subject split misses)
+      const queryWords = (originalQuery || subject).toLowerCase().split(/\s+/).filter(w => w.length > 2);
+      for (const qw of queryWords) {
+        if (headerLower.includes(qw) && !subjectWords.includes(qw)) score += 4;
       }
 
-      // Action matching
-      if (action === 'add' && /addnew|addmeas|add/i.test(cmd.header)) score += 4;
-      if (action === 'remove' && /delete|clear|remove/i.test(cmd.header)) score += 4;
-      if (action === 'query' && cmd.commandType !== 'set') score += 1;
-      if (action === 'configure' && cmd.commandType !== 'query') score += 1;
+      // Synonym expansion: map natural-language words to SCPI header tokens
+      const synonymMap: Record<string, string> = {
+        rising: 'edge', falling: 'edge', slope: 'edge',
+      };
+      for (const qw of queryWords) {
+        const mapped = synonymMap[qw];
+        if (mapped && headerLower.includes(mapped) && !subjectWords.includes(mapped)) {
+          score += 6;
+        }
+      }
+
+      // Subject-specific header boosts for disambiguation within a group
+      // "reset" subject: *RST should beat AUTOSet
+      if (subjectLower === 'reset' && /^\*rst$/i.test(cmd.header)) {
+        score += 25;
+      }
+      // "edge" subject: boost commands with EDGE in header path (e.g. TRIGger:A:EDGE:SLOpe)
+      if (subjectLower === 'edge' && /edge/i.test(cmd.header)) {
+        score += 15;
+      }
+      // Also boost SLOpe when "rising" or "falling" appears in query
+      if (subjectLower === 'edge' && /slope/i.test(cmd.header) && /\b(rising|falling)\b/i.test(originalQuery || '')) {
+        score += 10;
+      }
+
+      // Action matching — use word boundaries to avoid substring matches (e.g. POWer:ADDNew matching "add")
+      if (action === 'add' && /\b(?:ADDNEW|ADDMEAS)\b/i.test(cmd.header)) score += 4;
+      if (action === 'remove' && /\b(?:DELETE|CLEAR|REMOVE)\b/i.test(cmd.header)) score += 4;
+      if (action === 'query' && cmd.commandType !== 'set') score += 2;
+      if (action === 'configure' && cmd.commandType !== 'query') score += 3;
 
       // Group membership bonus (in case we're searching full corpus as fallback)
       if (groups.length > 0) {
@@ -323,14 +366,41 @@ export class SmartScpiAssistant {
     const embeddedValue = valueMatch ? valueMatch[1] : null;
 
     const relevantCommands = await this.searchCommands(commands, intent, request.query);
-    const catalogBoostedCommands = await this.mergeMeasurementCatalogCommands(
-      commands,
-      request.query,
-      request.modelFamily,
-      relevantCommands
-    );
+    // Only merge measurement catalog when intent is actually measurement/power related
+    // Otherwise it overrides correct results with MEASUrement:ADDMEAS for unrelated queries
+    const shouldMergeCatalog = intent.intent === 'measurement' || intent.intent === 'power' || intent.intent === 'wbg';
+    const catalogBoostedCommands = shouldMergeCatalog
+      ? await this.mergeMeasurementCatalogCommands(commands, request.query, request.modelFamily, relevantCommands)
+      : relevantCommands;
 
-    // ── NEW: If user provided a value, this is a specific SET request ──
+    const responseTime = Date.now() - startTime;
+
+    // BUILD MODE: Auto-select the best matching commands instead of showing
+    // conversational exploration prompts. Build mode needs actionable commands,
+    // not "which category would you like to explore?" menus.
+    if (request.mode === 'build' && catalogBoostedCommands.length > 0) {
+      // In build mode with an embedded value, narrow to set-capable commands
+      let topCommands: CommandRecord[];
+      if (embeddedValue) {
+        const setCapable = catalogBoostedCommands.filter(cmd =>
+          cmd.commandType === 'set' || cmd.commandType === 'both'
+        );
+        topCommands = setCapable.length > 0 ? setCapable.slice(0, 1) : catalogBoostedCommands.slice(0, 1);
+      } else {
+        topCommands = catalogBoostedCommands.slice(0, 3);
+      }
+      console.log(`[BUILD_MODE] Auto-selecting ${topCommands.length} command(s): ${topCommands.map(c => c.header).join(', ')}`);
+      return {
+        commands: topCommands,
+        intent: intent.intent,
+        groups: intent.groups,
+        workflow: [],
+        responseTime,
+        // No conversationalPrompt — let the caller materialize into ACTIONS_JSON
+      };
+    }
+
+    // ── Chat mode: If user provided a value, this is a specific SET request ──
     // Return top 1-2 set-capable commands, not 8 with a menu
     if (embeddedValue && catalogBoostedCommands.length > 0) {
       const setCapable = catalogBoostedCommands.filter(cmd =>
@@ -343,14 +413,12 @@ export class SmartScpiAssistant {
         intent: intent.intent,
         groups: intent.groups,
         workflow: [],
-        responseTime: Date.now() - startTime,
+        responseTime,
         conversationalPrompt: this.generateSetCommandResponse(topCmd, embeddedValue, intent),
       };
     }
 
-    // EXPLORATORY INTERFACE - Never auto-select commands, always provide exploration
-    const responseTime = Date.now() - startTime;
-
+    // EXPLORATORY INTERFACE (chat mode) - provide guided exploration
     // Check if this is a more specific query that should show detailed commands
     if (this.isSpecificQuery(request.query, catalogBoostedCommands)) {
       console.log(`[SPECIFIC_QUERY] Detected specific query: "${request.query}"`);
@@ -358,7 +426,7 @@ export class SmartScpiAssistant {
       if (catalogBoostedCommands.length > 0) {
         console.log(`[SPECIFIC_QUERY] First command: ${catalogBoostedCommands[0].header}`);
       }
-      
+
       // Return 5-6 most relevant commands for cleaner AI output
       const commandsToShow = catalogBoostedCommands.slice(0, 6);
       return {
@@ -576,56 +644,29 @@ Which category would you like to explore?`;
    * Generate detailed command view for exploration
    */
   private generateDetailedCommandView(commands: CommandRecord[], intent: any, categoryName?: string): string {
-    const commandList = commands.map((cmd, i) => {
-      const description = cmd.description;
-      const shortDesc = cmd.shortDescription || description;
-      
-      // Format syntax information more efficiently
-      const syntaxLines: string[] = [];
-      if (cmd.syntax.set) syntaxLines.push(`**Set:** \`${cmd.syntax.set}\``);
-      if (cmd.syntax.query) syntaxLines.push(`**Query:** \`${cmd.syntax.query}\``);
-      const syntaxStr = syntaxLines.length > 0 ? syntaxLines.join(' | ') : 'No syntax available';
-      
-      // Compact format with reduced empty space
-      return `## **${i + 1}. ${cmd.header}**
+    const label = categoryName || intent.intent || 'SCPI';
 
-**Description:** ${shortDesc}
+    // Build structured command cards for frontend rendering
+    const cards = commands.slice(0, 10).map((cmd) => {
+      const shortDesc = cmd.shortDescription || cmd.description || '';
+      // Pick an example SCPI command to use when adding to flow
+      const exampleCommand = cmd.syntax.set
+        ? cmd.syntax.set.replace(/\s*\{[^}]+\}/g, '').replace(/\s*<[^>]+>/g, '').trim()
+        : cmd.syntax.query || cmd.header;
+      return {
+        header: cmd.header,
+        description: shortDesc.slice(0, 120),
+        set: cmd.syntax.set || null,
+        query: cmd.syntax.query || null,
+        type: cmd.commandType,
+        group: cmd.group || '',
+        families: cmd.families,
+        example: exampleCommand,
+      };
+    });
 
-${syntaxStr}
-
-**Type:** ${cmd.commandType}${cmd.families.length > 0 ? ` | **Families:** ${cmd.families.join(', ')}` : ''}${cmd.group ? ` | **Group:** ${cmd.group}` : ''}`;
-    }).join('\n\n---\n\n');
-
-    const title = categoryName 
-  ? commands.length <= 3 
-    ? `## 📋 Commands in **${categoryName}**`
-    : `## 📋 ${commands.length} Commands in **${categoryName}**`
-  : commands.length <= 3
-    ? `## 📋 ${intent.intent} Commands`
-    : `## 📋 ${commands.length} ${intent.intent} Commands Found`;
-
-    // For single commands or small sets (1-6), skip the conversational menu for cleaner AI output
-    if (commands.length <= 6) {
-      return `${title}
-
-${commandList}`;
-    }
-
-    // For multiple commands, keep the menu for exploration
-    return `${title}
-
-${commandList}
-
----
-
-## 🎯 **What would you like to do?**
-
-- **Explain command:** "Explain command 3"
-- **Add command:** "Add command 7 to my flow"
-- **Compare commands:** "Compare command 1 and 5"
-- **Get details:** "Tell me more about command 2"
-
-**Which command interests you?**`;
+    // Emit structured JSON that the frontend renders as cards with action pills
+    return `Found ${cards.length} ${label} commands:\n\nSCPI_COMMANDS:${JSON.stringify(cards)}`;
   }
 
   /**
@@ -852,8 +893,24 @@ ${commandList}
       fullEntry: cmd // Complete command record for AI
     }));
 
-    // Add conversational hierarchy for broad queries
+    // Build mode (no conversationalPrompt) should NOT add conversational menus —
+    // the caller will materialize these commands into ACTIONS_JSON directly.
+    // Only add conversational hierarchy prompts for chat-mode (exploratory) queries.
     let conversationalPrompt: string | undefined;
+
+    if (!result.conversationalPrompt) {
+      // Build mode path: smartLookup deliberately omitted the prompt.
+      // Return commands without adding any conversational "which category?" menus.
+      return {
+        summary: `Found ${commands.length} command(s) for ${result.intent}: ${commands.map(c => c.header).join(', ')}`,
+        commands,
+        workflow: result.workflow || undefined,
+        responseTime: result.responseTime,
+        // No conversationalPrompt — let MCP-only mode materialize into ACTIONS_JSON
+      };
+    }
+
+    // Chat mode: add conversational hierarchy for broad queries
     let triggerTypes: string[] | undefined;
     let busProtocols: string[] | undefined;
 

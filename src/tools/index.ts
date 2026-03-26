@@ -13,6 +13,8 @@ import { materializeScpiCommands } from './materializeScpiCommands';
 import { finalizeScpiCommands } from './finalizeScpiCommands';
 import { materializeTmDevicesCall } from './materializeTmDevicesCall';
 import { probeCommand } from './probeCommand';
+import { captureScreenshot } from './captureScreenshot';
+import { sendScpi } from './sendScpi';
 import { retrieveRagChunks } from './retrieveRagChunks';
 import { searchKnownFailures } from './searchKnownFailures';
 import { searchScpi } from './searchScpi';
@@ -21,11 +23,50 @@ import { smartScpiLookup } from '../core/smartScpiAssistant';
 import { validateActionPayload } from './validateActionPayload';
 import { validateDeviceContext } from './validateDeviceContext';
 import { verifyScpiCommands } from './verifyScpiCommands';
-import { GROUP_NAMES } from '../core/commandGroups';
+import { GROUP_NAMES, COMMAND_GROUPS } from '../core/commandGroups';
 
 export const TOOL_HANDLERS = {
   smart_scpi_lookup: smartScpiLookup,
   search_scpi: searchScpi,
+  save_learned_workflow: async (input: {
+    name: string;
+    description: string;
+    triggers: string[];
+    steps: Array<{ tool: string; args: Record<string, unknown>; description?: string }>;
+  }) => {
+    try {
+      const { tekRouter } = await import('../core/toolRouter');
+      const id = `shortcut:learned_${input.name.toLowerCase().replace(/[^a-z0-9]+/g, '_').slice(0, 40)}_${Date.now()}`;
+      const result = await tekRouter({
+        action: 'create',
+        toolId: id,
+        toolName: input.name,
+        toolDescription: input.description,
+        toolTriggers: input.triggers,
+        toolTags: ['learned', 'live_mode', 'shortcut'],
+        toolCategory: 'shortcut',
+        toolSteps: input.steps,
+      });
+      if (result.ok) {
+        // Persist immediately
+        const { persistRuntimeShortcuts } = await import('../core/routerIntegration');
+        await persistRuntimeShortcuts();
+      }
+      return result;
+    } catch (err) {
+      return { ok: false, error: err instanceof Error ? err.message : String(err) };
+    }
+  },
+  list_command_groups: async () => ({
+    ok: true,
+    data: GROUP_NAMES.map((name) => ({
+      name,
+      description: COMMAND_GROUPS[name]?.description || '',
+      commandCount: COMMAND_GROUPS[name]?.commands?.length || 0,
+    })),
+    sourceMeta: [],
+    warnings: [],
+  }),
   get_command_group: getCommandGroup,
   get_command_by_header: getCommandByHeader,
   get_commands_by_header_batch: getCommandsByHeaderBatch,
@@ -45,6 +86,8 @@ export const TOOL_HANDLERS = {
   validate_device_context: validateDeviceContext,
   get_instrument_state: getInstrumentState,
   probe_command: probeCommand,
+  send_scpi: sendScpi,
+  capture_screenshot: captureScreenshot,
   get_visa_resources: getVisaResources,
   get_environment: getEnvironment,
 } as const;
@@ -101,9 +144,48 @@ export function getToolDefinitions() {
       },
     },
     {
+      name: 'save_learned_workflow',
+      description: 'Save a successful sequence of SCPI commands as a reusable workflow. Call this AFTER you have achieved the user\'s goal through exploration. The saved workflow will be available for instant recall next time.',
+      parameters: {
+        type: 'object',
+        properties: {
+          name: { type: 'string', description: 'Short name for the workflow (e.g. "Eye Diagram Jitter Setup")' },
+          description: { type: 'string', description: 'What this workflow achieves' },
+          triggers: {
+            type: 'array', items: { type: 'string' },
+            description: 'Natural language phrases that should trigger this workflow (e.g. ["setup eye diagram", "jitter measurement", "eye jitter"])'
+          },
+          steps: {
+            type: 'array',
+            items: {
+              type: 'object',
+              properties: {
+                tool: { type: 'string', description: 'Tool name that was called (e.g. "send_scpi")' },
+                args: { type: 'object', description: 'Arguments that were passed to the tool' },
+                description: { type: 'string', description: 'What this step does' },
+              },
+            },
+            description: 'The sequence of tool calls that achieved the goal (only the successful ones)'
+          },
+        },
+        required: ['name', 'description', 'triggers', 'steps'],
+        additionalProperties: false,
+      },
+    },
+    {
+      name: 'list_command_groups',
+      description: `List all SCPI command groups with descriptions and command counts. Use this first to discover what feature areas are available, then use get_command_group to browse commands in a specific group. Known groups: ${GROUP_NAMES.join(', ')}.`,
+      parameters: {
+        type: 'object',
+        properties: {},
+        required: [],
+        additionalProperties: false,
+      },
+    },
+    {
       name: 'get_command_group',
       description:
-        'Get all commands in a named group with group description. Use when user asks about a feature area, not a specific command.',
+        'Get all commands in a named group with full details (header, syntax, arguments, examples). Use to browse all commands for a feature area. Returns the complete command entries, not just headers.',
       parameters: {
         type: 'object',
         properties: {
@@ -460,6 +542,43 @@ export function getToolDefinitions() {
           outputMode: { type: 'string', enum: ['clean', 'verbose'] },
         },
         required: ['command'],
+        additionalProperties: false,
+      },
+    },
+    {
+      name: 'send_scpi',
+      description: 'Send one or more SCPI commands via code_executor. Requires liveMode=true. Queries return responses; writes return OK or error status.',
+      parameters: {
+        type: 'object',
+        properties: {
+          commands: { type: 'array', items: { type: 'string' }, description: 'SCPI commands to send in order.' },
+          executorUrl: { type: 'string' },
+          visaResource: { type: 'string' },
+          backend: { type: 'string' },
+          liveMode: { type: 'boolean' },
+          outputMode: { type: 'string', enum: ['clean', 'verbose'] },
+          timeoutMs: { type: 'number', description: 'Optional per-command timeout in milliseconds.' },
+        },
+        required: ['commands'],
+        additionalProperties: false,
+      },
+    },
+    {
+      name: 'capture_screenshot',
+      description: 'Capture a fresh scope screenshot via code_executor and return PNG image data. Requires liveMode=true. Use this when AI needs to see the current waveform or display state after an action.',
+      parameters: {
+        type: 'object',
+        properties: {
+          executorUrl: { type: 'string' },
+          visaResource: { type: 'string' },
+          backend: { type: 'string' },
+          liveMode: { type: 'boolean' },
+          outputMode: { type: 'string', enum: ['clean', 'verbose'] },
+          scopeType: { type: 'string', enum: ['modern', 'legacy'] },
+          modelFamily: { type: 'string' },
+          deviceDriver: { type: 'string' },
+        },
+        required: [],
         additionalProperties: false,
       },
     },

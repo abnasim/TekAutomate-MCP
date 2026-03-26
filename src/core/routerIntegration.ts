@@ -15,8 +15,10 @@ const DATA_DIR = 'data';
 const USAGE_STATS_FILE = 'router_usage_stats.json';
 const RUNTIME_SHORTCUTS_FILE = 'runtime_shortcuts.json';
 const BUILTIN_SHORTCUT_IDS = new Set([
+  'shortcut:measurement',
+  'shortcut:fastframe',
   'shortcut:screenshot',
-  'shortcut:save_waveform', 
+  'shortcut:save_waveform',
   'shortcut:scpi_search',
   'shortcut:validate_flow',
   'shortcut:scpi_verify',

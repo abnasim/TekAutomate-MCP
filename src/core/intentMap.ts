@@ -45,7 +45,7 @@ const SUBJECT_GROUP_MAP: Array<{
   { pattern: /\bi2c\b/i, groups: ['Bus', 'Trigger'], intent: 'bus', subject: 'i2c' },
   { pattern: /\bspi\b/i, groups: ['Bus', 'Trigger'], intent: 'bus', subject: 'spi' },
   { pattern: /\b(can\s*fd|canfd)\b/i, groups: ['Bus', 'Trigger'], intent: 'bus', subject: 'can_fd' },
-  { pattern: /\bcan\b/i, groups: ['Bus', 'Trigger'], intent: 'bus', subject: 'can' },
+  { pattern: /\b(can\s*bus|can\s*decode|can\s*trigger|can\s*2\.0|can\s*protocol)\b/i, groups: ['Bus', 'Trigger'], intent: 'bus', subject: 'can' },
   { pattern: /\blin\b/i, groups: ['Bus', 'Trigger'], intent: 'bus', subject: 'lin' },
   { pattern: /\b(uart|rs232|rs422|rs485|serial)\b/i, groups: ['Bus', 'Trigger'], intent: 'bus', subject: 'serial' },
   { pattern: /\b(flexray|flex\s*ray)\b/i, groups: ['Bus', 'Trigger'], intent: 'bus', subject: 'flexray' },
@@ -112,25 +112,35 @@ const SUBJECT_GROUP_MAP: Array<{
   { pattern: /\b(select\s*math|math\s*select)\b/i, groups: ['Math'], intent: 'math', subject: 'math_select' },
 
   // ── Voltage / Channel (Vertical) ──
-  { pattern: /\b(channel\s*scale)\b/i, groups: ['Measurement'], intent: 'vertical', subject: 'channel_scale' },
-  { pattern: /\b(channel\s*offset)\b/i, groups: ['Measurement'], intent: 'vertical', subject: 'channel_offset' },
-  { pattern: /\b(channel\s*bandwidth)\b/i, groups: ['Measurement'], intent: 'vertical', subject: 'channel_bandwidth' },
-  { pattern: /\b(channel\s*position)\b/i, groups: ['Measurement'], intent: 'vertical', subject: 'channel_position' },
-  { pattern: /\b(voltage|volt)\b/i, groups: ['Measurement', 'Cursor'], intent: 'measurement', subject: 'voltage' },
-  { pattern: /\b(ch\d|channel\s*\d)\b/i, groups: ['Measurement'], intent: 'vertical', subject: 'channel' },
-  { pattern: /\b(probe|attenuation|atten)\b/i, groups: ['Measurement'], intent: 'vertical', subject: 'probe' },
+  { pattern: /\b(vertical\s*scale|channel\s*scale|v\s*\/\s*div|volts?\s*per\s*div)\b/i, groups: ['Vertical'], intent: 'vertical', subject: 'channel_scale' },
+  { pattern: /\b(channel\s*offset|vertical\s*offset)\b/i, groups: ['Vertical'], intent: 'vertical', subject: 'channel_offset' },
+  { pattern: /\b(channel\s*bandwidth|bandwidth\s*limit|bw\s*limit)\b/i, groups: ['Vertical'], intent: 'vertical', subject: 'channel_bandwidth' },
+  { pattern: /\b(channel\s*position|vertical\s*position)\b/i, groups: ['Vertical'], intent: 'vertical', subject: 'channel_position' },
+  { pattern: /\b(coupling|ac\s*coupling|dc\s*coupling)\b/i, groups: ['Vertical'], intent: 'vertical', subject: 'coupling' },
+  { pattern: /\b(termination|50\s*ohm|1\s*meg)\b/i, groups: ['Vertical'], intent: 'vertical', subject: 'termination' },
+  { pattern: /\b(voltage|volt)\b/i, groups: ['Vertical', 'Measurement', 'Cursor'], intent: 'vertical', subject: 'voltage' },
+  { pattern: /\b(ch\s*\d|channel\s*\d)\s*(bandwidth|bw)\b/i, groups: ['Vertical'], intent: 'vertical', subject: 'channel_bandwidth' },
+  { pattern: /\b(ch\d|channel\s*\d)\b/i, groups: ['Vertical'], intent: 'vertical', subject: 'channel' },
+  { pattern: /\b(probe|attenuation|atten)\b/i, groups: ['Vertical'], intent: 'vertical', subject: 'probe' },
+  { pattern: /\b(bandwidth|bw)\b/i, groups: ['Vertical'], intent: 'vertical', subject: 'bandwidth' },
+  { pattern: /\b(scale)\b(?!.*\b(time|horiz))/i, groups: ['Vertical', 'Horizontal'], intent: 'vertical', subject: 'scale' },
+  { pattern: /\b(label|name\s*channel)\b/i, groups: ['Vertical'], intent: 'vertical', subject: 'label' },
+  { pattern: /\b(deskew)\b/i, groups: ['Vertical'], intent: 'vertical', subject: 'deskew' },
+  { pattern: /\b(invert)\b/i, groups: ['Vertical'], intent: 'vertical', subject: 'invert' },
 
   // ── Specific Vertical/Channel Commands (nested) ──
-  { pattern: /\b(channel\s*on|turn\s*on\s*channel|enable\s*channel|show\s*channel)\b/i, groups: ['Measurement'], intent: 'vertical', subject: 'channel_on' },
-  { pattern: /\b(channel\s*off|turn\s*off\s*channel|disable\s*channel|hide\s*channel)\b/i, groups: ['Measurement'], intent: 'vertical', subject: 'channel_off' },
-  { pattern: /\b(select\s*channel|channel\s*select)\b/i, groups: ['Measurement'], intent: 'vertical', subject: 'select_channel' },
-  { pattern: /\b(invert\s*channel|channel\s*invert)\b/i, groups: ['Measurement'], intent: 'vertical', subject: 'invert_channel' },
-  { pattern: /\b(probe\s*compensation|probe\s*comp)\b/i, groups: ['Measurement'], intent: 'vertical', subject: 'probe_comp' },
-  { pattern: /\b(probe\s*attenuation|probe\s*atten)\b/i, groups: ['Measurement'], intent: 'vertical', subject: 'probe_atten' },
-  { pattern: /\b(vernier|fine\s*scale)\b/i, groups: ['Measurement'], intent: 'vertical', subject: 'vernier' },
+  { pattern: /\b(channel\s*on|turn\s*on\s*channel|enable\s*channel|show\s*channel)\b/i, groups: ['Vertical', 'Display'], intent: 'vertical', subject: 'channel_on' },
+  { pattern: /\b(channel\s*off|turn\s*off\s*channel|disable\s*channel|hide\s*channel)\b/i, groups: ['Vertical', 'Display'], intent: 'vertical', subject: 'channel_off' },
+  { pattern: /\b(select\s*channel|channel\s*select)\b/i, groups: ['Vertical'], intent: 'vertical', subject: 'select_channel' },
+  { pattern: /\b(invert\s*channel|channel\s*invert)\b/i, groups: ['Vertical'], intent: 'vertical', subject: 'invert_channel' },
+  { pattern: /\b(probe\s*compensation|probe\s*comp)\b/i, groups: ['Vertical'], intent: 'vertical', subject: 'probe_comp' },
+  { pattern: /\b(probe\s*attenuation|probe\s*atten)\b/i, groups: ['Vertical'], intent: 'vertical', subject: 'probe_atten' },
+  { pattern: /\b(vernier|fine\s*scale)\b/i, groups: ['Vertical'], intent: 'vertical', subject: 'vernier' },
 
   // ── Trigger types ──
   { pattern: /\b(edge\s*trigger|trigger\s*edge|set\s*trigger\s*to\s*edge)\b/i, groups: ['Trigger'], intent: 'trigger', subject: 'edge' },
+  { pattern: /\btrigger\b.*\b(rising|falling)\b/i, groups: ['Trigger'], intent: 'trigger', subject: 'edge' },
+  { pattern: /\b(rising|falling)\b.*\btrigger\b/i, groups: ['Trigger'], intent: 'trigger', subject: 'edge' },
   { pattern: /\b(pulse\s*trigger|trigger\s*pulse|pulse\s*width|glitch)\b/i, groups: ['Trigger'], intent: 'trigger', subject: 'pulse' },
   { pattern: /\b(runt\s*trigger|trigger\s*runt|runt)\b/i, groups: ['Trigger'], intent: 'trigger', subject: 'runt' },
   { pattern: /\b(timeout\s*trigger|trigger\s*timeout)\b/i, groups: ['Trigger'], intent: 'trigger', subject: 'timeout' },
@@ -214,8 +224,10 @@ const SUBJECT_GROUP_MAP: Array<{
   { pattern: /\b(grid|graticule|intensity|brightness)\b/i, groups: ['Display'], intent: 'display', subject: 'display_general' },
 
   // ── Save / Recall ──
+  { pattern: /\b(recall\s*setup|load\s*setup|setup\s*recall|load\s*.*\.tss|recall\s*.*\.tss|load\s*.*\.set)\b/i, groups: ['Save and Recall', 'File System'], intent: 'save', subject: 'recall_setup' },
+  { pattern: /\b(save\s*setup|store\s*setup|setup\s*save)\b/i, groups: ['Save and Recall'], intent: 'save', subject: 'save_setup' },
   { pattern: /\b(screenshot|screen\s*capture|save\s*image|print)\b/i, groups: ['Save and Recall'], intent: 'save', subject: 'screenshot' },
-  { pattern: /\b(save|recall|session|store|export)\b/i, groups: ['Save and Recall'], intent: 'save', subject: 'save' },
+  { pattern: /\b(save|recall|session|store|export|load)\b/i, groups: ['Save and Recall', 'File System'], intent: 'save', subject: 'save' },
 
   // ── Simple Save Patterns (fallback) ──
   { pattern: /\b(save|recall|store|export|screenshot|image)\b/i, groups: ['Save and Recall'], intent: 'save', subject: 'save_simple' },
@@ -246,7 +258,8 @@ const SUBJECT_GROUP_MAP: Array<{
 
   // ── Status / Misc ──
   { pattern: /\b(status|esr|stb|allev|error\s*queue|event\s*queue)\b/i, groups: ['Status and Error'], intent: 'status', subject: 'status' },
-  { pattern: /\b(autoset|preset|factory|reset|\*rst)\b/i, groups: ['Miscellaneous'], intent: 'misc', subject: 'autoset' },
+  { pattern: /\b(autoset|preset)\b/i, groups: ['Miscellaneous'], intent: 'misc', subject: 'autoset' },
+  { pattern: /\b(factory\s*reset|reset|\*rst)\b/i, groups: ['Miscellaneous', 'Status and Error'], intent: 'misc', subject: 'reset' },
   { pattern: /\b(idn|\*idn|identify|id)\b/i, groups: ['Miscellaneous'], intent: 'misc', subject: 'identify' },
   { pattern: /\b(opc|\*opc|wait|busy)\b/i, groups: ['Miscellaneous'], intent: 'misc', subject: 'opc' },
 

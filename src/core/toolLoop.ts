@@ -15,6 +15,14 @@ import { planIntent, type PlannerOutput } from './intentPlanner';
 import { formatVerboseProbeResult, probeCommandProxy } from './instrumentProxy';
 import { decodeCommandStatus, decodeStatusFromText } from './statusDecoder';
 import type { CommandSuggestion } from './smartScpiAssistant';
+import {
+  getOrCreateSession,
+  incrementTurn,
+  recordToolResult,
+  updateContextDiagnostics,
+  buildSessionContext,
+  cleanupStaleSessions,
+} from './liveSession';
 
 /**
  * Build shortcut from clean plan
@@ -64,42 +72,35 @@ function buildShortcutFromCleanPlan(plan: CleanPlan, req: McpChatRequest): strin
  */
 async function runDeterministicToolLoop(req: McpChatRequest, flowCommandIssues: string[], maxRounds: number) {
   console.log('[DETERMINISTIC_TOOL_LOOP] Starting deterministic tool execution');
-  
+  const startedAt = Date.now();
+
   try {
     const routeDecision = cleanRouter.makeRouteDecision(req);
-    
-    // If router wants Smart SCPI Assistant, call it directly
+
+    // MCP-only mode: pure deterministic, no auto-RAG (user can call retrieve_rag_chunks explicitly)
     if (routeDecision.route === 'smart_scpi') {
       console.log('[DETERMINISTIC_TOOL_LOOP] Using Smart SCPI Assistant');
       return await runSmartScpiAssistant(req);
     }
-    
-    // Handle other deterministic routes
+
     if (routeDecision.route === 'tm_devices') {
       console.log('[DETERMINISTIC_TOOL_LOOP] Using TM Devices');
       return await runTmDevices(req);
     }
-    
-    // Fallback for unknown routes
-    console.log('[DETERMINISTIC_TOOL_LOOP] No deterministic route found, returning error');
+
+    // Fallback
+    console.log('[DETERMINISTIC_TOOL_LOOP] No deterministic route found');
     return {
-      text: 'No deterministic tool available for this request in MCP-only mode.',
+      text: 'No deterministic tool available for this request in MCP-only mode. Try rephrasing as a specific SCPI command question, or switch to AI mode for conversational assistance.',
       assistantThreadId: undefined,
-      errors: ['No deterministic tool available'],
-      warnings: [],
+      errors: [],
+      warnings: ['No deterministic route matched'],
       metrics: {
-        totalMs: 0,
-        usedShortcut: false,
-        iterations: 0,
-        toolCalls: 0,
-        toolMs: 0,
-        modelMs: 0,
+        totalMs: Date.now() - startedAt, usedShortcut: false,
+        iterations: 0, toolCalls: 0, toolMs: 0, modelMs: 0,
         promptChars: { system: 0, user: 0 }
       },
-      debug: {
-        toolTrace: [],
-        resolutionPath: 'deterministic:no_route'
-      }
+      debug: { toolTrace: [], resolutionPath: 'deterministic:no_route' }
     };
   } catch (error) {
     console.log('[DETERMINISTIC_TOOL_LOOP] Error:', error);
@@ -109,18 +110,11 @@ async function runDeterministicToolLoop(req: McpChatRequest, flowCommandIssues: 
       errors: [String(error)],
       warnings: [],
       metrics: {
-        totalMs: 0,
-        usedShortcut: false,
-        iterations: 0,
-        toolCalls: 0,
-        toolMs: 0,
-        modelMs: 0,
+        totalMs: Date.now() - startedAt, usedShortcut: false,
+        iterations: 0, toolCalls: 0, toolMs: 0, modelMs: 0,
         promptChars: { system: 0, user: 0 }
       },
-      debug: {
-        toolTrace: [],
-        resolutionPath: 'deterministic:error'
-      }
+      debug: { toolTrace: [], resolutionPath: 'deterministic:error' }
     };
   }
 }
@@ -148,7 +142,8 @@ async function runSmartScpiAssistant(req: McpChatRequest) {
     const toolResult = await smartScpiLookup({
       query: req.userMessage,
       modelFamily: req.flowContext.modelFamily,
-      context: `${req.flowContext.deviceType || 'SCOPE'} ${req.flowContext.backend || 'pyvisa'}`
+      context: `${req.flowContext.deviceType || 'SCOPE'} ${req.flowContext.backend || 'pyvisa'}`,
+      mode: 'build'  // MCP-only mode should auto-select best match, not show conversational menus
     });
 
     if (!toolResult) {
@@ -184,24 +179,61 @@ async function runSmartScpiAssistant(req: McpChatRequest) {
       };
     }
     
-    // Handle specific commands (limited to what the tool returns)
-    const actions = toolResult.data.map((cmd: any) => ({
-      type: 'insert_step_after' as const,
-      targetStepId: null,
-      newStep: {
-        type: 'query' as const,
-        label: cmd.description,
-        params: {
-          command: cmd.command,
-          saveAs: `scpi_result_${Date.now()}`
+    // Build mode: materialize matched commands into applyable ACTIONS_JSON flow steps.
+    // Extract the user's intent to fill in enum/placeholder values where possible.
+    const userWords = req.userMessage.toLowerCase().split(/\s+/);
+    const actions = toolResult.data.map((cmd: any, idx: number) => {
+      const isSetCapable = cmd.commandType === 'set' || cmd.commandType === 'both';
+      let scpiCommand: string;
+
+      if (isSetCapable && cmd.syntax?.set) {
+        // Try to resolve enum values from the user's query
+        let resolved = String(cmd.syntax.set).replace(/\n/g, ' ').replace(/\s+/g, ' ');
+        // Match {ENUM1|ENUM2|...} patterns (multiline-safe)
+        const enumMatch = resolved.match(/\{([^}]+)\}/);
+        if (enumMatch) {
+          const options = enumMatch[1].split('|').map((s: string) => s.trim()).filter(Boolean);
+          // Find the best matching enum value from user's words
+          const match = options.find((opt: string) =>
+            userWords.some((w: string) => w.length >= 3 && (opt.toLowerCase() === w || opt.toLowerCase().includes(w)))
+          );
+          if (match) {
+            resolved = resolved.replace(enumMatch[0], `"${match}"`).trim();
+          } else {
+            // No match — strip the enum for a cleaner command
+            resolved = resolved.replace(/\s*\{[^}]+\}/, '').trim();
+          }
         }
+        // Strip remaining placeholders like <NR3>, <x> etc
+        resolved = resolved.replace(/\s*<[^>]+>/g, '').trim();
+        scpiCommand = resolved;
+      } else {
+        scpiCommand = cmd.syntax?.query || `${cmd.header}?`;
       }
-    }));
-    
+
+      const stepType = isSetCapable ? 'write' : 'query';
+      const stepLabel = isSetCapable ? `Set ${cmd.header}` : `Read ${cmd.header}`;
+      const stepParams: Record<string, unknown> = { command: scpiCommand };
+      if (stepType === 'query') {
+        stepParams.saveAs = `result_${cmd.header.replace(/[^a-zA-Z0-9]/g, '_').toLowerCase()}`;
+      }
+
+      return {
+        type: 'insert_step_after' as const,
+        targetStepId: null,
+        newStep: {
+          id: `smart_scpi_${idx + 1}`,
+          type: stepType as 'write' | 'query',
+          label: stepLabel,
+          params: stepParams
+        }
+      };
+    });
+
     return {
       text: `ACTIONS_JSON: ${JSON.stringify({
         summary: toolResult.summary,
-        findings: toolResult.data.map((c: any) => c.description),
+        findings: toolResult.data.map((c: any) => `${c.header} — ${c.shortDescription || c.description}`),
         suggestedFixes: [],
         actions
       })}`,
@@ -314,6 +346,7 @@ interface ToolLoopResult {
         ok?: boolean;
         count?: number;
         warnings?: string[];
+        hasImage?: boolean;
       };
       rawResult?: unknown;
     }>;
@@ -3874,34 +3907,43 @@ function buildSystemPrompt(modePrompt: string, outputMode: 'steps_json' | 'block
 }
 
 const CHAT_MODE_SYSTEM_PROMPT = [
-  'You are a senior Tektronix test automation engineer having a technical conversation inside TekAutomate.',
+  '# TekAutomate AI Chat Assistant',
+  'You are a senior Tektronix test automation engineer inside TekAutomate.',
   'Help the user reason about instruments, measurements, debugging, setup strategy, tm_devices usage, SCPI concepts, and practical lab decisions.',
-  'Be conversational, concise, and practical.',
-  'Use hosted file_search first whenever uploaded Tektronix knowledge-base files are available.',
-  'Treat those uploaded KB files as source-of-truth context for Tek-specific methodology, best practices, workflow guidance, and instrument-specific recommendations.',
-  'Treat uploaded programmer-manual command-syntax material and verified command JSON as the command-language source of truth.',
-  'Use canonical constructed mnemonic forms such as CH1, B1, MATH1, MEAS1, SEARCH1, and WAVEView1; never use aliases like CHAN1.',
-  'Prefer KB-backed answers over unsupported freeform recall.',
-  'When guidance clearly comes from uploaded material, say so briefly in natural language.',
-  'Use your own general knowledge only to connect the dots around what the KB and runtime context say.',
-  'If the KB does not cover something, say that briefly and then fall back to general engineering knowledge.',
-  'Do not force ACTIONS_JSON in chat mode.',
-  'Do not pretend a flow was applied.',
-  'If the user is asking for a flow, reusable setup, or build artifact while still in chat mode, do not dump raw JSON or a full standalone Python script by default.',
-  'For build-like asks in chat mode, give a short engineer-friendly outline of the flow or key steps, then tell the user to say "build it" for the applyable flow artifact.',
-  'For direct flow-construction asks, do not answer with long SCPI blocks, tm_devices call lists, or fenced code unless the user explicitly asked for code.',
-  'Keep build-like chat answers to a compact outline: what the flow will do, any one critical caveat, and an explicit invitation to say "build it".',
-  'If a flow request mentions a python step, python loop, aggregation, or repeated acquisitions, still keep chat concise and build-oriented; do not turn that into a full standalone script unless the user explicitly asks for Python, code, or a script.',
-  'Only output a full Python or tm_devices script in chat mode when the user explicitly asks for Python, code, or a script.',
-  'If the user wants a build, tell them you can build it and ask them to switch to Build mode or say "build it".',
-  'Use the runtime workspace context when it helps, but answer like an engineer, not a validator.',
-  'For underspecified diagnostic questions, ask one or two narrowing engineering questions before jumping to a build.',
-  'Examples: eye diagram -> NRZ/PAM4, data rate, horizontal vs vertical closure, probing method; jitter -> source and acceptable limit; glitches -> channel and trigger approach; bus issues -> protocol, channels, bitrate/baud.',
+  '',
+  '## Context you receive',
+  'Before each response, you receive pre-loaded context injected into the user message:',
+  '- **Relevant SCPI commands** — exact command syntax from the 9,300+ command database (header, set syntax, query syntax)',
+  '- **Knowledge base** — relevant docs from error guides, app logic, PyVISA/TekHSI reference, tm_devices reference',
+  'Use this pre-loaded context as your primary source of truth for command syntax and Tek-specific knowledge.',
+  'When the pre-loaded context covers the question, use it directly. When it does not, fall back to your general engineering knowledge but say so.',
+  '',
+  '## How to use SCPI command data',
+  '- The pre-loaded SCPI commands show exact syntax: `CH<x>:SCAle <NR3>` means the set form, `CH<x>:SCAle?` means the query form.',
+  '- Placeholders: `<NR3>` = number, `CH<x>` = channel (CH1, CH2...), `{A|B}` = pick one, `<Qstring>` = quoted string.',
+  '- Use canonical mnemonics: CH1, B1, MATH1, MEAS1, SEARCH1 — never aliases like CHAN1.',
+  '- When referencing SCPI commands, show the exact syntax from the database, not guessed syntax.',
+  '',
+  '## Response style',
+  '- Be conversational, concise, and practical. Answer like an engineer, not a validator.',
+  '- Use **bold** for emphasis and `code` for SCPI commands.',
+  '- Do NOT force ACTIONS_JSON in chat mode. Do not pretend a flow was applied.',
+  '',
+  '## Build requests',
+  '- When the user asks to build a flow, set up a measurement, or create automation:',
+  '  Give a short engineer-friendly outline of what the flow will do, then tell them to say **"build it"**.',
+  '- Do NOT dump raw JSON, full Python scripts, or long SCPI blocks unless explicitly asked.',
+  '- Keep build-like answers compact: what it does, one key caveat, invitation to "build it".',
+  '- Only output full Python/tm_devices code when explicitly asked for code/script.',
+  '',
+  '## Diagnostic questions',
+  '- For underspecified questions, ask 1-2 narrowing engineering questions before jumping to a build.',
+  '- Examples: eye diagram → NRZ/PAM4, data rate, closure type; jitter → source, limit; bus → protocol, channels, bitrate.',
 ].join('\n');
 
 function buildChatDeveloperPrompt(req: McpChatRequest): string {
   const fc = req.flowContext;
-  const rc = req.runContext;
+  const rc = req.runContext || { runStatus: 'idle', logTail: '', auditOutput: '', exitCode: null, duration: undefined };
   const flatSteps = flattenSteps(Array.isArray(fc.steps) ? fc.steps : []);
   const stepPreview = flatSteps.length
     ? flatSteps
@@ -3972,26 +4014,65 @@ async function runChatConversation(
   debug: NonNullable<ToolLoopResult['debug']>;
 }> {
   const developerPrompt = buildChatDeveloperPrompt(req);
-  const userPrompt = `User question:\n${req.userMessage}`;
   const useHostedAssistant = shouldUseOpenAiAssistant(req);
   const modelStartedAt = Date.now();
 
+  // Only pre-load SCPI + RAG context on first message or new topic (keep context lean)
+  // If there's conversation history, the AI already has prior context — skip re-injection
+  const hasHistory = Array.isArray(req.history) && req.history.length > 0;
+  let preContext = '';
+  if (!hasHistory) {
+    const preContextParts: string[] = [];
+    try {
+      const { smartScpiLookup } = await import('./smartScpiAssistant');
+      const scpiRes = await smartScpiLookup({ query: req.userMessage, modelFamily: req.flowContext?.modelFamily });
+      if (scpiRes.ok && scpiRes.data.length > 0) {
+        const cmdLines = scpiRes.data.slice(0, 3).map((cmd: any) =>
+          `${cmd.header || ''}: Set=${cmd.syntax?.set || ''} Query=${cmd.syntax?.query || ''}`
+        );
+        preContextParts.push(`SCPI commands:\n${cmdLines.join('\n')}`);
+      }
+    } catch { /* non-fatal */ }
+    try {
+      const { retrieveRagChunks } = await import('../tools/retrieveRagChunks');
+      const chunks: string[] = [];
+      for (const corpus of ['errors', 'app_logic', 'pyvisa_tekhsi', 'tmdevices']) {
+        const res = await retrieveRagChunks({ corpus: corpus as any, query: req.userMessage, topK: 1 });
+        if (res.ok && Array.isArray(res.data)) {
+          for (const chunk of res.data) {
+            const c = chunk as { title?: string; body?: string };
+            if (c.body && c.body.length > 30) chunks.push(`${c.title || corpus}: ${c.body.slice(0, 300)}`);
+          }
+        }
+      }
+      if (chunks.length > 0) preContextParts.push(`Knowledge:\n${chunks.slice(0, 3).join('\n')}`);
+    } catch { /* non-fatal */ }
+    if (preContextParts.length > 0) {
+      preContext = '\n\n---\nContext from TekAutomate database:\n' + preContextParts.join('\n\n');
+      console.log(`[MCP] Chat mode pre-loaded context (${preContext.length} chars, first message)`);
+    }
+  }
+
+  const userPrompt = `${req.userMessage}${preContext}`;
+
   if (req.provider === 'anthropic') {
+    const userContent = buildAnthropicUserContent(req, userPrompt);
     const messages = [
       ...(Array.isArray(req.history)
         ? req.history
             .slice(-8)
             .map((h) => ({ role: h.role as 'user' | 'assistant', content: String(h.content || '').slice(0, 3000) }))
         : []),
-      { role: 'user' as const, content: userPrompt },
+      { role: 'user' as const, content: userContent },
     ];
     const requestPayload = {
       model: req.model,
       system: `${CHAT_MODE_SYSTEM_PROMPT}\n\n${developerPrompt}`,
-      max_tokens: 1800,
+      max_tokens: 4096,
       messages,
     };
-    const res = await fetch('https://api.anthropic.com/v1/messages', {
+    const anthropicBase = process.env.ANTHROPIC_BASE_URL || 'https://api.anthropic.com';
+    const res = await fetch(`${anthropicBase}/v1/messages`, {
       method: 'POST',
       headers: {
         'x-api-key': req.apiKey,
@@ -4042,6 +4123,7 @@ async function runChatConversation(
   if (useHostedAssistant) {
     const openAiBase = process.env.OPENAI_BASE_URL || 'https://api.openai.com';
     const hostedVectorStoreId = resolveHostedVectorStoreId();
+    const userContent = buildOpenAiUserContent(req, userPrompt);
     const chatTools: HostedToolDefinition[] = hostedVectorStoreId
       ? [
           {
@@ -4063,7 +4145,7 @@ async function runChatConversation(
               .slice(-8)
               .map((h) => ({ role: h.role, content: String(h.content || '').slice(0, 3000) }))
           : []),
-        { role: 'user', content: userPrompt },
+        { role: 'user', content: userContent },
       ],
       store: true,
       stream: false,
@@ -4124,6 +4206,7 @@ async function runChatConversation(
   }
 
   const openAiBase = process.env.OPENAI_BASE_URL || 'https://api.openai.com';
+  const userContent = buildOpenAiUserContent(req, userPrompt);
   const requestPayload = {
     model: resolveOpenAiModel(req),
     messages: [
@@ -4133,7 +4216,7 @@ async function runChatConversation(
             .slice(-8)
             .map((h) => ({ role: h.role, content: String(h.content || '').slice(0, 3000) }))
         : []),
-      { role: 'user', content: userPrompt },
+      { role: 'user', content: userContent },
     ],
     ...buildOpenAiCompletionTokenOption(resolveOpenAiModel(req)),
   };
@@ -4335,6 +4418,57 @@ function buildAttachmentContext(req: McpChatRequest): string {
     }
   });
   return lines.join('\n');
+}
+
+function getImageAttachments(req: McpChatRequest): Array<{ name: string; mimeType: string; dataUrl: string }> {
+  const attachments = Array.isArray(req.attachments) ? req.attachments : [];
+  return attachments
+    .filter((file) => String(file?.mimeType || '').startsWith('image/') && typeof file?.dataUrl === 'string' && String(file.dataUrl).startsWith('data:'))
+    .slice(0, 4)
+    .map((file, index) => ({
+      name: String(file?.name || `image_${index + 1}`),
+      mimeType: String(file?.mimeType || 'image/png'),
+      dataUrl: String(file?.dataUrl || ''),
+    }));
+}
+
+function splitDataUrl(dataUrl: string): { mimeType: string; base64: string } | null {
+  const match = String(dataUrl || '').match(/^data:([^;]+);base64,(.+)$/);
+  if (!match) return null;
+  return { mimeType: match[1], base64: match[2] };
+}
+
+function buildOpenAiUserContent(req: McpChatRequest, userPrompt: string): Array<Record<string, unknown>> | string {
+  const images = getImageAttachments(req);
+  if (!images.length) return userPrompt;
+  return [
+    { type: 'text', text: userPrompt },
+    ...images.map((image) => ({
+      type: 'image_url',
+      image_url: {
+        url: image.dataUrl,
+      },
+    })),
+  ];
+}
+
+function buildAnthropicUserContent(req: McpChatRequest, userPrompt: string): Array<Record<string, unknown>> | string {
+  const images = getImageAttachments(req);
+  if (!images.length) return userPrompt;
+  const blocks: Array<Record<string, unknown>> = [{ type: 'text', text: userPrompt }];
+  images.forEach((image) => {
+    const parsed = splitDataUrl(image.dataUrl);
+    if (!parsed) return;
+    blocks.push({
+      type: 'image',
+      source: {
+        type: 'base64',
+        media_type: parsed.mimeType,
+        data: parsed.base64,
+      },
+    });
+  });
+  return blocks;
 }
 
 function buildUserPrompt(req: McpChatRequest, flowCommandIssues: string[] = []): string {
@@ -4933,8 +5067,8 @@ export function buildHostedResponsesTools(
   } else {
     toolNames =
       phase === 'initial' && !options?.restrictSearchTools
-        ? ['get_current_flow', 'smart_scpi_lookup', 'get_command_group', 'get_command_by_header', 'get_commands_by_header_batch', 'materialize_scpi_command', 'materialize_scpi_commands', 'finalize_scpi_commands', 'verify_scpi_commands', 'validate_action_payload', ...(routerEnabledForRequest ? ['tek_router'] : [])]
-        : ['get_current_flow', 'smart_scpi_lookup', 'get_command_by_header', 'get_commands_by_header_batch', 'materialize_scpi_command', 'materialize_scpi_commands', 'finalize_scpi_commands', 'verify_scpi_commands', 'validate_action_payload', ...(routerEnabledForRequest ? ['tek_router'] : [])];
+? ['get_current_flow', 'smart_scpi_lookup', 'get_command_group', 'get_command_by_header', 'get_commands_by_header_batch', 'materialize_scpi_command', 'materialize_scpi_commands', 'finalize_scpi_commands', 'verify_scpi_commands', 'validate_action_payload', 'probe_command', 'send_scpi', 'capture_screenshot', ...(routerEnabledForRequest ? ['tek_router'] : [])]
+: ['get_current_flow', 'smart_scpi_lookup', 'get_command_by_header', 'get_commands_by_header_batch', 'materialize_scpi_command', 'materialize_scpi_commands', 'finalize_scpi_commands', 'verify_scpi_commands', 'validate_action_payload', 'probe_command', 'send_scpi', 'capture_screenshot', ...(routerEnabledForRequest ? ['tek_router'] : [])];
   }
 
   const allow = new Set(toolNames);
@@ -5378,6 +5512,22 @@ async function executeHostedToolCall(
     };
   }
 
+  if (
+      ['get_instrument_state', 'probe_command', 'send_scpi', 'capture_screenshot', 'get_visa_resources', 'get_environment'].includes(name) &&
+    req.instrumentEndpoint
+  ) {
+    args = {
+      executorUrl: req.instrumentEndpoint.executorUrl,
+      visaResource: req.instrumentEndpoint.visaResource,
+      backend: req.instrumentEndpoint.backend,
+      liveMode: req.instrumentEndpoint.liveMode === true,
+      outputMode: req.instrumentEndpoint.outputMode || 'verbose',
+      modelFamily: req.flowContext.modelFamily,
+      deviceDriver: req.flowContext.deviceDriver,
+      ...args,
+    };
+  }
+
   if (isRouterEnabledForRequest(undefined)) {
     const routerResult = await dispatchRouterTool(name, args);
     if (routerResult) return routerResult;
@@ -5817,12 +5967,13 @@ export function buildHostedOpenAiResponsesRequest(
           }))
           .filter((h) => h.content.trim().length > 0);
   const developerMessage = String(options.developerMessage || '').trim();
+  const userContent = buildOpenAiUserContent(req, assistantPrompt);
   const initialInput = options.inputOverride || [
     ...(developerMessage
       ? [{ role: 'developer', content: developerMessage }]
       : []),
     ...historyInput.map((h) => ({ role: h.role, content: h.content })),
-    { role: 'user', content: assistantPrompt },
+    { role: 'user', content: userContent },
   ];
   const requestPayload: Record<string, unknown> = {
     model: hostedModel,
@@ -6361,22 +6512,31 @@ async function runOpenAiToolLoop(
   metrics: NonNullable<ToolLoopResult['metrics']>;
   debug: NonNullable<ToolLoopResult['debug']>;
 }> {
+  const isLiveMode = req.interactionMode === 'live';
   const modePrompt = getModePrompt(req);
-  const systemPrompt = buildSystemPrompt(modePrompt, req.outputMode);
-  const userPrompt = buildUserPrompt(req, flowCommandIssues);
-  const useHostedAssistant = shouldUseOpenAiAssistant(req);
+  const systemPrompt = isLiveMode
+    ? buildLiveSystemPrompt(req)
+    : buildSystemPrompt(modePrompt, req.outputMode);
+  const userPrompt = isLiveMode
+    ? req.userMessage
+    : buildUserPrompt(req, flowCommandIssues);
+  const useHostedAssistant = isLiveMode ? false : shouldUseOpenAiAssistant(req);
   const compactDeveloperContext = shouldUseCompactDeveloperContext(req);
-  const baseDeveloperPrompt = isExplainOnlyCommandAsk(req)
-    ? 'Command explanation mode. Return plain text guidance only.'
-    : await buildContext(req, { compact: compactDeveloperContext });
-  const providerSupplementPrompt = await buildProviderSupplementDeveloperSection(req);
+  const baseDeveloperPrompt = isLiveMode
+    ? ''
+    : isExplainOnlyCommandAsk(req)
+      ? 'Command explanation mode. Return plain text guidance only.'
+      : await buildContext(req, { compact: compactDeveloperContext });
+  const providerSupplementPrompt = isLiveMode ? '' : await buildProviderSupplementDeveloperSection(req);
   const developerPrompt = [
     baseDeveloperPrompt,
     providerSupplementPrompt,
   ].filter(Boolean).join('\n\n');
-  let assistantPrompt = buildAssistantUserPrompt(req, flowCommandIssues, {
-    hostedPromptConfigured: useHostedAssistant && Boolean(resolveOpenAiPromptId(req)),
-  });
+  let assistantPrompt = isLiveMode
+    ? userPrompt
+    : buildAssistantUserPrompt(req, flowCommandIssues, {
+        hostedPromptConfigured: useHostedAssistant && Boolean(resolveOpenAiPromptId(req)),
+      });
   const toolTrace: NonNullable<ToolLoopResult['debug']>['toolTrace'] = [];
   if (useHostedAssistant) {
     console.log(
@@ -6667,6 +6827,166 @@ async function runOpenAiToolLoop(
   let json: Record<string, unknown>;
   let content = '';
   let providerRequest: Record<string, unknown>;
+
+  // Live mode: use OpenAI function calling with tool loop
+  if (isLiveMode) {
+    console.log('[MCP] OpenAI route: live mode (Chat Completions with tools)');
+    const openAiBase = process.env.OPENAI_BASE_URL || 'https://api.openai.com';
+    const model = resolveOpenAiModel(req);
+    const liveToolDefs = getToolDefinitions();
+    const liveToolNames = new Set([
+      // Instrument actions
+      'send_scpi', 'capture_screenshot', 'get_instrument_state', 'probe_command',
+      'get_visa_resources', 'get_environment',
+      // SCPI exploration (iterative — AI can browse groups, read full entries)
+      'list_command_groups', 'get_command_group', 'get_command_by_header', 'get_commands_by_header_batch',
+      // SCPI search + validation
+      'smart_scpi_lookup', 'search_scpi',
+      'verify_scpi_commands', 'materialize_scpi_command', 'finalize_scpi_commands',
+      // Learning — save successful workflows for reuse
+      'save_learned_workflow',
+      // tm_devices lookup + materialization
+      'search_tm_devices', 'materialize_tm_devices_call',
+      // Knowledge
+      'retrieve_rag_chunks', 'search_known_failures',
+    ]);
+    // Strip infra params from tool schemas (same as Anthropic path)
+    const infraParams = new Set(['executorUrl', 'visaResource', 'backend', 'liveMode', 'outputMode', 'modelFamily', 'deviceDriver', 'scopeType']);
+    const openAiTools = liveToolDefs
+      .filter((t) => liveToolNames.has(t.name))
+      .map((t) => {
+        const props = (t.parameters as any)?.properties;
+        if (!props) return { type: 'function' as const, function: { name: t.name, description: t.description, parameters: t.parameters } };
+        const cleanedProps: Record<string, unknown> = {};
+        for (const [k, v] of Object.entries(props)) {
+          if (!infraParams.has(k)) cleanedProps[k] = v;
+        }
+        return {
+          type: 'function' as const,
+          function: { name: t.name, description: t.description, parameters: { ...t.parameters, properties: cleanedProps } },
+        };
+      });
+
+    // Live mode: NO pre-resolution. AI has tools to explore (smart_scpi_lookup,
+    // get_command_group, search_scpi, retrieve_rag_chunks). Let AI drive its own searches.
+    // Pre-resolution adds latency, wrong context from intent misclassification, and
+    // unnecessary SCPI noise for conversational messages.
+
+    const liveSystemWithContext = systemPrompt;
+    const liveMessages: Array<Record<string, unknown>> = [
+      { role: 'system', content: liveSystemWithContext },
+      ...(req.history || [])
+        .slice(-12)
+        .map((h) => ({ role: h.role, content: String(h.content || '').slice(0, 3000) })),
+      { role: 'user', content: buildOpenAiUserContent(req, userPrompt) },
+    ];
+
+    let totalLiveModelMs = 0;
+    let totalLiveToolMs = 0;
+    let totalLiveToolCalls = 0;
+    let liveIterations = 0;
+    let liveFinalText = '';
+    const liveScreenshots: Array<{ base64: string; mimeType: string; capturedAt: string }> = [];
+
+    for (let i = 0; i < _maxCalls; i += 1) {
+      liveIterations = i + 1;
+      const modelStart = Date.now();
+      const liveRequest = {
+        model,
+        messages: liveMessages,
+        tools: openAiTools,
+        ...buildOpenAiCompletionTokenOption(model),
+      };
+      const liveRes = await fetch(`${openAiBase}/v1/chat/completions`, {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${req.apiKey}`, 'Content-Type': 'application/json' },
+        body: JSON.stringify(liveRequest),
+      });
+      if (!liveRes.ok) throw new Error(`OpenAI error ${liveRes.status}: ${await liveRes.text()}`);
+      const liveJson = (await liveRes.json()) as Record<string, unknown>;
+      totalLiveModelMs += Date.now() - modelStart;
+      const choice = Array.isArray(liveJson.choices) ? (liveJson.choices as Array<Record<string, unknown>>)[0] : null;
+      const message = choice?.message as Record<string, unknown> | undefined;
+      if (!message) break;
+
+      const toolCalls = Array.isArray(message.tool_calls) ? message.tool_calls as Array<Record<string, unknown>> : [];
+      if (typeof message.content === 'string' && message.content) liveFinalText = message.content;
+
+      if (toolCalls.length === 0) {
+        console.log(`[MCP] OpenAI live loop done after ${liveIterations} iteration(s)`);
+        break;
+      }
+
+      liveMessages.push(message);
+
+      for (const tc of toolCalls) {
+        const fn = tc.function as Record<string, unknown> | undefined;
+        const toolName = String(fn?.name || '');
+        const toolArgs = typeof fn?.arguments === 'string' ? JSON.parse(fn.arguments) : {};
+        const toolId = String(tc.id || '');
+        console.log(`[MCP] OpenAI live tool call: ${toolName}`);
+        const toolStart = Date.now();
+        try {
+          const result = await executeHostedToolCall(req, toolName, toolArgs);
+          totalLiveToolMs += Date.now() - toolStart;
+          totalLiveToolCalls += 1;
+
+          // Handle screenshot results: extract image for OpenAI vision, don't stringify base64
+          const imageData = extractImageFromToolResult(result);
+          if (imageData) {
+            const textSummary = buildImageToolResultSummary(result);
+            console.log(`[MCP] OpenAI live tool result for ${toolName}: screenshot (${imageData.mimeType}, ${imageData.base64.length} b64 chars)`);
+            // Collect for UI update
+            liveScreenshots.push({ base64: imageData.base64, mimeType: imageData.mimeType, capturedAt: new Date().toISOString() });
+            // OpenAI can't receive images in tool results — send text summary as tool result
+            liveMessages.push({ role: 'tool', tool_call_id: toolId, content: textSummary });
+            // Then inject the image as a user message so OpenAI vision can see it
+            liveMessages.push({
+              role: 'user',
+              content: [
+                { type: 'text', text: 'Here is the screenshot you just captured. Describe what you see on the scope display.' },
+                { type: 'image_url', image_url: { url: `data:${imageData.mimeType};base64,${imageData.base64}` } },
+              ],
+            });
+          } else {
+            const resultStr = typeof result === 'string' ? result : JSON.stringify(result);
+            const truncated = resultStr.length > 8000 ? resultStr.slice(0, 8000) + '\n...(truncated)' : resultStr;
+            console.log(`[MCP] OpenAI live tool result for ${toolName}: ${resultStr.slice(0, 500)}`);
+            liveMessages.push({ role: 'tool', tool_call_id: toolId, content: truncated });
+          }
+          toolTrace.push({
+            name: toolName, args: toolArgs, startedAt: new Date(toolStart).toISOString(),
+            durationMs: Date.now() - toolStart, resultSummary: { ok: true, hasImage: Boolean(imageData) },
+          });
+        } catch (err) {
+          totalLiveToolMs += Date.now() - toolStart;
+          totalLiveToolCalls += 1;
+          toolTrace.push({
+            name: toolName, args: toolArgs, startedAt: new Date(toolStart).toISOString(),
+            durationMs: Date.now() - toolStart, resultSummary: { ok: false },
+          });
+          liveMessages.push({ role: 'tool', tool_call_id: toolId, content: `Error: ${err instanceof Error ? err.message : String(err)}` });
+        }
+      }
+    }
+
+    return {
+      text: liveFinalText,
+      screenshots: liveScreenshots.length > 0 ? liveScreenshots : undefined,
+      metrics: {
+        totalMs: 0, usedShortcut: false, provider: 'openai',
+        iterations: liveIterations, toolCalls: totalLiveToolCalls,
+        toolMs: totalLiveToolMs, modelMs: totalLiveModelMs,
+        promptChars: { system: systemPrompt.length, user: userPrompt.length },
+      },
+      debug: {
+        promptFileText: modePrompt, systemPrompt, userPrompt,
+        toolDefinitions: openAiTools.map((t) => ({ name: t.function.name, description: t.function.description })),
+        toolTrace, resolutionPath: 'openai:live_tool_loop',
+      },
+    };
+  }
+
   console.log('[MCP] OpenAI route: direct (Chat Completions one-shot)');
   const openAiBase = process.env.OPENAI_BASE_URL || 'https://api.openai.com';
   const model = resolveOpenAiModel(req);
@@ -6674,7 +6994,7 @@ async function runOpenAiToolLoop(
     model,
     messages: [
       { role: 'system', content: systemPrompt },
-      { role: 'user', content: userPrompt },
+      { role: 'user', content: buildOpenAiUserContent(req, userPrompt) },
     ],
     ...buildOpenAiCompletionTokenOption(model),
   };
@@ -6719,74 +7039,502 @@ async function runOpenAiToolLoop(
   };
 }
 
+/**
+ * Convert OpenAI-format tool definitions to Anthropic tool_use format.
+ * OpenAI uses `parameters`, Anthropic uses `input_schema`.
+ */
+function toAnthropicTools(
+  openAiTools: Array<{ name: string; description: string; parameters: Record<string, unknown> }>
+): Array<{ name: string; description: string; input_schema: Record<string, unknown> }> {
+  return openAiTools.map((t) => ({
+    name: t.name,
+    description: t.description,
+    input_schema: t.parameters,
+  }));
+}
+
+/**
+ * Select which tools to expose to Anthropic based on request context.
+ * Live mode gets instrument tools; build mode gets the full catalog.
+ */
+function selectAnthropicTools(req: McpChatRequest): Array<{ name: string; description: string; input_schema: Record<string, unknown> }> {
+  const allTools = getToolDefinitions();
+  const isLive = req.interactionMode === 'live';
+  if (isLive) {
+    // Live mode: instrument tools + search/lookup tools only (keep it lean)
+    const liveToolNames = new Set([
+      // Instrument actions
+      'send_scpi', 'capture_screenshot', 'get_instrument_state', 'probe_command',
+      'get_visa_resources', 'get_environment',
+      // SCPI exploration (iterative — AI can browse groups, read full entries)
+      'list_command_groups', 'get_command_group', 'get_command_by_header', 'get_commands_by_header_batch',
+      // SCPI search + validation
+      'smart_scpi_lookup', 'search_scpi',
+      'verify_scpi_commands', 'materialize_scpi_command', 'finalize_scpi_commands',
+      // Learning — save successful workflows for reuse
+      'save_learned_workflow',
+      // tm_devices lookup + materialization
+      'search_tm_devices', 'materialize_tm_devices_call',
+      // Knowledge
+      'retrieve_rag_chunks', 'search_known_failures',
+    ]);
+    const filtered = allTools.filter((t) => liveToolNames.has(t.name));
+    // Strip server-injected infra params from schemas so AI only sees user-facing params
+    const infraParams = new Set(['executorUrl', 'visaResource', 'backend', 'liveMode', 'outputMode', 'modelFamily', 'deviceDriver', 'scopeType']);
+    const cleaned = filtered.map((t) => {
+      const props = (t.parameters as any)?.properties;
+      if (!props) return t;
+      const cleanedProps: Record<string, unknown> = {};
+      for (const [k, v] of Object.entries(props)) {
+        if (!infraParams.has(k)) cleanedProps[k] = v;
+      }
+      return {
+        ...t,
+        parameters: {
+          ...t.parameters,
+          properties: cleanedProps,
+        },
+      };
+    });
+    return toAnthropicTools(cleaned);
+  }
+  return toAnthropicTools(allTools);
+}
+
+/**
+ * Extract text content from an Anthropic Messages API response.
+ */
+function extractAnthropicText(content: Array<Record<string, unknown>>): string {
+  return content
+    .filter((c) => c.type === 'text')
+    .map((c) => String(c.text || ''))
+    .join('\n');
+}
+
+/**
+ * Extract base64 image data from a tool result, if present.
+ * Handles ToolResult shapes where data contains base64/mimeType (e.g. capture_screenshot).
+ */
+function extractImageFromToolResult(result: unknown): { base64: string; mimeType: string } | null {
+  if (!result || typeof result !== 'object') return null;
+  const r = result as Record<string, unknown>;
+
+  // Check in result.data (ToolResult shape from captureScreenshotProxy)
+  const data = r.data && typeof r.data === 'object' ? r.data as Record<string, unknown> : null;
+  if (data && typeof data.base64 === 'string' && typeof data.mimeType === 'string' && data.base64.length > 100) {
+    return { base64: data.base64 as string, mimeType: data.mimeType as string };
+  }
+
+  // Check at top level (in case result itself has base64/mimeType)
+  if (typeof r.base64 === 'string' && typeof r.mimeType === 'string' && (r.base64 as string).length > 100) {
+    return { base64: r.base64 as string, mimeType: r.mimeType as string };
+  }
+
+  // Check for dataUrl at result.data level
+  if (data && typeof data.dataUrl === 'string') {
+    const parsed = splitDataUrl(data.dataUrl as string);
+    if (parsed && parsed.base64.length > 100) return parsed;
+  }
+
+  return null;
+}
+
+/**
+ * Build a concise text summary for an image tool result, excluding the base64 blob.
+ */
+function buildImageToolResultSummary(result: unknown): string {
+  if (!result || typeof result !== 'object') return 'Screenshot captured.';
+  const r = result as Record<string, unknown>;
+  const data = r.data && typeof r.data === 'object' ? r.data as Record<string, unknown> : null;
+  const parts: string[] = ['Screenshot captured successfully.'];
+  const src = data || r;
+  if (typeof src.scopeType === 'string') parts.push(`Scope type: ${src.scopeType}`);
+  if (typeof src.sizeBytes === 'number') parts.push(`Size: ${src.sizeBytes} bytes`);
+  if (typeof src.capturedAt === 'string') parts.push(`Captured at: ${src.capturedAt}`);
+  if (r.ok === false) parts[0] = 'Screenshot capture had issues.';
+  const warnings = Array.isArray(r.warnings) ? r.warnings.filter(Boolean) : [];
+  if (warnings.length) parts.push(`Warnings: ${warnings.join(', ')}`);
+  return parts.join(' ');
+}
+
+/**
+ * Full Anthropic tool-calling loop with iterative tool_use / tool_result handling.
+ * Matches the same contract as runOpenAiToolLoop so it can be swapped in via provider dispatch.
+ */
 async function runAnthropicToolLoop(
   req: McpChatRequest,
   flowCommandIssues: string[] = [],
   maxCalls = 6
 ): Promise<{
   text: string;
+  displayText?: string;
   metrics: NonNullable<ToolLoopResult['metrics']>;
   debug: NonNullable<ToolLoopResult['debug']>;
 }> {
   const modePrompt = getModePrompt(req);
-  const systemPrompt = buildSystemPrompt(modePrompt, req.outputMode);
-  const userPrompt = buildUserPrompt(req, flowCommandIssues);
-  const res = await fetch('https://api.anthropic.com/v1/messages', {
-    method: 'POST',
-    headers: {
-      'x-api-key': req.apiKey,
-      'anthropic-version': '2023-06-01',
-      'content-type': 'application/json',
-    },
-    body: JSON.stringify({
-      model: req.model,
-      system: systemPrompt,
-      max_tokens: 2000,
-      messages: [
-        ...(req.history || [])
-          .slice(-6)
-          .map((h) => ({ role: h.role as 'user' | 'assistant', content: h.content.slice(0, 800) })),
-        { role: 'user', content: userPrompt },
-      ],
-    }),
-  });
-  if (!res.ok) {
-    throw new Error(`Anthropic error ${res.status}: ${await res.text()}`);
+  const isLive = req.interactionMode === 'live';
+
+  // Live session state management
+  const liveSession = isLive
+    ? getOrCreateSession(
+        `live-${req.provider}-${req.instrumentEndpoint?.visaResource || 'default'}`,
+        req.provider,
+        req.model,
+        req.instrumentEndpoint ? {
+          executorUrl: req.instrumentEndpoint.executorUrl,
+          visaResource: req.instrumentEndpoint.visaResource,
+          backend: req.instrumentEndpoint.backend,
+        } : undefined
+      )
+    : null;
+
+  if (liveSession) {
+    incrementTurn(liveSession);
+    // Periodic cleanup of stale sessions
+    if (liveSession.turnCount % 20 === 0) cleanupStaleSessions();
   }
-  const json = (await res.json()) as Record<string, unknown>;
-  const text = Array.isArray(json.content)
-    ? (json.content as Array<Record<string, unknown>>)
-        .filter((c) => c.type === 'text')
-        .map((c) => String(c.text || ''))
-        .join('\\n')
-    : '';
+
+  const sessionContext = liveSession ? buildSessionContext(liveSession) : '';
+  const systemPrompt = isLive
+    ? buildLiveSystemPrompt(req, sessionContext)
+    : buildSystemPrompt(modePrompt, req.outputMode);
+  const developerContext = isLive ? '' : await buildContext(req, { compact: true });
+
+  // Live mode: NO pre-resolution. AI has exploration tools (smart_scpi_lookup,
+  // get_command_group, search_scpi, retrieve_rag_chunks). Let AI drive its own searches.
+  // Pre-resolution adds latency and wrong context from intent misclassification.
+  const fullSystemPrompt = developerContext
+    ? `${systemPrompt}\n\n${developerContext}`
+    : systemPrompt;
+  const userPrompt = isLive
+    ? req.userMessage
+    : buildUserPrompt(req, flowCommandIssues);
+  const userContent = buildAnthropicUserContent(req, userPrompt);
+  const tools = selectAnthropicTools(req);
+  const toolTrace: NonNullable<ToolLoopResult['debug']>['toolTrace'] = [];
+
+  // Build conversation messages from history
+  const messages: Array<Record<string, unknown>> = [
+    ...(req.history || [])
+      .slice(isLive ? -12 : -6)
+      .map((h) => ({
+        role: h.role as 'user' | 'assistant',
+        content: String(h.content || '').slice(0, isLive ? 3000 : 800),
+      })),
+    { role: 'user', content: userContent },
+  ];
+
+  let totalModelMs = 0;
+  let totalToolMs = 0;
+  let totalToolCalls = 0;
+  let iterations = 0;
+  let finalText = '';
+  const providerRequests: Record<string, unknown>[] = [];
+  const anthScreenshots: Array<{ base64: string; mimeType: string; capturedAt: string }> = [];
+
+  for (let i = 0; i < Math.max(1, maxCalls); i += 1) {
+    iterations = i + 1;
+    const modelStartedAt = Date.now();
+
+    const requestPayload: Record<string, unknown> = {
+      model: req.model,
+      system: fullSystemPrompt,
+      max_tokens: isLive ? 4096 : 4096,
+      messages,
+      ...(tools.length ? { tools } : {}),
+      // In live mode, encourage tool use so the AI acts instead of chatting
+      ...(isLive && tools.length ? { tool_choice: { type: 'auto' } } : {}),
+    };
+    providerRequests.push(requestPayload);
+
+    console.log(`[MCP] Anthropic route: tool loop iteration ${iterations}/${maxCalls}, tools=${tools.length}, live=${isLive}`);
+    let res: Response;
+    try {
+      const anthropicBase = process.env.ANTHROPIC_BASE_URL || 'https://api.anthropic.com';
+      res = await fetch(`${anthropicBase}/v1/messages`, {
+        method: 'POST',
+        headers: {
+          'x-api-key': req.apiKey,
+          'anthropic-version': '2023-06-01',
+          'content-type': 'application/json',
+        },
+        body: JSON.stringify(requestPayload),
+      });
+    } catch (fetchErr) {
+      const msg = fetchErr instanceof Error ? fetchErr.message : String(fetchErr);
+      console.error(`[MCP] Anthropic fetch FAILED: ${msg}`);
+      throw new Error(`Anthropic API unreachable: ${msg}`);
+    }
+
+    if (!res.ok) {
+      const errText = await res.text();
+      throw new Error(`Anthropic error ${res.status}: ${errText}`);
+    }
+
+    const json = (await res.json()) as {
+      content: Array<Record<string, unknown>>;
+      stop_reason: string;
+      usage?: { input_tokens?: number; output_tokens?: number };
+    };
+    totalModelMs += Date.now() - modelStartedAt;
+
+    const content = Array.isArray(json.content) ? json.content : [];
+    const textParts = extractAnthropicText(content);
+    if (textParts) finalText = textParts;
+
+    // Check for tool_use blocks
+    const toolUseBlocks = content.filter((c) => c.type === 'tool_use');
+
+    // If no tool calls or stop_reason is end_turn, we're done
+    if (toolUseBlocks.length === 0 || json.stop_reason !== 'tool_use') {
+      console.log(`[MCP] Anthropic loop done after ${iterations} iteration(s), ${totalToolCalls} tool call(s), stop_reason=${json.stop_reason}, text=${(finalText || '').slice(0, 80)}`);
+      break;
+    }
+    console.log(`[MCP] Anthropic tool calls: ${toolUseBlocks.map((t) => t.name).join(', ')}`);
+
+    // Append the assistant's full response (including tool_use blocks) to messages
+    messages.push({ role: 'assistant', content });
+
+    // Execute each tool call and build tool_result blocks
+    const toolResultBlocks: Array<Record<string, unknown>> = [];
+    for (const toolUse of toolUseBlocks) {
+      const toolName = String(toolUse.name || '');
+      const toolId = String(toolUse.id || '');
+      const toolArgs = (toolUse.input && typeof toolUse.input === 'object')
+        ? toolUse.input as Record<string, unknown>
+        : {};
+
+      console.log(`[MCP] Anthropic tool call: ${toolName}(${JSON.stringify(toolArgs).slice(0, 200)})`);
+      const toolStartedAt = Date.now();
+
+      try {
+        const result = await executeHostedToolCall(req, toolName, toolArgs);
+        const toolMs = Date.now() - toolStartedAt;
+        totalToolMs += toolMs;
+        totalToolCalls += 1;
+
+        // Check if the tool result contains base64 image data (e.g. capture_screenshot)
+        const imageData = extractImageFromToolResult(result);
+
+        toolTrace.push({
+          name: toolName,
+          args: toolArgs,
+          startedAt: new Date(toolStartedAt).toISOString(),
+          durationMs: toolMs,
+          resultSummary: {
+            ok: typeof result === 'object' && result !== null && (result as Record<string, unknown>).ok === true,
+            count: typeof result === 'object' && result !== null && Array.isArray((result as Record<string, unknown>).data)
+              ? ((result as Record<string, unknown>).data as unknown[]).length
+              : undefined,
+            hasImage: Boolean(imageData),
+          },
+        });
+
+        if (imageData) {
+          // Build multimodal tool_result with image block so Claude can see the screenshot
+          const textSummary = buildImageToolResultSummary(result);
+          console.log(`[MCP] Anthropic tool result: image block (${imageData.mimeType}, ${imageData.base64.length} base64 chars)`);
+          anthScreenshots.push({ base64: imageData.base64, mimeType: imageData.mimeType, capturedAt: new Date().toISOString() });
+          toolResultBlocks.push({
+            type: 'tool_result',
+            tool_use_id: toolId,
+            content: [
+              {
+                type: 'image',
+                source: {
+                  type: 'base64',
+                  media_type: imageData.mimeType,
+                  data: imageData.base64,
+                },
+              },
+              { type: 'text', text: textSummary },
+            ],
+          });
+        } else {
+          // Only stringify non-image results (avoids serializing large base64 blobs)
+          const resultStr = typeof result === 'string' ? result : JSON.stringify(result);
+          // Truncate large results to keep context manageable
+          const truncatedResult = resultStr.length > 8000 ? resultStr.slice(0, 8000) + '\n... (truncated)' : resultStr;
+          // Log what the AI will see so we can debug blind tool calls
+          console.log(`[MCP] Anthropic tool result for ${toolName}: ${resultStr.slice(0, 500)}`);
+          toolResultBlocks.push({
+            type: 'tool_result',
+            tool_use_id: toolId,
+            content: truncatedResult,
+          });
+        }
+
+        // Record in live session for context persistence
+        if (liveSession) {
+          const sessionSummary = imageData
+            ? 'Screenshot captured (image attached)'
+            : (typeof result === 'string' ? result : JSON.stringify(result)).slice(0, 300);
+          recordToolResult(liveSession, toolName, toolArgs, sessionSummary);
+        }
+      } catch (err) {
+        const toolMs = Date.now() - toolStartedAt;
+        totalToolMs += toolMs;
+        totalToolCalls += 1;
+        const errorMsg = err instanceof Error ? err.message : String(err);
+
+        toolTrace.push({
+          name: toolName,
+          args: toolArgs,
+          startedAt: new Date(toolStartedAt).toISOString(),
+          durationMs: toolMs,
+          resultSummary: { ok: false },
+        });
+
+        toolResultBlocks.push({
+          type: 'tool_result',
+          tool_use_id: toolId,
+          is_error: true,
+          content: `Tool error: ${errorMsg}`,
+        });
+      }
+    }
+
+    // Append tool results as a user message (Anthropic's tool_result format)
+    messages.push({ role: 'user', content: toolResultBlocks });
+  }
+
+  // Update live session diagnostics
+  if (liveSession) {
+    const historyChars = messages.reduce((sum, m) => {
+      const content = typeof m.content === 'string' ? m.content : JSON.stringify(m.content);
+      return sum + content.length;
+    }, 0);
+    const toolResultChars = toolTrace.reduce((sum, t) => {
+      return sum + (t.resultSummary ? JSON.stringify(t.resultSummary).length : 0);
+    }, 0);
+    updateContextDiagnostics(liveSession, {
+      systemPromptChars: fullSystemPrompt.length,
+      historyChars,
+      toolResultChars,
+    });
+  }
+
   return {
-    text,
+    text: finalText,
+    screenshots: anthScreenshots.length > 0 ? anthScreenshots : undefined,
     metrics: {
       totalMs: 0,
       usedShortcut: false,
       provider: 'anthropic',
-      iterations: 1,
-      toolCalls: 0,
-      toolMs: 0,
-      modelMs: 0,
+      iterations,
+      toolCalls: totalToolCalls,
+      toolMs: totalToolMs,
+      modelMs: totalModelMs,
       promptChars: {
-        system: systemPrompt.length,
+        system: fullSystemPrompt.length,
         user: userPrompt.length,
       },
     },
     debug: {
       promptFileText: modePrompt,
-      systemPrompt,
+      systemPrompt: fullSystemPrompt,
       userPrompt,
-      toolDefinitions: [],
+      providerRequest: providerRequests.length <= 1 ? providerRequests[0] : { requests: providerRequests },
+      toolDefinitions: tools.map((t) => ({ name: t.name, description: t.description })),
       toolTrace,
+      resolutionPath: isLive ? 'anthropic:live_tool_loop' : 'anthropic:tool_loop',
     },
   };
 }
 
+/**
+ * Build a lightweight system prompt for Live copilot mode.
+ * Keeps context minimal — AI pulls what it needs via tools.
+ */
+function buildLiveSystemPrompt(req: McpChatRequest, sessionContext?: string): string {
+  const parts = [
+    '# TekAutomate Live Mode (Learn Mode)',
+    'You are a hands-on instrument copilot with direct access to a Tektronix oscilloscope.',
+    'Live mode = LEARN mode. You explore, try, observe, adjust, and achieve the goal.',
+    '',
+    '## Your approach',
+    '1. **Explore** — Browse the SCPI database to find relevant commands',
+    '2. **Try** — Send a command to the scope',
+    '3. **Observe** — Read the response. If it failed or returned unexpected results, try a different command.',
+    '4. **Adjust** — Capture a screenshot if needed. Query current values. Iterate.',
+    '5. **Achieve** — Once the goal is met, report what you did.',
+    '6. **Save** — If you discovered a useful sequence, call save_learned_workflow so it can be reused instantly next time.',
+    '',
+    '## Tools — when to use each one',
+    '',
+    '### Execution (use these to DO things on the scope)',
+    '- **send_scpi** — Send one or more SCPI commands. Returns per-command results: {command, response, ok, error}.',
+    '  - Write commands: "CH1:SCAle 0.5" → response="OK" if successful',
+    '  - Query commands (ending with ?): "*IDN?" → response contains the value',
+    '  - You can send multiple commands in one call: ["*RST", "CH1:SCAle 0.5", "*OPC?"]',
+    '- **capture_screenshot** — Capture the scope display as PNG. Call this AFTER any visual change to verify + update the UI.',
+    '- **probe_command** — Test ONE command when you want to check if it works before sending a batch.',
+    '- **get_instrument_state** — Quick scope check: *IDN?, *ESR?, ALLEV?. Use at start of session or after errors.',
+    '',
+    '### Discovery (use these to FIND the right SCPI commands)',
+    '- **smart_scpi_lookup** — Best for natural language: "how to add jitter measurement". Returns matching commands with syntax.',
+    '- **get_command_group** — Browse ALL commands in a feature area. Groups: Vertical, Horizontal, Trigger, Measurement, Bus, Power, Plot, Display, Save and Recall, Math, Acquisition, etc. Each command entry has: header, syntax.set, syntax.query, arguments with validValues, examples.',
+    '- **get_command_by_header** — When you already know the header: "CH<x>:SCAle" → returns full entry with syntax, args, examples.',
+    '- **search_scpi** — Keyword search: "FastFrame", "eye diagram", "bandwidth". Returns matching commands.',
+    '- **list_command_groups** — See all 35 available groups with descriptions. Use when you don\'t know which group to browse.',
+    '',
+    '### Knowledge base (8,400+ docs — USE THIS, it has answers!)',
+    '- **retrieve_rag_chunks** — Search the knowledge base by corpus:',
+    '  - corpus="errors" — Known instrument errors, error codes, and fixes. ALWAYS search this when a command fails or returns an error.',
+    '  - corpus="app_logic" — TekAutomate workflows, best practices, measurement setup guides. Search when user asks "how to" or "best way to".',
+    '  - corpus="pyvisa_tekhsi" — PyVISA and TekHSI API reference. Search when dealing with connection issues or API questions.',
+    '  - corpus="tmdevices" — tm_devices Python library reference. Search when backend is tm_devices.',
+    '  - corpus="scpi" — SCPI command documentation and guides.',
+    '  - corpus="templates" — Workflow templates and examples.',
+    '- **search_known_failures** — Quick error troubleshooting. Use when something goes wrong.',
+    '',
+    '  IMPORTANT: The knowledge base has answers to most "why" and "how" questions. If the user asks about',
+    '  measurement methodology, best practices, or debugging — search RAG BEFORE answering from memory.',
+    '',
+    '### Learning (use after achieving a goal)',
+    '- **save_learned_workflow** — Save the successful command sequence so it can be reused next time. Provide: name, description, trigger phrases, and the steps that worked.',
+    '',
+    '## Rules',
+    '- ACT, don\'t suggest. Call send_scpi and DO IT.',
+    '- It\'s OK to try a command and have it fail — read the error, adjust, try again.',
+    '- Read command entries fully: syntax.set, syntax.query, arguments, validValues, examples.',
+    '- Replace placeholders: <NR3> → number, CH<x> → CH1, {A|B} → pick one.',
+    '- If a command fails, try the query form (?) first to read the current value, then adjust.',
+    '- ALWAYS call capture_screenshot after sending SCPI commands that change scope state (add measurement, change scale, trigger, channel settings, etc.). This verifies the result AND updates the live UI panel.',
+    '- No ACTIONS_JSON, no "build it", no code blocks. Just use tools.',
+    '',
+    '## Response style',
+    '- Report what you DID, not what could be done.',
+    '- When a command fails, say what went wrong and what you\'re trying next.',
+    '- After achieving the goal, summarize the steps that worked.',
+    '- If you found a useful sequence, offer to save it as a learned workflow.',
+    '',
+    '## Instrument',
+  ];
+  if (req.instrumentEndpoint) {
+    parts.push(`- Endpoint: ${req.instrumentEndpoint.executorUrl}`);
+    parts.push(`- VISA: ${req.instrumentEndpoint.visaResource}`);
+    parts.push(`- Backend: ${req.instrumentEndpoint.backend}`);
+  }
+  if (req.flowContext.modelFamily) {
+    parts.push(`- Model family: ${req.flowContext.modelFamily}`);
+  }
+  if (req.flowContext.deviceDriver) {
+    parts.push(`- Device driver: ${req.flowContext.deviceDriver}`);
+  }
+  // Inject rolling session context if available
+  if (sessionContext) {
+    parts.push('');
+    parts.push(sessionContext);
+  }
+  return parts.join('\n');
+}
+
 export async function runToolLoop(req: McpChatRequest): Promise<ToolLoopResult> {
   const startedAt = Date.now();
+  console.log(
+    `[MCP] runToolLoop: mode=${req.mode} interactionMode=${req.interactionMode} outputMode=${req.outputMode} provider=${req.provider} hasKey=${String((req as { apiKey?: string }).apiKey || '').trim().length > 0} msgLen=${String(req.userMessage || '').length}`
+  );
   if (typeof req.userMessage === 'string' && /\btm_device\b/i.test(req.userMessage)) {
     req.userMessage = req.userMessage.replace(/\btm_device\b/gi, 'tm_devices');
   }
@@ -6797,7 +7545,20 @@ export async function runToolLoop(req: McpChatRequest): Promise<ToolLoopResult> 
     req.flowContext.backend = 'tm_devices';
   }
   if (req.outputMode === 'steps_json' && hasBuildBrief(req)) {
-    req.userMessage = buildQueryFromStructuredBrief(req.buildBrief);
+    const briefQuery = buildQueryFromStructuredBrief(req.buildBrief);
+    const originalMessage = String(req.userMessage || '').trim();
+    // When the request comes from a chat→build handoff, the original userMessage
+    // contains rich context from buildPromptFromRecentChat (chat transcript,
+    // focus hints, secondary evidence). Preserve it and append the structured
+    // brief query so the planner/router has both the conversational context AND
+    // the structured brief to work with.
+    const hasHandoffContext = originalMessage.length > briefQuery.length + 50 &&
+      /chat transcript|secondary evidence|structured.*brief/i.test(originalMessage);
+    if (hasHandoffContext) {
+      req.userMessage = originalMessage + '\n\nStructured brief summary:\n' + briefQuery;
+    } else {
+      req.userMessage = briefQuery;
+    }
     if (req.mode === 'mcp_ai') {
       req.routerOnly = true;
       req.routerPreferred = true;
@@ -6826,7 +7587,7 @@ export async function runToolLoop(req: McpChatRequest): Promise<ToolLoopResult> 
     rawApiKey.length === 0 ||
     rawApiKey === '__mcp_only__' ||
     rawApiKey.toLowerCase() === 'undefined';
-  if (req.outputMode === 'chat') {
+  if (req.outputMode === 'chat' && req.interactionMode !== 'live') {
     if (mcpOnlyMode) {
       const text = 'Chat mode needs MCP+AI with a provider model and API key. Switch to MCP+AI, or use Build mode for deterministic planner output.';
       return {
@@ -6865,6 +7626,53 @@ export async function runToolLoop(req: McpChatRequest): Promise<ToolLoopResult> 
       debug: chatResult.debug,
     };
   }
+
+  // Live mode: pure conversation + MCP tools, no planner/intent coercion
+  if (req.interactionMode === 'live') {
+    if (mcpOnlyMode) {
+      const text = 'Live mode needs MCP+AI with a provider model and API key.';
+      return {
+        text,
+        displayText: text,
+        assistantThreadId: undefined,
+        errors: [],
+        warnings: [],
+        metrics: {
+          totalMs: Date.now() - startedAt,
+          usedShortcut: true,
+          provider: req.provider,
+          iterations: 0,
+          toolCalls: 0,
+          toolMs: 0,
+          modelMs: 0,
+          promptChars: { system: 0, user: 0 },
+        },
+        debug: {
+          toolTrace: [],
+          resolutionPath: 'live:requires_ai',
+        },
+      };
+    }
+    console.log(`[MCP] Live mode: routing to ${req.provider} tool loop`);
+    const liveMaxRounds = 15; // Live = learn mode: explore, try, observe, adjust, succeed
+    const liveResult = req.provider === 'anthropic'
+      ? await runAnthropicToolLoop(req, [], liveMaxRounds)
+      : await runOpenAiToolLoop(req, [], liveMaxRounds);
+    return {
+      text: liveResult.text,
+      displayText: liveResult.displayText || liveResult.text,
+      assistantThreadId: liveResult.assistantThreadId,
+      screenshots: (liveResult as any).screenshots,
+      errors: [],
+      warnings: [],
+      metrics: {
+        ...liveResult.metrics,
+        totalMs: Date.now() - startedAt,
+      },
+      debug: liveResult.debug,
+    };
+  }
+
   const explainOnlyMode = isExplainOnlyCommandAsk(req);
   const forceToolCallMode = cleanRouter.getToolCallMode(req);
   const routeSummary = cleanRouter.getRouteSummary(req);
@@ -7499,27 +8307,39 @@ export async function runToolLoop(req: McpChatRequest): Promise<ToolLoopResult> 
   }
 
   const maxToolRounds = forceToolCallMode ? 8 : (isHostedStructuredBuildRequest(req) ? 4 : 3);
-  const loopResult = mcpOnlyMode
-    ? await runDeterministicToolLoop(req, flowCommandIssues, maxToolRounds)
-    : routerFirstAiMode
-      ? (plannerComplete
-          ? await runOpenAiResponses(req, flowCommandIssues, {
-              routerBaselineText: hostedBuildResult?.text || '',
-              routerBaselineMode: hostedBuildMode,
-            })
-          : await runOpenAiToolLoop(
-              {
-                ...req,
-                routerOnly: true,
-                routerPreferred: true,
-                routerBaselineText: hostedBuildResult?.text || '',
-              },
-              flowCommandIssues,
-              2
-            ))
-      : ((forceToolCallMode || shouldUseTools(req))
-        ? await runOpenAiToolLoop(req, flowCommandIssues, maxToolRounds)
-        : await runOpenAiResponses(req, flowCommandIssues));
+  const isAnthropicProvider = req.provider === 'anthropic';
+
+  // Provider dispatch — readable if/else instead of deep ternary
+  let loopResult: Awaited<ReturnType<typeof runOpenAiToolLoop>>;
+  if (mcpOnlyMode) {
+    loopResult = await runDeterministicToolLoop(req, flowCommandIssues, maxToolRounds);
+  } else if (isAnthropicProvider) {
+    // Anthropic always uses its tool loop for AI calls
+    loopResult = await runAnthropicToolLoop(req, flowCommandIssues, maxToolRounds);
+  } else if (routerFirstAiMode) {
+    // OpenAI router-first path
+    if (plannerComplete) {
+      loopResult = await runOpenAiResponses(req, flowCommandIssues, {
+        routerBaselineText: hostedBuildResult?.text || '',
+        routerBaselineMode: hostedBuildMode,
+      });
+    } else {
+      loopResult = await runOpenAiToolLoop(
+        {
+          ...req,
+          routerOnly: true,
+          routerPreferred: true,
+          routerBaselineText: hostedBuildResult?.text || '',
+        },
+        flowCommandIssues,
+        2
+      );
+    }
+  } else if (forceToolCallMode || shouldUseTools(req)) {
+    loopResult = await runOpenAiToolLoop(req, flowCommandIssues, maxToolRounds);
+  } else {
+    loopResult = await runOpenAiResponses(req, flowCommandIssues);
+  }
 
   // In MCP-only mode, return immediately without any post-processing
   if (mcpOnlyMode) {
@@ -7665,9 +8485,11 @@ export async function runToolLoop(req: McpChatRequest): Promise<ToolLoopResult> 
         `${req.userMessage}\n\n` +
         'Return ONLY valid ACTIONS_JSON as one compact JSON object. No prose, no markdown, no code fences.',
     };
-    const retryLoop = shouldUseTools(retryReq)
-      ? await runOpenAiToolLoop(retryReq, flowCommandIssues, 2)
-      : await runOpenAiResponses(retryReq, flowCommandIssues);
+    const retryLoop = isAnthropicProvider
+      ? await runAnthropicToolLoop(retryReq, flowCommandIssues, 2)
+      : (shouldUseTools(retryReq)
+        ? await runOpenAiToolLoop(retryReq, flowCommandIssues, 2)
+        : await runOpenAiResponses(retryReq, flowCommandIssues));
     const retryChecked = await postCheckResponse(
       retryLoop.text,
       {

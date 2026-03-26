@@ -849,13 +849,19 @@ function toCommandRecord(
   const manual = raw._manualEntry as Record<string, unknown> | undefined;
   let header = extractHeader(raw);
   if (!header) return null;
+  // Prefer explicit group from the command data over the file-level default
+  // Check both 'group' and 'commandGroup' fields (legacy overrides use 'commandGroup')
+  const effectiveGroup =
+    (typeof raw.group === 'string' && raw.group) ||
+    (typeof raw.commandGroup === 'string' && (raw.commandGroup as string)) ||
+    group;
   const description =
     (typeof raw.description === 'string' && raw.description) ||
     (typeof manual?.description === 'string' && manual.description) ||
     (typeof raw.shortDescription === 'string' && raw.shortDescription) ||
     '';
   const shortDescription = extractShortDescription(raw);
-  const category = (typeof raw.category === 'string' && raw.category) || group || 'general';
+  const category = (typeof raw.category === 'string' && raw.category) || effectiveGroup || 'general';
   const commandId =
     (typeof manual?.command === 'string' && manual.command) ||
     (typeof raw.id === 'string' && raw.id) ||
@@ -890,7 +896,7 @@ function toCommandRecord(
   return {
     commandId,
     sourceFile,
-    group,
+    group: effectiveGroup,
     header,
     shortDescription,
     description,

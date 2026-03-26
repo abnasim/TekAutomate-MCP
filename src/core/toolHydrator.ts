@@ -514,7 +514,7 @@ export function hydrateBuiltinShortcuts(): MicroTool[] {
       id: 'shortcut:bus_decode',
       name: 'Configure Bus Decode',
       description: 'Build a lightweight bus decode flow.',
-      triggers: ['bus decode', 'i2c', 'spi', 'can'],
+      triggers: ['bus decode', 'configure bus', 'decode i2c', 'decode spi', 'decode can', 'i2c decode', 'spi decode', 'can decode', 'setup i2c', 'setup spi', 'setup can'],
       tags: ['bus', 'decode'],
       category: 'shortcut',
       schema: {
@@ -544,7 +544,7 @@ export function hydrateBuiltinShortcuts(): MicroTool[] {
       id: 'shortcut:status_decode',
       name: 'Decode Status Register',
       description: 'Build a flow that queries and decodes a status register.',
-      triggers: ['status', 'esr', 'stb', 'allev'],
+      triggers: ['status register', 'decode status', 'read esr', 'read stb', 'query allev', 'event status', 'error queue', 'status byte'],
       tags: ['status', 'register'],
       category: 'shortcut',
       schema: {
