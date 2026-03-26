@@ -23,6 +23,9 @@ let lastAiDebug: Record<string, unknown> | null = null;
 const REQUEST_LOG_DIR = path.join(__dirname, 'logs', 'requests');
 const MAX_LOG_FILES = 500;
 const MAX_IN_MEMORY_LOGS = 250;
+let startupState: 'starting' | 'ready' | 'error' = 'starting';
+let startupError: string | null = null;
+let startupInitPromise: Promise<void> | null = null;
 type LogLevel = 'log' | 'info' | 'warn' | 'error';
 type InMemoryLogEntry = {
   timestamp: string;
@@ -303,14 +306,15 @@ function escapeHtml(value: string): string {
 
 function getStatusPayload() {
   return {
-    ok: true,
-    status: 'ready',
+    ok: startupState !== 'error',
+    status: startupState,
     service: 'TekAutomate MCP',
     uptimeSec: Math.floor((Date.now() - serverStartedAt) / 1000),
     routerEnabled: String(process.env.MCP_ROUTER_ENABLED || '').trim() === 'true',
     providerSupplementsEnabled: providerSupplementsEnabled(),
     port: Number(process.env.MCP_PORT || process.env.PORT || 8787),
     timestamp: new Date().toISOString(),
+    ...(startupError ? { startupError } : {}),
   };
 }
 
@@ -653,42 +657,43 @@ function parseProviderError(status: number, raw: string): { code: string; messag
   return { code, message, hint };
 }
 
-export async function createServer(port = 8787, host = '0.0.0.0'): Promise<http.Server> {
-  patchConsoleOnce();
-  // CRITICAL FIX: Initialize ALL indexes BEFORE creating HTTP server
-  // Previously: initialization happened inside request handlers (race condition)
-  const startInit = Date.now();
-  console.log('[SERVER] Initializing indexes before HTTP server starts...');
+async function warmStartup(): Promise<void> {
+  if (startupInitPromise) return startupInitPromise;
+  startupInitPromise = (async () => {
+    patchConsoleOnce();
+    startupState = 'starting';
+    startupError = null;
+    const startInit = Date.now();
+    console.log('[SERVER] Initializing indexes in background...');
 
-  const results = await Promise.allSettled([
-    initCommandIndex(),
-    initTmDevicesIndex(),
-    initRagIndexes(),
-    initTemplateIndex(),
-    ...(providerSupplementsEnabled() ? [initProviderCatalog()] : []),
-  ]);
+    const results = await Promise.allSettled([
+      initCommandIndex(),
+      initTmDevicesIndex(),
+      initRagIndexes(),
+      initTemplateIndex(),
+      ...(providerSupplementsEnabled() ? [initProviderCatalog()] : []),
+    ]);
 
-  // Check for initialization failures
-  const failures = results
-    .map((r, i) => r.status === 'rejected' ? { index: i, error: r.reason } : null)
-    .filter((f): f is { index: number; error: unknown } => Boolean(f));
+    const failures = results
+      .map((r, i) => (r.status === 'rejected' ? { index: i, error: r.reason } : null))
+      .filter((f): f is { index: number; error: unknown } => Boolean(f));
 
-  if (failures.length > 0) {
-    const names = ['CommandIndex', 'TmDevicesIndex', 'RagIndexes', 'TemplateIndex', 'ProviderCatalog'];
-    const failedNames = failures.map(f => names[f.index]).join(', ');
-    const error = new Error(`[CRITICAL] Initialization failed: ${failedNames}`);
-    console.error(error.message);
-    for (const failure of failures) {
-      console.error(`  ${names[failure.index]}: ${failure.error}`);
+    if (failures.length > 0) {
+      const names = ['CommandIndex', 'TmDevicesIndex', 'RagIndexes', 'TemplateIndex', 'ProviderCatalog'];
+      const failedNames = failures.map((f) => names[f.index]).join(', ');
+      const error = new Error(`[CRITICAL] Initialization failed: ${failedNames}`);
+      startupState = 'error';
+      startupError = error.message;
+      console.error(error.message);
+      for (const failure of failures) {
+        console.error(`  ${names[failure.index]}: ${failure.error}`);
+      }
+      throw error;
     }
-    throw error;
-  }
 
-  console.log(`✅ All indexes initialized in ${Date.now() - startInit}ms`);
+    console.log(`✅ All indexes initialized in ${Date.now() - startInit}ms`);
 
-  // Now bootstrap router if enabled
-  if (String(process.env.MCP_ROUTER_ENABLED || '').trim() === 'true') {
-    try {
+    if (String(process.env.MCP_ROUTER_ENABLED || '').trim() === 'true') {
       const commandIndex = await getCommandIndex();
       const ragIndexes = await getRagIndexes();
       const templates = (await getTemplateIndex()).all().map((doc) => ({
@@ -702,11 +707,19 @@ export async function createServer(port = 8787, host = '0.0.0.0'): Promise<http.
       }));
       const report = await bootRouter({ commandIndex, ragIndexes, templates });
       console.log(`[MCP:router] ${report.total} tools in ${report.durationMs}ms`);
-    } catch (error) {
-      console.error('[MCP:router] Boot failed:', error);
-      throw error;
     }
-  }
+
+    startupState = 'ready';
+  })().catch((error) => {
+    startupState = 'error';
+    startupError = error instanceof Error ? error.message : String(error);
+    throw error;
+  });
+  return startupInitPromise;
+}
+
+export async function createServer(port = 8787, host = '0.0.0.0'): Promise<http.Server> {
+  patchConsoleOnce();
 
   // NOW create the HTTP server (all indexes are ready)
   const server = http.createServer(async (req, res) => {
@@ -744,6 +757,16 @@ export async function createServer(port = 8787, host = '0.0.0.0'): Promise<http.
         ok: true,
         logs: inMemoryLogs.slice(-120),
         recentRequests: readRecentRequestSummaries(20),
+      });
+      return;
+    }
+
+    if (startupState !== 'ready') {
+      const retryable = startupState === 'starting';
+      sendJson(res, retryable ? 503 : 500, {
+        ok: false,
+        error: retryable ? 'Server is still initializing.' : startupError || 'Server failed to initialize.',
+        status: startupState,
       });
       return;
     }
@@ -1136,6 +1159,9 @@ export async function createServer(port = 8787, host = '0.0.0.0'): Promise<http.
 
   await new Promise<void>((resolve) => {
     server.listen(port, host, () => resolve());
+  });
+  void warmStartup().catch(() => {
+    // Startup errors are surfaced through /health, /status, /debug, and route guards.
   });
   return server;
 }
