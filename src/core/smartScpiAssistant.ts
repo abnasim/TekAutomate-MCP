@@ -283,6 +283,9 @@ export class SmartScpiAssistant {
         'mso_2_series': ['MSO2'],
         'dpo_7_series': ['DPO7000', 'DPO70000'],
         'dpo_5_series': ['DPO5000'],
+        'tekscopepc': ['MSO4', 'MSO5', 'MSO6', 'MSO7', 'MSO5000', 'DPO5000', 'DPO7000', 'DPO70000'],
+        'tekscope_pc': ['MSO4', 'MSO5', 'MSO6', 'MSO7', 'MSO5000', 'DPO5000', 'DPO7000', 'DPO70000'],
+        'tekscope pc': ['MSO4', 'MSO5', 'MSO6', 'MSO7', 'MSO5000', 'DPO5000', 'DPO7000', 'DPO70000'],
       };
 
       const targetFamilies = familyMap[request.modelFamily.toLowerCase()] || [request.modelFamily];

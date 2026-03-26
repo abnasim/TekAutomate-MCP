@@ -643,6 +643,10 @@ function requestedFamilyBuckets(family?: string): Set<string> {
 
   if (/MSO24567|MSO456|MSO45|MSO56|MSO7|MSO6|MSO5|MSO4|MSO2/.test(normalized)) add('MODERN_MSO');
   if (/DPO|5K|7K|70K|MSO5000/.test(normalized)) add('LEGACY_SCOPE');
+  if (/TEKSCOPEPC|TEKSCOPE/.test(normalized)) {
+    add('MODERN_MSO');
+    add('LEGACY_SCOPE');
+  }
   if (/AFG/.test(normalized)) add('AFG');
   if (/AWG/.test(normalized)) add('AWG');
   if (/SMU|KEITHLEY/.test(normalized)) add('SMU');
