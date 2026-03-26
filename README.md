@@ -182,6 +182,7 @@ Suggested Railway environment variables:
 - `OPENAI_ASSISTANT_ID` (if using assistant-thread routing)
 - `MCP_ROUTER_ENABLED=true` (if you want router-backed tool hydration at boot)
 - `NODE_ENV=production`
+- `MCP_WARM_START_MODE=minimal` (recommended on smaller Railway instances)
 
 ## Environment variables
 

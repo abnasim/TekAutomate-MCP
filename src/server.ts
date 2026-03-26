@@ -1,9 +1,6 @@
 import http from 'http';
 import { initCommandIndex } from './core/commandIndex';
-import { initProviderCatalog, providerSupplementsEnabled } from './core/providerCatalog';
-import { initTmDevicesIndex } from './core/tmDevicesIndex';
-import { initRagIndexes } from './core/ragIndex';
-import { initTemplateIndex } from './core/templateIndex';
+import { providerSupplementsEnabled } from './core/providerCatalog';
 import { runToolLoop } from './core/toolLoop';
 import type { McpChatRequest } from './core/schemas';
 import { bootRouter, createReloadProvidersHandler, createRouterHandler, getRouterHealth } from './core/routerIntegration';
@@ -305,6 +302,7 @@ function escapeHtml(value: string): string {
 }
 
 function getStatusPayload() {
+  const warmMode = String(process.env.MCP_WARM_START_MODE || 'minimal').trim().toLowerCase() || 'minimal';
   return {
     ok: startupState !== 'error',
     status: startupState,
@@ -312,6 +310,7 @@ function getStatusPayload() {
     uptimeSec: Math.floor((Date.now() - serverStartedAt) / 1000),
     routerEnabled: String(process.env.MCP_ROUTER_ENABLED || '').trim() === 'true',
     providerSupplementsEnabled: providerSupplementsEnabled(),
+    warmStartMode: warmMode,
     port: Number(process.env.MCP_PORT || process.env.PORT || 8787),
     timestamp: new Date().toISOString(),
     ...(startupError ? { startupError } : {}),
@@ -664,22 +663,31 @@ async function warmStartup(): Promise<void> {
     startupState = 'starting';
     startupError = null;
     const startInit = Date.now();
-    console.log('[SERVER] Initializing indexes in background...');
+    const warmMode = String(process.env.MCP_WARM_START_MODE || 'minimal').trim().toLowerCase() || 'minimal';
+    console.log(`[SERVER] Initializing indexes in background (mode=${warmMode})...`);
 
-    const results = await Promise.allSettled([
-      initCommandIndex(),
-      initTmDevicesIndex(),
-      initRagIndexes(),
-      initTemplateIndex(),
-      ...(providerSupplementsEnabled() ? [initProviderCatalog()] : []),
-    ]);
+    const tasks: Promise<unknown>[] = [initCommandIndex()];
+    const names = ['CommandIndex'];
+    if (warmMode === 'full') {
+      tasks.push(
+        import('./core/tmDevicesIndex').then(({ initTmDevicesIndex }) => initTmDevicesIndex()),
+        import('./core/ragIndex').then(({ initRagIndexes }) => initRagIndexes()),
+        import('./core/templateIndex').then(({ initTemplateIndex }) => initTemplateIndex())
+      );
+      names.push('TmDevicesIndex', 'RagIndexes', 'TemplateIndex');
+      if (providerSupplementsEnabled()) {
+        tasks.push(import('./core/providerCatalog').then(({ initProviderCatalog }) => initProviderCatalog()));
+        names.push('ProviderCatalog');
+      }
+    }
+
+    const results = await Promise.allSettled(tasks);
 
     const failures = results
       .map((r, i) => (r.status === 'rejected' ? { index: i, error: r.reason } : null))
       .filter((f): f is { index: number; error: unknown } => Boolean(f));
 
     if (failures.length > 0) {
-      const names = ['CommandIndex', 'TmDevicesIndex', 'RagIndexes', 'TemplateIndex', 'ProviderCatalog'];
       const failedNames = failures.map((f) => names[f.index]).join(', ');
       const error = new Error(`[CRITICAL] Initialization failed: ${failedNames}`);
       startupState = 'error';
