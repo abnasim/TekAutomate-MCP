@@ -6835,20 +6835,13 @@ async function runOpenAiToolLoop(
     const model = resolveOpenAiModel(req);
     const liveToolDefs = getToolDefinitions();
     const liveToolNames = new Set([
-      // Instrument actions
+      // Execution (4)
       'send_scpi', 'capture_screenshot', 'get_instrument_state', 'probe_command',
-      'get_visa_resources', 'get_environment',
-      // SCPI exploration (iterative — AI can browse groups, read full entries)
-      'list_command_groups', 'get_command_group', 'get_command_by_header', 'get_commands_by_header_batch',
-      // SCPI search + validation
-      'smart_scpi_lookup', 'search_scpi',
-      'verify_scpi_commands', 'materialize_scpi_command', 'finalize_scpi_commands',
-      // Learning — save successful workflows for reuse
-      'save_learned_workflow',
-      // tm_devices lookup + materialization
-      'search_tm_devices', 'materialize_tm_devices_call',
-      // Knowledge
-      'retrieve_rag_chunks', 'search_known_failures',
+      // Discovery (5) — AI explores the SCPI database
+      'smart_scpi_lookup', 'search_scpi', 'get_command_group', 'get_command_by_header',
+      'list_command_groups',
+      // Knowledge + learning (3)
+      'retrieve_rag_chunks', 'search_known_failures', 'save_learned_workflow',
     ]);
     // Strip infra params from tool schemas (same as Anthropic path)
     const infraParams = new Set(['executorUrl', 'visaResource', 'backend', 'liveMode', 'outputMode', 'modelFamily', 'deviceDriver', 'scopeType']);
@@ -6876,8 +6869,8 @@ async function runOpenAiToolLoop(
     const liveMessages: Array<Record<string, unknown>> = [
       { role: 'system', content: liveSystemWithContext },
       ...(req.history || [])
-        .slice(-12)
-        .map((h) => ({ role: h.role, content: String(h.content || '').slice(0, 3000) })),
+        .slice(-6)
+        .map((h) => ({ role: h.role, content: String(h.content || '').slice(0, 1500) })),
       { role: 'user', content: buildOpenAiUserContent(req, userPrompt) },
     ];
 
@@ -7063,20 +7056,13 @@ function selectAnthropicTools(req: McpChatRequest): Array<{ name: string; descri
   if (isLive) {
     // Live mode: instrument tools + search/lookup tools only (keep it lean)
     const liveToolNames = new Set([
-      // Instrument actions
+      // Execution (4)
       'send_scpi', 'capture_screenshot', 'get_instrument_state', 'probe_command',
-      'get_visa_resources', 'get_environment',
-      // SCPI exploration (iterative — AI can browse groups, read full entries)
-      'list_command_groups', 'get_command_group', 'get_command_by_header', 'get_commands_by_header_batch',
-      // SCPI search + validation
-      'smart_scpi_lookup', 'search_scpi',
-      'verify_scpi_commands', 'materialize_scpi_command', 'finalize_scpi_commands',
-      // Learning — save successful workflows for reuse
-      'save_learned_workflow',
-      // tm_devices lookup + materialization
-      'search_tm_devices', 'materialize_tm_devices_call',
-      // Knowledge
-      'retrieve_rag_chunks', 'search_known_failures',
+      // Discovery (5) — AI explores the SCPI database
+      'smart_scpi_lookup', 'search_scpi', 'get_command_group', 'get_command_by_header',
+      'list_command_groups',
+      // Knowledge + learning (3)
+      'retrieve_rag_chunks', 'search_known_failures', 'save_learned_workflow',
     ]);
     const filtered = allTools.filter((t) => liveToolNames.has(t.name));
     // Strip server-injected infra params from schemas so AI only sees user-facing params
@@ -7216,10 +7202,10 @@ async function runAnthropicToolLoop(
   // Build conversation messages from history
   const messages: Array<Record<string, unknown>> = [
     ...(req.history || [])
-      .slice(isLive ? -12 : -6)
+      .slice(isLive ? -6 : -6)
       .map((h) => ({
         role: h.role as 'user' | 'assistant',
-        content: String(h.content || '').slice(0, isLive ? 3000 : 800),
+        content: String(h.content || '').slice(0, isLive ? 1500 : 800),
       })),
     { role: 'user', content: userContent },
   ];
@@ -7449,65 +7435,21 @@ async function runAnthropicToolLoop(
 function buildLiveSystemPrompt(req: McpChatRequest, sessionContext?: string): string {
   const parts = [
     '# TekAutomate Live Mode (Learn Mode)',
-    'You are a hands-on instrument copilot with direct access to a Tektronix oscilloscope.',
-    'Live mode = LEARN mode. You explore, try, observe, adjust, and achieve the goal.',
+    'Live instrument copilot. You have direct scope access. Explore→Try→Observe→Adjust→Achieve.',
     '',
-    '## Your approach',
-    '1. **Explore** — Browse the SCPI database to find relevant commands',
-    '2. **Try** — Send a command to the scope',
-    '3. **Observe** — Read the response. If it failed or returned unexpected results, try a different command.',
-    '4. **Adjust** — Capture a screenshot if needed. Query current values. Iterate.',
-    '5. **Achieve** — Once the goal is met, report what you did.',
-    '6. **Save** — If you discovered a useful sequence, call save_learned_workflow so it can be reused instantly next time.',
-    '',
-    '## Tools — when to use each one',
-    '',
-    '### Execution (use these to DO things on the scope)',
-    '- **send_scpi** — Send one or more SCPI commands. Returns per-command results: {command, response, ok, error}.',
-    '  - Write commands: "CH1:SCAle 0.5" → response="OK" if successful',
-    '  - Query commands (ending with ?): "*IDN?" → response contains the value',
-    '  - You can send multiple commands in one call: ["*RST", "CH1:SCAle 0.5", "*OPC?"]',
-    '- **capture_screenshot** — Capture the scope display as PNG. Call this AFTER any visual change to verify + update the UI.',
-    '- **probe_command** — Test ONE command when you want to check if it works before sending a batch.',
-    '- **get_instrument_state** — Quick scope check: *IDN?, *ESR?, ALLEV?. Use at start of session or after errors.',
-    '',
-    '### Discovery (use these to FIND the right SCPI commands)',
-    '- **smart_scpi_lookup** — Best for natural language: "how to add jitter measurement". Returns matching commands with syntax.',
-    '- **get_command_group** — Browse ALL commands in a feature area. Groups: Vertical, Horizontal, Trigger, Measurement, Bus, Power, Plot, Display, Save and Recall, Math, Acquisition, etc. Each command entry has: header, syntax.set, syntax.query, arguments with validValues, examples.',
-    '- **get_command_by_header** — When you already know the header: "CH<x>:SCAle" → returns full entry with syntax, args, examples.',
-    '- **search_scpi** — Keyword search: "FastFrame", "eye diagram", "bandwidth". Returns matching commands.',
-    '- **list_command_groups** — See all 35 available groups with descriptions. Use when you don\'t know which group to browse.',
-    '',
-    '### Knowledge base (8,400+ docs — USE THIS, it has answers!)',
-    '- **retrieve_rag_chunks** — Search the knowledge base by corpus:',
-    '  - corpus="errors" — Known instrument errors, error codes, and fixes. ALWAYS search this when a command fails or returns an error.',
-    '  - corpus="app_logic" — TekAutomate workflows, best practices, measurement setup guides. Search when user asks "how to" or "best way to".',
-    '  - corpus="pyvisa_tekhsi" — PyVISA and TekHSI API reference. Search when dealing with connection issues or API questions.',
-    '  - corpus="tmdevices" — tm_devices Python library reference. Search when backend is tm_devices.',
-    '  - corpus="scpi" — SCPI command documentation and guides.',
-    '  - corpus="templates" — Workflow templates and examples.',
-    '- **search_known_failures** — Quick error troubleshooting. Use when something goes wrong.',
-    '',
-    '  IMPORTANT: The knowledge base has answers to most "why" and "how" questions. If the user asks about',
-    '  measurement methodology, best practices, or debugging — search RAG BEFORE answering from memory.',
-    '',
-    '### Learning (use after achieving a goal)',
-    '- **save_learned_workflow** — Save the successful command sequence so it can be reused next time. Provide: name, description, trigger phrases, and the steps that worked.',
+    '## Tools',
+    '- **send_scpi** — Send SCPI commands. Returns: [{command, response, ok, error}]. Queries (?) return values. Multiple commands OK.',
+    '- **capture_screenshot** — Capture scope display. ALWAYS call after visual changes.',
+    '- **probe_command** — Test one command. **get_instrument_state** — *IDN?/*ESR?/ALLEV?.',
+    '- **smart_scpi_lookup** — Natural language SCPI search. **search_scpi** — Keyword search.',
+    '- **get_command_group** — Browse group: Vertical, Horizontal, Trigger, Measurement, Bus, Power, Plot, Display, Math, Acquisition, Save and Recall. Returns full entries with syntax, args, examples.',
+    '- **get_command_by_header** — Exact lookup by header. **list_command_groups** — All groups.',
+    '- **retrieve_rag_chunks** — Knowledge base (corpus: errors|app_logic|pyvisa_tekhsi|tmdevices|scpi|templates). Search on errors or "how to" questions.',
+    '- **search_known_failures** — Error troubleshooting. **save_learned_workflow** — Save successful sequence for reuse.',
     '',
     '## Rules',
-    '- ACT, don\'t suggest. Call send_scpi and DO IT.',
-    '- It\'s OK to try a command and have it fail — read the error, adjust, try again.',
-    '- Read command entries fully: syntax.set, syntax.query, arguments, validValues, examples.',
-    '- Replace placeholders: <NR3> → number, CH<x> → CH1, {A|B} → pick one.',
-    '- If a command fails, try the query form (?) first to read the current value, then adjust.',
-    '- ALWAYS call capture_screenshot after sending SCPI commands that change scope state (add measurement, change scale, trigger, channel settings, etc.). This verifies the result AND updates the live UI panel.',
-    '- No ACTIONS_JSON, no "build it", no code blocks. Just use tools.',
-    '',
-    '## Response style',
-    '- Report what you DID, not what could be done.',
-    '- When a command fails, say what went wrong and what you\'re trying next.',
-    '- After achieving the goal, summarize the steps that worked.',
-    '- If you found a useful sequence, offer to save it as a learned workflow.',
+    'ACT, don\'t suggest. Try commands, read errors, adjust, retry. Replace placeholders: <NR3>→number, CH<x>→CH1, {A|B}→pick one.',
+    'capture_screenshot after visual changes. No ACTIONS_JSON. Report what you DID.',
     '',
     '## Instrument',
   ];
