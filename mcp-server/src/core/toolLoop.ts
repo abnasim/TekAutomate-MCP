@@ -6835,13 +6835,12 @@ async function runOpenAiToolLoop(
     const model = resolveOpenAiModel(req);
     const liveToolDefs = getToolDefinitions();
     const liveToolNames = new Set([
-      // Execution (4)
-      'send_scpi', 'capture_screenshot', 'get_instrument_state', 'probe_command',
-      // Discovery (5) — AI explores the SCPI database
-      'smart_scpi_lookup', 'search_scpi', 'get_command_group', 'get_command_by_header',
-      'list_command_groups',
-      // Knowledge + learning (3)
-      'retrieve_rag_chunks', 'search_known_failures', 'save_learned_workflow',
+      // Execution — direct scope actions
+      'send_scpi', 'capture_screenshot', 'get_instrument_state',
+      // Router — single tool for ALL discovery (search, browse groups, RAG, exec, build, save)
+      'tek_router',
+      // Knowledge
+      'retrieve_rag_chunks',
     ]);
     // Strip infra params from tool schemas (same as Anthropic path)
     const infraParams = new Set(['executorUrl', 'visaResource', 'backend', 'liveMode', 'outputMode', 'modelFamily', 'deviceDriver', 'scopeType']);
@@ -7056,13 +7055,12 @@ function selectAnthropicTools(req: McpChatRequest): Array<{ name: string; descri
   if (isLive) {
     // Live mode: instrument tools + search/lookup tools only (keep it lean)
     const liveToolNames = new Set([
-      // Execution (4)
-      'send_scpi', 'capture_screenshot', 'get_instrument_state', 'probe_command',
-      // Discovery (5) — AI explores the SCPI database
-      'smart_scpi_lookup', 'search_scpi', 'get_command_group', 'get_command_by_header',
-      'list_command_groups',
-      // Knowledge + learning (3)
-      'retrieve_rag_chunks', 'search_known_failures', 'save_learned_workflow',
+      // Execution — direct scope actions
+      'send_scpi', 'capture_screenshot', 'get_instrument_state',
+      // Router — single tool for ALL discovery (search, browse groups, RAG, exec, build, save)
+      'tek_router',
+      // Knowledge
+      'retrieve_rag_chunks',
     ]);
     const filtered = allTools.filter((t) => liveToolNames.has(t.name));
     // Strip server-injected infra params from schemas so AI only sees user-facing params
@@ -7435,21 +7433,24 @@ async function runAnthropicToolLoop(
 function buildLiveSystemPrompt(req: McpChatRequest, sessionContext?: string): string {
   const parts = [
     '# TekAutomate Live Mode (Learn Mode)',
-    'Live instrument copilot. You have direct scope access. Explore→Try→Observe→Adjust→Achieve.',
+    'Live instrument copilot. Direct scope access. Explore→Try→Observe→Adjust→Achieve.',
     '',
-    '## Tools',
-    '- **send_scpi** — Send SCPI commands. Returns: [{command, response, ok, error}]. Queries (?) return values. Multiple commands OK.',
-    '- **capture_screenshot** — Capture scope display. ALWAYS call after visual changes.',
-    '- **probe_command** — Test one command. **get_instrument_state** — *IDN?/*ESR?/ALLEV?.',
-    '- **smart_scpi_lookup** — Natural language SCPI search. **search_scpi** — Keyword search.',
-    '- **get_command_group** — Browse group: Vertical, Horizontal, Trigger, Measurement, Bus, Power, Plot, Display, Math, Acquisition, Save and Recall. Returns full entries with syntax, args, examples.',
-    '- **get_command_by_header** — Exact lookup by header. **list_command_groups** — All groups.',
-    '- **retrieve_rag_chunks** — Knowledge base (corpus: errors|app_logic|pyvisa_tekhsi|tmdevices|scpi|templates). Search on errors or "how to" questions.',
-    '- **search_known_failures** — Error troubleshooting. **save_learned_workflow** — Save successful sequence for reuse.',
+    '## Tools (5 total)',
+    '- **send_scpi** — Send SCPI commands: {commands:["CMD1","CMD2?"]}. Returns [{command, response, ok, error}].',
+    '- **capture_screenshot** — Capture scope display as PNG. ALWAYS call after visual changes.',
+    '- **get_instrument_state** — Quick check: *IDN?, *ESR?, ALLEV?.',
+    '- **tek_router** — ALL SCPI discovery, knowledge, and workflow management. Actions:',
+    '  - action:"search", query:"..." — Find SCPI commands by natural language. Returns command entries with syntax, args, examples.',
+    '  - action:"exec", toolId:"...", args:{} — Execute a found command/shortcut.',
+    '  - action:"search_exec", query:"..." — Search + auto-execute if confident match.',
+    '  - action:"list" — List all command groups and categories.',
+    '  - action:"info" — Router stats and capabilities.',
+    '  - action:"create", toolName/toolSteps/toolTriggers — Save a learned workflow for reuse.',
+    '- **retrieve_rag_chunks** — Knowledge base: corpus="errors"|"app_logic"|"pyvisa_tekhsi"|"tmdevices"|"scpi"|"templates".',
     '',
     '## Rules',
-    'ACT, don\'t suggest. Try commands, read errors, adjust, retry. Replace placeholders: <NR3>→number, CH<x>→CH1, {A|B}→pick one.',
-    'capture_screenshot after visual changes. No ACTIONS_JSON. Report what you DID.',
+    'ACT, don\'t suggest. Use tek_router to find commands, send_scpi to execute. Read errors, adjust, retry.',
+    'Replace placeholders: <NR3>→number, CH<x>→CH1, {A|B}→pick one. capture_screenshot after changes.',
     '',
     '## Instrument',
   ];

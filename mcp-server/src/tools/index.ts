@@ -24,8 +24,13 @@ import { validateActionPayload } from './validateActionPayload';
 import { validateDeviceContext } from './validateDeviceContext';
 import { verifyScpiCommands } from './verifyScpiCommands';
 import { GROUP_NAMES, COMMAND_GROUPS } from '../core/commandGroups';
+import { TEK_ROUTER_TOOL_DEFINITION } from '../core/toolRouter';
 
 export const TOOL_HANDLERS = {
+  tek_router: async (args: Record<string, unknown>) => {
+    const { tekRouter } = await import('../core/toolRouter');
+    return tekRouter(args as any);
+  },
   smart_scpi_lookup: smartScpiLookup,
   search_scpi: searchScpi,
   save_learned_workflow: async (input: {
@@ -96,6 +101,7 @@ export type ToolName = keyof typeof TOOL_HANDLERS;
 
 export function getToolDefinitions() {
   return [
+    TEK_ROUTER_TOOL_DEFINITION,
     {
       name: 'smart_scpi_lookup',
       description:
