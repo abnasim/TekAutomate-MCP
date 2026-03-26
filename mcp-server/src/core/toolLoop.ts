@@ -6867,51 +6867,12 @@ async function runOpenAiToolLoop(
         };
       });
 
-    // Pre-resolve SCPI + RAG knowledge so AI doesn't need 5+ search tool calls
-    const openAiPreParts: string[] = [];
-    try {
-      const { smartScpiLookup } = await import('./smartScpiAssistant');
-      const preRes = await smartScpiLookup({ query: req.userMessage, modelFamily: req.flowContext?.modelFamily });
-      if (preRes.ok && preRes.data.length > 0) {
-        const cmdLines = preRes.data.slice(0, 5).map((cmd: any) => {
-          const header = cmd.header || '';
-          const setSyntax = cmd.syntax?.set || '';
-          const querySyntax = cmd.syntax?.query || '';
-          const desc = cmd.shortDescription || cmd.description || '';
-          return `${header}: Set=${setSyntax} Query=${querySyntax} — ${desc}`;
-        });
-        openAiPreParts.push(`Pre-resolved SCPI commands (use exact syntaxes, replace placeholders):\n${cmdLines.join('\n')}`);
-        console.log(`[MCP] OpenAI live pre-resolved ${preRes.data.length} SCPI commands`);
-      }
-    } catch { /* non-fatal */ }
-    try {
-      const { retrieveRagChunks } = await import('../tools/retrieveRagChunks');
-      const ragCorpora: Array<{ corpus: any; label: string }> = [
-        { corpus: 'errors', label: 'Known issues & fixes' },
-        { corpus: 'app_logic', label: 'Application knowledge' },
-        { corpus: 'pyvisa_tekhsi', label: 'PyVISA / TekHSI reference' },
-        { corpus: 'tmdevices', label: 'tm_devices reference' },
-      ];
-      const ragChunks: string[] = [];
-      for (const { corpus, label } of ragCorpora) {
-        const ragRes = await retrieveRagChunks({ corpus, query: req.userMessage, topK: 2 });
-        if (ragRes.ok && Array.isArray(ragRes.data) && ragRes.data.length > 0) {
-          for (const chunk of ragRes.data) {
-            const c = chunk as { title?: string; body?: string };
-            if (c.body && c.body.length > 20) {
-              ragChunks.push(`${c.title || label}: ${c.body.slice(0, 400)}`);
-            }
-          }
-        }
-      }
-      if (ragChunks.length > 0) {
-        openAiPreParts.push(`Relevant knowledge:\n${ragChunks.slice(0, 4).join('\n')}`);
-        console.log(`[MCP] OpenAI live pre-loaded ${ragChunks.length} RAG chunks`);
-      }
-    } catch { /* non-fatal */ }
-    const openAiPreResolved = openAiPreParts.length > 0 ? '\n\n' + openAiPreParts.join('\n\n') : '';
+    // Live mode: NO pre-resolution. AI has tools to explore (smart_scpi_lookup,
+    // get_command_group, search_scpi, retrieve_rag_chunks). Let AI drive its own searches.
+    // Pre-resolution adds latency, wrong context from intent misclassification, and
+    // unnecessary SCPI noise for conversational messages.
 
-    const liveSystemWithContext = `${systemPrompt}${openAiPreResolved}`;
+    const liveSystemWithContext = systemPrompt;
     const liveMessages: Array<Record<string, unknown>> = [
       { role: 'system', content: liveSystemWithContext },
       ...(req.history || [])
@@ -7239,70 +7200,12 @@ async function runAnthropicToolLoop(
     : buildSystemPrompt(modePrompt, req.outputMode);
   const developerContext = isLive ? '' : await buildContext(req, { compact: true });
 
-  // Pre-resolve SCPI + RAG knowledge for live mode so AI doesn't need 5-7 search tool calls
-  let livePreResolved = '';
-  if (isLive) {
-    const preResParts: string[] = [];
-    // 1. Pre-resolve SCPI commands
-    try {
-      const { smartScpiLookup } = await import('./smartScpiAssistant');
-      const preRes = await smartScpiLookup({ query: req.userMessage, modelFamily: req.flowContext?.modelFamily });
-      if (preRes.ok && preRes.data.length > 0) {
-        const cmdLines = preRes.data.slice(0, 5).map((cmd: any) => {
-          const header = cmd.header || '';
-          const setSyntax = cmd.syntax?.set || '';
-          const querySyntax = cmd.syntax?.query || '';
-          const desc = cmd.shortDescription || cmd.description || '';
-          const args = Array.isArray(cmd.arguments)
-            ? cmd.arguments.slice(0, 3).map((a: any) => {
-                const vals = a.validValues ? JSON.stringify(a.validValues) : '';
-                return `  - ${a.name} (${a.type}${a.required ? ', required' : ''})${vals ? ': ' + vals : ''}`;
-              }).join('\n')
-            : '';
-          return `**${header}**\n  Set: ${setSyntax}\n  Query: ${querySyntax}\n  ${desc}${args ? '\n' + args : ''}`;
-        });
-        preResParts.push(`## Pre-resolved SCPI commands\nUse these exact syntaxes. Replace placeholders (<NR3>, CH<x>, etc.) with concrete values.\n\n${cmdLines.join('\n\n')}`);
-        console.log(`[MCP] Live pre-resolved ${preRes.data.length} SCPI commands for: "${req.userMessage.slice(0, 60)}"`);
-      }
-    } catch (e) {
-      console.log(`[MCP] Live SCPI pre-resolve failed (non-fatal): ${e instanceof Error ? e.message : String(e)}`);
-    }
-    // 2. Pre-load relevant RAG knowledge (errors, app_logic, pyvisa, tmdevices)
-    try {
-      const { retrieveRagChunks } = await import('../tools/retrieveRagChunks');
-      const ragCorpora: Array<{ corpus: any; label: string }> = [
-        { corpus: 'errors', label: 'Known issues & fixes' },
-        { corpus: 'app_logic', label: 'Application knowledge' },
-        { corpus: 'pyvisa_tekhsi', label: 'PyVISA / TekHSI reference' },
-        { corpus: 'tmdevices', label: 'tm_devices reference' },
-      ];
-      const ragChunks: string[] = [];
-      for (const { corpus, label } of ragCorpora) {
-        const ragRes = await retrieveRagChunks({ corpus, query: req.userMessage, topK: 1 });
-        if (ragRes.ok && Array.isArray(ragRes.data) && ragRes.data.length > 0) {
-          for (const chunk of ragRes.data) {
-            const c = chunk as { title?: string; body?: string };
-            if (c.body && c.body.length > 30) {
-              ragChunks.push(`**${c.title || label}**: ${c.body.slice(0, 300)}`);
-            }
-          }
-        }
-      }
-      if (ragChunks.length > 0) {
-        preResParts.push(`## Knowledge\n${ragChunks.slice(0, 3).join('\n')}`);
-        console.log(`[MCP] Live pre-loaded ${ragChunks.length} RAG chunks`);
-      }
-    } catch (e) {
-      console.log(`[MCP] Live RAG pre-load failed (non-fatal): ${e instanceof Error ? e.message : String(e)}`);
-    }
-    if (preResParts.length > 0) {
-      livePreResolved = '\n\n' + preResParts.join('\n\n');
-    }
-  }
-
+  // Live mode: NO pre-resolution. AI has exploration tools (smart_scpi_lookup,
+  // get_command_group, search_scpi, retrieve_rag_chunks). Let AI drive its own searches.
+  // Pre-resolution adds latency and wrong context from intent misclassification.
   const fullSystemPrompt = developerContext
     ? `${systemPrompt}\n\n${developerContext}`
-    : `${systemPrompt}${livePreResolved}`;
+    : systemPrompt;
   const userPrompt = isLive
     ? req.userMessage
     : buildUserPrompt(req, flowCommandIssues);
