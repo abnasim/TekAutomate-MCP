@@ -1,0 +1,165 @@
+name: Test
+
+on:
+  workflow_dispatch:
+
+jobs:
+  unit-tests:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+
+      - name: Install dependencies
+        run: npm ci --legacy-peer-deps
+
+      - name: Run unit tests
+        run: npm test
+
+  scpi-validation:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+
+      - name: Install dependencies
+        run: npm ci --legacy-peer-deps
+
+      - name: Run SCPI command validation
+        run: npm run test:scpi
+        env:
+          REPORT_FILENAME: scpi-report.html
+
+      - name: Upload SCPI validation report
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: scpi-validation-report
+          path: test-report/scpi-report.html
+          retention-days: 30
+
+  scpi-schema:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+      - run: npm ci --legacy-peer-deps
+      - name: SCPI parameter exposure (schema-level)
+        run: npm run test:scpi-schema
+
+  python-validate:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+      - run: npm ci --legacy-peer-deps
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Python syntax (py_compile) and runtime (mock)
+        run: npm run test:python-validate
+        env:
+          PYTHONIOENCODING: utf-8
+      - name: All commands → Python export (py_compile 8430 cmds)
+        run: npm run test:python-export
+        env:
+          PYTHONIOENCODING: utf-8
+
+  product-validation:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+      - run: npm ci --legacy-peer-deps
+      - name: Product validation (every command → step → Python)
+        run: npm run test:product
+      - name: Param pipeline (every parameterized command resolves)
+        run: npm run test:param-pipeline
+
+  e2e:
+    if: ${{ false }}
+    runs-on: ubuntu-latest
+    needs: unit-tests
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+
+      - name: Install dependencies
+        run: npm ci --legacy-peer-deps
+
+      - name: Install Playwright browsers
+        run: npx playwright install --with-deps chromium
+
+      - name: Run E2E tests (export + scenarios, excludes slow corpus)
+        run: npm run test:e2e:fast
+        env:
+          CI: true
+
+      - name: Upload E2E artifacts
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: e2e-output
+          path: e2e-output/
+          retention-days: 30
+
+  regression:
+    if: ${{ false }}
+    runs-on: ubuntu-latest
+    needs: unit-tests
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+
+      - name: Install dependencies
+        run: npm ci --legacy-peer-deps
+
+      - name: Install Playwright browsers
+        run: npx playwright install --with-deps chromium
+
+      - name: Run regression scenarios (Group 1, 6, 7)
+        run: npm run test:regression
+        env:
+          CI: true
+
+      - name: Upload regression output
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: regression-output
+          path: e2e-output/regression/
+          retention-days: 30

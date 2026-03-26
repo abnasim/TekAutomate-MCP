@@ -1,0 +1,99 @@
+{
+  "_comment": "Example of Query-Only Command",
+  "_description": "Template for commands that can only be queried (no set form)",
+  
+  "id": "acq_max_samplerate",
+  "category": "acquisition",
+  "scpi": "ACQuire:MAXSamplerate?",
+  "header": "ACQuire:MAXSamplerate",
+  "mnemonics": ["ACQuire", "MAXSamplerate"],
+  "commandType": "query",
+  "shortDescription": "Query maximum real-time sample rate",
+  "description": "Returns the maximum real-time sample rate available on the instrument. This is a read-only value that depends on the instrument model and current settings.",
+  
+  "instruments": {
+    "families": ["MSO4", "MSO5", "MSO6", "MSO7"],
+    "models": ["MSO4XB", "MSO5XB", "MSO6XB", "MSO58LP", "LPD64"],
+    "exclusions": []
+  },
+  
+  "arguments": [],
+  
+  "queryResponse": {
+    "type": "numeric",
+    "format": "NR3",
+    "unit": "samples/second",
+    "description": "Returns maximum sample rate in samples per second",
+    "example": "2.5E+09"
+  },
+  
+  "syntax": {
+    "query": "ACQuire:MAXSamplerate?",
+    "description": "Query-only command, no arguments"
+  },
+  
+  "codeExamples": [
+    {
+      "description": "Query maximum sample rate",
+      "codeExamples": {
+        "scpi": {
+          "code": "ACQuire:MAXSamplerate?",
+          "library": "SCPI",
+          "description": "Raw SCPI query"
+        },
+        "python": {
+          "code": "max_rate = scope.query('ACQuire:MAXSamplerate?')",
+          "library": "PyVISA",
+          "description": "Query using PyVISA"
+        },
+        "tm_devices": {
+          "code": "max_rate = scope.commands.acquire.maxsamplerate.query()",
+          "library": "tm_devices",
+          "description": "Query using tm_devices"
+        }
+      },
+      "result": "2.5E+09",
+      "resultDescription": "Returns maximum sample rate, e.g., '2.5E+09' (2.5 GS/s)"
+    }
+  ],
+  
+  "relatedCommands": [
+    "ACQuire:SAMPLERate?",
+    "HORizontal:SAMPLERate?"
+  ],
+  
+  "manualReference": {
+    "section": "Acquisition Commands",
+    "page": 164,
+    "subsection": "ACQuire:MAXSamplerate"
+  },
+  
+  "notes": [
+    "Read-only value",
+    "Depends on instrument model",
+    "May vary based on number of active channels"
+  ],
+  
+  "backwardCompatibility": {
+    "legacyCommands": [],
+    "notes": "No backward compatibility issues"
+  },
+  
+  "dynamicActivation": {
+    "implicitlyActivates": false,
+    "createsObject": null,
+    "defaultType": null,
+    "notes": "Does not create new objects"
+  },
+  
+  "concatenation": {
+    "canConcatenate": true,
+    "requiresColon": false,
+    "example": "ACQuire:MAXSamplerate?;:ACQuire:MODe?"
+  },
+  
+  "commandGroup": "Acquisition",
+  "subGroup": "Sample Rate"
+}
+
+

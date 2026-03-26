@@ -1,0 +1,569 @@
+{
+  "category": "Data",
+  "instruments": ["MSO4", "MSO5", "MSO6", "MSO7"],
+  "commands": [
+    {
+      "command": "DATa:SOUrce",
+      "header": "DATa:SOUrce",
+      "mnemonics": ["DATa", "SOUrce"],
+      "commandType": "both",
+      "description": "Sets or queries the waveform source for data transfer operations. The source can be any active channel (CH1-CH4), reference waveform (REF1-REF4), or math waveform (MATH1-MATH4). The source must be active for the command to succeed. If a non-active source is specified, the instrument may automatically activate it or return an error depending on the context.",
+      "shortDescription": "Select waveform source for data transfer",
+      "instruments": {
+        "families": ["MSO4", "MSO5", "MSO6", "MSO7"],
+        "models": ["MSO44", "MSO46", "MSO54", "MSO56", "MSO64", "MSO66", "MSO68", "MSO74", "MSO76"],
+        "exclusions": []
+      },
+      "arguments": [
+        {
+          "name": "source",
+          "type": "mnemonic",
+          "required": true,
+          "position": 0,
+          "description": "Waveform source specification. Can be a channel, reference waveform, or math waveform.",
+          "mnemonicType": "channel",
+          "validValues": {
+            "type": "mnemonic_range",
+            "pattern": "CH<x>|REF<x>|MATH<x>",
+            "examples": ["CH1", "CH2", "CH3", "CH4", "REF1", "REF2", "REF3", "REF4", "MATH1", "MATH2", "MATH3", "MATH4"],
+            "range": {
+              "channels": {
+                "min": 1,
+                "max": 4,
+                "description": "Analog channels 1 through 4"
+              },
+              "references": {
+                "min": 1,
+                "max": 4,
+                "description": "Reference waveforms 1 through 4"
+              },
+              "math": {
+                "min": 1,
+                "max": 4,
+                "description": "Math waveforms 1 through 4"
+              }
+            }
+          },
+          "defaultValue": "CH1"
+        }
+      ],
+      "queryResponse": {
+        "type": "string",
+        "format": "Returns the current source as a quoted string mnemonic",
+        "example": "CH1",
+        "description": "Response is the active source in the format CH<x>, REF<x>, or MATH<x>"
+      },
+      "examples": [
+        {
+          "description": "Set data source to channel 1",
+          "codeExamples": {
+            "scpi": {
+              "code": "DATa:SOUrce CH1",
+              "library": "SCPI",
+              "description": "Raw SCPI command"
+            },
+            "python": {
+              "code": "scope.write('DATa:SOUrce CH1')",
+              "library": "PyVISA",
+              "description": "Using PyVISA with scope resource"
+            },
+            "tm_devices": {
+              "code": "scope.commands.data.source.write('CH1')",
+              "library": "tm_devices",
+              "description": "Using tm_devices high-level API"
+            }
+          },
+          "result": null,
+          "resultDescription": null
+        },
+        {
+          "description": "Set data source to reference waveform 2",
+          "codeExamples": {
+            "scpi": {
+              "code": "DATa:SOUrce REF2",
+              "library": "SCPI",
+              "description": "Raw SCPI command"
+            },
+            "python": {
+              "code": "scope.write('DATa:SOUrce REF2')",
+              "library": "PyVISA",
+              "description": "Using PyVISA with scope resource"
+            },
+            "tm_devices": {
+              "code": "scope.commands.data.source.write('REF2')",
+              "library": "tm_devices",
+              "description": "Using tm_devices high-level API"
+            }
+          },
+          "result": null,
+          "resultDescription": null
+        },
+        {
+          "description": "Query current data source",
+          "codeExamples": {
+            "scpi": {
+              "code": "DATa:SOUrce?",
+              "library": "SCPI",
+              "description": "Raw SCPI query command"
+            },
+            "python": {
+              "code": "source = scope.query('DATa:SOUrce?')",
+              "library": "PyVISA",
+              "description": "Query using PyVISA, returns string like 'CH1'"
+            },
+            "tm_devices": {
+              "code": "source = scope.commands.data.source.value",
+              "library": "tm_devices",
+              "description": "Query using tm_devices property access"
+            }
+          },
+          "result": "CH1",
+          "resultDescription": "Returns the current data source as a string mnemonic (CH1, CH2, REF1, REF2, MATH1, etc.)"
+        },
+        {
+          "description": "Concatenated command: Set source and encoding",
+          "codeExamples": {
+            "scpi": {
+              "code": "DATa:SOUrce CH1;:DATa:ENCdg RIBinary",
+              "library": "SCPI",
+              "description": "Multiple commands concatenated with semicolon"
+            },
+            "python": {
+              "code": "scope.write('DATa:SOUrce CH1;:DATa:ENCdg RIBinary')",
+              "library": "PyVISA",
+              "description": "Send concatenated commands in single write"
+            },
+            "tm_devices": {
+              "code": "scope.commands.data.source.write('CH1'); scope.commands.data.encoding.write('RIBinary')",
+              "library": "tm_devices",
+              "description": "Separate commands using tm_devices API"
+            }
+          },
+          "result": null,
+          "resultDescription": null
+        }
+      ],
+      "relatedCommands": [
+        "DATa:ENCdg",
+        "DATa:WIDth",
+        "DATa:STARt",
+        "DATa:STOP",
+        "DATa:SOUrce?",
+        "CH1:STATE",
+        "REF1:STATE",
+        "MATH1:STATE"
+      ],
+      "commandGroup": "Data",
+      "subGroup": "Data Source",
+      "backwardCompatibility": {
+        "legacyCommands": [],
+        "notes": "This command is standard across all MSO series instruments"
+      },
+      "notes": [
+        "The source must be an active channel, reference, or math waveform",
+        "If the specified source is not active, the command may fail or activate it automatically depending on the instrument state",
+        "When querying, the response will be in the format of the source mnemonic (e.g., 'CH1', 'REF2', 'MATH1')",
+        "This command is commonly used in conjunction with DATa:ENCdg and DATa:WIDth to configure waveform data transfer"
+      ],
+      "manualReference": {
+        "section": "Data Commands",
+        "page": 123,
+        "subsection": "DATa:SOUrce"
+      },
+      "concatenation": {
+        "canConcatenate": true,
+        "requiresColon": true,
+        "example": "DATa:SOUrce CH1;:DATa:ENCdg RIBinary;:DATa:WIDth 1"
+      },
+      "dynamicActivation": {
+        "implicitlyActivates": false,
+        "requiresActiveSource": true,
+        "notes": "The source must exist and be active. Does not create new sources."
+      },
+      "syntax": {
+        "set": "[:]DATa:SOUrce <source>",
+        "query": "[:]DATa:SOUrce?",
+        "argumentType": "Mnemonic (CH<x>|REF<x>|MATH<x>)"
+      }
+    },
+    {
+      "command": "CH1:SCAle",
+      "header": "CH<x>:SCAle",
+      "mnemonics": ["CH<x>", "SCAle"],
+      "commandType": "both",
+      "description": "Sets or queries the vertical scale (volts per division) for the specified channel. The scale determines how much voltage each vertical division represents on the display. Valid values depend on the probe attenuation and channel coupling settings.",
+      "shortDescription": "Set or query channel vertical scale",
+      "instruments": {
+        "families": ["MSO4", "MSO5", "MSO6", "MSO7"],
+        "models": ["MSO44", "MSO46", "MSO54", "MSO56", "MSO64", "MSO66", "MSO68", "MSO74", "MSO76"],
+        "exclusions": []
+      },
+      "arguments": [
+        {
+          "name": "channel",
+          "type": "mnemonic",
+          "required": true,
+          "position": 0,
+          "description": "Channel number (1-4)",
+          "mnemonicType": "channel",
+          "validValues": {
+            "type": "mnemonic_range",
+            "pattern": "CH<x>",
+            "examples": ["CH1", "CH2", "CH3", "CH4"],
+            "range": {
+              "channels": {
+                "min": 1,
+                "max": 4,
+                "description": "Analog channels 1 through 4"
+              }
+            }
+          }
+        },
+        {
+          "name": "scale",
+          "type": "numeric",
+          "required": true,
+          "position": 1,
+          "description": "Vertical scale in volts per division",
+          "validValues": {
+            "type": "numeric",
+            "format": "NR2",
+            "min": 0.001,
+            "max": 1000,
+            "unit": "volts",
+            "default": 1.0,
+            "increment": 0.001,
+            "notes": "Valid range depends on probe attenuation. Typical range is 0.001V to 1000V per division."
+          },
+          "defaultValue": 1.0
+        }
+      ],
+      "queryResponse": {
+        "type": "numeric",
+        "format": "Returns scale as floating point number",
+        "example": "1.0",
+        "unit": "volts",
+        "description": "Response is the current scale in volts per division"
+      },
+      "examples": [
+        {
+          "description": "Set channel 1 scale to 1 volt per division",
+          "codeExamples": {
+            "scpi": {
+              "code": "CH1:SCAle 1.0",
+              "library": "SCPI",
+              "description": "Raw SCPI command"
+            },
+            "python": {
+              "code": "scope.write('CH1:SCAle 1.0')",
+              "library": "PyVISA",
+              "description": "Using PyVISA with scope resource"
+            },
+            "tm_devices": {
+              "code": "scope.ch[1].scale.write(1.0)",
+              "library": "tm_devices",
+              "description": "Using tm_devices channel API"
+            }
+          },
+          "result": null,
+          "resultDescription": null
+        },
+        {
+          "description": "Set channel 2 scale to 500 millivolts per division",
+          "codeExamples": {
+            "scpi": {
+              "code": "CH2:SCAle 0.5",
+              "library": "SCPI",
+              "description": "Raw SCPI command"
+            },
+            "python": {
+              "code": "scope.write('CH2:SCAle 0.5')",
+              "library": "PyVISA",
+              "description": "Using PyVISA with scope resource"
+            },
+            "tm_devices": {
+              "code": "scope.ch[2].scale.write(0.5)",
+              "library": "tm_devices",
+              "description": "Using tm_devices channel API"
+            }
+          },
+          "result": null,
+          "resultDescription": null
+        },
+        {
+          "description": "Query channel 1 scale",
+          "codeExamples": {
+            "scpi": {
+              "code": "CH1:SCAle?",
+              "library": "SCPI",
+              "description": "Raw SCPI query command"
+            },
+            "python": {
+              "code": "scale = float(scope.query('CH1:SCAle?'))",
+              "library": "PyVISA",
+              "description": "Query and convert to float"
+            },
+            "tm_devices": {
+              "code": "scale = scope.ch[1].scale.value",
+              "library": "tm_devices",
+              "description": "Query using tm_devices property, returns float"
+            }
+          },
+          "result": "1.0",
+          "resultDescription": "Returns the current scale in volts per division as a floating point number"
+        }
+      ],
+      "relatedCommands": [
+        "CH1:OFFSet",
+        "CH1:POSition",
+        "CH1:COUPling",
+        "CH1:PROBe",
+        "CH1:STATE"
+      ],
+      "commandGroup": "Channels",
+      "subGroup": "Channel Scale",
+      "backwardCompatibility": {
+        "legacyCommands": [],
+        "notes": "Standard command across all MSO series"
+      },
+      "notes": [
+        "Scale value is affected by probe attenuation setting",
+        "The instrument may round the value to the nearest valid setting",
+        "Scale and position work together to determine the displayed voltage range"
+      ],
+      "manualReference": {
+        "section": "Channel Commands",
+        "page": 45,
+        "subsection": "CH<x>:SCAle"
+      },
+      "concatenation": {
+        "canConcatenate": true,
+        "requiresColon": false,
+        "example": "CH1:SCAle 1.0;OFFSet 0.0"
+      },
+      "dynamicActivation": {
+        "implicitlyActivates": false,
+        "requiresActiveSource": false,
+        "notes": "Channel must exist but does not need to be active"
+      },
+      "syntax": {
+        "set": "[:]CH<x>:SCAle <NR2>",
+        "query": "[:]CH<x>:SCAle?",
+        "argumentType": "Numeric (NR2 - floating point)"
+      }
+    },
+    {
+      "command": "MEASurement:MEAS1:TYPE",
+      "header": "MEASurement:MEAS<x>:TYPE",
+      "mnemonics": ["MEASurement", "MEAS<x>", "TYPE"],
+      "commandType": "both",
+      "description": "Sets or queries the measurement type for the specified measurement. This is a dynamic command - querying a measurement that doesn't exist will create it with default settings. Measurement types include Period, Frequency, Amplitude, Peak-to-Peak, Rise Time, Fall Time, and many others.",
+      "shortDescription": "Set or query measurement type",
+      "instruments": {
+        "families": ["MSO4", "MSO5", "MSO6", "MSO7"],
+        "models": ["MSO44", "MSO46", "MSO54", "MSO56", "MSO64", "MSO66", "MSO68", "MSO74", "MSO76"],
+        "exclusions": []
+      },
+      "arguments": [
+        {
+          "name": "measurement",
+          "type": "mnemonic",
+          "required": true,
+          "position": 0,
+          "description": "Measurement number (1-8)",
+          "mnemonicType": "measurement",
+          "validValues": {
+            "type": "mnemonic_range",
+            "pattern": "MEAS<x>",
+            "examples": ["MEAS1", "MEAS2", "MEAS3", "MEAS4", "MEAS5", "MEAS6", "MEAS7", "MEAS8"],
+            "range": {
+              "measurements": {
+                "min": 1,
+                "max": 8,
+                "description": "Measurement slots 1 through 8"
+              }
+            }
+          }
+        },
+        {
+          "name": "type",
+          "type": "enumeration",
+          "required": true,
+          "position": 1,
+          "description": "Measurement type",
+          "validValues": {
+            "type": "enumeration",
+            "values": [
+              "AMPLitude",
+              "AREa",
+              "BURst",
+              "CARea",
+              "CMEan",
+              "CRMs",
+              "DELay",
+              "DISTDUty",
+              "EXTINCTDB",
+              "EXTINCTPCT",
+              "EXTINCTRATIO",
+              "EYEHeight",
+              "EYEWidth",
+              "FALL",
+              "FREQuency",
+              "HIGH",
+              "HITs",
+              "LOW",
+              "MAXimum",
+              "MEAN",
+              "MEDian",
+              "MINImum",
+              "NDUTy",
+              "NEDGECount",
+              "NOVershoot",
+              "NPULSECount",
+              "NWIDth",
+              "PDUTy",
+              "PEDGECount",
+              "PEAKHits",
+              "PERIod",
+              "PHASE",
+              "PK2Pk",
+              "POVershoot",
+              "PPULSECount",
+              "PWIDth",
+              "QFACtor",
+              "RISe",
+              "RMS",
+              "SIGMA1",
+              "SIGMA2",
+              "SIGMA3",
+              "SIXSIGma",
+              "SNRatio",
+              "STDdev",
+              "TOP",
+              "WIDth"
+            ],
+            "caseSensitive": false,
+            "default": "PERIod"
+          },
+          "defaultValue": "PERIod"
+        }
+      ],
+      "queryResponse": {
+        "type": "enumeration",
+        "format": "Returns measurement type as enumeration string",
+        "example": "PERIod",
+        "description": "Response is the current measurement type"
+      },
+      "examples": [
+        {
+          "description": "Set measurement 1 type to Frequency",
+          "codeExamples": {
+            "scpi": {
+              "code": "MEASurement:MEAS1:TYPE FREQuency",
+              "library": "SCPI",
+              "description": "Raw SCPI command"
+            },
+            "python": {
+              "code": "scope.write('MEASurement:MEAS1:TYPE FREQuency')",
+              "library": "PyVISA",
+              "description": "Using PyVISA with scope resource"
+            },
+            "tm_devices": {
+              "code": "scope.measurement[1].type.write('FREQuency')",
+              "library": "tm_devices",
+              "description": "Using tm_devices measurement API"
+            }
+          },
+          "result": null,
+          "resultDescription": null
+        },
+        {
+          "description": "Query measurement 1 type (creates measurement if it doesn't exist)",
+          "codeExamples": {
+            "scpi": {
+              "code": "MEASurement:MEAS1:TYPE?",
+              "library": "SCPI",
+              "description": "Raw SCPI query - note: implicitly creates MEAS1 if it doesn't exist"
+            },
+            "python": {
+              "code": "mtype = scope.query('MEASurement:MEAS1:TYPE?')",
+              "library": "PyVISA",
+              "description": "Query returns measurement type string, creates measurement if needed"
+            },
+            "tm_devices": {
+              "code": "mtype = scope.measurement[1].type.value",
+              "library": "tm_devices",
+              "description": "Query using tm_devices property, may create measurement"
+            }
+          },
+          "result": "PERIod",
+          "resultDescription": "Returns the measurement type as an enumeration string. If MEAS1 didn't exist, it's created with default type 'PERIod'"
+        },
+        {
+          "description": "Set measurement 2 type to Peak-to-Peak",
+          "codeExamples": {
+            "scpi": {
+              "code": "MEASurement:MEAS2:TYPE PK2Pk",
+              "library": "SCPI",
+              "description": "Raw SCPI command"
+            },
+            "python": {
+              "code": "scope.write('MEASurement:MEAS2:TYPE PK2Pk')",
+              "library": "PyVISA",
+              "description": "Using PyVISA with scope resource"
+            },
+            "tm_devices": {
+              "code": "scope.measurement[2].type.write('PK2Pk')",
+              "library": "tm_devices",
+              "description": "Using tm_devices measurement API"
+            }
+          },
+          "result": null,
+          "resultDescription": null
+        }
+      ],
+      "relatedCommands": [
+        "MEASurement:MEAS1:SOUrce1",
+        "MEASurement:MEAS1:SOUrce2",
+        "MEASurement:MEAS1:VALue?",
+        "MEASurement:MEAS1:STATE",
+        "MEASurement:ADDNew",
+        "MEASurement:DELete"
+      ],
+      "commandGroup": "Measurement",
+      "subGroup": "Measurement Type",
+      "backwardCompatibility": {
+        "legacyCommands": [],
+        "notes": "Standard command. Querying non-existent measurement creates it with default type Period."
+      },
+      "notes": [
+        "This command exhibits implicit activation - querying a measurement that doesn't exist will create it",
+        "Default measurement type is Period",
+        "Measurement must have at least one source configured to return valid values",
+        "Some measurement types require two sources (e.g., DELay, PHASE)"
+      ],
+      "manualReference": {
+        "section": "Measurement Commands",
+        "page": 234,
+        "subsection": "MEASurement:MEAS<x>:TYPE"
+      },
+      "concatenation": {
+        "canConcatenate": true,
+        "requiresColon": true,
+        "example": "MEASurement:MEAS1:TYPE FREQuency;:MEASurement:MEAS1:SOUrce1 CH1"
+      },
+      "dynamicActivation": {
+        "implicitlyActivates": true,
+        "createsObject": "measurement",
+        "defaultType": "PERIod",
+        "notes": "Querying a non-existent measurement creates it with default settings"
+      },
+      "syntax": {
+        "set": "[:]MEASurement:MEAS<x>:TYPE <enumeration>",
+        "query": "[:]MEASurement:MEAS<x>:TYPE?",
+        "argumentType": "Enumeration (measurement type)"
+      }
+    }
+  ]
+}
+

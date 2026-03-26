@@ -1,0 +1,140 @@
+{
+  "name": "tek-script-generator",
+  "version": "2.0.0",
+  "description": "Tektronix Script Generator",
+  "private": true,
+  "main": "public/electron.js",
+  "homepage": "https://abnasim.github.io/TekAutomate",
+  "dependencies": {
+    "@blockly/plugin-cross-tab-copy-paste": "^8.0.7",
+    "@blockly/plugin-scroll-options": "^7.0.8",
+    "@blockly/plugin-workspace-search": "^10.1.7",
+    "@blockly/theme-modern": "^7.0.4",
+    "@blockly/toolbox-search": "^3.1.8",
+    "@codemirror/commands": "^6.10.1",
+    "@codemirror/lang-python": "^6.2.1",
+    "@codemirror/state": "^6.5.4",
+    "@codemirror/theme-one-dark": "^6.1.3",
+    "@codemirror/view": "^6.39.11",
+    "@mit-app-inventor/blockly-plugin-workspace-multiselect": "^1.0.2",
+    "@types/react-joyride": "^2.0.2",
+    "blockly": "^12.3.1",
+    "codemirror": "^6.0.2",
+    "html5-qrcode": "^2.3.8",
+    "jszip": "^3.10.1",
+    "lucide-react": "^0.263.1",
+    "react": "^18.2.0",
+    "react-dom": "^18.2.0",
+    "react-hook-form": "^7.71.2",
+    "react-joyride": "^2.9.3",
+    "react-scripts": "5.0.1",
+    "tailwindcss": "^3.3.0",
+    "typescript": "^4.9.5"
+  },
+  "devDependencies": {
+    "@craco/craco": "^7.1.0",
+    "@playwright/test": "^1.58.2",
+    "@types/jest": "^30.0.0",
+    "@types/react": "^18.2.0",
+    "@types/react-dom": "^18.2.0",
+    "ajv": "^8.18.0",
+    "autoprefixer": "^10.4.14",
+    "baseline-browser-mapping": "^2.9.19",
+    "concurrently": "^9.2.1",
+    "cross-fetch": "^4.1.0",
+    "electron": "^28.3.3",
+    "electron-builder": "^24.13.3",
+    "execa": "^9.6.1",
+    "jest-html-reporter": "^4.3.0",
+    "jest-html-reporters": "^3.1.7",
+    "postcss": "^8.4.24",
+    "ts-jest": "^29.4.6",
+    "undici": "^7.24.2",
+    "wait-on": "^9.0.3"
+  },
+  "scripts": {
+    "start": "craco start",
+    "build": "craco build",
+    "test": "craco test --watchAll=false",
+    "test:report": "craco test --watchAll=false",
+    "test:scpi": "craco test --watchAll=false --testPathPattern=scpiCommandValidator",
+    "test:scpi-schema": "craco test --watchAll=false --testPathPattern=scpiParameterExposure",
+    "test:product": "craco test --watchAll=false --testPathPattern=scpiProductValidation --verbose",
+    "test:param-pipeline": "craco test --watchAll=false --testPathPattern=scpiParamPipeline --verbose",
+    "test:generator": "craco test --watchAll=false --testPathPattern=appGenerator --verbose",
+    "test:python-validate": "craco test --watchAll=false --testPathPattern=pythonRuntimeValidation",
+    "test:python-export": "craco test --watchAll=false --testPathPattern=pythonExportValidation --verbose",
+    "test:watch": "craco test",
+    "test:e2e": "playwright test",
+    "test:e2e:fast": "playwright test export-python export-variations e2e-scenarios flow-fidelity default-controls scpi-syntax-match command-browser-parity connect-backend-coverage --reporter=list",
+    "test:e2e:ui": "playwright test --ui",
+    "test:e2e:corpus": "playwright test scpi-corpus --reporter=line",
+    "test:regression": "playwright test regression --reporter=list",
+    "test:mcp:smoke": "node scripts/runMcpSmokes.js",
+    "eval:comparison": "npx tsx scripts/evalComparison.ts",
+    "logs:tail": "node mcp-server/scripts/logsTail.js",
+    "logs:failures": "node mcp-server/scripts/logsFailures.js",
+    "test:ci": "npm test && npm run test:scpi && npm run test:e2e:fast",
+    "build:tmdevices-corpus": "node scripts/buildTmDevicesCorpus.js",
+    "build:rag": "node scripts/buildRagIndex.js",
+    "electron": "electron .",
+    "electron-dev": "concurrently \"npm start\" \"wait-on http://localhost:3001 && electron .\"",
+    "electron-build": "npm run build && electron-builder",
+    "electron-build-win": "set CSC_IDENTITY_AUTO_DISCOVERY=false && npm run build && electron-builder --win --x64",
+    "mcp:start": "npm --prefix mcp-server run start",
+    "mcp:dev": "npm --prefix mcp-server run dev"
+  },
+  "build": {
+    "appId": "com.tektronix.tekautomate",
+    "productName": "TekAutomate",
+    "files": [
+      "build/**/*",
+      "public/electron.js"
+    ],
+    "extraResources": [
+      {
+        "from": "public/commands",
+        "to": "public/commands"
+      },
+      {
+        "from": "public/templates",
+        "to": "public/templates"
+      },
+      {
+        "from": "public/manual",
+        "to": "public/manual"
+      },
+      {
+        "from": "public/mascot",
+        "to": "public/mascot"
+      }
+    ],
+    "directories": {
+      "buildResources": "public"
+    },
+    "win": {
+      "target": [
+        {
+          "target": "portable",
+          "arch": [
+            "x64"
+          ]
+        }
+      ]
+    }
+  },
+  "eslintConfig": {
+    "extends": [
+      "react-app"
+    ]
+  },
+  "browserslist": {
+    "production": [
+      ">0.2%",
+      "not dead"
+    ],
+    "development": [
+      "last 1 chrome version"
+    ]
+  }
+}

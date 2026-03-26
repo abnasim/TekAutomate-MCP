@@ -1,0 +1,340 @@
+{
+  "category": "Example",
+  "templates": [
+    {
+      "name": "Perfect Single Device Template",
+      "description": "Example template showing best practices for single device workflows",
+      "backend": "pyvisa",
+      "deviceType": "SCOPE",
+      "steps": [
+        {
+          "id": "1",
+          "type": "connect",
+          "label": "Connect",
+          "params": {
+            "instrumentIds": [],
+            "printIdn": true
+          }
+        },
+        {
+          "id": "2",
+          "type": "write",
+          "label": "Reset Instrument",
+          "params": {
+            "command": "*RST"
+          }
+        },
+        {
+          "id": "3",
+          "type": "sleep",
+          "label": "Wait for Reset",
+          "params": {
+            "duration": 1.0
+          }
+        },
+        {
+          "id": "g1",
+          "type": "group",
+          "label": "Channel Configuration",
+          "params": {},
+          "collapsed": false,
+          "children": [
+            {
+              "id": "4",
+              "type": "write",
+              "label": "Configure CH1",
+              "params": {
+                "command": "CH1:SCAle 1.0"
+              }
+            },
+            {
+              "id": "5",
+              "type": "write",
+              "label": "Enable CH1",
+              "params": {
+                "command": "DISplay:WAVEView1:CH1:STATE ON"
+              }
+            }
+          ]
+        },
+        {
+          "id": "6",
+          "type": "write",
+          "label": "Stop Acquisition",
+          "params": {
+            "command": "ACQuire:STATE OFF"
+          }
+        },
+        {
+          "id": "7",
+          "type": "write",
+          "label": "Start Acquisition",
+          "params": {
+            "command": "ACQuire:STATE ON"
+          }
+        },
+        {
+          "id": "8",
+          "type": "sleep",
+          "label": "Wait for Trigger",
+          "params": {
+            "duration": 0.5
+          }
+        },
+        {
+          "id": "9",
+          "type": "write",
+          "label": "Stop Acquisition",
+          "params": {
+            "command": "ACQuire:STATE OFF"
+          }
+        },
+        {
+          "id": "10",
+          "type": "query",
+          "label": "Wait Complete",
+          "params": {
+            "command": "*OPC?",
+            "saveAs": "opc"
+          }
+        },
+        {
+          "id": "11",
+          "type": "save_waveform",
+          "label": "Save Waveform",
+          "params": {
+            "source": "CH1",
+            "filename": "waveform.bin",
+            "format": "bin",
+            "width": 1,
+            "encoding": "RIBinary"
+          }
+        },
+        {
+          "id": "12",
+          "type": "error_check",
+          "label": "Check for Errors",
+          "params": {
+            "command": "ALLEV?"
+          }
+        },
+        {
+          "id": "13",
+          "type": "disconnect",
+          "label": "Disconnect",
+          "params": {
+            "instrumentIds": []
+          }
+        }
+      ]
+    },
+    {
+      "name": "Perfect Multi-Device Template",
+      "description": "Example template showing best practices for multi-device workflows",
+      "backend": "pyvisa",
+      "steps": [
+        {
+          "id": "1",
+          "type": "connect",
+          "label": "Connect All Instruments",
+          "params": {
+            "instrumentIds": [],
+            "printIdn": true
+          }
+        },
+        {
+          "id": "2",
+          "type": "comment",
+          "label": "Configure SMU",
+          "params": {
+            "text": "Configure SMU for voltage sweep"
+          }
+        },
+        {
+          "id": "3",
+          "type": "write",
+          "label": "Set SMU Voltage to Zero",
+          "params": {
+            "command": "SOURce:VOLTage 0.0"
+          },
+          "boundDeviceId": "smu"
+        },
+        {
+          "id": "4",
+          "type": "write",
+          "label": "Enable SMU Output",
+          "params": {
+            "command": "OUTPut:STATE ON"
+          },
+          "boundDeviceId": "smu"
+        },
+        {
+          "id": "5",
+          "type": "comment",
+          "label": "Configure Scope",
+          "params": {
+            "text": "Configure scope for measurement"
+          }
+        },
+        {
+          "id": "6",
+          "type": "write",
+          "label": "Configure Scope CH1",
+          "params": {
+            "command": "CH1:SCAle 1.0"
+          },
+          "boundDeviceId": "scope"
+        },
+        {
+          "id": "sweep1",
+          "type": "sweep",
+          "label": "Voltage Sweep",
+          "params": {
+            "variableName": "voltage",
+            "start": 0,
+            "stop": 5,
+            "step": 0.1,
+            "saveResults": true,
+            "resultVariable": "results"
+          },
+          "children": [
+            {
+              "id": "7",
+              "type": "write",
+              "label": "Set Voltage",
+              "params": {
+                "command": "SOURce:VOLTage ${voltage}"
+              },
+              "boundDeviceId": "smu"
+            },
+            {
+              "id": "8",
+              "type": "sleep",
+              "label": "Stabilize",
+              "params": {
+                "duration": 0.2
+              }
+            },
+            {
+              "id": "9",
+              "type": "write",
+              "label": "Trigger Scope",
+              "params": {
+                "command": "ACQuire:STATE SINGLE"
+              },
+              "boundDeviceId": "scope"
+            },
+            {
+              "id": "10",
+              "type": "sleep",
+              "label": "Wait for Acquisition",
+              "params": {
+                "duration": 0.5
+              }
+            },
+            {
+              "id": "11",
+              "type": "query",
+              "label": "Read Current",
+              "params": {
+                "command": "MEASure:CURRent:DC?",
+                "saveAs": "current"
+              },
+              "boundDeviceId": "smu"
+            },
+            {
+              "id": "12",
+              "type": "query",
+              "label": "Read Voltage",
+              "params": {
+                "command": "MEASure:VOLTage:DC?",
+                "saveAs": "voltage_measured"
+              },
+              "boundDeviceId": "smu"
+            }
+          ]
+        },
+        {
+          "id": "13",
+          "type": "write",
+          "label": "Disable SMU Output",
+          "params": {
+            "command": "OUTPut:STATE OFF"
+          },
+          "boundDeviceId": "smu"
+        },
+        {
+          "id": "14",
+          "type": "error_check",
+          "label": "Check SMU Errors",
+          "params": {
+            "command": "SYSTem:ERRor?"
+          },
+          "boundDeviceId": "smu"
+        },
+        {
+          "id": "15",
+          "type": "error_check",
+          "label": "Check Scope Errors",
+          "params": {
+            "command": "ALLEV?"
+          },
+          "boundDeviceId": "scope"
+        },
+        {
+          "id": "16",
+          "type": "disconnect",
+          "label": "Disconnect All",
+          "params": {
+            "instrumentIds": []
+          }
+        }
+      ]
+    },
+    {
+      "name": "tm_devices High-Level API Template",
+      "description": "Example using tm_devices high-level Python API",
+      "backend": "tm_devices",
+      "deviceType": "SCOPE",
+      "deviceDriver": "MSO6B",
+      "steps": [
+        {
+          "id": "1",
+          "type": "connect",
+          "label": "Connect",
+          "params": {}
+        },
+        {
+          "id": "2",
+          "type": "write",
+          "label": "Turn On CH1",
+          "params": {
+            "command": "scope.turn_channel_on(\"CH1\")"
+          }
+        },
+        {
+          "id": "3",
+          "type": "write",
+          "label": "Set Horizontal Scale",
+          "params": {
+            "command": "scope.set_and_check(\":HORIZONTAL:SCALE\", 100e-9)"
+          }
+        },
+        {
+          "id": "4",
+          "type": "write",
+          "label": "Save Screenshot",
+          "params": {
+            "command": "scope.save_screenshot(\"example.png\")"
+          }
+        },
+        {
+          "id": "5",
+          "type": "disconnect",
+          "label": "Disconnect",
+          "params": {}
+        }
+      ]
+    }
+  ]
+}

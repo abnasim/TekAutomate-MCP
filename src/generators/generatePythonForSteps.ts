@@ -1,0 +1,302 @@
+import { formatPythonSnippet, substituteSCPI, type CommandParam } from './appGenerator';
+
+type Backend = 'pyvisa' | 'tm_devices' | 'vxi11' | 'tekhsi' | 'hybrid';
+type ConnectionType = 'tcpip' | 'socket' | 'usb' | 'gpib';
+
+export interface DeviceEntry {
+  id: string;
+  alias?: string;
+  backend?: Backend;
+  connectionType?: ConnectionType;
+  host?: string;
+  port?: number;
+  enabled?: boolean;
+}
+
+export interface StepLike {
+  id: string;
+  type: string;
+  label?: string;
+  params?: Record<string, any>;
+  children?: StepLike[];
+}
+
+function pyResourceForDevice(d: DeviceEntry): string {
+  const connectionType = d.connectionType || 'tcpip';
+  const host = d.host || '127.0.0.1';
+  if (connectionType === 'socket') {
+    return `TCPIP::${host}::${d.port || 5025}::SOCKET`;
+  }
+  if (connectionType === 'usb') {
+    return 'USB0::0x0699::0x0000::INSTR';
+  }
+  if (connectionType === 'gpib') {
+    return 'GPIB0::1::INSTR';
+  }
+  return `TCPIP::${host}::INSTR`;
+}
+
+function normalizeSteps(steps: StepLike[]): StepLike[] {
+  return steps.map((s) => {
+    const step: StepLike = {
+      ...s,
+      params: s.params || {},
+      children: s.children ? normalizeSteps(s.children) : undefined,
+    };
+    if (step.type === 'tm_device_command') {
+      const code = String(step.params?.code || '').trim();
+      return {
+        ...step,
+        type: 'write',
+        params: { command: code },
+      };
+    }
+    return step;
+  });
+}
+
+function decodeEscapedNewlinesOutsideQuotes(code: string): string {
+  let out = '';
+  let inSingle = false;
+  let inDouble = false;
+  for (let i = 0; i < code.length; i += 1) {
+    const ch = code[i];
+    const prev = i > 0 ? code[i - 1] : '';
+    const next = i + 1 < code.length ? code[i + 1] : '';
+
+    if (ch === "'" && !inDouble && prev !== '\\') {
+      inSingle = !inSingle;
+      out += ch;
+      continue;
+    }
+    if (ch === '"' && !inSingle && prev !== '\\') {
+      inDouble = !inDouble;
+      out += ch;
+      continue;
+    }
+
+    if (!inSingle && !inDouble && ch === '\\' && next === 'n') {
+      out += '\n';
+      i += 1;
+      continue;
+    }
+
+    out += ch;
+  }
+  return out;
+}
+
+function emitSteps(
+  steps: StepLike[],
+  mode: 'pyvisa' | 'tm_devices' | 'vxi11',
+  indent = '    '
+): string {
+  let out = '';
+  const scpiVar = mode === 'vxi11' ? 'instrument' : mode === 'tm_devices' ? 'visa' : 'scpi';
+
+  for (const s of steps) {
+    const params = s.params || {};
+
+    if (s.type === 'connect' || s.type === 'disconnect') continue;
+    if (s.type === 'group') {
+      out += `${indent}# Group: ${s.label || 'Group'}\n`;
+      if (s.children?.length) out += emitSteps(s.children, mode, indent);
+      continue;
+    }
+    if (s.type === 'comment') {
+      out += `${indent}# ${params.text || s.label || ''}\n`;
+      continue;
+    }
+    if (s.type === 'sleep') {
+      out += `${indent}time.sleep(${Number(params.duration) || 0})\n`;
+      continue;
+    }
+    if (s.type === 'python' && typeof params.code === 'string') {
+      out += formatPythonSnippet(
+        decodeEscapedNewlinesOutsideQuotes(
+          String(params.code)
+            .replace(/\\r\\n/g, '\n')
+            .replace(/\r\n/g, '\n')
+            .replace(/\r/g, '\n')
+        ),
+        indent
+      );
+      continue;
+    }
+    if (s.type === 'sweep') {
+      const varName = String(params.variableName || 'x');
+      const start = Number(params.start ?? 0);
+      const stop = Number(params.stop ?? 0);
+      const step = Number(params.step ?? 1);
+      out += `${indent}${varName} = ${start}\n`;
+      out += `${indent}while ${varName} <= ${stop}:\n`;
+      if (s.children?.length) out += emitSteps(s.children, mode, `${indent}    `);
+      out += `${indent}    ${varName} += ${step}\n`;
+      continue;
+    }
+    if (s.type === 'save_screenshot') {
+      const filename = String(params.filename || 'screenshot.png');
+      const scopeType = String(params.scopeType || 'modern').toLowerCase();
+      if (scopeType === 'legacy') {
+        out += `${indent}${scpiVar}.write('HARDCopy:PORT FILE')\n`;
+        out += `${indent}${scpiVar}.write('HARDCopy STARt')\n`;
+      } else {
+        out += `${indent}${scpiVar}.write('SAVE:IMAGE "C:/Temp/screen.png"')\n`;
+        out += `${indent}${scpiVar}.query("*OPC?")\n`;
+        out += `${indent}${scpiVar}.write('FILESYSTEM:READFILE "C:/Temp/screen.png"')\n`;
+        out += `${indent}data = ${scpiVar}.read_raw()\n`;
+        out += `${indent}pathlib.Path(${JSON.stringify(filename)}).write_bytes(data)\n`;
+      }
+      continue;
+    }
+    if (s.type === 'save_waveform') {
+      const source = String(params.source || 'CH1').toUpperCase();
+      const filename = String(params.filename || 'waveform.bin');
+      out += `${indent}${scpiVar}.write("DATA:SOURCE ${source}")\n`;
+      out += `${indent}${scpiVar}.write("DATA:ENCDG RIBinary")\n`;
+      out += `${indent}${scpiVar}.write("CURVE?")\n`;
+      out += `${indent}data = ${scpiVar}.read_raw()\n`;
+      out += `${indent}pathlib.Path(${JSON.stringify(filename)}).write_bytes(data)\n`;
+      continue;
+    }
+    if (s.type === 'recall') {
+      const recallType = String(params.recallType || 'SESSION').toUpperCase();
+      const filePath = String(params.filePath || '');
+      if (recallType === 'FACTORY') {
+        out += `${indent}${scpiVar}.write('*RST')\n`;
+      } else {
+        out += `${indent}${scpiVar}.write(${JSON.stringify(`RECALL:${recallType} "${filePath}"`)})\n`;
+      }
+      continue;
+    }
+    if (s.type === 'error_check') {
+      const cmd = String(params.command || 'ALLEV?');
+      out += `${indent}try:\n`;
+      out += `${indent}    err = ${scpiVar}.query(${JSON.stringify(cmd)}).strip()\n`;
+      out += `${indent}    log_cmd(${JSON.stringify(cmd)}, err)\n`;
+      out += `${indent}except Exception:\n`;
+      out += `${indent}    pass\n`;
+      continue;
+    }
+    if (s.type === 'set_and_query') {
+      const raw = substituteSCPI(
+        String(params.command || ''),
+        (params.cmdParams || []) as CommandParam[],
+        params.paramValues || {}
+      );
+      const cmdHeader = raw.replace(/\?$/, '').split(/\s+/)[0];
+      const queryCmd = `${cmdHeader}?`;
+      const valueParam = (params.paramValues || {}).value || (params.paramValues || {}).Value;
+      const writeCmd = /\s/.test(raw) ? raw : valueParam ? `${cmdHeader} ${valueParam}` : raw;
+      const varName = String(params.saveAs || 'result');
+      out += `${indent}${scpiVar}.write(${JSON.stringify(writeCmd)})\n`;
+      out += `${indent}${varName} = ${scpiVar}.query(${JSON.stringify(queryCmd)}).strip()\n`;
+      continue;
+    }
+    if (s.type === 'query') {
+      const cmd = substituteSCPI(
+        String(params.command || ''),
+        (params.cmdParams || []) as CommandParam[],
+        params.paramValues || {}
+      );
+      const varName = String(params.saveAs || 'result');
+      out += `${indent}${varName} = ${scpiVar}.query(${JSON.stringify(cmd)}).strip()\n`;
+      continue;
+    }
+    if (s.type === 'write') {
+      const cmd = substituteSCPI(
+        String(params.command || ''),
+        (params.cmdParams || []) as CommandParam[],
+        params.paramValues || {}
+      );
+      if (mode === 'tm_devices' && (cmd.includes('.commands.') || cmd.includes('.add_') || cmd.includes('.save_'))) {
+        out += `${indent}${cmd}\n`;
+      } else if (mode === 'tm_devices') {
+        out += `${indent}${scpiVar}.write(${JSON.stringify(cmd)})\n`;
+      } else {
+        out += `${indent}${scpiVar}.write(${JSON.stringify(cmd)})\n`;
+      }
+      continue;
+    }
+  }
+
+  return out;
+}
+
+export function generatePythonForSteps(stepsInput: unknown[], devicesInput: unknown[]): string {
+  const steps = normalizeSteps((stepsInput || []) as StepLike[]);
+  const devices = ((devicesInput || []) as DeviceEntry[]).filter((d) => d && d.enabled !== false);
+  const primary = devices[0] || { id: 'dev1', alias: 'scope', backend: 'pyvisa', host: '127.0.0.1' };
+  const backend = (primary.backend || 'pyvisa') as Backend;
+  const hasTekExp = JSON.stringify(steps).toUpperCase().includes('TEKEXP:');
+
+  const header = `#!/usr/bin/env python3\nimport time\nimport pathlib\n`;
+
+  if (backend === 'tm_devices') {
+    const host = primary.host || '127.0.0.1';
+    const alias = primary.alias || 'scope';
+    const body = emitSteps(steps, 'tm_devices', '        ');
+    return (
+      header +
+      `from tm_devices import DeviceManager\n\n` +
+      `def log_cmd(cmd, resp):\n    pass\n\n` +
+      `def main():\n` +
+      `    with DeviceManager(verbose=False) as dm:\n` +
+      `        ${alias} = dm.add_scope("${host}")\n` +
+      `        visa = ${alias}.visa_resource\n` +
+      body +
+      `        ${alias}.close()\n\n` +
+      `if __name__ == "__main__":\n    main()\n`
+    );
+  }
+
+  if (backend === 'vxi11') {
+    const host = primary.host || '127.0.0.1';
+    const body = emitSteps(steps, 'vxi11');
+    return (
+      header +
+      `import vxi11\n\n` +
+      `def log_cmd(cmd, resp):\n    pass\n\n` +
+      `def main():\n` +
+      `    instrument = vxi11.Instrument("${host}")\n` +
+      body +
+      `    instrument.close()\n\n` +
+      `if __name__ == "__main__":\n    main()\n`
+    );
+  }
+
+  const pyImports = `import pyvisa\n`;
+  let connectionBlock = `    rm = pyvisa.ResourceManager()\n`;
+  const aliases = devices.length ? devices : [primary];
+  aliases.forEach((d, idx) => {
+    const alias = (d.alias || `scope${idx + 1}`).replace(/[^A-Za-z0-9_]/g, '_');
+    const resource = pyResourceForDevice(d);
+    connectionBlock += `    ${alias} = rm.open_resource(${JSON.stringify(resource)})\n`;
+  });
+  const mainAlias = (aliases[0].alias || 'scope').replace(/[^A-Za-z0-9_]/g, '_');
+  connectionBlock += `    scpi = ${mainAlias}\n`;
+  if (hasTekExp) {
+    connectionBlock += `    tek = rm.open_resource("TCPIP0::${primary.host || '127.0.0.1'}::5000::SOCKET")\n`;
+  }
+
+  const body = emitSteps(steps, 'pyvisa');
+  let closeBlock = '';
+  aliases.forEach((d, idx) => {
+    const alias = (d.alias || `scope${idx + 1}`).replace(/[^A-Za-z0-9_]/g, '_');
+    closeBlock += `    ${alias}.close()\n`;
+  });
+  if (hasTekExp) closeBlock += `    tek.close()\n`;
+  closeBlock += `    rm.close()\n`;
+
+  return (
+    header +
+    pyImports +
+    `\n` +
+    `def log_cmd(cmd, resp):\n    pass\n\n` +
+    `def main():\n` +
+    connectionBlock +
+    body +
+    closeBlock +
+    `\nif __name__ == "__main__":\n    main()\n`
+  );
+}

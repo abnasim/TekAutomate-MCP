@@ -1,0 +1,351 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="-25 -20 300 270" width="300" height="270">
+  <defs>
+    <clipPath id="screenClip">
+      <rect x="18" y="38" width="158" height="88" rx="2"/>
+    </clipPath>
+    <filter id="glow">
+      <feGaussianBlur stdDeviation="1.5" result="coloredBlur"/>
+      <feMerge>
+        <feMergeNode in="coloredBlur"/>
+        <feMergeNode in="SourceGraphic"/>
+      </feMerge>
+    </filter>
+    <linearGradient id="metal-grad" x1="0%" y1="0%" x2="0%" y2="100%">
+      <stop offset="0%" stop-color="#fff"/>
+      <stop offset="100%" stop-color="#ccc"/>
+    </linearGradient>
+    <linearGradient id="fire-grad-celebrate" x1="0%" y1="0%" x2="0%" y2="100%">
+      <stop offset="0%" stop-color="#ffff00"/> 
+      <stop offset="50%" stop-color="#00ffff"/>
+      <stop offset="100%" stop-color="#ff00ff" stop-opacity="0"/>
+    </linearGradient>
+  </defs>
+
+  <style>
+    /* Excited bouncy hover */
+    .hover-body { animation: hoverCelebrate 0.5s ease-in-out infinite; }
+    @keyframes hoverCelebrate {
+      0%, 100% { transform: translateY(0px) rotate(-1deg); } 
+      50% { transform: translateY(-6px) rotate(1deg); }
+    }
+
+    /* Party thrusters! */
+    .flame { animation: thrustParty 0.25s ease-in-out infinite alternate; transform-origin: center top; }
+    @keyframes thrustParty {
+      0% { transform: scaleY(1); opacity: 0.7; }
+      100% { transform: scaleY(1.4); opacity: 1; }
+    }
+
+    .handle { 
+      animation: handleBounce 0.5s ease-in-out infinite; 
+    }
+    @keyframes handleBounce {
+      0%, 100% { transform: translateY(0); }
+      50% { transform: translateY(-2px); }
+    }
+
+    /* Both arms raised high! */
+    .left-arm-assembly { 
+      animation: armCelebrateL 0.4s ease-in-out infinite; 
+      transform-origin: 0px 70px;
+    }
+    @keyframes armCelebrateL {
+      0%, 100% { transform: rotate(-60deg); }
+      50% { transform: rotate(-55deg); }
+    }
+
+    .right-arm-celebrate { 
+      animation: armCelebrateR 0.4s ease-in-out infinite; 
+      transform-origin: 240px 70px;
+    }
+    @keyframes armCelebrateR {
+      0%, 100% { transform: rotate(60deg); }
+      50% { transform: rotate(55deg); }
+    }
+
+    /* Claws open wide celebrating */
+    .left-claw-L, .left-claw-R, .right-claw-L, .right-claw-R {
+      animation: clawCelebrate 0.4s ease-in-out infinite;
+    }
+    @keyframes clawCelebrate {
+      0%, 100% { transform: scale(1) rotate(0deg); }
+      50% { transform: scale(1.1) rotate(5deg); }
+    }
+
+    .grid-line {
+      stroke: #1a3030;
+      stroke-width: 0.7;
+      opacity: 0.3;
+    }
+
+    /* Excited wide eyes */
+    .celebrate-eye {
+      fill: #ffdd00;
+      filter: url(#glow);
+      animation: eyeExcited 0.3s ease-in-out infinite;
+    }
+    @keyframes eyeExcited {
+      0%, 100% { transform: scale(1); }
+      50% { transform: scale(1.15); }
+    }
+
+    /* Star-shaped pupils */
+    .star-pupil {
+      fill: #0a1a15;
+      animation: starSpin 1s linear infinite;
+      transform-origin: center;
+    }
+    @keyframes starSpin {
+      0% { transform: rotate(0deg); }
+      100% { transform: rotate(360deg); }
+    }
+
+    /* Confetti pieces */
+    .confetti {
+      animation: confettiFall 2s ease-in-out infinite;
+    }
+    .c1 { fill: #ff6b6b; animation-delay: 0s; }
+    .c2 { fill: #4ecdc4; animation-delay: 0.2s; }
+    .c3 { fill: #ffe66d; animation-delay: 0.4s; }
+    .c4 { fill: #a855f7; animation-delay: 0.6s; }
+    .c5 { fill: #06b6d4; animation-delay: 0.8s; }
+    .c6 { fill: #f472b6; animation-delay: 1s; }
+    .c7 { fill: #84cc16; animation-delay: 1.2s; }
+    .c8 { fill: #fb923c; animation-delay: 1.4s; }
+    @keyframes confettiFall {
+      0% { transform: translateY(-30px) rotate(0deg); opacity: 1; }
+      100% { transform: translateY(50px) rotate(360deg); opacity: 0; }
+    }
+
+    /* YAY! text */
+    .yay-text {
+      font-family: "Arial", sans-serif;
+      font-size: 18px;
+      font-weight: bold;
+      fill: #ffdd00;
+      filter: url(#glow);
+      animation: yayPulse 0.3s ease-in-out infinite;
+    }
+    @keyframes yayPulse {
+      0%, 100% { transform: scale(1); }
+      50% { transform: scale(1.1); }
+    }
+
+    /* Sparkle stars */
+    .sparkle-star {
+      fill: #ffdd00;
+      filter: url(#glow);
+      animation: sparklePop 0.6s ease-in-out infinite;
+    }
+    .s1 { animation-delay: 0s; }
+    .s2 { animation-delay: 0.15s; }
+    .s3 { animation-delay: 0.3s; }
+    .s4 { animation-delay: 0.45s; }
+    @keyframes sparklePop {
+      0%, 100% { transform: scale(0.5); opacity: 0.3; }
+      50% { transform: scale(1.2); opacity: 1; }
+    }
+
+    /* Handle bar rainbow effect */
+    .handle-bar-celebrate {
+      animation: rainbowBar 1s linear infinite;
+    }
+    @keyframes rainbowBar {
+      0% { fill: #ff6b6b; }
+      16% { fill: #ffe66d; }
+      33% { fill: #84cc16; }
+      50% { fill: #06b6d4; }
+      66% { fill: #a855f7; }
+      83% { fill: #f472b6; }
+      100% { fill: #ff6b6b; }
+    }
+
+    /* Big smile */
+    .big-smile {
+      fill: none;
+      stroke: #00ffaa;
+      stroke-width: 4;
+      stroke-linecap: round;
+      filter: url(#glow);
+    }
+  </style>
+
+  <!-- Confetti outside the body -->
+  <rect class="confetti c1" x="30" y="0" width="6" height="6" rx="1"/>
+  <rect class="confetti c2" x="80" y="-10" width="5" height="8" rx="1"/>
+  <rect class="confetti c3" x="130" y="5" width="7" height="5" rx="1"/>
+  <rect class="confetti c4" x="180" y="-5" width="5" height="7" rx="1"/>
+  <rect class="confetti c5" x="220" y="0" width="6" height="6" rx="1"/>
+  <rect class="confetti c6" x="55" y="-15" width="4" height="6" rx="1"/>
+  <rect class="confetti c7" x="155" y="-12" width="6" height="4" rx="1"/>
+  <rect class="confetti c8" x="200" y="-8" width="5" height="5" rx="1"/>
+
+  <!-- Sparkle stars -->
+  <polygon class="sparkle-star s1" points="-5,40 -2,35 1,40 -2,45"/>
+  <polygon class="sparkle-star s2" points="250,45 253,40 256,45 253,50"/>
+  <polygon class="sparkle-star s3" points="10,10 13,5 16,10 13,15"/>
+  <polygon class="sparkle-star s4" points="235,15 238,10 241,15 238,20"/>
+
+  <g class="hover-body">
+    <!-- Thruster flames - party colors! -->
+    <path class="flame" d="M 38 168 L 52 168 L 45 198 Z" fill="url(#fire-grad-celebrate)"/>
+    <path class="flame" d="M 188 168 L 202 168 L 195 198 Z" fill="url(#fire-grad-celebrate)"/>
+
+    <!-- HANDLE -->
+    <g class="handle">
+      <path d="M 12 28 L 12 5 Q 12 -2 19 -2 L 30 -2" fill="none" stroke="#b0b0b0" stroke-width="5" stroke-linecap="round"/>
+      <path d="M 228 28 L 228 5 Q 228 -2 221 -2 L 210 -2" fill="none" stroke="#b0b0b0" stroke-width="5" stroke-linecap="round"/>
+      <rect class="handle-bar-code" x="30" y="-5" width="180" height="7" rx="3.5"/>
+    </g>
+    
+    <!-- Main body -->
+    <rect x="8" y="28" width="224" height="120" rx="5" fill="#f8f8f8" stroke="#c0c0c0" stroke-width="1"/>
+
+    <!-- Black bezel -->
+    <rect x="12" y="32" width="180" height="104" rx="3" fill="#1a1a1a"/>
+    
+    <!-- Tektronix branding -->
+    <text x="16" y="36" font-family="Arial" font-size="5" font-weight="bold" fill="#777" letter-spacing="0.5">Tektronix</text>
+    <text x="130" y="36" font-family="Arial" font-size="3.5" fill="#ffdd00">🎉 PARTY MODE</text>
+    
+    <!-- Screen frame -->
+    <rect x="18" y="38" width="158" height="88" rx="2" fill="#0a1515"/>
+
+    <!-- Screen content -->
+    <g clip-path="url(#screenClip)">
+      <!-- Grid - dim -->
+      <g>
+        <line class="grid-line" x1="18" y1="58" x2="176" y2="58"/>
+        <line class="grid-line" x1="18" y1="78" x2="176" y2="78"/>
+        <line class="grid-line" x1="18" y1="98" x2="176" y2="98"/>
+        <line class="grid-line" x1="18" y1="118" x2="176" y2="118"/>
+        <line class="grid-line" x1="46" y1="38" x2="46" y2="126"/>
+        <line class="grid-line" x1="74" y1="38" x2="74" y2="126"/>
+        <line class="grid-line" x1="102" y1="38" x2="102" y2="126"/>
+        <line class="grid-line" x1="130" y1="38" x2="130" y2="126"/>
+        <line class="grid-line" x1="158" y1="38" x2="158" y2="126"/>
+      </g>
+
+      <!-- Excited wide eyes -->
+      <g transform="translate(0, 5)">
+        <ellipse class="celebrate-eye" cx="72" cy="60" rx="12" ry="14"/>
+        <ellipse class="celebrate-eye" cx="122" cy="60" rx="12" ry="14"/>
+        
+        <!-- Star-shaped excitement in pupils -->
+        <polygon class="star-pupil" points="72,55 74,58 78,58 75,61 76,65 72,62 68,65 69,61 66,58 70,58" />
+        <polygon class="star-pupil" points="122,55 124,58 128,58 125,61 126,65 122,62 118,65 119,61 116,58 120,58" />
+        
+        <!-- Big highlights -->
+        <circle cx="68" cy="55" r="3" fill="#fff" opacity="0.8"/>
+        <circle cx="118" cy="55" r="3" fill="#fff" opacity="0.8"/>
+      </g>
+
+      <!-- Big smile -->
+      <path class="big-smile" d="M 60 82 Q 97 105 134 82"/>
+
+      <!-- YAY! text -->
+      <text class="yay-text" x="97" y="120" text-anchor="middle">YAY!</text>
+
+      <!-- Mini confetti on screen -->
+      <rect x="35" y="45" width="4" height="4" fill="#ff6b6b" rx="1" opacity="0.7"/>
+      <rect x="150" y="48" width="3" height="5" fill="#4ecdc4" rx="1" opacity="0.7"/>
+      <rect x="45" y="100" width="4" height="3" fill="#ffe66d" rx="1" opacity="0.7"/>
+      <rect x="145" y="95" width="5" height="4" fill="#a855f7" rx="1" opacity="0.7"/>
+    </g>
+
+    <!-- Right side control panel -->
+    <rect x="194" y="32" width="36" height="104" rx="3" fill="#f0f0f0" stroke="#ccc" stroke-width="1"/>
+    
+    <!-- TRIGGER section -->
+    <rect x="197" y="35" width="30" height="7" rx="1" fill="#333"/>
+    <text x="212" y="40" font-family="Arial" font-size="4" fill="#0f0" text-anchor="middle">TRIGGER</text>
+    
+    <!-- Top knob -->
+    <text x="212" y="48" font-family="Arial" font-size="3" fill="#555" text-anchor="middle">Level</text>
+    <circle cx="212" cy="56" r="7" fill="#e0e0e0" stroke="#999" stroke-width="1"/>
+    <circle cx="212" cy="56" r="2.5" fill="#888"/>
+    
+    <!-- VERTICAL section -->
+    <rect x="197" y="66" width="30" height="6" rx="1" fill="#444"/>
+    <text x="212" y="70.5" font-family="Arial" font-size="3.5" fill="#fff" text-anchor="middle">VERTICAL</text>
+    
+    <!-- Channel buttons -->
+    <circle cx="203" cy="80" r="4" fill="#222" stroke="#f4b400" stroke-width="2"/> 
+    <circle cx="221" cy="80" r="4" fill="#222" stroke="#00c8c8" stroke-width="2"/> 
+    <circle cx="203" cy="92" r="4" fill="#222" stroke="#e06666" stroke-width="2"/> 
+    <circle cx="221" cy="92" r="4" fill="#222" stroke="#8e7cc3" stroke-width="2"/>
+    
+    <!-- HORIZONTAL section -->
+    <rect x="197" y="100" width="30" height="6" rx="1" fill="#444"/>
+    <text x="212" y="104.5" font-family="Arial" font-size="3" fill="#fff" text-anchor="middle">HORIZONTAL</text>
+    
+    <!-- Bottom knob -->
+    <text x="212" y="112" font-family="Arial" font-size="3" fill="#555" text-anchor="middle">Scale</text>
+    <circle cx="212" cy="120" r="8" fill="#e0e0e0" stroke="#999" stroke-width="1"/>
+    <circle cx="212" cy="120" r="3" fill="#888"/>
+    
+    <!-- Function buttons -->
+    <rect x="197" y="130" width="14" height="5" rx="1" fill="#4a4"/>
+    <rect x="213" y="130" width="14" height="5" rx="1" fill="#48f"/>
+    
+    <!-- Bottom channel inputs bar -->
+    <rect x="8" y="138" width="224" height="16" rx="2" fill="#e8e8e8"/>
+    
+    <!-- CH1-4 -->
+    <g transform="translate(25, 140)">
+      <rect x="0" y="0" width="24" height="12" rx="2" fill="#3a3a3a"/>
+      <circle cx="12" cy="6" r="5" fill="#222" stroke="#f4b400" stroke-width="2"/>
+    </g>
+    <g transform="translate(60, 140)">
+      <rect x="0" y="0" width="24" height="12" rx="2" fill="#3a3a3a"/>
+      <circle cx="12" cy="6" r="5" fill="#222" stroke="#00c8c8" stroke-width="2"/>
+    </g>
+    <g transform="translate(95, 140)">
+      <rect x="0" y="0" width="24" height="12" rx="2" fill="#3a3a3a"/>
+      <circle cx="12" cy="6" r="5" fill="#222" stroke="#e06666" stroke-width="2"/>
+    </g>
+    <g transform="translate(130, 140)">
+      <rect x="0" y="0" width="24" height="12" rx="2" fill="#3a3a3a"/>
+      <circle cx="12" cy="6" r="5" fill="#222" stroke="#8e7cc3" stroke-width="2"/>
+    </g>
+    
+    <!-- Aux In -->
+    <circle cx="190" cy="146" r="4" fill="#222" stroke="#666" stroke-width="1"/>
+
+    <!-- Feet -->
+    <rect x="35" y="154" width="24" height="14" rx="3" fill="#f0f0f0" stroke="#c0c0c0" stroke-width="1"/>
+    <rect x="181" y="154" width="24" height="14" rx="3" fill="#f0f0f0" stroke="#c0c0c0" stroke-width="1"/>
+
+    <!-- RIGHT ARM - raised celebrating (no probe for celebrate) -->
+    <g class="right-arm-celebrate">
+      <circle cx="240" cy="70" r="10" fill="#00aad2" stroke="#0088aa" stroke-width="1"/>
+      <rect x="232" y="72" width="16" height="24" rx="4" fill="url(#metal-grad)" stroke="#999" stroke-width="1" transform="rotate(-25 240 84)"/>
+      <rect x="234" y="94" width="14" height="20" rx="3" fill="#fff" stroke="#999" stroke-width="1" transform="rotate(10 241 104)"/>
+      <ellipse cx="242" cy="116" rx="8" ry="5" fill="#e8e8e8" stroke="#999" stroke-width="1"/>
+      <g class="right-claw-L">
+        <path d="M 236 116 Q 226 120 222 130" fill="none" stroke="#e0e0e0" stroke-width="5" stroke-linecap="round"/>
+        <circle cx="222" cy="130" r="4" fill="#2d5a5a"/>
+      </g>
+      <g class="right-claw-R">
+        <path d="M 248 116 Q 258 120 262 130" fill="none" stroke="#e0e0e0" stroke-width="5" stroke-linecap="round"/>
+        <circle cx="262" cy="130" r="4" fill="#2d5a5a"/>
+      </g>
+    </g>
+
+    <!-- LEFT ARM - raised celebrating -->
+    <g class="left-arm-assembly">
+      <circle cx="0" cy="70" r="10" fill="#00aad2" stroke="#0088aa" stroke-width="1"/>
+      <rect x="-8" y="72" width="16" height="24" rx="4" fill="url(#metal-grad)" stroke="#999" stroke-width="1" transform="rotate(25 0 84)"/>
+      <rect x="-10" y="94" width="14" height="20" rx="3" fill="#fff" stroke="#999" stroke-width="1" transform="rotate(-10 -3 104)"/>
+      <ellipse cx="-2" cy="116" rx="8" ry="5" fill="#e8e8e8" stroke="#999" stroke-width="1"/>
+      <g class="left-claw-L">
+        <path d="M -8 116 Q -18 120 -22 130" fill="none" stroke="#e0e0e0" stroke-width="5" stroke-linecap="round"/>
+        <circle cx="-22" cy="130" r="4" fill="#2d5a5a"/>
+      </g>
+      <g class="left-claw-R">
+        <path d="M 4 116 Q 14 120 18 130" fill="none" stroke="#e0e0e0" stroke-width="5" stroke-linecap="round"/>
+        <circle cx="18" cy="130" r="4" fill="#2d5a5a"/>
+      </g>
+    </g>
+  </g>
+</svg>

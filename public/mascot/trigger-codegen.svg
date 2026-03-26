@@ -1,0 +1,448 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="-25 -20 300 270" width="300" height="270">
+  <defs>
+    <clipPath id="screenClip">
+      <rect x="18" y="38" width="158" height="88" rx="2"/>
+    </clipPath>
+    <filter id="glow">
+      <feGaussianBlur stdDeviation="1.5" result="coloredBlur"/>
+      <feMerge>
+        <feMergeNode in="coloredBlur"/>
+        <feMergeNode in="SourceGraphic"/>
+      </feMerge>
+    </filter>
+    <filter id="glowStrong">
+      <feGaussianBlur stdDeviation="2.5" result="coloredBlur"/>
+      <feMerge>
+        <feMergeNode in="coloredBlur"/>
+        <feMergeNode in="SourceGraphic"/>
+      </feMerge>
+    </filter>
+    <linearGradient id="metal-grad" x1="0%" y1="0%" x2="0%" y2="100%">
+      <stop offset="0%" stop-color="#fff"/>
+      <stop offset="100%" stop-color="#ccc"/>
+    </linearGradient>
+    <linearGradient id="fire-grad" x1="0%" y1="0%" x2="0%" y2="100%">
+      <stop offset="0%" stop-color="#00ff88"/> 
+      <stop offset="100%" stop-color="#004422" stop-opacity="0"/>
+    </linearGradient>
+  </defs>
+
+  <style>
+    /* Focused steady hover */
+    .hover-body { animation: hoverCode 2.5s ease-in-out infinite; }
+    @keyframes hoverCode {
+      0%, 100% { transform: translateY(0px); } 
+      50% { transform: translateY(-2px); }
+    }
+
+    /* Green-tinted thrusters for code mode */
+    .flame { animation: thrustCode 0.4s ease-in-out infinite alternate; transform-origin: center top; }
+    @keyframes thrustCode {
+      0% { transform: scaleY(0.8); opacity: 0.4; }
+      100% { transform: scaleY(1.1); opacity: 0.7; }
+    }
+
+    .handle { 
+      animation: handleBreathe 2.5s ease-in-out infinite; 
+    }
+    @keyframes handleBreathe {
+      0%, 100% { transform: translateY(0); }
+      50% { transform: translateY(1px); }
+    }
+
+    /* Left arm - typing motion from shoulder */
+    .left-arm { 
+      animation: typeLeft 0.3s ease-in-out infinite; 
+      transform-origin: 0px 70px;
+    }
+    @keyframes typeLeft {
+      0%, 100% { transform: rotate(3deg); }
+      50% { transform: rotate(6deg); }
+    }
+
+    /* Right arm assembly - typing motion, pivots from CH1 connection */
+    .right-arm-assembly { 
+      animation: typeRight 0.3s ease-in-out infinite 0.15s; 
+      transform-origin: 37px 146px;
+    }
+    @keyframes typeRight {
+      0%, 100% { transform: rotate(-2deg); }
+      50% { transform: rotate(2deg); }
+    }
+
+    /* Typing claws */
+    .left-claw-L, .left-claw-R {
+      animation: clawTypeL 0.15s ease-in-out infinite;
+    }
+    .left-claw-R { animation-delay: 0.075s; }
+    @keyframes clawTypeL {
+      0%, 100% { transform: translateY(0); }
+      50% { transform: translateY(2px); }
+    }
+
+    .right-claw-L, .right-claw-R {
+      animation: clawTypeR 0.15s ease-in-out infinite 0.075s;
+    }
+    .right-claw-R { animation-delay: 0.15s; }
+    @keyframes clawTypeR {
+      0%, 100% { transform: translateY(0); }
+      50% { transform: translateY(2px); }
+    }
+
+    .grid-line {
+      stroke: #0a2010;
+      stroke-width: 0.7;
+      opacity: 0.2;
+    }
+
+    /* Focused coder eyes - slight squint */
+    .code-eye {
+      fill: #00ff66;
+      filter: url(#glow);
+    }
+    .eye-group {
+      animation: eyeFocus 2s ease-in-out infinite;
+    }
+    @keyframes eyeFocus {
+      0%, 100% { transform: scaleY(0.85); }
+      50% { transform: scaleY(0.9); }
+    }
+
+    /* Matrix rain characters - falling continuously */
+    .matrix-char {
+      font-family: "Courier New", monospace;
+      font-size: 7px;
+      fill: #00ff44;
+      filter: url(#glow);
+    }
+    
+    /* Column 1 */
+    .m1a { animation: matrixFall 1.5s linear infinite; }
+    .m1b { animation: matrixFall 1.5s linear infinite 0.5s; }
+    .m1c { animation: matrixFall 1.5s linear infinite 1.0s; }
+    /* Column 2 */
+    .m2a { animation: matrixFall 1.8s linear infinite 0.2s; }
+    .m2b { animation: matrixFall 1.8s linear infinite 0.8s; }
+    .m2c { animation: matrixFall 1.8s linear infinite 1.4s; }
+    /* Column 3 */
+    .m3a { animation: matrixFall 1.3s linear infinite 0.1s; }
+    .m3b { animation: matrixFall 1.3s linear infinite 0.6s; }
+    .m3c { animation: matrixFall 1.3s linear infinite 1.1s; }
+    /* Column 4 */
+    .m4a { animation: matrixFall 2.0s linear infinite 0.3s; }
+    .m4b { animation: matrixFall 2.0s linear infinite 1.0s; }
+    .m4c { animation: matrixFall 2.0s linear infinite 1.6s; }
+    /* Column 5 */
+    .m5a { animation: matrixFall 1.6s linear infinite 0.0s; }
+    .m5b { animation: matrixFall 1.6s linear infinite 0.7s; }
+    .m5c { animation: matrixFall 1.6s linear infinite 1.3s; }
+    /* Column 6 */
+    .m6a { animation: matrixFall 1.4s linear infinite 0.4s; }
+    .m6b { animation: matrixFall 1.4s linear infinite 0.9s; }
+    .m6c { animation: matrixFall 1.4s linear infinite 1.2s; }
+    /* Column 7 */
+    .m7a { animation: matrixFall 1.7s linear infinite 0.15s; }
+    .m7b { animation: matrixFall 1.7s linear infinite 0.75s; }
+    .m7c { animation: matrixFall 1.7s linear infinite 1.35s; }
+    /* Column 8 */
+    .m8a { animation: matrixFall 1.9s linear infinite 0.25s; }
+    .m8b { animation: matrixFall 1.9s linear infinite 0.85s; }
+    .m8c { animation: matrixFall 1.9s linear infinite 1.45s; }
+
+    @keyframes matrixFall {
+      0% { transform: translateY(-20px); opacity: 1; }
+      70% { opacity: 0.7; }
+      100% { transform: translateY(100px); opacity: 0; }
+    }
+
+    /* Bright lead characters */
+    .matrix-lead {
+      font-family: "Courier New", monospace;
+      font-size: 7px;
+      fill: #aaffaa;
+      filter: url(#glowStrong);
+    }
+
+    /* Cursor blink */
+    .cursor {
+      fill: #00ff88;
+      animation: cursorBlink 0.5s steps(1) infinite;
+    }
+    @keyframes cursorBlink {
+      0%, 50% { opacity: 1; }
+      51%, 100% { opacity: 0; }
+    }
+
+    /* Code prompt */
+    .code-prompt {
+      font-family: "Courier New", monospace;
+      font-size: 5px;
+      fill: #00ff88;
+      filter: url(#glow);
+    }
+
+    /* Typing code line */
+    .code-typing {
+      font-family: "Courier New", monospace;
+      font-size: 5px;
+      fill: #00dd66;
+    }
+    .typing-line {
+      animation: typeCode 3s steps(20) infinite;
+    }
+    @keyframes typeCode {
+      0%, 100% { width: 0; }
+      50% { width: 100px; }
+    }
+
+    .probe-wire {
+      fill: none;
+      stroke: #222;
+      stroke-width: 3;
+      stroke-linecap: round;
+    }
+
+    /* Handle bar - code green pulse */
+    .handle-bar-code {
+      animation: barCode 2s ease-in-out infinite;
+    }
+    @keyframes barCode {
+      0%, 100% { fill: #00b8d4; }
+      50% { fill: #00dd88; }
+    }
+
+    /* Concentrated eyebrows */
+    .focus-brow {
+      fill: none;
+      stroke: #00cc55;
+      stroke-width: 2;
+      stroke-linecap: round;
+      filter: url(#glow);
+    }
+  </style>
+
+  <g class="hover-body">
+    <!-- Thruster flames - green tinted -->
+    <path class="flame" d="M 38 168 L 52 168 L 45 188 Z" fill="url(#fire-grad)"/>
+    <path class="flame" d="M 188 168 L 202 168 L 195 188 Z" fill="url(#fire-grad)"/>
+
+    <!-- HANDLE -->
+    <g class="handle">
+      <path d="M 12 28 L 12 5 Q 12 -2 19 -2 L 30 -2" fill="none" stroke="#b0b0b0" stroke-width="5" stroke-linecap="round"/>
+      <path d="M 228 28 L 228 5 Q 228 -2 221 -2 L 210 -2" fill="none" stroke="#b0b0b0" stroke-width="5" stroke-linecap="round"/>
+      <rect class="handle-bar-code" x="30" y="-5" width="180" height="7" rx="3.5" fill="#00b8d4"/>
+    </g>
+    
+    <!-- Main body -->
+    <rect x="8" y="28" width="224" height="120" rx="5" fill="#f8f8f8" stroke="#c0c0c0" stroke-width="1"/>
+
+    <!-- Black bezel -->
+    <rect x="12" y="32" width="180" height="104" rx="3" fill="#0a0a0a"/>
+    
+    <!-- Tektronix branding -->
+    <text x="16" y="36" font-family="Arial" font-size="5" font-weight="bold" fill="#444" letter-spacing="0.5">Tektronix</text>
+    <text x="125" y="36" font-family="Courier New" font-size="3.5" fill="#00ff88">&lt;/&gt; CODEGEN</text>
+    
+    <!-- Screen frame - darker for code -->
+    <rect x="18" y="38" width="158" height="88" rx="2" fill="#050a05"/>
+
+    <!-- Screen content -->
+    <g clip-path="url(#screenClip)">
+      <!-- Very dim grid -->
+      <g>
+        <line class="grid-line" x1="18" y1="58" x2="176" y2="58"/>
+        <line class="grid-line" x1="18" y1="78" x2="176" y2="78"/>
+        <line class="grid-line" x1="18" y1="98" x2="176" y2="98"/>
+        <line class="grid-line" x1="18" y1="118" x2="176" y2="118"/>
+      </g>
+
+      <!-- MATRIX RAIN - Multiple columns with staggered falling characters -->
+      <!-- Column 1 (x=25) -->
+      <text class="matrix-char m1a" x="25" y="45">ス</text>
+      <text class="matrix-char m1b" x="25" y="45">7</text>
+      <text class="matrix-char m1c" x="25" y="45">コ</text>
+      
+      <!-- Column 2 (x=40) -->
+      <text class="matrix-char m2a" x="40" y="50">0</text>
+      <text class="matrix-char m2b" x="40" y="50">ピ</text>
+      <text class="matrix-char m2c" x="40" y="50">1</text>
+      
+      <!-- Column 3 (x=55) -->
+      <text class="matrix-char m3a" x="55" y="42">ケ</text>
+      <text class="matrix-char m3b" x="55" y="42">{</text>
+      <text class="matrix-char m3c" x="55" y="42">}</text>
+      
+      <!-- Column 4 (x=100) -->
+      <text class="matrix-char m4a" x="100" y="48">;</text>
+      <text class="matrix-char m4b" x="100" y="48">タ</text>
+      <text class="matrix-char m4c" x="100" y="48">λ</text>
+      
+      <!-- Column 5 (x=130) -->
+      <text class="matrix-char m5a" x="130" y="44">ム</text>
+      <text class="matrix-char m5b" x="130" y="44">$</text>
+      <text class="matrix-char m5c" x="130" y="44">9</text>
+      
+      <!-- Column 6 (x=145) -->
+      <text class="matrix-char m6a" x="145" y="46">=</text>
+      <text class="matrix-char m6b" x="145" y="46">ト</text>
+      <text class="matrix-char m6c" x="145" y="46">(</text>
+      
+      <!-- Column 7 (x=160) -->
+      <text class="matrix-char m7a" x="160" y="40">リ</text>
+      <text class="matrix-char m7b" x="160" y="40">2</text>
+      <text class="matrix-char m7c" x="160" y="40">:</text>
+      
+      <!-- Column 8 (x=170) -->
+      <text class="matrix-char m8a" x="170" y="43">ガ</text>
+      <text class="matrix-char m8b" x="170" y="43">/</text>
+      <text class="matrix-char m8c" x="170" y="43">*</text>
+
+      <!-- Focused squinting eyes in center -->
+      <g class="eye-group" transform="translate(0, 5)">
+        <ellipse class="code-eye" cx="72" cy="65" rx="9" ry="10"/>
+        <ellipse class="code-eye" cx="122" cy="65" rx="9" ry="10"/>
+        
+        <!-- Pupils - looking at code -->
+        <circle cx="74" cy="66" r="4" fill="#050a05"/>
+        <circle cx="124" cy="66" r="4" fill="#050a05"/>
+        
+        <!-- Highlights -->
+        <circle cx="71" cy="63" r="1.5" fill="#fff" opacity="0.5"/>
+        <circle cx="121" cy="63" r="1.5" fill="#fff" opacity="0.5"/>
+        
+        <!-- Concentrated eyebrows - angled down toward center -->
+        <path class="focus-brow" d="M 58 56 L 86 60"/>
+        <path class="focus-brow" d="M 136 56 L 108 60"/>
+      </g>
+
+      <!-- Code prompt at bottom -->
+      <text class="code-prompt" x="22" y="100">&gt;&gt;&gt; scope.query("*IDN?")</text>
+      <text class="code-prompt" x="22" y="108">TEKTRONIX,MSO46B,...</text>
+      <text class="code-prompt" x="22" y="116">&gt;&gt;&gt; <tspan class="cursor">█</tspan></text>
+    </g>
+
+    <!-- Right side control panel -->
+    <rect x="194" y="32" width="36" height="104" rx="3" fill="#f0f0f0" stroke="#ccc" stroke-width="1"/>
+    
+    <!-- TRIGGER section -->
+    <rect x="197" y="35" width="30" height="7" rx="1" fill="#333"/>
+    <text x="212" y="40" font-family="Arial" font-size="4" fill="#0f0" text-anchor="middle">TRIGGER</text>
+    
+    <!-- Top knob -->
+    <text x="212" y="48" font-family="Arial" font-size="3" fill="#555" text-anchor="middle">Level</text>
+    <circle cx="212" cy="56" r="7" fill="#e0e0e0" stroke="#999" stroke-width="1"/>
+    <circle cx="212" cy="56" r="2.5" fill="#888"/>
+    
+    <!-- VERTICAL section -->
+    <rect x="197" y="66" width="30" height="6" rx="1" fill="#444"/>
+    <text x="212" y="70.5" font-family="Arial" font-size="3.5" fill="#fff" text-anchor="middle">VERTICAL</text>
+    
+    <!-- Channel buttons -->
+    <circle cx="203" cy="80" r="4" fill="#222" stroke="#f4b400" stroke-width="2"/> 
+    <circle cx="221" cy="80" r="4" fill="#222" stroke="#00c8c8" stroke-width="2"/> 
+    <circle cx="203" cy="92" r="4" fill="#222" stroke="#e06666" stroke-width="2"/> 
+    <circle cx="221" cy="92" r="4" fill="#222" stroke="#8e7cc3" stroke-width="2"/>
+    
+    <!-- HORIZONTAL section -->
+    <rect x="197" y="100" width="30" height="6" rx="1" fill="#444"/>
+    <text x="212" y="104.5" font-family="Arial" font-size="3" fill="#fff" text-anchor="middle">HORIZONTAL</text>
+    
+    <!-- Bottom knob -->
+    <text x="212" y="112" font-family="Arial" font-size="3" fill="#555" text-anchor="middle">Scale</text>
+    <circle cx="212" cy="120" r="8" fill="#e0e0e0" stroke="#999" stroke-width="1"/>
+    <circle cx="212" cy="120" r="3" fill="#888"/>
+    
+    <!-- Function buttons -->
+    <rect x="197" y="130" width="14" height="5" rx="1" fill="#4a4"/>
+    <rect x="213" y="130" width="14" height="5" rx="1" fill="#48f"/>
+    
+    <!-- Bottom channel inputs bar -->
+    <rect x="8" y="138" width="224" height="16" rx="2" fill="#e8e8e8"/>
+    
+    <!-- CH1 -->
+    <g transform="translate(25, 140)">
+      <rect x="0" y="0" width="24" height="12" rx="2" fill="#3a3a3a"/>
+      <circle cx="12" cy="6" r="5" fill="#222" stroke="#f4b400" stroke-width="2"/>
+    </g>
+    <!-- CH2 -->
+    <g transform="translate(60, 140)">
+      <rect x="0" y="0" width="24" height="12" rx="2" fill="#3a3a3a"/>
+      <circle cx="12" cy="6" r="5" fill="#222" stroke="#00c8c8" stroke-width="2"/>
+    </g>
+    <!-- CH3 -->
+    <g transform="translate(95, 140)">
+      <rect x="0" y="0" width="24" height="12" rx="2" fill="#3a3a3a"/>
+      <circle cx="12" cy="6" r="5" fill="#222" stroke="#e06666" stroke-width="2"/>
+    </g>
+    <!-- CH4 -->
+    <g transform="translate(130, 140)">
+      <rect x="0" y="0" width="24" height="12" rx="2" fill="#3a3a3a"/>
+      <circle cx="12" cy="6" r="5" fill="#222" stroke="#8e7cc3" stroke-width="2"/>
+    </g>
+    
+    <!-- Aux In -->
+    <circle cx="190" cy="146" r="4" fill="#222" stroke="#666" stroke-width="1"/>
+
+    <!-- Feet -->
+    <rect x="35" y="154" width="24" height="14" rx="3" fill="#f0f0f0" stroke="#c0c0c0" stroke-width="1"/>
+    <rect x="181" y="154" width="24" height="14" rx="3" fill="#f0f0f0" stroke="#c0c0c0" stroke-width="1"/>
+
+    <!-- RIGHT ARM ASSEMBLY - Wire from CH1 (37,146) to probe, arm at shoulder (240,70) -->
+    <g class="right-arm-assembly">
+      <!-- Probe wire - starts at CH1 input (37,146), curves to probe tip -->
+      <path class="probe-wire" d="M 37 146 Q 90 150 150 165 Q 210 178 242 154" />
+
+      <!-- Right arm - positioned at shoulder (240, 70) in global coords -->
+      <g class="right-arm">
+        <!-- Shoulder joint -->
+        <circle cx="240" cy="70" r="10" fill="#00aad2" stroke="#0088aa" stroke-width="1"/>
+        <!-- Upper arm -->
+        <rect x="232" y="72" width="16" height="24" rx="4" fill="url(#metal-grad)" stroke="#999" stroke-width="1" transform="rotate(-15 240 75)"/>
+        <!-- Forearm -->
+        <rect x="234" y="94" width="14" height="20" rx="3" fill="#fff" stroke="#999" stroke-width="1" transform="rotate(8 243 100)"/>
+        <!-- Wrist -->
+        <ellipse cx="242" cy="116" rx="8" ry="5" fill="#e8e8e8" stroke="#999" stroke-width="1"/>
+        
+        <!-- Right claw left finger -->
+        <g class="right-claw-L">
+          <path d="M 236 116 Q 229 126 232 136" fill="none" stroke="#e0e0e0" stroke-width="5" stroke-linecap="round"/>
+          <circle cx="232" cy="136" r="4" fill="#2d5a5a"/>
+        </g>
+        <!-- Right claw right finger -->
+        <g class="right-claw-R">
+          <path d="M 248 116 Q 255 126 252 136" fill="none" stroke="#e0e0e0" stroke-width="5" stroke-linecap="round"/>
+          <circle cx="252" cy="136" r="4" fill="#2d5a5a"/>
+        </g>
+        
+        <!-- Probe body held in claws -->
+        <rect x="237" y="120" width="10" height="30" rx="2" fill="#555"/>
+        <rect x="239" y="148" width="6" height="6" rx="1" fill="#333"/>
+        <!-- Probe tip -->
+        <line x1="242" y1="154" x2="242" y2="165" stroke="#aaa" stroke-width="2" stroke-linecap="round"/>
+      </g>
+    </g>
+
+    <!-- LEFT ARM - at shoulder position (0, 70) -->
+    <g class="left-arm">
+      <!-- Shoulder joint -->
+      <circle cx="0" cy="70" r="10" fill="#00aad2" stroke="#0088aa" stroke-width="1"/>
+      <!-- Upper arm -->
+      <rect x="-8" y="72" width="16" height="24" rx="4" fill="url(#metal-grad)" stroke="#999" stroke-width="1" transform="rotate(15 0 75)"/>
+      <!-- Forearm -->
+      <rect x="-10" y="94" width="14" height="20" rx="3" fill="#fff" stroke="#999" stroke-width="1" transform="rotate(-8 -3 100)"/>
+      <!-- Wrist -->
+      <ellipse cx="-2" cy="116" rx="8" ry="5" fill="#e8e8e8" stroke="#999" stroke-width="1"/>
+      
+      <!-- Left claw left finger -->
+      <g class="left-claw-L">
+        <path d="M -8 116 Q -15 126 -12 136" fill="none" stroke="#e0e0e0" stroke-width="5" stroke-linecap="round"/>
+        <circle cx="-12" cy="136" r="4" fill="#2d5a5a"/>
+      </g>
+      <!-- Left claw right finger -->
+      <g class="left-claw-R">
+        <path d="M 4 116 Q 11 126 8 136" fill="none" stroke="#e0e0e0" stroke-width="5" stroke-linecap="round"/>
+        <circle cx="8" cy="136" r="4" fill="#2d5a5a"/>
+      </g>
+    </g>
+  </g>
+</svg>

@@ -1,0 +1,2490 @@
+Commands Needing Manual Review
+================================================================================
+
+Total: 496 commands
+
+These commands have generic/empty arguments text and <=1 example.
+They should be checked against the PDF manual for proper {OPTIONS} syntax.
+
+================================================================================
+
+Command: ACQuire:MODe
+Group: Acquisition
+Arguments: SAMple specifies that the displayed data point value is the first sampled value that is taken during
+Examples: 1
+--------------------------------------------------------------------------------
+Command: ALIas:DELEte:ALL
+Group: Alias
+Arguments: 
+Examples: 1
+--------------------------------------------------------------------------------
+Command: DATa:ENCdg
+Group: Waveform Transfer
+Arguments: ASCIi specifies the ASCII representation of signed INT, FLOAT. If ASCII is the value, then :BN_Fmt a
+Examples: 1
+--------------------------------------------------------------------------------
+Command: WFMInpre:XINcr
+Group: Waveform Transfer
+Arguments: <NR3> is the horizontal interval representation.
+Examples: 1
+--------------------------------------------------------------------------------
+Command: WFMInpre:YZEro
+Group: Waveform Transfer
+Arguments: <NR3> is the offset in YUNits. <NR1> number of bits per data point can be 8, 16, 32 or 64. Commands 
+Examples: 1
+--------------------------------------------------------------------------------
+Command: SETUp:NAMe
+Group: Miscellaneous
+Arguments: <NR1> specifies a location in which the setup label is stored. Location values range from 1 through 
+Examples: 1
+--------------------------------------------------------------------------------
+Command: AUXIn:PRObe:AUTOZero
+Group: Vertical
+Arguments: EXECute sets the probe to autozero.
+Examples: 1
+--------------------------------------------------------------------------------
+Command: AUXIn:PRObe:DEGAUSS
+Group: Vertical
+Arguments: EXECute starts a probe degauss cycle.
+Examples: 1
+--------------------------------------------------------------------------------
+Command: AUXIn:PRObe:FORCEDRange
+Group: Vertical
+Arguments: <NR3> specifies the probe range.
+Examples: 1
+--------------------------------------------------------------------------------
+Command: AUXIn:PRObe:INPUTMode:AOFFSet
+Group: Vertical
+Arguments: <NR3> specifies the A mode offset control.
+Examples: 1
+--------------------------------------------------------------------------------
+Command: AUXIn:PRObe:INPUTMode:BOFFSet
+Group: Vertical
+Arguments: <NR3> specifies the B mode offset control.
+Examples: 1
+--------------------------------------------------------------------------------
+Command: AUXIn:PRObe:INPUTMode:CMOFFSet
+Group: Vertical
+Arguments: <NR3> specifies the common mode offset control
+Examples: 1
+--------------------------------------------------------------------------------
+Command: AUXIn:PRObe:INPUTMode:DMOFFSet
+Group: Vertical
+Arguments: <NR3> specifies the differential mode offset control.
+Examples: 1
+--------------------------------------------------------------------------------
+Command: AUXIn:PRObe:RANge
+Group: Vertical
+Arguments: 
+Examples: 1
+--------------------------------------------------------------------------------
+Command: AUXIn:VTERm:DUAL:A
+Group: Vertical
+Arguments: <NR3> specifies the termination voltage.
+Examples: 1
+--------------------------------------------------------------------------------
+Command: AUXIn:VTERm:DUAL:B
+Group: Vertical
+Arguments: <NR3> specifies the termination voltage.
+Examples: 1
+--------------------------------------------------------------------------------
+Command: BUS:B1<x>:USB:HYSTeresis
+Group: Bus
+Arguments: <NR3> sets the hysteresis for USB Super Speed.
+Examples: 0
+--------------------------------------------------------------------------------
+Command: BUS:B<x>:CAN:BITRate
+Group: Bus
+Arguments: Arguments specify the bitrate.
+Examples: 1
+--------------------------------------------------------------------------------
+Command: BUS:B<x>:CAN:BITRate:VALue
+Group: Bus
+Arguments: <nr3> specifies the CAN custom bitrate value.
+Examples: 1
+--------------------------------------------------------------------------------
+Command: BUS:B<x>:CAN:SOUrce
+Group: Bus
+Arguments: Arguments specify a channel.
+Examples: 1
+--------------------------------------------------------------------------------
+Command: BUS:B<x>:ETHERnet:SOUrce
+Group: Bus
+Arguments: CH1–4 specifies to use one of the channels 1–4 as the Ethernet data source for differential input. M
+Examples: 1
+--------------------------------------------------------------------------------
+Command: BUS:B<x>:ETHERnet:SOUrce:DMINus
+Group: Bus
+Arguments: CH1–4 specifies to use one of the analog channels as the Ethernet data source for the D- input. D0–D
+Examples: 1
+--------------------------------------------------------------------------------
+Command: BUS:B<x>:ETHERnet:SOUrce:DPLUs
+Group: Bus
+Arguments: CH1–4 specifies to use one of the analog channels 1 – 4 as the Ethernet data source for the D+ input
+Examples: 1
+--------------------------------------------------------------------------------
+Command: BUS:B<x>:FLEXRAY:BITRate:VALue
+Group: Bus
+Arguments: <nr3> specifies the custom bit rate value.
+Examples: 1
+--------------------------------------------------------------------------------
+Command: BUS:B<x>:FLEXRAY:SOUrce
+Group: Bus
+Arguments: Arguments are the available FLEXRAY sources.
+Examples: 1
+--------------------------------------------------------------------------------
+Command: BUS:B<x>:I2C:CLOCk:SOUrce
+Group: Bus
+Arguments: CH1–CH4 specifies an analog channel to use as the I2C SCLK source. D0–D15 specifies a digital channe
+Examples: 1
+--------------------------------------------------------------------------------
+Command: BUS:B<x>:I2C:DATa:SOUrce
+Group: Bus
+Arguments: CH1–CH4 specifies an analog channel to use as the I2C SDATA source. D0–D15 specifies a digital chann
+Examples: 1
+--------------------------------------------------------------------------------
+Command: BUS:B<x>:LIN:BITRate
+Group: Bus
+Arguments: Arguments are the available bit rates.
+Examples: 1
+--------------------------------------------------------------------------------
+Command: BUS:B<x>:LIN:BITRate:VALue
+Group: Bus
+Arguments: <nr3> specifies the custom bit rate.
+Examples: 1
+--------------------------------------------------------------------------------
+Command: BUS:B<x>:LIN:SOUrce
+Group: Bus
+Arguments: Arguments specify the available sources.
+Examples: 1
+--------------------------------------------------------------------------------
+Command: BUS:B<x>:MIL1553B:RESPonsetime:MAXimum
+Group: Bus
+Arguments: <NR3> is a floating point number that specifies the maximum response time, in seconds.
+Examples: 1
+--------------------------------------------------------------------------------
+Command: BUS:B<x>:MIL1553B:RESPonsetime:MINimum
+Group: Bus
+Arguments: <NR3> is a floating point number that specifies the minimum response time in seconds.
+Examples: 1
+--------------------------------------------------------------------------------
+Command: BUS:B<x>:MIL1553B:SOUrce
+Group: Bus
+Arguments: CH1–4 specifies to use one of the analog channels as the MIL-STD-1553 bus source for differential in
+Examples: 1
+--------------------------------------------------------------------------------
+Command: BUS:B<x>:MIPICSITWo:CLOCk:SOUrce
+Group: Bus
+Arguments: CH1–CH4 specifies an analog channel to use as the MIPI CSI2 clock source. D0–D15 specifies a digital
+Examples: 1
+--------------------------------------------------------------------------------
+Command: BUS:B<x>:MIPICSITWo:LANE<x>:SOUrce:DIFFerential
+Group: Bus
+Arguments: D0–D15 specifies a digital input signal to use as the differential source.
+Examples: 1
+--------------------------------------------------------------------------------
+Command: BUS:B<x>:MIPICSITWo:LANE<x>:SOUrce:DMINUS
+Group: Bus
+Arguments: CH1–CH4 specifies an analog channel to use as the D Minus source for the specified lane. D0–D15 spec
+Examples: 1
+--------------------------------------------------------------------------------
+Command: BUS:B<x>:MIPICSITWo:LANE<x>:SOUrce:DPLUS
+Group: Bus
+Arguments: CH1–CH4 specifies an analog channel to use as the D Plus source for the specified lane. D0–D15 speci
+Examples: 1
+--------------------------------------------------------------------------------
+Command: BUS:B<x>:MIPIDSIOne:CLOCk:SOUrce
+Group: Bus
+Arguments: CH1–CH4 specifies an analog channel to use as the clock source. MATH1–MATH4 specifies a math channel
+Examples: 1
+--------------------------------------------------------------------------------
+Command: BUS:B<x>:MIPIDSIOne:LANE<x>:SOUrce:DIFFerential
+Group: Bus
+Arguments: D0–D15 specifies a digital input signal to use as the differential source for the specified lane.
+Examples: 1
+--------------------------------------------------------------------------------
+Command: BUS:B<x>:MIPIDSIOne:LANE<x>:SOUrce:DMINUS
+Group: Bus
+Arguments: CH1–CH4 specifies an analog channel to use as the D Minus source for the specified lane. D0–D15 spec
+Examples: 1
+--------------------------------------------------------------------------------
+Command: BUS:B<x>:MIPIDSIOne:LANE<x>:SOUrce:DPLUS
+Group: Bus
+Arguments: CH1–CH4 specifies an analog channel to use as the D Plus source for the specified lane. D0–D15 speci
+Examples: 1
+--------------------------------------------------------------------------------
+Command: BUS:B<x>:PARallel:CLOCk:SOUrce
+Group: Bus
+Arguments: CH1–CH4 specifies an analog channel to use as the Parallel clock source. D0–D15 specifies a digital 
+Examples: 1
+--------------------------------------------------------------------------------
+Command: BUS:B<x>:PARallel:SOURCES
+Group: Bus
+Arguments: CH1–CH4 specifies an analog channel to use as the Parallel source. D0–D15 specifies a digital channe
+Examples: 1
+--------------------------------------------------------------------------------
+Command: BUS:B<x>:PCIE:BITRate:VALue
+Group: Bus
+Arguments: <nr3> specifies the bit rate value.
+Examples: 1
+--------------------------------------------------------------------------------
+Command: BUS:B<x>:PCIE:HYSTeresis
+Group: Bus
+Arguments: <nr3> specifies the hysteresis. Commands listed in alphabetical order
+Examples: 1
+--------------------------------------------------------------------------------
+Command: BUS:B<x>:PCIE:LANE
+Group: Bus
+Arguments: <nr3> specifies the bus lane.
+Examples: 1
+--------------------------------------------------------------------------------
+Command: BUS:B<x>:POSition
+Group: Bus
+Arguments: <NR3> specifies the position.
+Examples: 1
+--------------------------------------------------------------------------------
+Command: BUS:B<x>:RS232C:DATABits
+Group: Bus
+Arguments: <NR3> specifies the number of bits in the RS-232C data frame.
+Examples: 1
+--------------------------------------------------------------------------------
+Command: BUS:B<x>:RS232C:SOUrce
+Group: Bus
+Arguments: CH1–CH4 specifies an analog channel to use as the RS232C source. D0–D15 specifies a digital channel 
+Examples: 1
+--------------------------------------------------------------------------------
+Command: BUS:B<x>:S8B10B:BITRate:VALue
+Group: Bus
+Arguments: <NR3> is the data rate in bits per second.
+Examples: 1
+--------------------------------------------------------------------------------
+Command: BUS:B<x>:S8B10B:HYSTeresis
+Group: Bus
+Arguments: <NR3> is the hysteresis setting.
+Examples: 1
+--------------------------------------------------------------------------------
+Command: BUS:B<x>:S8B10B:SOUrce
+Group: Bus
+Arguments: CH1–CH4 specifies an analog channel to use as the bus signal source. D0–D15 specifies a digital chan
+Examples: 1
+--------------------------------------------------------------------------------
+Command: BUS:B<x>:SPI:IDLETime
+Group: Bus
+Arguments: <nr3> specifies the SPI idle time. Commands listed in alphabetical order
+Examples: 1
+--------------------------------------------------------------------------------
+Command: BUS:B<x>:TYPe
+Group: Bus
+Arguments: CAN specifies a CAN bus. CUSTom specifies a custom bus. FLEXRAY specifies a FLEXRAY bus. LIN specifi
+Examples: 1
+--------------------------------------------------------------------------------
+Command: BUS:B<x>:USB:SOUrce
+Group: Bus
+Arguments: CH1–Ch4 specifies an analog channel as the data source for the specified USB bus. D0–D15 specifies a
+Examples: 1
+--------------------------------------------------------------------------------
+Command: BUS:B<x>:USB:SOUrce:DMINus
+Group: Bus
+Arguments: CH1–Ch4 specifies an analog channel as the D- source for the specified USB bus. D0–D15 specifies a d
+Examples: 1
+--------------------------------------------------------------------------------
+Command: BUS:B<x>:USB:SOUrce:DPLUs
+Group: Bus
+Arguments: CH1–Ch4 specifies an analog channel as the D+ source for the specified USB bus D0–D15 specifies a di
+Examples: 1
+--------------------------------------------------------------------------------
+Command: BUS:CH<x>:LOWTHRESHold
+Group: Bus
+Arguments: <NR3> is a floating point number that specifies the threshold in millivolts. The default value is -2
+Examples: 1
+--------------------------------------------------------------------------------
+Command: BUS:CH<x>:THRESHold
+Group: Bus
+Arguments: <NR3> is a floating point number that specifies the high threshold value for the specified analog so
+Examples: 1
+--------------------------------------------------------------------------------
+Command: BUS:MATH<x>:LOWTHRESHold
+Group: Bus
+Arguments: <NR3> is a floating point number that specifies the threshold in Volts. The default value is 0V.
+Examples: 1
+--------------------------------------------------------------------------------
+Command: BUS:MATH<x>:THRESHold
+Group: Bus
+Arguments: <NR3> is a floating point number that specifies the high threshold value for the mathematical wavefo
+Examples: 1
+--------------------------------------------------------------------------------
+Command: BUS:REF<x>:THRESHold
+Group: Bus
+Arguments: <NR3> is a floating point number that specifies the high threshold value for the reference waveform.
+Examples: 1
+--------------------------------------------------------------------------------
+Command: CALibrate:INTERNal
+Group: Calibration
+Arguments: 
+Examples: 1
+--------------------------------------------------------------------------------
+Command: CALibrate:INTERNal:STARt
+Group: Calibration
+Arguments: 
+Examples: 1
+--------------------------------------------------------------------------------
+Command: COUnter:LOGAction
+Group: Trigger
+Arguments: CLEAR empties the log table.
+Examples: 1
+--------------------------------------------------------------------------------
+Command: COUnter:VIEW
+Group: Trigger
+Arguments: FREQuency displays the count in Hertz. PERiod displays the count in seconds. <NR3> specifies the cha
+Examples: 1
+--------------------------------------------------------------------------------
+Command: TRIGger:A:BUS:CAN:DATa:QUALifier
+Group: Trigger
+Arguments: Arguments are the available data qualifiers.
+Examples: 1
+--------------------------------------------------------------------------------
+Command: TRIGger:A:BUS:CAN:DATa:SIZe
+Group: Trigger
+Arguments: <nr3> specifies the data size. Commands listed in alphabetical order
+Examples: 1
+--------------------------------------------------------------------------------
+Command: TRIGger:A:BUS:CAN:DATa:VALue
+Group: Trigger
+Arguments: <string> specifies the data value.
+Examples: 1
+--------------------------------------------------------------------------------
+Command: TRIGger:A:BUS:ETHERnet:IPHeader:DESTinationaddr:FORMat
+Group: Trigger
+Arguments: BINary specifies the data format as binary. HEX specifies the data format as hexadecimal. DECImal sp
+Examples: 1
+--------------------------------------------------------------------------------
+Command: TRIGger:A:BUS:ETHERnet:IPHeader:SOUrceaddr:FORMat
+Group: Trigger
+Arguments: BINary specifies the data format as binary. HEX specifies the data format as hexadecimal. DECImal sp
+Examples: 1
+--------------------------------------------------------------------------------
+Command: TRIGger:A:BUS:ETHERnet:MAC:ADDRess:DESTination:FORMat
+Group: Trigger
+Arguments: BINary specifies the data format as binary. HEX specifies the data format as hexadecimal.
+Examples: 1
+--------------------------------------------------------------------------------
+Command: TRIGger:A:BUS:ETHERnet:MAC:ADDRess:SOUrce:FORMat
+Group: Trigger
+Arguments: BINary specifies the data format as binary. HEX specifies the data format as hexadecimal.
+Examples: 1
+--------------------------------------------------------------------------------
+Command: TRIGger:A:BUS:ETHERnet:TCPHeader:ACKnum:FORMat
+Group: Trigger
+Arguments: BINary specifies the data format as binary. HEX specifies the data format as hexadecimal. DECImal sp
+Examples: 1
+--------------------------------------------------------------------------------
+Command: TRIGger:A:BUS:ETHERnet:TCPHeader:DESTinationport:FORMat
+Group: Trigger
+Arguments: BINary specifies the data format as binary. HEX specifies the data format as hexadecimal. DECImal sp
+Examples: 1
+--------------------------------------------------------------------------------
+Command: TRIGger:A:BUS:ETHERnet:TCPHeader:SEQnum:FORMat
+Group: Trigger
+Arguments: BINary specifies the data format as binary. HEX specifies the data format as hexadecimal. Commands l
+Examples: 1
+--------------------------------------------------------------------------------
+Command: TRIGger:A:BUS:ETHERnet:TCPHeader:SOUrceport:FORMat
+Group: Trigger
+Arguments: BINary specifies the data format as binary. HEX specifies the data format as hexadecimal. DECImal sp
+Examples: 1
+--------------------------------------------------------------------------------
+Command: TRIGger:A:BUS:FLEXRAY:CONDition
+Group: Trigger
+Arguments: Arguments are the available trigger conditions.
+Examples: 1
+--------------------------------------------------------------------------------
+Command: TRIGger:A:BUS:FLEXRAY:CYCLEcount:VALue
+Group: Trigger
+Arguments: <STRING> specifies the cycle count value.
+Examples: 1
+--------------------------------------------------------------------------------
+Command: TRIGger:A:BUS:FLEXRAY:DATa:OFFSet
+Group: Trigger
+Arguments: <NR3> specifies the data offset in bytes.
+Examples: 1
+--------------------------------------------------------------------------------
+Command: TRIGger:A:BUS:FLEXRAY:DATa:SIZe
+Group: Trigger
+Arguments: <NR3> specifies the data size in bytes. A setting of X/Don’t care is accomplished by setting the siz
+Examples: 1
+--------------------------------------------------------------------------------
+Command: TRIGger:A:BUS:FLEXRAY:DATa:VALue
+Group: Trigger
+Arguments: <STRING> specifies the data value. Commands listed in alphabetical order
+Examples: 1
+--------------------------------------------------------------------------------
+Command: TRIGger:A:BUS:FLEXRAY:ERRTYPE
+Group: Trigger
+Arguments: Arguments are the available error types.
+Examples: 1
+--------------------------------------------------------------------------------
+Command: TRIGger:A:BUS:FLEXRAY:HEADER:CRC
+Group: Trigger
+Arguments: <string> specifies the cyclic redundancy code.
+Examples: 1
+--------------------------------------------------------------------------------
+Command: TRIGger:A:BUS:FLEXRAY:HEADER:CYCLECount
+Group: Trigger
+Arguments: <string> specifies the header cycle count.
+Examples: 1
+--------------------------------------------------------------------------------
+Command: TRIGger:A:BUS:FLEXRAY:HEADER:FRAMEID
+Group: Trigger
+Arguments: <string> specifies the header frame ID.
+Examples: 1
+--------------------------------------------------------------------------------
+Command: TRIGger:A:BUS:FLEXRAY:HEADER:INDBits
+Group: Trigger
+Arguments: <string> specifies the header Indicator Bits.
+Examples: 1
+--------------------------------------------------------------------------------
+Command: TRIGger:A:BUS:FLEXRAY:HEADER:PAYLENgth
+Group: Trigger
+Arguments: <string> specifies the header Payload Length.
+Examples: 1
+--------------------------------------------------------------------------------
+Command: TRIGger:A:BUS:FLEXRAY:IDentifier:QUALifier
+Group: Trigger
+Arguments: Arguments are the available qualifiers.
+Examples: 1
+--------------------------------------------------------------------------------
+Command: TRIGger:A:BUS:FLEXRAY:IDentifier:VALue
+Group: Trigger
+Arguments: <string> specifies the identifier value.
+Examples: 1
+--------------------------------------------------------------------------------
+Command: TRIGger:A:BUS:I2C:ADDress:TYPe
+Group: Trigger
+Arguments: NONe specifies the address type as None. STARtbyte specifies the address type as Start byte. HSMODe 
+Examples: 1
+--------------------------------------------------------------------------------
+Command: TRIGger:A:BUS:I2C:ADDress:VALue
+Group: Trigger
+Arguments: <string> specifies the address value. This is either 7 bits or 10 bits depending on the address mode
+Examples: 1
+--------------------------------------------------------------------------------
+Command: TRIGger:A:BUS:I2C:DATa:SIZe
+Group: Trigger
+Arguments: <NR3> specifies the data size in bytes.
+Examples: 1
+--------------------------------------------------------------------------------
+Command: TRIGger:A:BUS:I2C:DATa:VALue
+Group: Trigger
+Arguments: <string> specifies the data value. The valid characters are 0, 1, or X representing a binary number.
+Examples: 1
+--------------------------------------------------------------------------------
+Command: TRIGger:A:BUS:LIN:CONDition
+Group: Trigger
+Arguments: Arguments are the available trigger conditions.
+Examples: 1
+--------------------------------------------------------------------------------
+Command: TRIGger:A:BUS:LIN:DATa:QUALifier
+Group: Trigger
+Arguments: Arguments specify the available data qualifiers.
+Examples: 1
+--------------------------------------------------------------------------------
+Command: TRIGger:A:BUS:LIN:DATa:SIZe
+Group: Trigger
+Arguments: <nr3> specifies the data size.
+Examples: 1
+--------------------------------------------------------------------------------
+Command: TRIGger:A:BUS:LIN:IDentifier:VALue
+Group: Trigger
+Arguments: <string> specifies the identifier value.
+Examples: 1
+--------------------------------------------------------------------------------
+Command: TRIGger:A:BUS:MIL1553B:COMMAND:SUBADdress:FORMat
+Group: Trigger
+Arguments: BINary specifies the data format as binary. HEX specifies the data format as hexadecimal.
+Examples: 1
+--------------------------------------------------------------------------------
+Command: TRIGger:A:BUS:MIL1553B:CONDition
+Group: Trigger
+Arguments: SYNC refers to the 3-bit sync pulse that precedes each word. COMMAND is one of 3 16-bit word types. 
+Examples: 1
+--------------------------------------------------------------------------------
+Command: TRIGger:A:BUS:MIL1553B:TIME:LESSLimit
+Group: Trigger
+Arguments: <NR3> is a floating point number that specifies either the minimum remote terminal response time (RT
+Examples: 1
+--------------------------------------------------------------------------------
+Command: TRIGger:A:BUS:MIL1553B:TIME:MORELimit
+Group: Trigger
+Arguments: <NR3> is a floating point number that specifies either the maximum remote terminal response time (RT
+Examples: 1
+--------------------------------------------------------------------------------
+Command: TRIGger:A:BUS:PCIE:CHARacter:CHAR
+Group: Trigger
+Arguments: <string> specifies the trigger character.
+Examples: 1
+--------------------------------------------------------------------------------
+Command: TRIGger:A:BUS:PCIE:CHARacter:SYMbol:MINus
+Group: Trigger
+Arguments: <string> specifies the minus character symbol.
+Examples: 1
+--------------------------------------------------------------------------------
+Command: TRIGger:A:BUS:PCIE:CHARacter:SYMbol:PLUS
+Group: Trigger
+Arguments: <string> specifies the character symbol plus. Commands listed in alphabetical order
+Examples: 1
+--------------------------------------------------------------------------------
+Command: TRIGger:A:BUS:PCIE:CONDition
+Group: Trigger
+Arguments: Arguments are the available trigger conditions.
+Examples: 1
+--------------------------------------------------------------------------------
+Command: TRIGger:A:BUS:PCIE:PATtern:CHAR<x>
+Group: Trigger
+Arguments: <string> specifies the trigger pattern character. Valid characters are any valid PCIe/8b10b characte
+Examples: 1
+--------------------------------------------------------------------------------
+Command: TRIGger:A:BUS:PCIE:PATtern:SYMbol:MINus<x>
+Group: Trigger
+Arguments: <string> specifies the trigger pattern minus symbol.
+Examples: 1
+--------------------------------------------------------------------------------
+Command: TRIGger:A:BUS:PCIE:PATtern:SYMbol:PLUS<x>
+Group: Trigger
+Arguments: <string> specifies the pattern symbol plus.
+Examples: 1
+--------------------------------------------------------------------------------
+Command: TRIGger:A:BUS:RS232C:DATa:SIZe
+Group: Trigger
+Arguments: <NR3> specifies the data size in bytes.
+Examples: 1
+--------------------------------------------------------------------------------
+Command: TRIGger:A:BUS:RS232C:DATa:VALue
+Group: Trigger
+Arguments: <string> specifies the address value. The argument is a string of 0, 1, or X representing a binary n
+Examples: 1
+--------------------------------------------------------------------------------
+Command: TRIGger:A:BUS:S8B10B:CHARacter:CHAR
+Group: Trigger
+Arguments: <string> is the 8B10B character.
+Examples: 1
+--------------------------------------------------------------------------------
+Command: TRIGger:A:BUS:S8B10B:CHARacter:SYMbol:MINus
+Group: Trigger
+Arguments: <string> is the 8B10B character bit pattern.
+Examples: 1
+--------------------------------------------------------------------------------
+Command: TRIGger:A:BUS:S8B10B:CHARacter:SYMbol:PLUS
+Group: Trigger
+Arguments: <string> is the 8B10B character bit pattern.
+Examples: 1
+--------------------------------------------------------------------------------
+Command: TRIGger:A:BUS:S8B10B:CONDition
+Group: Trigger
+Arguments: ANYControl CHARacter ERROR PATtern
+Examples: 1
+--------------------------------------------------------------------------------
+Command: TRIGger:A:BUS:S8B10B:PATtern:SYMbol:MINus<x>
+Group: Trigger
+Arguments: <string> is the character bit pattern.
+Examples: 1
+--------------------------------------------------------------------------------
+Command: TRIGger:A:BUS:S8B10B:PATtern:SYMbol:PLUS<x>
+Group: Trigger
+Arguments: <string> is the character bit pattern.
+Examples: 1
+--------------------------------------------------------------------------------
+Command: TRIGger:A:BUS:SOUrce
+Group: Trigger
+Arguments: B1–B16 sets the selected source to the bus.
+Examples: 1
+--------------------------------------------------------------------------------
+Command: TRIGger:A:BUS:SPI:DATa:VALue
+Group: Trigger
+Arguments: <string> specifies the data value in the specified valid format. The valid characters are 0-9, A-F, 
+Examples: 1
+--------------------------------------------------------------------------------
+Command: TRIGger:A:BUS:USB:ADDress:FORMat
+Group: Trigger
+Arguments: TRIGger:A:BUS:USB:ADDress:FORMat BINary specifies the address format for the normal token as Binary.
+Examples: 1
+--------------------------------------------------------------------------------
+Command: TRIGger:A:BUS:USB:ADDress:HIVALue
+Group: Trigger
+Arguments: <string> specifies the data value in the specified valid format (binary, hex, or decimal).
+Examples: 1
+--------------------------------------------------------------------------------
+Command: TRIGger:A:BUS:USB:CHARacter:SYMbol:MINus
+Group: Trigger
+Arguments: <string> is the character bit pattern.
+Examples: 1
+--------------------------------------------------------------------------------
+Command: TRIGger:A:BUS:USB:DATa:HIVALue
+Group: Trigger
+Arguments: <string> specifies the data value in the specified valid format (binary, hex, or decimal).
+Examples: 1
+--------------------------------------------------------------------------------
+Command: TRIGger:A:BUS:USB:DATa:SIZe
+Group: Trigger
+Arguments: <NR3> specifies the data size in bytes.
+Examples: 1
+--------------------------------------------------------------------------------
+Command: TRIGger:A:BUS:USB:DATa:VALue
+Group: Trigger
+Arguments: <string> specifies the data value. The valid characters are 0, 1, or X representing a binary number.
+Examples: 1
+--------------------------------------------------------------------------------
+Command: TRIGger:A:BUS:USB:PATtern:SYMbol:PLUS<x>
+Group: Trigger
+Arguments: <string> is the specified character bit pattern.
+Examples: 1
+--------------------------------------------------------------------------------
+Command: TRIGger:A:BUS:USB:QUAlifier
+Group: Trigger
+Arguments: EQUal specifies = trigger qualifier. INrange specifies Inside Range trigger qualifier. LESSEQual spe
+Examples: 1
+--------------------------------------------------------------------------------
+Command: TRIGger:A:BUS:USB:SOF:FRAMENUMber
+Group: Trigger
+Arguments: <string> specifies the frame number for the SOF in the specified valid format.
+Examples: 1
+--------------------------------------------------------------------------------
+Command: TRIGger:A:BUS:USB:SPLIT:ET:VALue
+Group: Trigger
+Arguments: DONTCare specifies the End Point Type value as don't care (XX). CONTRol specifies the End Point Type
+Examples: 1
+--------------------------------------------------------------------------------
+Command: TRIGger:A:BUS:USB:SPLIT:PORT:VALue
+Group: Trigger
+Arguments: <string> specifies the port address in the specified valid format.
+Examples: 1
+--------------------------------------------------------------------------------
+Command: TRIGger:A:BUS:USB:SPLIT:SE:VALue
+Group: Trigger
+Arguments: DONTCARE specifies the Start/End bit value as don't care (X). FULLSPeed specifies the Start/End bit 
+Examples: 1
+--------------------------------------------------------------------------------
+Command: TRIGger:A:COMMunication:CODe
+Group: Trigger
+Arguments: AMI HDB3 B3ZS B6ZS B8ZS CMI NRZ MLT3 MANChester
+Examples: 1
+--------------------------------------------------------------------------------
+Command: TRIGger:A:HOLDoff:TIMe
+Group: Trigger
+Arguments: <NR3> specifies the holdoff time in seconds. The range is from 250 ns through 12.0 s.
+Examples: 1
+--------------------------------------------------------------------------------
+Command: TRIGger:A:I2C:CLOCk:LEVel
+Group: Trigger
+Arguments: <NR3> specifies the I2C clock level. The clock level range is ±5.
+Examples: 1
+--------------------------------------------------------------------------------
+Command: TRIGger:A:I2C:CLOCk:SOUrce
+Group: Trigger
+Arguments: CH<x> specifies the clock source. x can be 1 through 4.
+Examples: 1
+--------------------------------------------------------------------------------
+Command: TRIGger:A:I2C:CONDition
+Group: Trigger
+Arguments: START specifies triggering on the start of a packet. STOP specifies triggering on the stop packet. R
+Examples: 1
+--------------------------------------------------------------------------------
+Command: TRIGger:A:I2C:DATa:LEVel
+Group: Trigger
+Arguments: <NR3> specifies the I2C data level with a range of ±%.0.
+Examples: 1
+--------------------------------------------------------------------------------
+Command: TRIGger:A:I2C:DATa:SOUrce
+Group: Trigger
+Arguments: CH<x> specifies the data source. x can be 1 through 4. Commands listed in alphabetical order
+Examples: 1
+--------------------------------------------------------------------------------
+Command: TRIGger:A:I2C:DATa:STARt
+Group: Trigger
+Arguments: <NR3> specifies the data start byte (offset), with a range of 0 to 65535.
+Examples: 1
+--------------------------------------------------------------------------------
+Command: TRIGger:A:RS232:DATa:LEVel
+Group: Trigger
+Arguments: <NR3> specifies the threshold level with a range of ±5.0.
+Examples: 1
+--------------------------------------------------------------------------------
+Command: TRIGger:A:RS232:DATa:SOUrce
+Group: Trigger
+Arguments: CH<x> specifies the RS232 data source. x can be 1, 2, 3, or 4.
+Examples: 1
+--------------------------------------------------------------------------------
+Command: TRIGger:A:RS232:DATa:VALue
+Group: Trigger
+Arguments: <QString> specifies the RS232 data value. The value can be up to 8 bits.
+Examples: 1
+--------------------------------------------------------------------------------
+Command: TRIGger:A:SERIAL:DATa:PATtern
+Group: Trigger
+Arguments: <QString> specifies the serial pattern to trigger on. The default value is “01”, such that there are
+Examples: 0
+--------------------------------------------------------------------------------
+Command: TRIGger:A:SERIAL:DATa:PATtern:NRZ
+Group: Trigger
+Arguments: <QString> specifies the serial pattern to trigger on. The default value is “01”, such that there are
+Examples: 0
+--------------------------------------------------------------------------------
+Command: TRIGger:A:SERIAL:DATa:PATtern:S8B10B
+Group: Trigger
+Arguments: <QString> specifies the serial pattern to trigger on. The default value is “0011111010”, such that t
+Examples: 0
+--------------------------------------------------------------------------------
+Command: TRIGger:A:SERIAL:LOCKLen
+Group: Trigger
+Arguments: <NR1> specifies the length in bits. The valid values are 1 to 2147483647.
+Examples: 1
+--------------------------------------------------------------------------------
+Command: TRIGger:A:SERIAL:LOCKOffset
+Group: Trigger
+Arguments: <NR1> specifies the bit offset. The valid values are 1 to 2147483646.
+Examples: 1
+--------------------------------------------------------------------------------
+Command: TRIGger:A:SPI:DATa:MISO:LEVel
+Group: Trigger
+Arguments: <NR3> specifies the threshold for the SPI trigger MISO data source. The range is ±5.0.
+Examples: 1
+--------------------------------------------------------------------------------
+Command: TRIGger:A:SPI:DATa:MISO:SOUrce
+Group: Trigger
+Arguments: CH<x> specifies the source for the SPI trigger MISO data source. x can be 1, 2, 3, or 4.
+Examples: 1
+--------------------------------------------------------------------------------
+Command: TRIGger:A:SPI:DATa:MOSI:LEVel
+Group: Trigger
+Arguments: <NR3> specifies the threshold for the SPI trigger MOSI data source. The range is ±5.0.
+Examples: 1
+--------------------------------------------------------------------------------
+Command: TRIGger:A:SPI:DATa:MOSI:SOUrce
+Group: Trigger
+Arguments: CH<x> specifies the source for the SPI trigger MOSI data source. x can be 1, 2, 3, or 4.
+Examples: 1
+--------------------------------------------------------------------------------
+Command: TRIGger:A:VIDeo:CUSTom:LINEPeriod
+Group: Trigger
+Arguments: <NR3> is the time for each horizontal scan line.
+Examples: 1
+--------------------------------------------------------------------------------
+Command: TRIGger:A:VIDeo:SOUrce
+Group: Trigger
+Arguments: CH<x> argument specifies one of the input channels of the instrument as the A video trigger. The val
+Examples: 1
+--------------------------------------------------------------------------------
+Command: TRIGger:B:RESET:ACCEPTTIMEout
+Group: Trigger
+Arguments: <NR3> specifies the Accept Time Out time.
+Examples: 1
+--------------------------------------------------------------------------------
+Command: TRIGger:B:RESET:REJECTTIMEout
+Group: Trigger
+Arguments: <NR3> specifies the Reject Time Out time.
+Examples: 1
+--------------------------------------------------------------------------------
+Command: TRIGger:B:RESET:TIMEOut
+Group: Trigger
+Arguments: <NR3> specifies the reset time.
+Examples: 1
+--------------------------------------------------------------------------------
+Command: TRIGger:B:TIMe
+Group: Trigger
+Arguments: <NR3> is the B trigger delay time in seconds.
+Examples: 1
+--------------------------------------------------------------------------------
+Command: TRIGger:QUALification:BUS:SOUrce
+Group: Trigger
+Arguments: B0–B16 specifies the bus source from B0 to B16.
+Examples: 1
+--------------------------------------------------------------------------------
+Command: TRIGger:QUALification:BUS:VALue
+Group: Trigger
+Arguments: <String> sets the bus value.
+Examples: 1
+--------------------------------------------------------------------------------
+Command: VISual:AREA<x>:HEIGHT
+Group: Trigger
+Arguments: <NR3> specifies the height of the specified visual trigger area. Commands listed in alphabetical ord
+Examples: 1
+--------------------------------------------------------------------------------
+Command: VISual:AREA<x>:ROTAtion
+Group: Trigger
+Arguments: <NR3> specifies the rotation angle of the specified visual trigger area.
+Examples: 0
+--------------------------------------------------------------------------------
+Command: VISual:AREA<x>:WIDTH
+Group: Trigger
+Arguments: <NR3> specifies the width of the visual trigger area.
+Examples: 1
+--------------------------------------------------------------------------------
+Command: VISual:AREA<x>:XPOSition
+Group: Trigger
+Arguments: <NR3> specifies the horizontal position of the center of the visual trigger area.
+Examples: 1
+--------------------------------------------------------------------------------
+Command: VISual:AREA<x>:YPOSition
+Group: Trigger
+Arguments: <NR3> specifies the vertical position of the center of the visual trigger area.
+Examples: 1
+--------------------------------------------------------------------------------
+Command: VISual:DELETEAREA
+Group: Trigger
+Arguments: 
+Examples: 1
+--------------------------------------------------------------------------------
+Command: VISual:FILE:SAVE
+Group: Trigger
+Arguments: <string> is the complete path and file name where you want to store the visual trigger parameters. T
+Examples: 1
+--------------------------------------------------------------------------------
+Command: CURSor:HBArs:POSITION<x>
+Group: Cursor
+Arguments: <NR3> specifies the cursor position relative to ground.
+Examples: 1
+--------------------------------------------------------------------------------
+Command: CURSor:SCREEN:XPOSITION<x>
+Group: Cursor
+Arguments: <NR3> specifies the x position of the specified screen cursor.
+Examples: 1
+--------------------------------------------------------------------------------
+Command: CURSor:SCREEN:YPOSITION<x>
+Group: Cursor
+Arguments: <NR3> specifies the y position of the specified screen cursor.
+Examples: 1
+--------------------------------------------------------------------------------
+Command: CURSor:VBArs:POSITION<x>
+Group: Cursor
+Arguments: <NR3> specifies the cursor position.
+Examples: 1
+--------------------------------------------------------------------------------
+Command: CURSor:VBArs:POS<x>
+Group: Cursor
+Arguments: <NR3> specifies the cursor position.
+Examples: 1
+--------------------------------------------------------------------------------
+Command: CURSor:WAVEform:POSition<x>
+Group: Cursor
+Arguments: <NR3> specifies the cursor position measured relative to the time of the trigger point of the source
+Examples: 1
+--------------------------------------------------------------------------------
+Command: CURSor:WAVEform:UNIts
+Group: Cursor
+Arguments: BASe sets cursor units to base.
+Examples: 1
+--------------------------------------------------------------------------------
+Command: RECAll:WAVEform
+Group: Save and Recall
+Arguments: <file path> specifies a location for a stored waveform file. <file path> is a quoted string that def
+Examples: 1
+--------------------------------------------------------------------------------
+Command: SAVe:EVENTtable:BUS<x>
+Group: Save and Recall
+Arguments: <string> is the file name.
+Examples: 1
+--------------------------------------------------------------------------------
+Command: SAVe:MARKS
+Group: Save and Recall
+Arguments: <string> specifies the file that the marks are save to.
+Examples: 1
+--------------------------------------------------------------------------------
+Command: SAVe:WAVEform:DATa:STARt
+Group: Save and Recall
+Arguments: <NR1> specifies the starting waveform sample used by the SAVe:WAVEform command. This works for Sprea
+Examples: 1
+--------------------------------------------------------------------------------
+Command: SAVe:WAVEform:DATa:STOP
+Group: Save and Recall
+Arguments: <NR1> specifies the ending waveform sample used by the SAVe:WAVEform command. This works for Spreads
+Examples: 1
+--------------------------------------------------------------------------------
+Command: SAVe:WAVEform:FILEFormat
+Group: Save and Recall
+Arguments: INTERNal specifies that waveforms are saved in an internal format, using a .wfm file name extension.
+Examples: 1
+--------------------------------------------------------------------------------
+Command: DIAg:EXECUTE
+Group: Diagnostics
+Arguments: 
+Examples: 1
+--------------------------------------------------------------------------------
+Command: DIAg:SELect:ALL
+Group: Diagnostics
+Arguments: ALL selects all available diagnostics.
+Examples: 1
+--------------------------------------------------------------------------------
+Command: DIAg:STOP
+Group: Diagnostics
+Arguments: 
+Examples: 1
+--------------------------------------------------------------------------------
+Command: TEST:STOP
+Group: Diagnostics
+Arguments: <QString> is a time in the form “hh:mm:ss” where hh refers to a two-digit hour number, mm refers to 
+Examples: 1
+--------------------------------------------------------------------------------
+Command: DISplay:GRAticule
+Group: Display control
+Arguments: CROSSHair specifies a frame and cross hairs. FRAme specifies a frame only. FULl specifies a frame, a
+Examples: 1
+--------------------------------------------------------------------------------
+Command: DISplay:PERSistence:RESET
+Group: Display control
+Arguments: 
+Examples: 1
+--------------------------------------------------------------------------------
+Command: DISplay:COLOr:PALEtte:USEr:GRAticule
+Group: Display control
+Arguments: 
+Examples: 0
+--------------------------------------------------------------------------------
+Command: DISplay:COLOr:PALEtte:USEr:HIStogram
+Group: Display control
+Arguments: 
+Examples: 0
+--------------------------------------------------------------------------------
+Command: DISplay:COLOr:PALEtte:USEr:MASK
+Group: Display control
+Arguments: 
+Examples: 0
+--------------------------------------------------------------------------------
+Command: DISplay:COLOr:PALEtte:USEr:MASKHighlight
+Group: Display control
+Arguments: 
+Examples: 0
+--------------------------------------------------------------------------------
+Command: SELect:DIGTraces:COMbination
+Group: Digital
+Arguments: nr1 is a decimal integer.
+Examples: 1
+--------------------------------------------------------------------------------
+Command: EMail:AUTHLogin
+Group: E-mail
+Arguments: <QString> argument is a string that specifies the login name to be used with the SMTP e-mail server.
+Examples: 1
+--------------------------------------------------------------------------------
+Command: EMail:AUTHPassword
+Group: E-mail
+Arguments: <QString> argument is a string that specifies the password to be used with the SMTP e-mail server.
+Examples: 1
+--------------------------------------------------------------------------------
+Command: EMail:HOSTwanted
+Group: E-mail
+Arguments: <QString> argument is a string that specifies the host name to be used with the SMTP e-mail server i
+Examples: 1
+--------------------------------------------------------------------------------
+Command: EMail:SMTPPort
+Group: E-mail
+Arguments: <NR1> can be 1 through 65535. This number specifies the TCPIP port number.
+Examples: 1
+--------------------------------------------------------------------------------
+Command: EMail:TO
+Group: E-mail
+Arguments: <QString> argument is the e-mail address of the recipient (or recipients). Multiple addresses are se
+Examples: 1
+--------------------------------------------------------------------------------
+Command: EMail:ATTempts
+Group: E-mail
+Arguments: 
+Examples: 0
+--------------------------------------------------------------------------------
+Command: EMail:FROm
+Group: E-mail
+Arguments: 
+Examples: 0
+--------------------------------------------------------------------------------
+Command: EMail:HOSTwanted
+Group: E-mail
+Arguments: 
+Examples: 0
+--------------------------------------------------------------------------------
+Command: ERRORDetector:BIT:SYNCPATtern:BITString
+Group: Error Detector
+Arguments: <QString> is the bit string.
+Examples: 0
+--------------------------------------------------------------------------------
+Command: ERRORDetector:BIT:SYNCPATtern:SYMBOL<x>
+Group: Error Detector
+Arguments: 
+Examples: 0
+--------------------------------------------------------------------------------
+Command: ERRORDetector:BITRate:VALue
+Group: Error Detector
+Arguments: <NR3> is the custom bit rate value.
+Examples: 1
+--------------------------------------------------------------------------------
+Command: ERRORDetector:ERRORLIMIT
+Group: Error Detector
+Arguments: <NR1> is the maximum number of errors.
+Examples: 1
+--------------------------------------------------------------------------------
+Command: ERRORDetector:PREset:APPLY
+Group: Error Detector
+Arguments: 
+Examples: 1
+--------------------------------------------------------------------------------
+Command: EXPort:FILEName
+Group: Hard copy
+Arguments: <file path> specifies that the hard copy is sent to the named file. <file path> is a quoted string t
+Examples: 1
+--------------------------------------------------------------------------------
+Command: HARDCopy:FILEName
+Group: Hard copy
+Arguments: <file path> specifies that the hard copy is sent to the named file. <file path> is a quoted string t
+Examples: 1
+--------------------------------------------------------------------------------
+Command: FILESystem:PRInt
+Group: File system
+Arguments: <file path> is a quoted string that defines the file name and path. If the file path is within the c
+Examples: 1
+--------------------------------------------------------------------------------
+Command: HIStogram:BOX
+Group: Histogram
+Arguments: <NR3> specifies the left position of the histogram box in source waveform coordinates. <NR3> specifi
+Examples: 1
+--------------------------------------------------------------------------------
+Command: HIStogram:BOXPcnt
+Group: Histogram
+Arguments: <NR2> specifies the left position of the histogram box in percentage coordinates. The default value 
+Examples: 1
+--------------------------------------------------------------------------------
+Command: HIStogram:COUNt
+Group: Histogram
+Arguments: 
+Examples: 1
+--------------------------------------------------------------------------------
+Command: HIStogram:SIZe
+Group: Histogram
+Arguments: <NR3> specifies the histogram size. The value can vary from 0.1 to 8.0 divisions in HORizontal mode 
+Examples: 1
+--------------------------------------------------------------------------------
+Command: HORizontal:FASTframe:COUNt
+Group: Horizontal
+Arguments: <NR1> indicates the number of frames to acquire.
+Examples: 1
+--------------------------------------------------------------------------------
+Command: HORizontal:FASTframe:MULtipleframes:FRAMESTart:<wfm>
+Group: Horizontal
+Arguments: <NR1> specifies the start frame number on the specified waveform.
+Examples: 1
+--------------------------------------------------------------------------------
+Command: HORizontal:FASTframe:REF:FRAme
+Group: Horizontal
+Arguments: <NR1> specifies the FastFrame reference frame.
+Examples: 1
+--------------------------------------------------------------------------------
+Command: HORizontal:FASTframe:REF:SOUrce
+Group: Horizontal
+Arguments: <wfm> specifies the FastFrame Reference waveform source. Valid waveforms include CH<x> and MATH<x> T
+Examples: 1
+--------------------------------------------------------------------------------
+Command: HORizontal:FASTframe:SELECTED:CH<x>
+Group: Horizontal
+Arguments: <NRF> is the selected frame number.
+Examples: 1
+--------------------------------------------------------------------------------
+Command: HORizontal:FASTframe:SELECTED:MATH<x>
+Group: Horizontal
+Arguments: <NRF> is the selected frame number.
+Examples: 1
+--------------------------------------------------------------------------------
+Command: HORizontal:FASTframe:SELECTED:REF<x>
+Group: Horizontal
+Arguments: <NRF> is the selected frame number.
+Examples: 1
+--------------------------------------------------------------------------------
+Command: HORizontal:FASTframe:SELECTED:SOUrce
+Group: Horizontal
+Arguments: <NR1> specifies the selected frame number on the specified waveform.
+Examples: 1
+--------------------------------------------------------------------------------
+Command: HORizontal:MAIn:UNIts
+Group: Horizontal
+Arguments: <QString> is the time base units string.
+Examples: 1
+--------------------------------------------------------------------------------
+Command: HORizontal:MAIn:UNIts:STRing
+Group: Horizontal
+Arguments: <QString> is the time base units string.
+Examples: 1
+--------------------------------------------------------------------------------
+Command: HORizontal:MODE:AUTO:LIMITrecordlen
+Group: Horizontal
+Arguments: <NR1> is the record length limit in samples.
+Examples: 1
+--------------------------------------------------------------------------------
+Command: HORizontal:MODE:SAMPLERate
+Group: Horizontal
+Arguments: <NR1> is the sample rate in samples per second.
+Examples: 1
+--------------------------------------------------------------------------------
+Command: LIMit:HIGHLIGHTHits:RESet
+Group: Limit Test
+Arguments: 
+Examples: 1
+--------------------------------------------------------------------------------
+Command: LIMit:TEMPlate:SOUrce
+Group: Limit Test
+Arguments: CH1–CH4 specifies the channel used by the LIMit:TEMPlate:STORe command. MATH1–MATH4 specifies the ma
+Examples: 1
+--------------------------------------------------------------------------------
+Command: SEARCH:SEARCH<x>
+Group: Search and Mark
+Arguments: <QString> specifies the user search marks.
+Examples: 1
+--------------------------------------------------------------------------------
+Command: SEARCH:SEARCH<x>:TRIGger:A:BUS:CAN:CONDition
+Group: Search and Mark
+Arguments: Arguments specify the CAN bus trigger condition.
+Examples: 1
+--------------------------------------------------------------------------------
+Command: SEARCH:SEARCH<x>:TRIGger:A:BUS:CAN:DATa:QUALifier
+Group: Search and Mark
+Arguments: Arguments are the data qualifier types.
+Examples: 1
+--------------------------------------------------------------------------------
+Command: SEARCH:SEARCH<x>:TRIGger:A:BUS:CAN:DATa:SIZe
+Group: Search and Mark
+Arguments: <nr3> specifies the data size.
+Examples: 1
+--------------------------------------------------------------------------------
+Command: SEARCH:SEARCH<x>:TRIGger:A:BUS:CAN:DATa:VALue
+Group: Search and Mark
+Arguments: <string> is the data value.
+Examples: 1
+--------------------------------------------------------------------------------
+Command: SEARCH:SEARCH<x>:TRIGger:A:BUS:CAN:FRAMEtype
+Group: Search and Mark
+Arguments: Arguments are the available frame types.
+Examples: 1
+--------------------------------------------------------------------------------
+Command: SEARCH:SEARCH<x>:TRIGger:A:BUS:CAN:IDentifier:DIRection
+Group: Search and Mark
+Arguments: DONTCare specifies the direction is a don’t care. READ specifies the read direction. WRITE specifies
+Examples: 0
+--------------------------------------------------------------------------------
+Command: SEARCH:SEARCH<x>:TRIGger:A:BUS:CAN:IDentifier:FORMat
+Group: Search and Mark
+Arguments: BINary specifies the identifier format as binary. HEX specifies the identifier format as hexadecimal
+Examples: 1
+--------------------------------------------------------------------------------
+Command: SEARCH:SEARCH<x>:TRIGger:A:BUS:CAN:IDentifier:MODe
+Group: Search and Mark
+Arguments: EXTENDed specifies the extended identifier mode. STandard specifies the standard identifier mode.
+Examples: 1
+--------------------------------------------------------------------------------
+Command: SEARCH:SEARCH<x>:TRIGger:A:BUS:CAN:IDentifier:VALue
+Group: Search and Mark
+Arguments: <string> is the identifier value.
+Examples: 1
+--------------------------------------------------------------------------------
+Command: SEARCH:SEARCH<x>:TRIGger:A:BUS:ETHERnet:DATa:FORMat
+Group: Search and Mark
+Arguments: BINary specifies the data format as binary. HEX specifies the data format as hexadecimal.
+Examples: 1
+--------------------------------------------------------------------------------
+Command: SEARCH:SEARCH<x>:TRIGger:A:BUS:ETHERnet:MAC:ADDRess:DESTination:FORMat
+Group: Search and Mark
+Arguments: BINary specifies the data format as binary. HEX specifies the data format as hexadecimal.
+Examples: 1
+--------------------------------------------------------------------------------
+Command: SEARCH:SEARCH<x>:TRIGger:A:BUS:ETHERnet:MAC:ADDRess:SOUrce:FORMat
+Group: Search and Mark
+Arguments: BINary specifies the data format as binary. HEX specifies the data format as hexadecimal.
+Examples: 1
+--------------------------------------------------------------------------------
+Command: SEARCH:SEARCH<x>:TRIGger:A:BUS:ETHERnet:QTAG:FORMat
+Group: Search and Mark
+Arguments: BINary specifies the data format as binary. HEX specifies the data format as hexadecimal.
+Examples: 1
+--------------------------------------------------------------------------------
+Command: SEARCH:SEARCH<x>:TRIGger:A:BUS:FLEXRAY:CYCLEcount:FORMat
+Group: Search and Mark
+Arguments: BINary specifies the data format as binary. HEX specifies the data format as hexadecimal.
+Examples: 1
+--------------------------------------------------------------------------------
+Command: SEARCH:SEARCH<x>:TRIGger:A:BUS:FLEXRAY:CYCLEcount:VALue
+Group: Search and Mark
+Arguments: <string> specifies the cycle count value.
+Examples: 1
+--------------------------------------------------------------------------------
+Command: SEARCH:SEARCH<x>:TRIGger:A:BUS:FLEXRAY:DATa:FORMat
+Group: Search and Mark
+Arguments: BINary specifies the data format as binary. HEX specifies the data format as hexadecimal.
+Examples: 1
+--------------------------------------------------------------------------------
+Command: SEARCH:SEARCH<x>:TRIGger:A:BUS:FLEXRAY:DATa:OFFSet
+Group: Search and Mark
+Arguments: <nr3> specifies the data offset in bytes. A setting of X/Don’t care is accomplished by setting the o
+Examples: 1
+--------------------------------------------------------------------------------
+Command: SEARCH:SEARCH<x>:TRIGger:A:BUS:FLEXRAY:DATa:QUALifier
+Group: Search and Mark
+Arguments: Arguments are the available data qualifiers.
+Examples: 1
+--------------------------------------------------------------------------------
+Command: SEARCH:SEARCH<x>:TRIGger:A:BUS:FLEXRAY:DATa:SIZe
+Group: Search and Mark
+Arguments: <NR3> specifies the data size in bytes. A data size of –1 is don’t care.
+Examples: 1
+--------------------------------------------------------------------------------
+Command: SEARCH:SEARCH<x>:TRIGger:A:BUS:FLEXRAY:DATa:VALue
+Group: Search and Mark
+Arguments: <STRING> specifies the data value.
+Examples: 1
+--------------------------------------------------------------------------------
+Command: SEARCH:SEARCH<x>:TRIGger:A:BUS:FLEXRAY:EOFTYPE
+Group: Search and Mark
+Arguments: ALL specifies either end of file type. STATIC specifies the static end of file type. DYNAMIC specifi
+Examples: 1
+--------------------------------------------------------------------------------
+Command: SEARCH:SEARCH<x>:TRIGger:A:BUS:FLEXRAY:ERRTYPE
+Group: Search and Mark
+Arguments: Arguments are the available error types.
+Examples: 1
+--------------------------------------------------------------------------------
+Command: SEARCH:SEARCH<x>:TRIGger:A:BUS:FLEXRAY:FRAMEType
+Group: Search and Mark
+Arguments: Arguments are the available frame types.
+Examples: 1
+--------------------------------------------------------------------------------
+Command: SEARCH:SEARCH<x>:TRIGger:A:BUS:FLEXRAY:HEADER:CRC
+Group: Search and Mark
+Arguments: <STRING> specifies the CRC.
+Examples: 1
+--------------------------------------------------------------------------------
+Command: SEARCH:SEARCH<x>:TRIGger:A:BUS:FLEXRAY:HEADER:CYCLECount
+Group: Search and Mark
+Arguments: <STRING> specifies the header cycle count.
+Examples: 1
+--------------------------------------------------------------------------------
+Command: SEARCH:SEARCH<x>:TRIGger:A:BUS:FLEXRAY:HEADER:FRAMEID
+Group: Search and Mark
+Arguments: <STRING> specifies the frame ID.
+Examples: 1
+--------------------------------------------------------------------------------
+Command: SEARCH:SEARCH<x>:TRIGger:A:BUS:FLEXRAY:HEADER:INDBits
+Group: Search and Mark
+Arguments: <STRING> specifies the header Indicator Bits.
+Examples: 1
+--------------------------------------------------------------------------------
+Command: SEARCH:SEARCH<x>:TRIGger:A:BUS:FLEXRAY:HEADER:PAYLENgth
+Group: Search and Mark
+Arguments: <STRING> specifies the header Payload Length.
+Examples: 1
+--------------------------------------------------------------------------------
+Command: SEARCH:SEARCH<x>:TRIGger:A:BUS:FLEXRAY:IDentifier:FORMat
+Group: Search and Mark
+Arguments: BINary specifies the identifier format as binary. HEX specifies the identifier format as hexadecimal
+Examples: 1
+--------------------------------------------------------------------------------
+Command: SEARCH:SEARCH<x>:TRIGger:A:BUS:FLEXRAY:IDentifier:VALue
+Group: Search and Mark
+Arguments: <STRING> specifies the identifier value.
+Examples: 1
+--------------------------------------------------------------------------------
+Command: SEARCH:SEARCH<x>:TRIGger:A:BUS:I2C:ADDress:FORMat
+Group: Search and Mark
+Arguments: BINary specifies the address format as Binary. HEXadecimal specifies the address format as Hexadecim
+Examples: 1
+--------------------------------------------------------------------------------
+Command: SEARCH:SEARCH<x>:TRIGger:A:BUS:I2C:ADDress:MODe
+Group: Search and Mark
+Arguments: ADDR10 specifies the address mode as ADDR10. ADDR7 specifies the address mode as ADDR7.
+Examples: 1
+--------------------------------------------------------------------------------
+Command: SEARCH:SEARCH<x>:TRIGger:A:BUS:I2C:ADDress:TYPe
+Group: Search and Mark
+Arguments: CBUS specifies the address type as CBUS. EEPROm specifies the address type as EEPROM. GENeralcall sp
+Examples: 1
+--------------------------------------------------------------------------------
+Command: SEARCH:SEARCH<x>:TRIGger:A:BUS:I2C:ADDress:VALue
+Group: Search and Mark
+Arguments: <string> specifies the address value. This is either a 7-bit or 10-bit value depending on the addres
+Examples: 1
+--------------------------------------------------------------------------------
+Command: SEARCH:SEARCH<x>:TRIGger:A:BUS:I2C:CONDition
+Group: Search and Mark
+Arguments: ADDress specifies the trigger condition as Address. ADDRANDDATA specifies the trigger condition as A
+Examples: 1
+--------------------------------------------------------------------------------
+Command: SEARCH:SEARCH<x>:TRIGger:A:BUS:I2C:DATa:DIRection
+Group: Search and Mark
+Arguments: DONTCare specifies the direction of data as Don’t Care. READ specifies the direction of data as Read
+Examples: 1
+--------------------------------------------------------------------------------
+Command: SEARCH:SEARCH<x>:TRIGger:A:BUS:I2C:DATa:FORMat
+Group: Search and Mark
+Arguments: BINary specifies the trigger data format as Binary. HEX specifies the trigger data format as Hexadec
+Examples: 1
+--------------------------------------------------------------------------------
+Command: SEARCH:SEARCH<x>:TRIGger:A:BUS:I2C:DATa:SIZe
+Group: Search and Mark
+Arguments: <NR3> specifies the data size in bytes.
+Examples: 1
+--------------------------------------------------------------------------------
+Command: SEARCH:SEARCH<x>:TRIGger:A:BUS:I2C:DATa:VALue
+Group: Search and Mark
+Arguments: <string> specifies the data value. The valid characters are 0, 1, or X for binary format; and A-F, 0
+Examples: 1
+--------------------------------------------------------------------------------
+Command: SEARCH:SEARCH<x>:TRIGger:A:BUS:LIN:CONDition
+Group: Search and Mark
+Arguments: Arguments are the available trigger conditions.
+Examples: 1
+--------------------------------------------------------------------------------
+Command: SEARCH:SEARCH<x>:TRIGger:A:BUS:LIN:DATa:QUALifier
+Group: Search and Mark
+Arguments: Arguments are the available data qualifiers.
+Examples: 1
+--------------------------------------------------------------------------------
+Command: SEARCH:SEARCH<x>:TRIGger:A:BUS:LIN:DATa:SIZe
+Group: Search and Mark
+Arguments: <nr3> specifies the data size.
+Examples: 1
+--------------------------------------------------------------------------------
+Command: SEARCH:SEARCH<x>:TRIGger:A:BUS:LIN:DATa:VALue
+Group: Search and Mark
+Arguments: <string> specifies the data value.
+Examples: 1
+--------------------------------------------------------------------------------
+Command: SEARCH:SEARCH<x>:TRIGger:A:BUS:LIN:ERRTYPE
+Group: Search and Mark
+Arguments: CHecksum specifies the error type is checksum. PARity specifies the error type is parity. SYNC speci
+Examples: 1
+--------------------------------------------------------------------------------
+Command: SEARCH:SEARCH<x>:TRIGger:A:BUS:LIN:IDentifier:FORMat
+Group: Search and Mark
+Arguments: BINary specifies the identifier format as binary. HEX specifies the identifier format as hexadecimal
+Examples: 1
+--------------------------------------------------------------------------------
+Command: SEARCH:SEARCH<x>:TRIGger:A:BUS:LIN:IDentifier:VALue
+Group: Search and Mark
+Arguments: <string> specifies the identifier value.
+Examples: 1
+--------------------------------------------------------------------------------
+Command: SEARCH:SEARCH<x>:TRIGger:A:BUS:MIL1553B:COMMAND:ADDRess:FORMat
+Group: Search and Mark
+Arguments: BINary specifies the data format as binary. HEX specifies the data format as hexadecimal.
+Examples: 1
+--------------------------------------------------------------------------------
+Command: SEARCH:SEARCH<x>:TRIGger:A:BUS:MIL1553B:COMMAND:COUNt:FORMat
+Group: Search and Mark
+Arguments: BINary specifies the data format as binary. HEX specifies the data format as hexadecimal.
+Examples: 1
+--------------------------------------------------------------------------------
+Command: SEARCH:SEARCH<x>:TRIGger:A:BUS:MIL1553B:COMMAND:SUBADdress:FORMat
+Group: Search and Mark
+Arguments: BINary specifies the data format as binary. HEX specifies the data format as hexadecimal.
+Examples: 1
+--------------------------------------------------------------------------------
+Command: SEARCH:SEARCH<x>:TRIGger:A:BUS:MIL1553B:CONDition
+Group: Search and Mark
+Arguments: SYNC refers to the 3-bit sync pulse that precedes each word. COMMAND is one of 3 16-bit word types. 
+Examples: 1
+--------------------------------------------------------------------------------
+Command: SEARCH:SEARCH<x>:TRIGger:A:BUS:MIL1553B:DATA:FORMat
+Group: Search and Mark
+Arguments: BINary specifies the data format as binary. HEX specifies the data format as hexadecimal.
+Examples: 1
+--------------------------------------------------------------------------------
+Command: SEARCH:SEARCH<x>:TRIGger:A:BUS:MIL1553B:STATUS:ADDRess:FORMat
+Group: Search and Mark
+Arguments: BINary specifies the data format as binary. HEX specifies the data format as hexadecimal.
+Examples: 1
+--------------------------------------------------------------------------------
+Command: SEARCH:SEARCH<x>:TRIGger:A:BUS:MIL1553B:TIME:LESSLimit
+Group: Search and Mark
+Arguments: <NR3> is a floating point number that specifies either the minimum remote terminal response time (RT
+Examples: 1
+--------------------------------------------------------------------------------
+Command: SEARCH:SEARCH<x>:TRIGger:A:BUS:MIL1553B:TIME:MORELimit
+Group: Search and Mark
+Arguments: <NR3> is a floating point number that specifies either the maximum remote terminal response time (RT
+Examples: 1
+--------------------------------------------------------------------------------
+Command: SEARCH:SEARCH<x>:TRIGger:A:BUS:MIPICSITWo:CONDition
+Group: Search and Mark
+Arguments: ESCMode specifies the search condition as Escape Mode. EOT specifies the search condition as End Of 
+Examples: 1
+--------------------------------------------------------------------------------
+Command: SEARCH:SEARCH<x>:TRIGger:A:BUS:MIPICSITWo:DTLong
+Group: Search and Mark
+Arguments: ANY specifies the data type as Any. BLANK specifies the data type as Blank. EMBEDded specifies the d
+Examples: 1
+--------------------------------------------------------------------------------
+Command: SEARCH:SEARCH<x>:TRIGger:A:BUS:MIPICSITWo:DTShort
+Group: Search and Mark
+Arguments: ANY specifies the data type as Any. FRAMEEnd specifies the data type as Frame End. FRAMEStart specif
+Examples: 1
+--------------------------------------------------------------------------------
+Command: SEARCH:SEARCH<x>:TRIGger:A:BUS:MIPICSITWo:ERRor
+Group: Search and Mark
+Arguments: ANY specifies the error type as Any. CHECKsumerror specifies the error type as CHECKsumerror. ECCErr
+Examples: 1
+--------------------------------------------------------------------------------
+Command: SEARCH:SEARCH<x>:TRIGger:A:BUS:MIPICSITWo:ESCape
+Group: Search and Mark
+Arguments: ANY specifies the Escape command as Any. LPDATA specifies the Escape command as Low Power Data Trans
+Examples: 1
+--------------------------------------------------------------------------------
+Command: SEARCH:SEARCH<x>:TRIGger:A:BUS:MIPICSITWo:OFFset:VALue
+Group: Search and Mark
+Arguments: <NR3> specifies an offset value. DONTCare specifies the offset value as Don’t Care.
+Examples: 1
+--------------------------------------------------------------------------------
+Command: SEARCH:SEARCH<x>:TRIGger:A:BUS:MIPICSITWo:PACKetdata:FORMat
+Group: Search and Mark
+Arguments: BINary specifies the data packet format as Binary. HEXadecimal specifies the data packet format as H
+Examples: 1
+--------------------------------------------------------------------------------
+Command: SEARCH:SEARCH<x>:TRIGger:A:BUS:MIPICSITWo:PACKetdata:VALue
+Group: Search and Mark
+Arguments: <string> specifies the 16-bit packet data string. The valid characters are 0, 1, and X when the form
+Examples: 1
+--------------------------------------------------------------------------------
+Command: SEARCH:SEARCH<x>:TRIGger:A:BUS:MIPICSITWo:PAYLoad:FORMat
+Group: Search and Mark
+Arguments: BINary specifies the generic payload format as Binary. HEXadecimal specifies the generic payload for
+Examples: 1
+--------------------------------------------------------------------------------
+Command: SEARCH:SEARCH<x>:TRIGger:A:BUS:MIPICSITWo:PAYLoad:SIZe
+Group: Search and Mark
+Arguments: <NR3> specifies a number from 1 to 16 that sets the generic payload size in bytes.
+Examples: 1
+--------------------------------------------------------------------------------
+Command: SEARCH:SEARCH<x>:TRIGger:A:BUS:MIPICSITWo:PAYLoad:VALue
+Group: Search and Mark
+Arguments: <string> specifies the generic payload value. The valid characters are 0, 1, and X for values in bin
+Examples: 1
+--------------------------------------------------------------------------------
+Command: SEARCH:SEARCH<x>:TRIGger:A:BUS:MIPICSITWo:PIXel:VALue
+Group: Search and Mark
+Arguments: <NR3> specifies a number that represents the pixel value. DONTCare specifies the pixel value as Don’
+Examples: 1
+--------------------------------------------------------------------------------
+Command: SEARCH:SEARCH<x>:TRIGger:A:BUS:MIPICSITWo:RAW:QUAlifier
+Group: Search and Mark
+Arguments: EQUal specifies the RAW qualifier as Equal. LESSThan specifies the RAW qualifier as Less Than. MORET
+Examples: 1
+--------------------------------------------------------------------------------
+Command: SEARCH:SEARCH<x>:TRIGger:A:BUS:MIPICSITWo:RAW:VALue
+Group: Search and Mark
+Arguments: <NR3> specifies a number that represents the RAW value. DONTCare specifies the RAW value as Don’t Ca
+Examples: 1
+--------------------------------------------------------------------------------
+Command: SEARCH:SEARCH<x>:TRIGger:A:BUS:MIPICSITWo:RGB:BLUe:QUAlifier
+Group: Search and Mark
+Arguments: EQUal specifies the qualifier as Equal. LESSThan specifies the qualifier as Less Than. MOREThan spec
+Examples: 1
+--------------------------------------------------------------------------------
+Command: SEARCH:SEARCH<x>:TRIGger:A:BUS:MIPICSITWo:RGB:BLUe:VALue
+Group: Search and Mark
+Arguments: <NR3> specifies a number for the RGB Blue value; the range of the number is dependent on the data ty
+Examples: 1
+--------------------------------------------------------------------------------
+Command: SEARCH:SEARCH<x>:TRIGger:A:BUS:MIPICSITWo:RGB:GREen:QUAlifier
+Group: Search and Mark
+Arguments: EQUal specifies the qualifier as Equal. LESSThan specifies the qualifier as Less Than. MOREThan spec
+Examples: 1
+--------------------------------------------------------------------------------
+Command: SEARCH:SEARCH<x>:TRIGger:A:BUS:MIPICSITWo:RGB:GREen:VALue
+Group: Search and Mark
+Arguments: <NR3> specifies a number for the RGB Green value; the range of the number is dependent on the data t
+Examples: 1
+--------------------------------------------------------------------------------
+Command: SEARCH:SEARCH<x>:TRIGger:A:BUS:MIPICSITWo:RGB:RED:QUAlifier
+Group: Search and Mark
+Arguments: EQUal specifies the qualifier as Equal. LESSThan specifies the qualifier as Less Than. MOREThan spec
+Examples: 1
+--------------------------------------------------------------------------------
+Command: SEARCH:SEARCH<x>:TRIGger:A:BUS:MIPICSITWo:RGB:RED:VALue
+Group: Search and Mark
+Arguments: <NR3> specifies a number for the RGB Red value; the range of the number is dependent on the data typ
+Examples: 1
+--------------------------------------------------------------------------------
+Command: SEARCH:SEARCH<x>:TRIGger:A:BUS:MIPICSITWo:VC
+Group: Search and Mark
+Arguments: <NR3> specifies a number from 0 to 3 that represents the virtual channel. DONTCare specifies the vir
+Examples: 1
+--------------------------------------------------------------------------------
+Command: SEARCH:SEARCH<x>:TRIGger:A:BUS:MIPICSITWo:WARNing
+Group: Search and Mark
+Arguments: ANY specifies the warning type as Any. ECCWarn specifies the warning type as ECC Warning.
+Examples: 1
+--------------------------------------------------------------------------------
+Command: SEARCH:SEARCH<x>:TRIGger:A:BUS:MIPICSITWo:WC:VALue
+Group: Search and Mark
+Arguments: <NR3> specifies a number for the word count value. DONTCare specifies the word count value as Don’t 
+Examples: 1
+--------------------------------------------------------------------------------
+Command: SEARCH:SEARCH<x>:TRIGger:A:BUS:MIPICSITWo:YUV:U:QUAlifier
+Group: Search and Mark
+Arguments: EQUal specifies the qualifier as Equal. LESSThan specifies the qualifier as Less Than. MOREThan spec
+Examples: 1
+--------------------------------------------------------------------------------
+Command: SEARCH:SEARCH<x>:TRIGger:A:BUS:MIPICSITWo:YUV:U:VALue
+Group: Search and Mark
+Arguments: <NR3> specifies a number for the YUV U value; the range of the number is dependent on the data type.
+Examples: 1
+--------------------------------------------------------------------------------
+Command: SEARCH:SEARCH<x>:TRIGger:A:BUS:MIPICSITWo:YUV:V:QUAlifier
+Group: Search and Mark
+Arguments: EQUal specifies the qualifier as Equal. LESSThan specifies the qualifier as Less Than. Commands list
+Examples: 1
+--------------------------------------------------------------------------------
+Command: SEARCH:SEARCH<x>:TRIGger:A:BUS:MIPICSITWo:YUV:V:VALue
+Group: Search and Mark
+Arguments: <NR3> specifies a number for the YUV V value; the range of the number is dependent on the data type.
+Examples: 1
+--------------------------------------------------------------------------------
+Command: SEARCH:SEARCH<x>:TRIGger:A:BUS:MIPICSITWo:YUV:Y:QUAlifier
+Group: Search and Mark
+Arguments: EQUal specifies the qualifier as Equal. LESSThan specifies the qualifier as Less Than. MOREThan spec
+Examples: 1
+--------------------------------------------------------------------------------
+Command: SEARCH:SEARCH<x>:TRIGger:A:BUS:MIPICSITWo:YUV:Y:VALue
+Group: Search and Mark
+Arguments: <NR3> specifies a number for the YUV Y value; the range of the number is dependent on the data type.
+Examples: 1
+--------------------------------------------------------------------------------
+Command: SEARCH:SEARCH<x>:TRIGger:A:BUS:MIPIDSIOne:CONDition
+Group: Search and Mark
+Arguments: ESCMode specifies the search condition as Escape Mode. BTA specifies the search condition as Bus Tur
+Examples: 1
+--------------------------------------------------------------------------------
+Command: SEARCH:SEARCH<x>:TRIGger:A:BUS:MIPIDSIOne:DIRection
+Group: Search and Mark
+Arguments: FORWard specifies the direction as Forward. REVErse specifies the direction as Reverse. ANY specifie
+Examples: 1
+--------------------------------------------------------------------------------
+Command: SEARCH:SEARCH<x>:TRIGger:A:BUS:MIPIDSIOne:DTLong
+Group: Search and Mark
+Arguments: ANY specifies the data type as Any. BLANK specifies the data type as Blank. DCSLONGRead specifies th
+Examples: 1
+--------------------------------------------------------------------------------
+Command: SEARCH:SEARCH<x>:TRIGger:A:BUS:MIPIDSIOne:ERRor
+Group: Search and Mark
+Arguments: ANY specifies the error type as Any. CHECKsumerror specifies the error type as Check Sum Error. ECCE
+Examples: 1
+--------------------------------------------------------------------------------
+Command: SEARCH:SEARCH<x>:TRIGger:A:BUS:MIPIDSIOne:ESCape
+Group: Search and Mark
+Arguments: ACK specifies the Escape command as Ack (positive acknowledgement). LPDATA specifies the Escape comm
+Examples: 1
+--------------------------------------------------------------------------------
+Command: SEARCH:SEARCH<x>:TRIGger:A:BUS:MIPIDSIOne:OFFset:VALue
+Group: Search and Mark
+Arguments: <NR3> specifies an offset value. DONTCare specifies the offset value as Don’t Care.
+Examples: 1
+--------------------------------------------------------------------------------
+Command: SEARCH:SEARCH<x>:TRIGger:A:BUS:MIPIDSIOne:PACKetdata:FORMat
+Group: Search and Mark
+Arguments: BINary specifies the format of the packet data as Binary. HEXadecimal specifies the format of the pa
+Examples: 1
+--------------------------------------------------------------------------------
+Command: SEARCH:SEARCH<x>:TRIGger:A:BUS:MIPIDSIOne:PACKetdata:VALUEOne
+Group: Search and Mark
+Arguments: <string> specifies the first byte of the packet data string. The valid characters are 0, 1, and X wh
+Examples: 1
+--------------------------------------------------------------------------------
+Command: SEARCH:SEARCH<x>:TRIGger:A:BUS:MIPIDSIOne:PACKetdata:VALUETwo
+Group: Search and Mark
+Arguments: <string> specifies the second byte of a packet data string. The valid characters are 0, 1, and X whe
+Examples: 1
+--------------------------------------------------------------------------------
+Command: SEARCH:SEARCH<x>:TRIGger:A:BUS:MIPIDSIOne:PAYLoad:FORMat
+Group: Search and Mark
+Arguments: BINary specifies the generic payload format as Binary. HEXadecimal specifies the generic payload for
+Examples: 1
+--------------------------------------------------------------------------------
+Command: SEARCH:SEARCH<x>:TRIGger:A:BUS:MIPIDSIOne:PAYLoad:SIZe
+Group: Search and Mark
+Arguments: <NR3> specifies a number from 1 to 16, that sets the size of the generic payload in bytes.
+Examples: 1
+--------------------------------------------------------------------------------
+Command: SEARCH:SEARCH<x>:TRIGger:A:BUS:MIPIDSIOne:PAYLoad:VALue
+Group: Search and Mark
+Arguments: <string> specifies the payload value. The valid characters are 0, 1, and X for values in binary form
+Examples: 1
+--------------------------------------------------------------------------------
+Command: SEARCH:SEARCH<x>:TRIGger:A:BUS:MIPIDSIOne:PIXel:VALue
+Group: Search and Mark
+Arguments: <NR3> specifies a number that represents the pixel value. DONTCare specifies the pixel value as Don’
+Examples: 1
+--------------------------------------------------------------------------------
+Command: SEARCH:SEARCH<x>:TRIGger:A:BUS:MIPIDSIOne:RGB:BLUe:QUAlifier
+Group: Search and Mark
+Arguments: EQUal specifies the qualifier as Equal. LESSThan specifies the qualifier as Less Than. MOREThan spec
+Examples: 1
+--------------------------------------------------------------------------------
+Command: SEARCH:SEARCH<x>:TRIGger:A:BUS:MIPIDSIOne:RGB:BLUe:VALue
+Group: Search and Mark
+Arguments: <NR3> specifies a number for the RGB Blue value; the range is dependent on the data type. DONTCare s
+Examples: 1
+--------------------------------------------------------------------------------
+Command: SEARCH:SEARCH<x>:TRIGger:A:BUS:MIPIDSIOne:RGB:GREen:QUAlifier
+Group: Search and Mark
+Arguments: EQUal specifies the qualifier as Equal. LESSThan specifies the qualifier as Less Than. MOREThan spec
+Examples: 1
+--------------------------------------------------------------------------------
+Command: SEARCH:SEARCH<x>:TRIGger:A:BUS:MIPIDSIOne:RGB:GREen:VALue
+Group: Search and Mark
+Arguments: <NR3> specifies a number for the RGB Green value; the range is dependent on the data type. DONTCare 
+Examples: 1
+--------------------------------------------------------------------------------
+Command: SEARCH:SEARCH<x>:TRIGger:A:BUS:MIPIDSIOne:RGB:RED:QUAlifier
+Group: Search and Mark
+Arguments: EQUal specifies the qualifier as Equal. LESSThan specifies the qualifier as Less Than. MOREThan spec
+Examples: 1
+--------------------------------------------------------------------------------
+Command: SEARCH:SEARCH<x>:TRIGger:A:BUS:MIPIDSIOne:RGB:RED:VALue
+Group: Search and Mark
+Arguments: <NR3> specifies a number for the RGB Red value; the range is dependent on the data type. DONTCare sp
+Examples: 1
+--------------------------------------------------------------------------------
+Command: SEARCH:SEARCH<x>:TRIGger:A:BUS:MIPIDSIOne:VC
+Group: Search and Mark
+Arguments: <NR3> specifies a Virtual Channel from 0 to 3. DONTCare specifies the Virtual Channel as Don’t Care.
+Examples: 1
+--------------------------------------------------------------------------------
+Command: SEARCH:SEARCH<x>:TRIGger:A:BUS:MIPIDSIOne:WARNing
+Group: Search and Mark
+Arguments: ANY specifies the warning type as Any. ECCWarn specifies the warning type as ECCWarn.
+Examples: 1
+--------------------------------------------------------------------------------
+Command: SEARCH:SEARCH<x>:TRIGger:A:BUS:MIPIDSIOne:WC:VALue
+Group: Search and Mark
+Arguments: <NR3> specifies a number for the word count value. DONTCare specifies the word count value as Don’t 
+Examples: 1
+--------------------------------------------------------------------------------
+Command: SEARCH:SEARCH<x>:TRIGger:A:BUS:MIPIDSIOne:YCBCR:CB:VALue
+Group: Search and Mark
+Arguments: <nr3> specifies the CB value. DONTCare specifies the CB values is don’t care.
+Examples: 1
+--------------------------------------------------------------------------------
+Command: SEARCH:SEARCH<x>:TRIGger:A:BUS:MIPIDSIOne:YCBCR:CR:VALue
+Group: Search and Mark
+Arguments: <nr3> specifies the CR value. DONTCare specifies the CR values is don’t care.
+Examples: 1
+--------------------------------------------------------------------------------
+Command: SEARCH:SEARCH<x>:TRIGger:A:BUS:MIPIDSIOne:YCBCR:Y:VALue
+Group: Search and Mark
+Arguments: <nr3> specifies the Y value. DONTCare specifies the Y values is don’t care.
+Examples: 1
+--------------------------------------------------------------------------------
+Command: SEARCH:SEARCH<x>:TRIGger:A:BUS:PARallel:DATa:FORMat
+Group: Search and Mark
+Arguments: BINary specifies the data format as Binary. HEXadecimal specifies the data format as Hexadecimal. SY
+Examples: 1
+--------------------------------------------------------------------------------
+Command: SEARCH:SEARCH<x>:TRIGger:A:BUS:PARallel:DATa:VALue
+Group: Search and Mark
+Arguments: <string> specifies the data value in a valid format. Valid characters are 0-9,
+Examples: 1
+--------------------------------------------------------------------------------
+Command: SEARCH:SEARCH<x>:TRIGger:A:BUS:PCIE:CHARacter:CHAR
+Group: Search and Mark
+Arguments: <STRING> specifies the trigger character. The string can be a mnemonic, K, or D code character.
+Examples: 1
+--------------------------------------------------------------------------------
+Command: SEARCH:SEARCH<x>:TRIGger:A:BUS:PCIE:CHARacter:SYMbol:MINus
+Group: Search and Mark
+Arguments: <string> specifies the character symbol minus.
+Examples: 1
+--------------------------------------------------------------------------------
+Command: SEARCH:SEARCH<x>:TRIGger:A:BUS:PCIE:CHARacter:SYMbol:PLUS
+Group: Search and Mark
+Arguments: <string> specifies the character symbol plus.
+Examples: 1
+--------------------------------------------------------------------------------
+Command: SEARCH:SEARCH<x>:TRIGger:A:BUS:PCIE:DISParity
+Group: Search and Mark
+Arguments: NEGative specifies negative disparity. POSITIVe specifies positive disparity. EITher specifies eithe
+Examples: 1
+--------------------------------------------------------------------------------
+Command: SEARCH:SEARCH<x>:TRIGger:A:BUS:PCIE:FORMat
+Group: Search and Mark
+Arguments: Arguments are the available formats.
+Examples: 1
+--------------------------------------------------------------------------------
+Command: SEARCH:SEARCH<x>:TRIGger:A:BUS:PCIE:PATtern:CHAR<x>
+Group: Search and Mark
+Arguments: <string> is the pattern character.
+Examples: 1
+--------------------------------------------------------------------------------
+Command: SEARCH:SEARCH<x>:TRIGger:A:BUS:PCIE:PATtern:SYMbol:MINus<x>
+Group: Search and Mark
+Arguments: <string> specifies the minus pattern symbol.
+Examples: 1
+--------------------------------------------------------------------------------
+Command: SEARCH:SEARCH<x>:TRIGger:A:BUS:PCIE:PATtern:SYMbol:PLUS<x>
+Group: Search and Mark
+Arguments: <string> specifies the plus pattern symbol.
+Examples: 1
+--------------------------------------------------------------------------------
+Command: SEARCH:SEARCH<x>:TRIGger:A:BUS:RS232C:CONDition
+Group: Search and Mark
+Arguments: DATa specifies the search condition as Data. EOp specifies the search condition as End of Packet. PA
+Examples: 1
+--------------------------------------------------------------------------------
+Command: SEARCH:SEARCH<x>:TRIGger:A:BUS:RS232C:DATa:FORMat
+Group: Search and Mark
+Arguments: BINary specifies the data format as Binary. HEXadecimal specifies the data format as Hexadecimal.
+Examples: 1
+--------------------------------------------------------------------------------
+Command: SEARCH:SEARCH<x>:TRIGger:A:BUS:RS232C:DATa:VALue
+Group: Search and Mark
+Arguments: <string> specifies the value of the data string. The valid characters are 0, 1, and X for values in 
+Examples: 1
+--------------------------------------------------------------------------------
+Command: SEARCH:SEARCH<x>:TRIGger:A:BUS:S8B10B:CHARacter:CHAR
+Group: Search and Mark
+Arguments: <string> sets the 8B10B character.
+Examples: 1
+--------------------------------------------------------------------------------
+Command: SEARCH:SEARCH<x>:TRIGger:A:BUS:S8B10B:CHARacter:SYMbol:MINus
+Group: Search and Mark
+Arguments: <string> sets the 8B10B character bit pattern.
+Examples: 1
+--------------------------------------------------------------------------------
+Command: SEARCH:SEARCH<x>:TRIGger:A:BUS:S8B10B:CHARacter:SYMbol:PLUS
+Group: Search and Mark
+Arguments: <string> sets the character bit pattern.
+Examples: 1
+--------------------------------------------------------------------------------
+Command: SEARCH:SEARCH<x>:TRIGger:A:BUS:S8B10B:CONDition
+Group: Search and Mark
+Arguments: ANYCONTROL specifies that the oscilloscope will search for any control character. CHARACTER specifie
+Examples: 1
+--------------------------------------------------------------------------------
+Command: SEARCH:SEARCH<x>:TRIGger:A:BUS:S8B10B:PATtern:CHAR<x>
+Group: Search and Mark
+Arguments: <string> is the 8B10B character.
+Examples: 1
+--------------------------------------------------------------------------------
+Command: SEARCH:SEARCH<x>:TRIGger:A:BUS:S8B10B:PATtern:SYMbol:PLUS<x>
+Group: Search and Mark
+Arguments: <string> is the 8B10B character bit pattern.
+Examples: 1
+--------------------------------------------------------------------------------
+Command: SEARCH:SEARCH<x>:TRIGger:A:BUS:SOUrce
+Group: Search and Mark
+Arguments: B0–B16 specifies the bus source as a bus number from B01 to B16.
+Examples: 1
+--------------------------------------------------------------------------------
+Command: SEARCH:SEARCH<x>:TRIGger:A:BUS:SPI:DATa:FORMat
+Group: Search and Mark
+Arguments: BINary specifies the data format as Binary. HEXadecimal specifies the data format as Hexadecimal.
+Examples: 1
+--------------------------------------------------------------------------------
+Command: SEARCH:SEARCH<x>:TRIGger:A:BUS:SPI:DATa:SIZe
+Group: Search and Mark
+Arguments: <NR3> specifies the number of contiguous data bytes.
+Examples: 1
+--------------------------------------------------------------------------------
+Command: SEARCH:SEARCH<x>:TRIGger:A:BUS:SPI:DATa:VALue
+Group: Search and Mark
+Arguments: <string> specifies the data value in the specified valid format. The valid characters are 0, 1, and 
+Examples: 1
+--------------------------------------------------------------------------------
+Command: SEARCH:SEARCH<x>:TRIGger:A:BUS:USB:ADDress:FORMat
+Group: Search and Mark
+Arguments: BINary specifies the address format as Binary. HEX specifies the address format as Hexadecimal. SYMB
+Examples: 1
+--------------------------------------------------------------------------------
+Command: SEARCH:SEARCH<x>:TRIGger:A:BUS:USB:ADDress:HIVALue
+Group: Search and Mark
+Arguments: <string> specifies the data value in the specified valid format. The valid characters are 0, 1, and 
+Examples: 0
+--------------------------------------------------------------------------------
+Command: SEARCH:SEARCH<x>:TRIGger:A:BUS:USB:ADDress:VALue
+Group: Search and Mark
+Arguments: <string> specifies the data value in the specified valid format. Valid characters are 0, 1, and X fo
+Examples: 1
+--------------------------------------------------------------------------------
+Command: SEARCH:SEARCH<x>:TRIGger:A:BUS:USB:CHARacter:CHAR
+Group: Search and Mark
+Arguments: <string> sets the character bit pattern.
+Examples: 1
+--------------------------------------------------------------------------------
+Command: SEARCH:SEARCH<x>:TRIGger:A:BUS:USB:CHARacter:SYMbol:MINus
+Group: Search and Mark
+Arguments: <string> sets the character bit pattern.
+Examples: 1
+--------------------------------------------------------------------------------
+Command: SEARCH:SEARCH<x>:TRIGger:A:BUS:USB:CHARacter:SYMbol:PLUS
+Group: Search and Mark
+Arguments: <string> sets the character bit pattern.
+Examples: 1
+--------------------------------------------------------------------------------
+Command: SEARCH:SEARCH<x>:TRIGger:A:BUS:USB:CONDition
+Group: Search and Mark
+Arguments: DATAPacket specifies the search condition as Data Packet. EOP specifies the search condition as End 
+Examples: 1
+--------------------------------------------------------------------------------
+Command: SEARCH:SEARCH<x>:TRIGger:A:BUS:USB:DATa:FORMat
+Group: Search and Mark
+Arguments: BINary specifies the data format as Binary. HEX specifies the data format as Hexadecimal. SYMBolic s
+Examples: 1
+--------------------------------------------------------------------------------
+Command: SEARCH:SEARCH<x>:TRIGger:A:BUS:USB:DATa:HIVALue
+Group: Search and Mark
+Arguments: <string> specifies the data value in the specified valid format (binary, hexadecimal, or symbolic). 
+Examples: 1
+--------------------------------------------------------------------------------
+Command: SEARCH:SEARCH<x>:TRIGger:A:BUS:USB:DATa:OFFSet
+Group: Search and Mark
+Arguments: <NR3> specifies the data offset in bytes. DONTCare specifies the data offset as Don’t Care. Commands
+Examples: 1
+--------------------------------------------------------------------------------
+Command: SEARCH:SEARCH<x>:TRIGger:A:BUS:USB:DATa:SIZe
+Group: Search and Mark
+Arguments: <NR3> specifies the data size in bytes.
+Examples: 1
+--------------------------------------------------------------------------------
+Command: SEARCH:SEARCH<x>:TRIGger:A:BUS:USB:DATa:TYPe
+Group: Search and Mark
+Arguments: ANY specifies the data packet type as Any. DATA0 specifies the data packet type as DATA0. DATA1 spec
+Examples: 1
+--------------------------------------------------------------------------------
+Command: SEARCH:SEARCH<x>:TRIGger:A:BUS:USB:DATa:VALue
+Group: Search and Mark
+Arguments: <string> specifies the data value. The valid characters are 0, 1, and X for binary format; and A-F, 
+Examples: 1
+--------------------------------------------------------------------------------
+Command: SEARCH:SEARCH<x>:TRIGger:A:BUS:USB:ENDPoint:FORMat
+Group: Search and Mark
+Arguments: BINary specifies the endpoint format as Binary. HEXadecimal specifies the endpoint format as Hexadec
+Examples: 1
+--------------------------------------------------------------------------------
+Command: SEARCH:SEARCH<x>:TRIGger:A:BUS:USB:ENDPoint:HIVALue
+Group: Search and Mark
+Arguments: <string> specifies the data value in the specified valid format. <No LRN> specifies do not return a 
+Examples: 1
+--------------------------------------------------------------------------------
+Command: SEARCH:SEARCH<x>:TRIGger:A:BUS:USB:ENDPoint:VALue
+Group: Search and Mark
+Arguments: <string> specifies the data value in the specified valid format. The valid characters are 0, 1, and 
+Examples: 1
+--------------------------------------------------------------------------------
+Command: SEARCH:SEARCH<x>:TRIGger:A:BUS:USB:HANDSHAKEType
+Group: Search and Mark
+Arguments: ACK specifies the handshake type as Acknowledgement (positive) (XX10). ANY specifies the handshake t
+Examples: 1
+--------------------------------------------------------------------------------
+Command: SEARCH:SEARCH<x>:TRIGger:A:BUS:USB:PATtern:CHAR<x>
+Group: Search and Mark
+Arguments: <string> is the character.
+Examples: 1
+--------------------------------------------------------------------------------
+Command: SEARCH:SEARCH<x>:TRIGger:A:BUS:USB:PATtern:SYMbol:MINus<x>
+Group: Search and Mark
+Arguments: <string> is the character bit pattern.
+Examples: 1
+--------------------------------------------------------------------------------
+Command: SEARCH:SEARCH<x>:TRIGger:A:BUS:USB:PATtern:SYMbol:PLUS<x>
+Group: Search and Mark
+Arguments: <string> is the symbol bit pattern.
+Examples: 1
+--------------------------------------------------------------------------------
+Command: SEARCH:SEARCH<x>:TRIGger:A:BUS:USB:QUAlifier
+Group: Search and Mark
+Arguments: EQUal specifies the qualifier as Equal. INrange specifies the qualifier as Inside Range. LESSEQual s
+Examples: 1
+--------------------------------------------------------------------------------
+Command: SEARCH:SEARCH<x>:TRIGger:A:BUS:USB:SOF:FORMat
+Group: Search and Mark
+Arguments: BINary specifies the format as Binary. HEXadecimal specifies the format as Hexadecimal. SYMBolic spe
+Examples: 1
+--------------------------------------------------------------------------------
+Command: SEARCH:SEARCH<x>:TRIGger:A:BUS:USB:SOF:FRAMENUMber
+Group: Search and Mark
+Arguments: <string> specifies the frame number string for the Start of Frame in a valid format (binary, hexadec
+Examples: 1
+--------------------------------------------------------------------------------
+Command: SEARCH:SEARCH<x>:TRIGger:A:BUS:USB:SPECIALType
+Group: Search and Mark
+Arguments: ANY specifies the PID value as Any (XX00). ERR specifies the PID value as ERR (1100). PING specifies
+Examples: 1
+--------------------------------------------------------------------------------
+Command: SEARCH:SEARCH<x>:TRIGger:A:BUS:USB:SPLIT:ET:VALue
+Group: Search and Mark
+Arguments: BULK specifies the Endpoint Type value as Bulk (10). CONTROL specifies the Endpoint Type value as Co
+Examples: 1
+--------------------------------------------------------------------------------
+Command: SEARCH:SEARCH<x>:TRIGger:A:BUS:USB:SPLIT:HUB:FORMat
+Group: Search and Mark
+Arguments: BINary specifies the hub address format as Binary. HEXadecimal specifies the hub address format as H
+Examples: 1
+--------------------------------------------------------------------------------
+Command: SEARCH:SEARCH<x>:TRIGger:A:BUS:USB:SPLIT:HUB:VALue
+Group: Search and Mark
+Arguments: <string> specifies the hub address. The valid characters are .
+Examples: 1
+--------------------------------------------------------------------------------
+Command: SEARCH:SEARCH<x>:TRIGger:A:BUS:USB:SPLIT:PORT:FORMat
+Group: Search and Mark
+Arguments: BINary specifies the port address format as Binary. HEXadecicmal specifies the port address format a
+Examples: 1
+--------------------------------------------------------------------------------
+Command: SEARCH:SEARCH<x>:TRIGger:A:BUS:USB:SPLIT:PORT:VALue
+Group: Search and Mark
+Arguments: <string> specifies the port address in the valid format. The valid characters are
+Examples: 1
+--------------------------------------------------------------------------------
+Command: SEARCH:SEARCH<x>:TRIGger:A:BUS:USB:SPLIT:SC:VALue
+Group: Search and Mark
+Arguments: CSPLIT specifies Complete (CSPLIT)(1) Start/Complete value. DONTCare specifies the Start/Complete va
+Examples: 1
+--------------------------------------------------------------------------------
+Command: SEARCH:SEARCH<x>:TRIGger:A:BUS:USB:SPLIT:SE:VALue
+Group: Search and Mark
+Arguments: DONTCare specifies Don’t Care (X) Start/End bit value. FULLSPeed specifies Control/Bulk/Interrupt Fu
+Examples: 1
+--------------------------------------------------------------------------------
+Command: SEARCH:SEARCH<x>:TRIGger:A:BUS:USB:TOKENType
+Group: Search and Mark
+Arguments: ANY specifies the token type as Any (XX01). IN specifies the token type as IN (1001). OUT specifies 
+Examples: 1
+--------------------------------------------------------------------------------
+Command: SEARCH:SEARCH<x>:TRIGger:A:DDRMemory:BITRate
+Group: Search and Mark
+Arguments: <NR3> specifies the DDR data rate in bits per second.
+Examples: 1
+--------------------------------------------------------------------------------
+Command: SEARCH:SEARCH<x>:TRIGger:A:DDRMemory:CSSource
+Group: Search and Mark
+Arguments: CH<x> specifies one input channel as the search source, where <x> is the channel number and can be 1
+Examples: 1
+--------------------------------------------------------------------------------
+Command: SEARCH:SEARCH<x>:TRIGger:A:DDRMemory:DATASource
+Group: Search and Mark
+Arguments: CH<x> specifies one input channel as the search source, where <x> is the channel number. MATH<x> spe
+Examples: 1
+--------------------------------------------------------------------------------
+Command: SEARCH:SEARCH<x>:TRIGger:A:DDRMemory:HYSteresis
+Group: Search and Mark
+Arguments: <NR3> is the hysteresis amount in percent.
+Examples: 1
+--------------------------------------------------------------------------------
+Command: SEARCH:SEARCH<x>:TRIGger:A:DDRMemory:MARgin
+Group: Search and Mark
+Arguments: <NR3> is the termination logic margin in percent.
+Examples: 1
+--------------------------------------------------------------------------------
+Command: SEARCH:SEARCH<x>:TRIGger:A:DDRMemory:REFLevel:DATa:HIGH
+Group: Search and Mark
+Arguments: <NRF> specifies the value of the data HIGH reference level in volts.
+Examples: 1
+--------------------------------------------------------------------------------
+Command: SEARCH:SEARCH<x>:TRIGger:A:DDRMemory:REFLevel:DATa:LOW
+Group: Search and Mark
+Arguments: <NRF> specifies the value of the data LOW reference level in volts.
+Examples: 1
+--------------------------------------------------------------------------------
+Command: SEARCH:SEARCH<x>:TRIGger:A:DDRMemory:REFLevel:DATa:MID
+Group: Search and Mark
+Arguments: <NRF> specifies the value of the data MID reference level in volts.
+Examples: 1
+--------------------------------------------------------------------------------
+Command: SEARCH:SEARCH<x>:TRIGger:A:DDRMemory:REFLevel:STROBE:HIGH
+Group: Search and Mark
+Arguments: <NRF> specifies the value of the strobe HIGH reference level in volts.
+Examples: 1
+--------------------------------------------------------------------------------
+Command: SEARCH:SEARCH<x>:TRIGger:A:DDRMemory:REFLevel:STROBE:LOW
+Group: Search and Mark
+Arguments: <NRF> specifies the value of the strobe LOW reference level in volts.
+Examples: 1
+--------------------------------------------------------------------------------
+Command: SEARCH:SEARCH<x>:TRIGger:A:DDRMemory:REFLevel:STROBE:MID
+Group: Search and Mark
+Arguments: <NRF> specifies the value of the strobe MID reference level in volts.
+Examples: 1
+--------------------------------------------------------------------------------
+Command: SEARCH:SEARCH<x>:TRIGger:A:DDRMemory:STROBEsource
+Group: Search and Mark
+Arguments: CH<x> specifies the input channel as the search source, where <x> is the channel number. MATH<x> spe
+Examples: 1
+--------------------------------------------------------------------------------
+Command: SEARCH:SEARCH<x>:TRIGger:A:EDGE:SLOpe:CH<x>
+Group: Search and Mark
+Arguments: RISe specifies a rising edge. FALL specifies a falling edge. EITher specifies either rising or falli
+Examples: 1
+--------------------------------------------------------------------------------
+Command: SEARCH:SEARCH<x>:TRIGger:A:EDGE:SLOpe:MATH<x>
+Group: Search and Mark
+Arguments: RISe specifies a rising edge. FALL specifies a falling edge. EITHER specifies either rising or falli
+Examples: 1
+--------------------------------------------------------------------------------
+Command: SEARCH:SEARCH<x>:TRIGger:A:EDGE:SLOpe:REF<x>
+Group: Search and Mark
+Arguments: RISe specifies a rising edge. FALL specifies a falling edge. EITHER specifies either rising or falli
+Examples: 1
+--------------------------------------------------------------------------------
+Command: SEARCH:SEARCH<x>:TRIGger:A:EDGE:SOUrce
+Group: Search and Mark
+Arguments: CH<x> specifies one input channel as the edge source, where <x> is the channel number. MATH<x> speci
+Examples: 1
+--------------------------------------------------------------------------------
+Command: SEARCH:SEARCH<x>:TRIGger:A:GLItch:POLarity:CH<x>
+Group: Search and Mark
+Arguments: EITher specifies positive or negative polarity. NEGAtive specifies a negative polarity. POSITIVe spe
+Examples: 1
+--------------------------------------------------------------------------------
+Command: SEARCH:SEARCH<x>:TRIGger:A:GLItch:POLarity:MATH<x>
+Group: Search and Mark
+Arguments: EITher specifies positive or negative polarity. NEGAtive specifies a negative polarity. POSITIVe spe
+Examples: 1
+--------------------------------------------------------------------------------
+Command: SEARCH:SEARCH<x>:TRIGger:A:GLItch:POLarity:REF<x>
+Group: Search and Mark
+Arguments: EITher specifies positive or negative polarity. NEGAtive specifies a negative polarity. POSITIVe spe
+Examples: 1
+--------------------------------------------------------------------------------
+Command: SEARCH:SEARCH<x>:TRIGger:A:GLItch:WIDth
+Group: Search and Mark
+Arguments: <NR3> specifies the glitch width in seconds.
+Examples: 1
+--------------------------------------------------------------------------------
+Command: SEARCH:SEARCH<x>:TRIGger:A:LOGIc:THReshold:CH<x>
+Group: Search and Mark
+Arguments: <NR3> specifies the threshold level in volts.
+Examples: 1
+--------------------------------------------------------------------------------
+Command: SEARCH:SEARCH<x>:TRIGger:A:LOGIc:THReshold:MATH<x>
+Group: Search and Mark
+Arguments: <NR3> specifies the threshold level in volts.
+Examples: 1
+--------------------------------------------------------------------------------
+Command: SEARCH:SEARCH<x>:TRIGger:A:LOGIc:THReshold:REF<x>
+Group: Search and Mark
+Arguments: <NR3> specifies the threshold level in volts.
+Examples: 1
+--------------------------------------------------------------------------------
+Command: SEARCH:SEARCH<x>:TRIGger:A:PATtern:WHEn
+Group: Search and Mark
+Arguments: TRUe specifies a TRUE logic level. FALSe specifies a FALSE logic level. LESSThan specifies the patte
+Examples: 1
+--------------------------------------------------------------------------------
+Command: SEARCH:SEARCH<x>:TRIGger:A:PATtern:WHEn:LESSLimit
+Group: Search and Mark
+Arguments: <NR3> is the time in seconds.
+Examples: 1
+--------------------------------------------------------------------------------
+Command: SEARCH:SEARCH<x>:TRIGger:A:PATtern:WHEn:MORELimit
+Group: Search and Mark
+Arguments: <NR3> is the time in seconds.
+Examples: 1
+--------------------------------------------------------------------------------
+Command: SEARCH:SEARCH<x>:TRIGger:A:PULse:SOUrce
+Group: Search and Mark
+Arguments: CH<x> specifies one input channel as the edge source, where <x> = 1, 2, 3 or 4. MATH<x> specifies th
+Examples: 1
+--------------------------------------------------------------------------------
+Command: SEARCH:SEARCH<x>:TRIGger:A:RUNT:THReshold:HIGH:CH<x>
+Group: Search and Mark
+Arguments: <NR3> specifies the HIGH threshold in volts. Commands listed in alphabetical order
+Examples: 1
+--------------------------------------------------------------------------------
+Command: SEARCH:SEARCH<x>:TRIGger:A:RUNT:THReshold:HIGH:MATH<x>
+Group: Search and Mark
+Arguments: <NR3> specifies the HIGH threshold level.
+Examples: 1
+--------------------------------------------------------------------------------
+Command: SEARCH:SEARCH<x>:TRIGger:A:RUNT:THReshold:HIGH:REF<x>
+Group: Search and Mark
+Arguments: <NR3> specifies the HIGH threshold in volts. Commands listed in alphabetical order
+Examples: 1
+--------------------------------------------------------------------------------
+Command: SEARCH:SEARCH<x>:TRIGger:A:RUNT:THReshold:LOW:CH<x>
+Group: Search and Mark
+Arguments: <NR3> specifies the LOW threshold in volts.
+Examples: 1
+--------------------------------------------------------------------------------
+Command: SEARCH:SEARCH<x>:TRIGger:A:RUNT:THReshold:LOW:MATH<x>
+Group: Search and Mark
+Arguments: <NR3> specifies the LOW threshold level. Commands listed in alphabetical order
+Examples: 1
+--------------------------------------------------------------------------------
+Command: SEARCH:SEARCH<x>:TRIGger:A:RUNT:THReshold:LOW:REF<x>
+Group: Search and Mark
+Arguments: <NR3> specifies the LOW threshold in volts.
+Examples: 1
+--------------------------------------------------------------------------------
+Command: SEARCH:SEARCH<x>:TRIGger:A:RUNT:WIDth
+Group: Search and Mark
+Arguments: <NR3> specifies the minimum width in seconds.
+Examples: 1
+--------------------------------------------------------------------------------
+Command: SEARCH:SEARCH<x>:TRIGger:A:SETHold:CLOCk:SOUrce
+Group: Search and Mark
+Arguments: CH<x> specifies an input channel as the edge source, where <x> = 1, 2, 3 or 4. MATH<x> specifies the
+Examples: 1
+--------------------------------------------------------------------------------
+Command: SEARCH:SEARCH<x>:TRIGger:A:SETHold:CLOCk:THReshold:CH<x>
+Group: Search and Mark
+Arguments: <NR3> is the clock level in volts. ECL specifies a preset ECL high level of -1.3 V. TTL specifies a 
+Examples: 1
+--------------------------------------------------------------------------------
+Command: SEARCH:SEARCH<x>:TRIGger:A:SETHold:CLOCk:THReshold:MATH<x>
+Group: Search and Mark
+Arguments: <NR3> is the clock level in volts. ECL specifies a preset ECL high level of -1.3 V. TTL specifies a 
+Examples: 1
+--------------------------------------------------------------------------------
+Command: SEARCH:SEARCH<x>:TRIGger:A:SETHold:CLOCk:THReshold:REF<x>
+Group: Search and Mark
+Arguments: <NR3> is the clock level in volts. ECL specifies a preset ECL high level of -1.3 V. TTL specifies a 
+Examples: 1
+--------------------------------------------------------------------------------
+Command: SEARCH:SEARCH<x>:TRIGger:A:SETHold:DATa:SOUrce
+Group: Search and Mark
+Arguments: CH<x> specifies an input channel as the search source, where <x> = 1, 2, 3 or 4. MATH<x> specifies t
+Examples: 1
+--------------------------------------------------------------------------------
+Command: SEARCH:SEARCH<x>:TRIGger:A:SETHold:DATa:THReshold:CH<x>
+Group: Search and Mark
+Arguments: <NR3> is the clock level in volts. ECL specifies a preset ECL high level of -1.3 V. TTL specifies a 
+Examples: 1
+--------------------------------------------------------------------------------
+Command: SEARCH:SEARCH<x>:TRIGger:A:SETHold:DATa:THReshold:MATH<x>
+Group: Search and Mark
+Arguments: <NR3> is the clock level in volts. ECL specifies a preset ECL high level of -1.3 V. TTL specifies a 
+Examples: 1
+--------------------------------------------------------------------------------
+Command: SEARCH:SEARCH<x>:TRIGger:A:SETHold:DATa:THReshold:REF<x>
+Group: Search and Mark
+Arguments: <NR3> is the clock level in volts. ECL specifies a preset ECL high level of -1.3 V. TTL specifies a 
+Examples: 1
+--------------------------------------------------------------------------------
+Command: SEARCH:SEARCH<x>:TRIGger:A:SETHold:HOLDTime
+Group: Search and Mark
+Arguments: <NR3> specifies the hold time setting in seconds. Positive values for hold time occur after the cloc
+Examples: 1
+--------------------------------------------------------------------------------
+Command: SEARCH:SEARCH<x>:TRIGger:A:SETHold:SETTime
+Group: Search and Mark
+Arguments: <NR3> specifies the setup time for setup and hold violation triggering. Commands listed in alphabeti
+Examples: 1
+--------------------------------------------------------------------------------
+Command: SEARCH:SEARCH<x>:TRIGger:A:STATE:CLOCk:SOUrce
+Group: Search and Mark
+Arguments: CH<x> specifies an input channel as the search source, where <x> = 1, 2, 3 or 4. MATH<x> specifies t
+Examples: 1
+--------------------------------------------------------------------------------
+Command: SEARCH:SEARCH<x>:TRIGger:A:TIMEOut:POLarity:CH<x>
+Group: Search and Mark
+Arguments: STAYSHigh specifies the polarity stays HIGH. STAYSLow specifies the polarity stays LOW. EITher speci
+Examples: 1
+--------------------------------------------------------------------------------
+Command: SEARCH:SEARCH<x>:TRIGger:A:TIMEOut:POLarity:MATH<x>
+Group: Search and Mark
+Arguments: STAYSHigh specifies the polarity stays HIGH. STAYSLow specifies the polarity stays LOW. EITher speci
+Examples: 1
+--------------------------------------------------------------------------------
+Command: SEARCH:SEARCH<x>:TRIGger:A:TIMEOut:POLarity:REF<x>
+Group: Search and Mark
+Arguments: STAYSHigh specifies the polarity stays HIGH. STAYSLow specifies the polarity stays LOW. EITher speci
+Examples: 1
+--------------------------------------------------------------------------------
+Command: SEARCH:SEARCH<x>:TRIGger:A:TIMEOut:TIMe
+Group: Search and Mark
+Arguments: <NR3> is the time in seconds.
+Examples: 1
+--------------------------------------------------------------------------------
+Command: SEARCH:SEARCH<x>:TRIGger:A:TRANsition:DELTATime
+Group: Search and Mark
+Arguments: <NR3> specifies the transition time in seconds.
+Examples: 1
+--------------------------------------------------------------------------------
+Command: SEARCH:SEARCH<x>:TRIGger:A:TRANsition:POLarity:CH<x>
+Group: Search and Mark
+Arguments: EITher specifies either positive or negative polarity. NEGative specifies that a pulse edge must tra
+Examples: 1
+--------------------------------------------------------------------------------
+Command: SEARCH:SEARCH<x>:TRIGger:A:TRANsition:POLarity:MATH<x>
+Group: Search and Mark
+Arguments: EITher specifies either positive or negative polarity. NEGative specifies that a pulse edge must tra
+Examples: 1
+--------------------------------------------------------------------------------
+Command: SEARCH:SEARCH<x>:TRIGger:A:TRANsition:POLarity:REF<x>
+Group: Search and Mark
+Arguments: EITher specifies either positive or negative polarity. NEGative specifies that a pulse edge must tra
+Examples: 1
+--------------------------------------------------------------------------------
+Command: SEARCH:SEARCH<x>:TRIGger:A:TRANsition:THReshold:HIGH:CH<x>
+Group: Search and Mark
+Arguments: <NR3> specifies the HIGH threshold in volts.
+Examples: 1
+--------------------------------------------------------------------------------
+Command: SEARCH:SEARCH<x>:TRIGger:A:TRANsition:THReshold:HIGH:MATH<x>
+Group: Search and Mark
+Arguments: <NR3> specifies the HIGH threshold in volts.
+Examples: 1
+--------------------------------------------------------------------------------
+Command: SEARCH:SEARCH<x>:TRIGger:A:TRANsition:THReshold:HIGH:REF<x>
+Group: Search and Mark
+Arguments: <NR3> specifies the HIGH threshold in volts. Commands listed in alphabetical order
+Examples: 1
+--------------------------------------------------------------------------------
+Command: SEARCH:SEARCH<x>:TRIGger:A:TRANsition:THReshold:LOW:CH<x>
+Group: Search and Mark
+Arguments: <NR3> specifies the LOW threshold in volts.
+Examples: 1
+--------------------------------------------------------------------------------
+Command: SEARCH:SEARCH<x>:TRIGger:A:TRANsition:THReshold:LOW:MATH<x>
+Group: Search and Mark
+Arguments: <NR3> specifies the LOW threshold in volts.
+Examples: 1
+--------------------------------------------------------------------------------
+Command: SEARCH:SEARCH<x>:TRIGger:A:TRANsition:THReshold:LOW:REF<x>
+Group: Search and Mark
+Arguments: <NR3> specifies the LOW threshold in volts.
+Examples: 1
+--------------------------------------------------------------------------------
+Command: SEARCH:SEARCH<x>:TRIGger:A:WIDth:HIGHLimit
+Group: Search and Mark
+Arguments: <NR3> specifies the upper time limit in seconds.
+Examples: 1
+--------------------------------------------------------------------------------
+Command: SEARCH:SEARCH<x>:TRIGger:A:WIDth:LOWLimit
+Group: Search and Mark
+Arguments: <NR3> specifies the lower time limit in seconds.
+Examples: 1
+--------------------------------------------------------------------------------
+Command: SEARCH:SEARCH<x>:TRIGger:A:WIDth:POLarity:CH<x>
+Group: Search and Mark
+Arguments: NEGAtive specifies a negative polarity. POSITIVe specifies a positive polarity.
+Examples: 1
+--------------------------------------------------------------------------------
+Command: SEARCH:SEARCH<x>:TRIGger:A:WIDth:POLarity:MATH<x>
+Group: Search and Mark
+Arguments: NEGAtive specifies a negative polarity. POSITIVe specifies a positive polarity.
+Examples: 1
+--------------------------------------------------------------------------------
+Command: SEARCH:SEARCH<x>:TRIGger:A:WIDth:POLarity:REF<x>
+Group: Search and Mark
+Arguments: NEGAtive specifies a negative polarity. POSITIVe specifies a positive polarity.
+Examples: 1
+--------------------------------------------------------------------------------
+Command: SEARCH:SEARCH<x>:TRIGger:A:WINdow:EVENT
+Group: Search and Mark
+Arguments: OUTSIDEGreater specifies a trigger event when the signal leaves the window defined by the threshold 
+Examples: 1
+--------------------------------------------------------------------------------
+Command: SEARCH:SEARCH<x>:TRIGger:A:WINdow:THReshold:HIGH:CH<x>
+Group: Search and Mark
+Arguments: <NR3> specifies the HIGH threshold level.
+Examples: 1
+--------------------------------------------------------------------------------
+Command: SEARCH:SEARCH<x>:TRIGger:A:WINdow:THReshold:HIGH:MATH<x>
+Group: Search and Mark
+Arguments: <NR3> specifies the HIGH threshold level.
+Examples: 1
+--------------------------------------------------------------------------------
+Command: SEARCH:SEARCH<x>:TRIGger:A:WINdow:THReshold:HIGH:REF<x>
+Group: Search and Mark
+Arguments: <NR3> specifies the HIGH threshold level. Commands listed in alphabetical order
+Examples: 1
+--------------------------------------------------------------------------------
+Command: SEARCH:SEARCH<x>:TRIGger:A:WINdow:THReshold:LOW:CH<x>
+Group: Search and Mark
+Arguments: <NR3> specifies the LOW threshold level.
+Examples: 1
+--------------------------------------------------------------------------------
+Command: SEARCH:SEARCH<x>:TRIGger:A:WINdow:THReshold:LOW:MATH<x>
+Group: Search and Mark
+Arguments: <NR3> specifies the LOW threshold level.
+Examples: 1
+--------------------------------------------------------------------------------
+Command: SEARCH:SEARCH<x>:TRIGger:A:WINdow:THReshold:LOW:REF<x>
+Group: Search and Mark
+Arguments: <NR3> specifies the LOW threshold level.
+Examples: 1
+--------------------------------------------------------------------------------
+Command: SEARCH:SEARCH<x>:TRIGger:A:WINdow:WIDth
+Group: Search and Mark
+Arguments: <NR3> specifies the minimum width in seconds. ECL specifies a preset high level of -1.3 V and TTL sp
+Examples: 1
+--------------------------------------------------------------------------------
+Command: MASK:COPy:USER
+Group: Mask
+Arguments: 
+Examples: 1
+--------------------------------------------------------------------------------
+Command: MASK:MASKPRE:PATTERNBITS
+Group: Mask
+Arguments: <NR1> is an integer that sets the number of bits.
+Examples: 1
+--------------------------------------------------------------------------------
+Command: MASK:SEG<m>:POINTS
+Group: Mask
+Arguments: <NR3> refers to the coordinates of one of the vertices in the Current mask. Each pair of numbers rep
+Examples: 1
+--------------------------------------------------------------------------------
+Command: MASK:TESt:DELay
+Group: Mask
+Arguments: <NR3> is a floating point number that specifies the amount of time in seconds, to delay the start of
+Examples: 1
+--------------------------------------------------------------------------------
+Command: MASK:TESt:SAMple
+Group: Mask
+Arguments: <NR1> the number of points to sample.
+Examples: 1
+--------------------------------------------------------------------------------
+Command: MASK:USER:PATTERNBITS
+Group: Mask
+Arguments: <NR1> is an integer that sets the number of bits.
+Examples: 1
+--------------------------------------------------------------------------------
+Command: MASK:USER:SEG<m>:POINTS
+Group: Mask
+Arguments: <NR3> refers to the coordinates of one of the vertices in the user mask. Each pair of numbers repres
+Examples: 1
+--------------------------------------------------------------------------------
+Command: MASK:USER:WIDth
+Group: Mask
+Arguments: <NR3> is a floating point number that sets the nominal bit width in seconds. This is the time of one
+Examples: 1
+--------------------------------------------------------------------------------
+Command: MATHVAR:VAR<x>
+Group: Math
+Arguments: <NR3> specifies the numerical value to be stored in location x <1 through 8>. <QString> quoted strin
+Examples: 1
+--------------------------------------------------------------------------------
+Command: MEASUrement:STATIstics:WEIghting
+Group: Measurement
+Arguments: <NR1> is the time constant for the mean and standard deviation statistical accumulations. <QString> 
+Examples: 1
+--------------------------------------------------------------------------------
+Command: SAVEON:FILE:COUNt
+Group: Save On
+Arguments: <NR3> specifies the starting number for automatically incrementing the file name.
+Examples: 1
+--------------------------------------------------------------------------------
+Command: SAVEON:FILE:DEST
+Group: Save On
+Arguments: <string> specifies the location to store files.
+Examples: 1
+--------------------------------------------------------------------------------
+Command: SAVEON:FILE:NAME
+Group: Save On
+Arguments: <string> is the file name you want to use.
+Examples: 1
+--------------------------------------------------------------------------------
+Command: SAVEON:NUMEvents
+Group: Save On
+Arguments: <NR3> specifies the number of events that will be saved before a reset is required.
+Examples: 1
+--------------------------------------------------------------------------------
+Command: TRIGger:A:BUS:CAN:CONDition
+Group: Low Speed Serial Trigger
+Arguments: Arguments are the available trigger conditions.
+Examples: 1
+--------------------------------------------------------------------------------
+Command: TRIGger:A:BUS:FLEXRAY:FRAMEType
+Group: Low Speed Serial Trigger
+Arguments: Argument are the available frame types.
+Examples: 1
+--------------------------------------------------------------------------------
+Command: TRIGger:A:BUS:LIN:DATa:VALue
+Group: Low Speed Serial Trigger
+Arguments: <string> specifies the data value.
+Examples: 1
+--------------------------------------------------------------------------------
+Command: TRIGger:A:BUS:SPI:DATa:SIZe
+Group: Low Speed Serial Trigger
+Arguments: <NR3> specifies the number of contiguous data bytes to trigger on.
+Examples: 1
+--------------------------------------------------------------------------------
+Command: TRIGger:A:BUS:USB:ADDress:VALue
+Group: Low Speed Serial Trigger
+Arguments: <string> specifies the data value in the specified valid format (binary, hex, or symbolic).
+Examples: 1
+--------------------------------------------------------------------------------
+Command: TRIGger:A:BUS:USB:ENDPoint:HIVALue
+Group: Low Speed Serial Trigger
+Arguments: <string> specifies the endpoint value in the specified valid format (binary, hex, or symbolic).
+Examples: 1
+--------------------------------------------------------------------------------
+Command: TRIGger:A:BUS:USB:ENDPoint:VALue
+Group: Low Speed Serial Trigger
+Arguments: <string> specifies the data value in the specified valid format (binary, hex, or symbolic).
+Examples: 1
+--------------------------------------------------------------------------------
+Command: TRIGger:A:BUS:USB:SPECIALType
+Group: Low Speed Serial Trigger
+Arguments: ANY specifies Any (XX00) PID value. ERR specifies ERR (1100) PID value. PING specifies PING (0100) P
+Examples: 1
+--------------------------------------------------------------------------------
+Command: TRIGger:A:BUS:USB:SPLIT:HUB:VALue
+Group: Low Speed Serial Trigger
+Arguments: <string> specifies the hub address in the specified valid format.
+Examples: 1
+--------------------------------------------------------------------------------
+Command: TRIGger:A:CAN:DATa:LEVel
+Group: Low Speed Serial Trigger
+Arguments: <NR3> specifies the CAN trigger data level. The level can be ±12.0 divisions.
+Examples: 1
+--------------------------------------------------------------------------------
+Command: TRIGger:A:CAN:DATa:SOUrce
+Group: Low Speed Serial Trigger
+Arguments: CH<x> specifies the source for the CAN trigger. x can be 1, 2, 3, or 4.
+Examples: 1
+--------------------------------------------------------------------------------
+Command: TRIGger:A:I2C:ADDRess:TYPe
+Group: Low Speed Serial Trigger
+Arguments: GENERALCALL specifies a generalcall address type. STARTBYTE specifies a startbyte address type. TENB
+Examples: 1
+--------------------------------------------------------------------------------
+Command: TRIGger:A:I2C:ADDRess:VALue
+Group: Low Speed Serial Trigger
+Arguments: <QString> is up to 7 bits or 10 bits depending on the address mode that specifies the address.
+Examples: 1
+--------------------------------------------------------------------------------
+Command: TRIGger:A:RS232:BAUd
+Group: Low Speed Serial Trigger
+Arguments: <x> specifies the baud rate for RS232 triggering. X can be: 1500000, 921600. 750000, 460800, 115200,
+Examples: 1
+--------------------------------------------------------------------------------
+Command: TRIGger:A:SPI:DATa:MISO:VALue
+Group: Low Speed Serial Trigger
+Arguments: <QString> specifies the binary data string for the SPI data. You can specify up to 32 bits.
+Examples: 1
+--------------------------------------------------------------------------------
+Command: TRIGger:A:SPI:DATa:MOSI:VALue
+Group: Low Speed Serial Trigger
+Arguments: <QString> specifies the binary data string for the SPI data. You can specify up to 32 bits.
+Examples: 1
+--------------------------------------------------------------------------------
+Command: TRIGger:A:SPI:DATa:STARt
+Group: Low Speed Serial Trigger
+Arguments: <NR3> specifies the SPI start byte data. The data can range from 0 to 216–1.
+Examples: 1
+--------------------------------------------------------------------------------
+Command: TRIGger:A:SPI:SCLK:LEVel
+Group: Low Speed Serial Trigger
+Arguments: <NR3> specifies the SPI trigger SCLK threshold.
+Examples: 1
+--------------------------------------------------------------------------------
+Command: TRIGger:A:SPI:SCLK:SOUrce
+Group: Low Speed Serial Trigger
+Arguments: CH<x> specifies the SPI SCLK source. x can be 1, 2, 3, or 4.
+Examples: 1
+--------------------------------------------------------------------------------
+Command: TRIGger:A:SPI:SS:LEVel
+Group: Low Speed Serial Trigger
+Arguments: <NR3> specifies the threshold for the SPI trigger SS line. The threshold range is ±5.0.
+Examples: 1
+--------------------------------------------------------------------------------
+Command: TRIGger:A:SPI:SS:SOUrce
+Group: Low Speed Serial Trigger
+Arguments: CH<x> specifies the source for the SPI SS signal. x can be 1, 2, 3, or 4.
+Examples: 1
+--------------------------------------------------------------------------------
+Command: ZOOm:ZOOM<x>:<wfm>:VERTical:SCAle
+Group: Zoom
+Arguments: <NR3> is the amount of vertical expansion or compression, which operates on a 1-2-5 sequence (for ex
+Examples: 1
+--------------------------------------------------------------------------------

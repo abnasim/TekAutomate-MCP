@@ -1,0 +1,88 @@
+{
+  "_comment": "Template for commands that support both SET and QUERY operations. For query-only commands, see COMMAND_JSON_TEMPLATE_QUERY_ONLY_EXAMPLE.json",
+  "scpi": "COMMAND:HEADER<x>:SUBCMD",
+  "description": "Full description of what this command does. This should be a complete sentence explaining the command's purpose and behavior.",
+  "conditions": "Optional: Any conditions or requirements (e.g., 'Requires option SR-AUDIO') or null",
+  "group": "GroupName",
+  "syntax": [
+    "COMMAND:HEADER<x>:SUBCMD  <NR1> COMMAND:HEADER<x>:SUBCMD?"
+  ],
+  "relatedCommands": null,
+  "arguments": "Detailed description of arguments. For example:\nHEADER<x> is the header number.\n<NR1> specifies the numeric value.",
+  "examples": [
+    {
+      "scpi": "COMMAND:HEADER1:SUBCMD 10",
+      "description": "Description of what this example does."
+    },
+    {
+      "scpi": "COMMAND:HEADER1:SUBCMD?",
+      "description": "Description of what this query returns."
+    }
+  ],
+  "returns": null,
+  "shortDescription": "Short description (first part of description, typically 80-100 characters)",
+  "notes": [],
+  "name": "CommandName",
+  "params": [
+    {
+      "name": "header",
+      "type": "integer",
+      "required": true,
+      "default": 1,
+      "min": 1,
+      "max": 8,
+      "description": "HEADER<x> where x is the header number (1-8)"
+    },
+    {
+      "name": "value",
+      "type": "number",
+      "required": true,
+      "default": 1,
+      "description": "Numeric value"
+    }
+  ],
+  "example": "COMMAND:HEADER1:SUBCMD 10",
+  "_manualEntry": {
+    "command": "COMMAND:HEADER<x>:SUBCMD",
+    "header": "COMMAND:HEADER<x>:SUBCMD",
+    "mnemonics": [
+      "COMMAND",
+      "HEADER<x>",
+      "SUBCMD"
+    ],
+    "commandType": "both",
+    "description": "Full description of what this command does.",
+    "shortDescription": "Short description",
+    "arguments": null,
+    "examples": [
+      {
+        "description": "Description of what this example does.",
+        "codeExamples": {
+          "scpi": {
+            "code": "COMMAND:HEADER1:SUBCMD 10"
+          }
+        }
+      },
+      {
+        "description": "Description of what this query returns.",
+        "codeExamples": {
+          "scpi": {
+            "code": "COMMAND:HEADER1:SUBCMD?"
+          }
+        }
+      }
+    ],
+    "relatedCommands": [],
+    "commandGroup": "GroupName",
+    "syntax": {
+      "set": "COMMAND:HEADER<x>:SUBCMD  <NR1>",
+      "query": "COMMAND:HEADER<x>:SUBCMD?"
+    },
+    "manualReference": {
+      "section": "GroupName"
+    },
+    "notes": []
+  }
+}
+
+

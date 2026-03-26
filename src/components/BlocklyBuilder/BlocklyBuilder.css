@@ -1,0 +1,174 @@
+/* Blockly Builder Custom Styles */
+
+/* Thin scrollbars for modern browsers */
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+::-webkit-scrollbar-thumb {
+  background: #c1c1c1;
+  border-radius: 3px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: #a1a1a1;
+}
+
+/* Firefox thin scrollbars */
+* {
+  scrollbar-width: thin;
+  scrollbar-color: #c1c1c1 transparent;
+}
+
+/* ONLY remove the scrollbar, keep the background */
+.blocklyFlyoutScrollbar {
+  display: none !important;
+  visibility: hidden !important;
+}
+
+/* Keep the flyout background for visibility, but ensure it hides properly */
+.blocklyFlyoutBackground {
+  opacity: 0.95 !important;
+  transition: opacity 0.2s ease-in-out;
+}
+
+/* When flyout is hidden, hide the background too */
+.blocklyFlyout.blocklyHidden .blocklyFlyoutBackground {
+  display: none !important;
+  opacity: 0 !important;
+}
+
+/* Ensure flyout closes properly and doesn't stick around */
+.blocklyFlyout {
+  transition: transform 0.2s ease-in-out, opacity 0.2s ease-in-out;
+}
+
+/* Hidden flyout should be completely invisible and non-interactive */
+.blocklyFlyout.blocklyHidden {
+  display: none !important;
+  opacity: 0 !important;
+  pointer-events: none !important;
+  transform: translateX(-100%) !important;
+}
+
+/* Hide only the scrollbar elements, not the background */
+.blocklyFlyout .blocklyScrollbarVertical,
+.blocklyFlyout .blocklyScrollbarHorizontal {
+  display: none !important;
+}
+
+/* Ensure toolbox flyout is positioned correctly */
+.blocklyToolboxDiv {
+  z-index: 10;
+}
+
+/* Blockly toolbar: scroll horizontally with near-invisible scrollbar */
+.blockly-toolbar-scroll {
+  overflow-x: auto;
+  overflow-y: hidden;
+  white-space: nowrap;
+  -webkit-overflow-scrolling: touch;
+  overscroll-behavior-x: contain;
+  touch-action: pan-x;
+  scrollbar-width: thin;
+}
+.blockly-toolbar-scroll::-webkit-scrollbar {
+  height: 6px;
+}
+.blockly-toolbar-scroll::-webkit-scrollbar-track {
+  background: transparent;
+}
+.blockly-toolbar-scroll::-webkit-scrollbar-thumb {
+  background: rgba(100, 116, 139, 0.45);
+  border-radius: 9999px;
+}
+
+/* Make sure workspace is interactive */
+.blocklyWorkspace {
+  z-index: 1;
+}
+
+/* Light mode: soft gray workspace instead of white (lower contrast) */
+.blockly-workspace-container {
+  background-color: #f3f4f6 !important;
+}
+.blocklyMainBackground {
+  fill: #f3f4f6 !important;
+}
+.blocklyCanvas {
+  background-color: #f3f4f6 !important;
+}
+
+/* Dark mode: workspace slightly lighter than header (gray-600) for lower contrast */
+.dark .blockly-workspace-container {
+  background-color: #4b5563 !important;
+}
+.dark .blocklyMainBackground {
+  fill: #4b5563 !important;
+}
+.dark .blocklyCanvas {
+  background-color: #4b5563 !important;
+}
+.dark .blocklyScrollbarHandle {
+  fill: #6b7280 !important;
+}
+.dark .blocklyScrollbarBackground {
+  fill: #374151 !important;
+}
+/* Toolbox (left sidebar) dark */
+.dark .blocklyToolboxDiv {
+  background-color: #374151 !important;
+}
+.dark .blocklyTreeRow {
+  color: #e5e7eb !important;
+}
+.dark .blocklyTreeRow:hover {
+  background-color: #4b5563 !important;
+}
+.dark .blocklyFlyoutBackground {
+  fill: #374151 !important;
+}
+
+/* Dark mode: inline text editor (widgetdiv) – avoid black bar, ensure readable text */
+.dark .blocklyWidgetDiv,
+.dark .blocklyWidgetDiv .blocklyHtmlInput {
+  background-color: #374151 !important;
+  color: #e5e7eb !important;
+  border-color: #4b5563 !important;
+}
+.dark .blocklyWidgetDiv textarea,
+.dark .blocklyWidgetDiv input {
+  background-color: #374151 !important;
+  color: #e5e7eb !important;
+  border-color: #4b5563 !important;
+}
+
+/* Device context labels in blocks */
+.blocklyText[data-device-context] {
+  font-weight: 600;
+}
+
+/* Smooth color transitions for device context changes */
+.blocklyPath {
+  transition: fill 0.2s ease-in-out, stroke 0.2s ease-in-out;
+}
+
+/* While AI Builder modal is open, keep Blockly chrome behind it and non-interactive. */
+body.ai-builder-open .blocklyToolboxDiv,
+body.ai-builder-open .blocklyFlyout,
+body.ai-builder-open .blocklyDropDownDiv,
+body.ai-builder-open .blocklyWidgetDiv {
+  pointer-events: none !important;
+}
+
+/* Fully hide toolbox/flyout while AI modal is open so it never appears in front/highlighted. */
+body.ai-builder-open .blocklyToolboxDiv,
+body.ai-builder-open .blocklyFlyout,
+body.ai-builder-open .blocklyTreeRoot {
+  visibility: hidden !important;
+}

@@ -1,0 +1,62 @@
+{
+  "_comment": "Example of Query-Only Command - Use this structure for commands that can only be queried (no set form)",
+  "_description": "Template for commands that can only be queried (no set form). These commands should have commandType: 'query' and syntax should only contain query form.",
+  
+  "scpi": "COMMAND:QUERYONLY?",
+  "description": "This query-only command returns [description of what it returns]. This should explicitly state 'query-only' in the description.",
+  "conditions": null,
+  "group": "GroupName",
+  "syntax": [
+    "COMMAND:QUERYONLY?"
+  ],
+  "relatedCommands": null,
+  "arguments": null,
+  "examples": [
+    {
+      "scpi": "COMMAND:QUERYONLY?",
+      "description": "Description of what this query returns."
+    }
+  ],
+  "returns": "Description of return value format",
+  "shortDescription": "Short description (first part of description, typically 80-100 characters)",
+  "notes": [],
+  "name": "QueryOnlyCommand",
+  "params": [],
+  "example": "COMMAND:QUERYONLY?",
+  "_manualEntry": {
+    "command": "COMMAND:QUERYONLY?",
+    "header": "COMMAND:QUERYONLY",
+    "mnemonics": [
+      "COMMAND",
+      "QUERYONLY"
+    ],
+    "commandType": "query",
+    "description": "This query-only command returns [description of what it returns].",
+    "shortDescription": "Short description",
+    "arguments": null,
+    "examples": [
+      {
+        "description": "Description of what this query returns.",
+        "codeExamples": {
+          "scpi": {
+            "code": "COMMAND:QUERYONLY?"
+          }
+        }
+      }
+    ],
+    "relatedCommands": [],
+    "commandGroup": "GroupName",
+    "syntax": {
+      "query": "COMMAND:QUERYONLY?"
+    },
+    "manualReference": {
+      "section": "GroupName"
+    },
+    "notes": []
+  }
+}
+
+
+
+
+

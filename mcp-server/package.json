@@ -1,0 +1,24 @@
+{
+  "name": "tekautomate-mcp-server",
+  "private": true,
+  "version": "0.1.0",
+  "type": "module",
+  "scripts": {
+    "start": "tsx src/index.ts",
+    "dev": "tsx src/index.ts",
+    "eval:router": "tsx tests/router_smoke.ts",
+    "eval:comprehensive": "tsx tests/comprehensive_smoke.ts",
+    "eval:levels": "tsx tests/level_benchmark.ts",
+    "eval:quality": "tsx tests/quality_comparison.ts",
+    "eval:final-compare": "tsx tests/final_case_compare.ts",
+    "verify:command-groups": "tsx tests/verify_command_groups.ts"
+  },
+  "dependencies": {
+    "dotenv": "^17.3.1",
+    "ts-node": "^10.9.2",
+    "tsx": "^4.20.5"
+  },
+  "devDependencies": {
+    "vitest": "^4.1.1"
+  }
+}

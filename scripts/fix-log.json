@@ -1,0 +1,17 @@
+{
+  "timestamp": "2026-02-03T01:02:40.018Z",
+  "stats": {
+    "filesProcessed": 2,
+    "commandsFixed": 1,
+    "fixesByType": {
+      "add_string_param": 1
+    }
+  },
+  "fixes": [
+    {
+      "scpi": "TRIGger:A:BUS:ETHERnet:MAC:ADDRess:SOUrce:VALue",
+      "type": "add_string_param",
+      "description": "Added missing string parameter: address"
+    }
+  ]
+}

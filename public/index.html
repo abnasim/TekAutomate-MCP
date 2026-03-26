@@ -1,0 +1,19 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <script>
+      (function() {
+        var saved = localStorage.getItem('tekautomate_dark');
+        var dark = saved === 'true' || (saved === null && window.matchMedia('(prefers-color-scheme: dark)').matches);
+        if (dark) document.documentElement.classList.add('dark');
+      })();
+    </script>
+    <title>TekAutomate</title>
+    <link rel="icon" type="image/png" href="%PUBLIC_URL%/favicon.png" />
+  </head>
+  <body>
+    <div id="root"></div>
+  </body>
+</html>

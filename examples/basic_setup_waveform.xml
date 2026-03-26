@@ -1,0 +1,65 @@
+<xml xmlns="https://developers.google.com/blockly/xml">
+  <variables></variables>
+
+  <block type="connect_scope" id="c1" x="20" y="20">
+    <mutation show_advanced="false" current_backend="pyvisa" current_dev_type="SCOPE" current_conn_type="INSTR" host="192.168.1.100"></mutation>
+    <field name="DEVICE_NAME">scope</field>
+    <field name="BACKEND">pyvisa</field>
+    <next>
+      <block type="set_device_context" id="ctx1">
+        <mutation device="scope"></mutation>
+        <field name="DEVICE">scope</field>
+        <next>
+          <block type="enable_channel" id="ch1_en">
+            <field name="CHANNEL">CH1</field>
+            <field name="STATE">ON</field>
+            <next>
+              <block type="configure_channel" id="ch1_cfg">
+                <field name="CHANNEL">CH1</field>
+                <field name="SCALE">1.0</field>
+                <field name="OFFSET">0.0</field>
+                <field name="COUPLING">DC</field>
+                <field name="TERMINATION">ONEMEG</field>
+                <next>
+                  <block type="scpi_write" id="hor_scale">
+                    <field name="DEVICE_CONTEXT">(scope)</field>
+                    <field name="COMMAND">HORizontal:SCAle 1e-6</field>
+                    <next>
+                      <block type="acquisition_reset" id="acq_rst">
+                        <field name="DEVICE_CONTEXT">(scope)</field>
+                        <next>
+                          <block type="single_acquisition" id="acq_single">
+                            <next>
+                              <block type="wait_for_opc" id="opc1">
+                                <field name="DEVICE_CONTEXT">(scope)</field>
+                                <field name="TIMEOUT">10</field>
+                                <next>
+                                  <block type="save_waveform" id="save_wf1">
+                                    <mutation></mutation>
+                                    <field name="DEVICE_CONTEXT">(scope)</field>
+                                    <field name="SOURCE">CH1</field>
+                                    <field name="FILENAME">ch1.csv</field>
+                                    <field name="FORMAT">CSV</field>
+                                    <next>
+                                      <block type="disconnect" id="d1">
+                                        <field name="DEVICE_CONTEXT">(scope)</field>
+                                      </block>
+                                    </next>
+                                  </block>
+                                </next>
+                              </block>
+                            </next>
+                          </block>
+                        </next>
+                      </block>
+                    </next>
+                  </block>
+                </next>
+              </block>
+            </next>
+          </block>
+        </next>
+      </block>
+    </next>
+  </block>
+</xml>

@@ -1,0 +1,216 @@
+Legacy oscilloscope commands
+Legacy oscilloscope command New command alias
+:SV:SV<n>:UNIts :SV:CH<n>:UNIts
+:BUS:B<n>:AUDio:FRAMESync:SOUrce :BUS:B<n>:AUDio:WORDSel:SOUrce
+:BUS:B<n>:AUDio:FRAMESync:POLarity :BUS:B<n>:AUDio:WORDSel:POLarity
+:BUS:B<n>:AUTOETHERnet:SOUrce:DIFFerential :BUS:B<n>:AUTOETHERnet:SOUrce
+:BUS:B<n>:AUTOETHERnet:LOWerthreshold :BUS:B<n>:AUTOETHERnet:LOWTHRESHold
+:BUS:B<n>:CAN:BITRate:VALue :BUS:B<n>:CAN:BITRate:CUSTom
+:BUS:B<n>:CAN:FD:BITRate:VALue :BUS:B<n>:CAN:FD:BITRate:CUSTom
+:MEASUrement:MEAS<n>:EDGEQUALifier :MEASUrement:MEAS<n>:SOUrce<n>
+:MEASUrement:MEAS<n>:ACQTime :MEASUrement:MEAS<n>:WAITTime
+:BUS:B<n>:ETHERnet:SOUrce:DIFFerential :BUS:B<n>:ETHERnet:SOUrce
+:BUS:B<n>:ETHERnet:LOWerthreshold :BUS:B<n>:ETHERnet:LOWTHRESHold
+:BUS:B<n>:THReshold :BUS:B<n>:FLEXray:THRESHold
+:BUS:B<n>:LOWerthreshold :BUS:B<n>:FLEXray:LOWTHRESHold
+:DPOJET:GATing :MEASUrement:MEAS<n>:GATing
+:BUS:B<n>:I2C:SCLk:SOUrce :BUS:B<n>:I2C:CLOCk:SOUrce
+:BUS:B<n>:I2C:ADDRess:RWINClude :BUS:B<n>:I2C:DATa:SOUrce
+:BUS:B<n>:I3C:SCLk:SOUrce :BUS:B<n>:I3C:CLOCk:SOUrce
+:BUS:B<n>:I3C:SDAta:SOUrce :BUS:B<n>:I3C:DATa:SOUrce
+Table continued…
+Getting Started
+12
+Legacy oscilloscope command New command alias
+:MEASUrement:MEAS<n>:FUNDAMENTALFreq :MEASUrement:MEAS<n>:FREQ
+:BUS:B<n>:LIN:VALue :BUS:B<n>:LIN:BITRate:CUSTom
+:MATH:MATH<n>:SPECTral:UNWRap :MATH:MATH<n>:SPECTral:WRAP:STATE
+:MATH:MATH<n>:SPECTral:UNWRap:DEGrees :MATH:MATH<n>:SPECTral:WRAP:DEGrees
+:BUS:B<n>:MDIO:SCLOCk:SOUrce :BUS:B<n>:MDIO:CLOCk:SOUrce
+:BUS:B<n>:MDIO:SDATA:SOUrce :BUS:B<n>:MDIO:DATA:SOUrce
+:DPOJET:DIRacmodel :MEASUrement:DIRacmodel
+:DPOJET:JITTermodel :MEASUrement:JITTermodel
+:DPOJET:MINBUJUI :MEASUrement:MINUI
+:DPOJET:INTERp :MEASUrement:INTERp
+:BUS:B<n>:MIL1553B:LOWerthreshold :BUS:B<n>:MIL1553B:LOWTHRESHold
+:DPOJET:PLOT<n>:SPECtrum:HORizontal:SCALE :PLOT:PLOT<n>:SPECtrum:HORizontal:SCALE
+:DPOJET:PLOT<n>:SPECtrum:BASE :PLOT:PLOT<n>:SPECtrum:BASE
+:DPOJET:PLOT<n>:BATHtub:BER :PLOT:PLOT<n>:BATHtub:BER
+:BUS:B<n>:RS232C:TX:SOUrce :BUS:B<n>:RS232C:SOUrce
+:BUS:B<n>:RS232C:TX:SOUrce:THReshold :BUS:B<n>:RS232C:SOUrce:THReshold
+:SEARCH:SEARCH<n>:TRIGger:A:WINdow:POLarity :SEARCH:SEARCH<n>:TRIGger:A:WINdow:CROSSIng
+:BUS:B<n>:SPACEWIRe:SDAta:SOUrce :BUS:B<n>:SPACEWIRe:DATa:SOUrce
+:BUS:B<n>:SPACEWIRe:SSTRobe:SOUrce :BUS:B<n>:SPACEWIRe:STRobe:SOUrce
+:BUS:B<n>:SPI:SCLk:SOUrce :BUS:B<n>:SPI:CLOCk:SOUrce
+:BUS:B<n>:SPI:MOSi:INPut :BUS:B<n>:SPI:DATa:SOUrce
+:BUS:B<n>:SPI:SS:SOUrce :BUS:B<n>:SPI:SELect:SOUrce
+:BUS:B<n>:SPI:MOSi:THReshold :BUS:B<n>:SPI:DATa:THReshold
+:BUS:B<n>:SPI:SCLk:POLarity :BUS:B<n>:SPI:CLOCk:POLarity
+:BUS:B<n>:SPI:MOSi:DATa:POLarity :BUS:B<n>:SPI:DATa:POLarity
+:BUS:B<n>:SPI:SS:POLarity :BUS:B<n>:SPI:SELect:POLarity
+:TRIGger:A|B:BUS:B<n>:SPI:DATa:IN:VALue :TRIGger:A|B:BUS:B<n>:SPI:DATa:VALue
+:TRIGger:A|B:BUS:B<n>:SPI:DATa:MISO:VALue
+:TRIGger:A|B:BUS:B<n>:SPI:DATa:OUT:VALue
+:TRIGger:A|B:BUS:B<n>:SPI:DATa:MOSI:VALue
+:BUS:B<n>:SPMI:SCLk:SOUrce :BUS:B<n>:SPMI:SCLk:SOUrce
+:BUS:B<n>:SPMI:SDAta:SOUrce :BUS:B<n>:SPMI:SDATa:SOUrce
+:MEASUrement:MEAS<n>:DELay:DIREction :MEASUrement:MEAS<n>:TOEDGESEARCHDIRec
+:BUS:B<n>:USB:SOUrce:DIFFerential :BUS:B<n>:USB:SOUrce
+:BUS:B<n>:USB:LOWerthreshold :BUS:B<n>:USB:LOWTHRESHold
+:TRIGger:A|B:BUS:B<n>:USB:QUAlifier :TRIGger:A|B:BUS:B<n>:USB:DATa:QUAlifier
+:MATH:MATH<n>:POSITION :DISplay:WAVEView<n>:MATH:MATH<n>:VERTical:POSition
+Table continued…
+Getting Started
+4/5/6 Series MSO Programmer Manual (MSO4XB, MSO5XB, MSO58LP, MSO6XB, LPD64) 13
+Legacy oscilloscope command New command alias
+:MATH:MATH<n>:SCAle :DISplay:WAVEView<n>:MATH:MATH<n>:VERTical:SCAle
+:REF:REF<n>:POSITION :DISplay:WAVEView<n>:REF:REF<n>:VERTical:POSition
+:REF:REF<n>:SCAle :DISplay:WAVEView<n>:REF:REF<n>:VERTical:SCAle
+:HORizontal:FASTframe:SELECTED:REF<n> :DISplay:WAVEView<n>:REF:REF<n>:FRAMe
+:CURSor:VBArs:POSITIONB :DISplay:WAVEView<n>:CURSor:CURSOR:VBArs:BPOSition
+:CURSor:VBArs:POSB
+:CURSor:HBArs:POSITIONA :DISplay:WAVEView<n>:CURSor:CURSOR:HBArs:APOSition
+:CURSor:HBArs:POSITIONB :DISplay:WAVEView<n>:CURSor:CURSOR:HBArs:BPOSition
+:CURSor:SCREEN:XPOSITIONA :DISplay:WAVEView<n>:CURSor:CURSOR:SCREEN:AXPOSition
+:CURSor:SCREEN:XPOSITIONB :DISplay:WAVEView<n>:CURSor:CURSOR:SCREEN:BXPOSition
+:CURSor:SCREEN:YPOSITIONA :DISplay:WAVEView<n>:CURSor:CURSOR:SCREEN:AYPOSition
+:CURSor:SCREEN:YPOSITIONB :DISplay:WAVEView<n>:CURSor:CURSOR:SCREEN:BYPOSition
+:CURSor:WAVEform:POSITIONA :DISplay:WAVEView<n>:CURSor:CURSOR:WAVEform:APOSition
+:CURSor:WAVEform:POSITIONB :DISplay:WAVEView<n>:CURSor:CURSOR:WAVEform:BPOSition
+:CURSor:SOURCEA :DISplay:WAVEView<n>:CURSor:CURSOR:ASOUrce
+:CURSor:SOURCEB :DISplay:WAVEView<n>:CURSor:CURSOR:BSOUrce
+:CURSor:VBArs:UNIts :DISplay:WAVEView<n>:CURSor:CURSOR:VBArs:UNIts
+:CURSor:HBArs:UNITA :DISplay:WAVEView<n>:CURSor:CURSOR:HBArs:AUNIts
+:CURSor:HBArs:UNITA :DISplay:WAVEView<n>:CURSor:CURSOR:HBArs:AUNIts
+:CURSor:HBArs:UNIts
+:CURSor:HBArs:UNITB :DISplay:WAVEView<n>:CURSor:CURSOR:HBArs:BUNIts
+:CURSor:VBArs:ALTERNATEA :DISplay:WAVEView<n>:CURSor:CURSOR:VBArs:ALTERNATEA
+:CURSor:VBArs:ALTERNATEB :DISplay:WAVEView<n>:CURSor:CURSOR:VBArs:ALTERNATEB
+:CURSor:VBArs:DELTa :DISplay:WAVEView<n>:CURSor:CURSOR:VBArs:DELTa
+:CURSor:WAVEform:HDELTa :DISplay:WAVEView<n>:CURSor:CURSOR:HBArs:DELTa
+:CURSor:HBArs:DELTa
+:CURSor:WAVEform:VDELTa :DISplay:WAVEView<n>:CURSor:CURSOR:VBArs:DELTa
+:CURSor:HBArs:DELTa
+:CURSor:DDT :DISplay:WAVEView<n>:CURSor:CURSOR:DDT
+:CURSor:ONEOVERDELTATVALUE :DISplay:WAVEView<n>:CURSor:CURSOR:ONEOVERDELTATVAL
+UE
+:CURSor:FUNCtion :DISplay:WAVEView<n>:CURSor:CURSOR:FUNCtion
+:CURSor:STATE :DISplay:WAVEView<n>:CURSor:CURSOR:STATE
+:CURSor:CURSOR:STATE
+:CURSor:MODe :DISplay:WAVEView<n>:CURSor:CURSOR:MODe
+:BUS:B<n>:POSition :DISplay:WAVEView<n>:BUS:B<n>:VERTical:POSition
+Table continued…
+Getting Started
+14
+Legacy oscilloscope command New command alias
+:ZOOm:HORizontal:POSition :DISplay:WAVEView<n>:ZOOM:ZOOM<n>:HORizontal:POSition
+:ZOOm:ZOOM<n>:HORizontal:POSition
+:ZOOm:HORizontal:SCALe :DISplay:WAVEView<n>:ZOOM:ZOOM<n>:HORizontal:SCALe
+:ZOOm:ZOOM<n>:HORizontal:SCALe
+:ZOOm:VERTical:POSition :DISplay:WAVEView<n>:ZOOM:ZOOM<n>:VERTical:POSition
+:ZOOm:ZOOM<n>:VERTical:POSition
+:ZOOm:VERTical:SCALe :DISplay:WAVEView<n>:ZOOM:ZOOM<n>:VERTical:SCALe
+:ZOOm:ZOOM<n>:VERTical:SCALe
+:ZOOm:STATe :DISplay:WAVEView<n>:ZOOM:ZOOM<n>:STATe
+:ZOOm:ZOOM<n>:STATe
+:FASTAcq:PALEtte :ACQuire:FASTAcq:PALEtte
+:BUS:B<n>:STATE :DISplay:GLObal:B<n>:STATE
+CH1:STATE DISplay:GLObal:CH1:STATE
+:MATH:MATH<n>:STATE :DISplay:GLObal:MATH<n>:STATE
+:REF:REF<n>:STATE :DISplay:GLObal:REF<n>:STATE
+:REM:REM<n>:STATE :DISplay:GLObal:REM<n>:STATE
+:PLOT:PLOT<n>:STATE :DISplay:GLObal:PLOT<n>:STATE
+:DISplay:INTENSITy:WAVEform(:ANALYsis|:FASTAcq) :DISplay:WAVEView<n>:INTENSITy:WAVEform
+:DISplay:INTENSITy:GRATicule :DISplay:WAVEView<n>:INTENSITy:GRATicule
+:DISplay:STYle :DISplay:WAVEView<n>:STYle
+:DISplay:GRAticule :DISplay:WAVEView<n>:GRAticule
+:DISplay:FILTer :DISplay:WAVEView<n>:FILTer
+:DISplay:VIEWStyle :DISplay:WAVEView<n>:VIEWStyle
+:HORizontal:DELay:POSition :HORizontal:POSition
+:HORizontal:MAIn:POSition
+:HORizontal:DELay:POSition
+:HORizontal:MODe:SCAle :HORizontal:SCAle
+:HORizontal:SECdiv
+:HORizontal:MAIn:SCAle
+:HORizontal:MAIn:SECdiv
+:HORizontal:DELay:SCAle
+:HORizontal:DELay:SECdiv
+:HORizontal:MAIn:UNIts:STRing :HORizontal:MAIn:UNIts
+:HORizontal:DELay:STATE :HORizontal:DELay:MODe
+:HORizontal:MAIn:DELay:MODe
+:HORizontal:DELay:TIMe(:RUNSAfter|:TRIGAfter) :HORizontal:DELay:TIMe
+:HORizontal:MAIn:DELay:TIMe
+Table continued…
+Getting Started
+4/5/6 Series MSO Programmer Manual (MSO4XB, MSO5XB, MSO58LP, MSO6XB, LPD64) 15
+Legacy oscilloscope command New command alias
+:CH1:VOLTS CH1:SCAle
+:HORizontal:MODe:SAMPLERate :HORizontal:SAMPLERate
+:HORizontal:MAIn:SAMPLERate
+:HORizontal:DIGital:SAMPLERate
+:HORizontal:DIGital:SAMPLERate:MAIn
+:HORizontal:MODe:RECOrdlength :HORizontal:RECOrdlengt
+:HORizontal:RESOlution
+:HORizontal:DIGital:RECOrdlength
+:HORizontal:DIGital:RECOrdlength:MAIn
+:HORizontal:ACQLENGTH
+:FASTAcq:STATE :ACQuire:FASTAcq:STATE
+:SAVEON:WAVEform:FILEFormat :SAVEONEVent:WAVEform:FILEFormat
+:SAVEON:WAVEform:SOURce :SAVEONEVent:WAVEform:SOUrce
+:SAVEON:IMAGe:FILEFormat :SAVEONEVent:IMAGe:FILEFormat
+:SAVEON:FILE:NAME :SAVEONEVent:FILEName
+:SAVEON:FILE:NAME :SAVEONEVent:FILEName
+:TRIGger:A|B:PULse:WIDth:WHEn :TRIGger:A|B:PULSEWidth:WHEn
+:TRIGger:A|B:PULse:WIDth:POLarity :TRIGger:A|B:PULSEWidth:POLarity
+:TRIGger:A|B:PULse:WIDth:HIGHLimit :TRIGger:A|B:PULSEWidth:HIGHLimit
+:TRIGger:A|B:PULse:WIDth:LOWLimit :TRIGger:A|B:PULSEWidth:LOWLimit
+:TRIGger:A|B:PULSEWidth:WIDth
+:TRIGger:A|B:PULse:WIDth:LOWLimit :TRIGger:A|B:PULSEWidth:LOWLimit
+:TRIGger:A|B:VIDeo:SYNC :TRIGger:A|B:VIDeo:FIELD
+:TRIGger:A|B:PULse:RUNT:WHEn :TRIGger:A|B:RUNT:WHEn
+:TRIGger:A|B:PULse:RUNT:POLarity :TRIGger:A|B:RUNT:POLarity
+:TRIGger:A|B:PULse:RUNT:WIDth :TRIGger:A|B:RUNT:WIDth
+:TRIGger:A|B:PULse:TIMEOut:POLarity :TRIGger:A|B:TIMEOut:POLarity
+:TRIGger:A|B:PULse:TIMEOut:TIMe :TRIGger:A|B:TIMEOut:TIMe
+:TRIGger:A|B:RISEFall:SOUrce :TRIGger:A|B:TRANsition:SOUrce
+:TRIGger:A|B:RISEFall:WHEn :TRIGger:A|B:TRANsition:WHEn
+:TRIGger:A|B:PULse:TRANsition:WHEn
+:TRIGger:A|B:RISEFall:POLarity :TRIGger:A|B:TRANsition:POLarity
+:TRIGger:A|B:PULse:TRANsition:POLarity
+:TRIGger:A|B:RISEFall:DELTatime :TRIGger:A|B:TRANsition:DELTatime
+:TRIGger:A|B:PULse:TRANsition:DELTatime
+:TRIGger:A|B:WINdow:POLarity :TRIGger:A|B:WINdow:CROSSIng
+:TRIGger:A|B:PULse:WINdow:POLarity
+Table continued…
+Getting Started
+16
+Legacy oscilloscope command New command alias
+:TRIGger:A|B:PULse:WINdow:WIDth :TRIGger:A|B:WINdow:WIDth
+:TRIGger:A|B:LOGIc:SETHold:CLOCk:SOUrce :TRIGger:A|B:SETHold:CLOCk:SOUrce
+:TRIGger:A|B:LOGIc:SETHold:CLOCk:EDGE :TRIGger:A|B:SETHold:CLOCk:EDGE
+:TRIGger:A|B:LOGIc:SETHold:SETTime :TRIGger:A|B:SETHold:SETTime
+:TRIGger:A|B:LOGIc:SETHold:HOLDTime :TRIGger:A|B:SETHold:HOLDTime
+:TRIGger:A|B:LOGIc:PATtern:WHEn :TRIGger:A|B:LOGIc:WHEn
+:TRIGger:A|B:LOGIc:PATtern:DELTatime :TRIGger:A|B:LOGIc:DELTatime
+:TRIGger:A|B:LOGIc:STATE:CLOck:SOUrce :TRIGger:A|B:LOGIc:INPut:CLOCk:SOUrce
+:TRIGger:A|B:LOGIc:INPut:CLOCk:EDGE :TRIGger:A|B:LOGIc:POLarity
+:TRIGger:B:RESET:SOUrce :TRIGger:B:RESET:EDGE:SOUrce
+:TRIGger:B:RESET:TIMEOut:TIMe :TRIGger:B:RESET:EDGE:LEVel
+:TRIGger:B:RESET:TIMEOut :TRIGger:B:RESET:TIMEOut:TIMe
+:TRIGger:A|B:BUS:B<n>:AUTOETHERnet:QUALifier :TRIGger:A|B:BUS:B<n>:AUTOETHERnet:QUALifier
+:TRIGger:A|B:BUS:B<n>:AUTOETHERnet:MAC:TYPe:VALue :TRIGger:A|B:BUS:B<n>:AUTOETHERnet:MAC:LENgth:VALue
+:TRIGger:A|B:BUS:B<n>:AUTOETHERnet:MAC:TYPe:HIVALue :TRIGger:A|B:BUS:B<n>:AUTOETHERnet:MAC:LENgth:HIVALue
+:TRIGger:A|B:BUS:B<n>:CAN:ADDRess:MODe :TRIGger:A|B:BUS:B<n>:CAN:IDentifier:MODe
+:TRIGger:A|B:BUS:B<n>:CAN:ADDRess:VALue :TRIGger:A|B:BUS:B<n>:CAN:IDentifier:VALue
+:TRIGger:A|B:BUS:B<n>:ETHERnet:QUALifier :TRIGger:A|B:BUS:B<n>:ETHERnet:DATa:QUALifie
+:TRIGger:A|B:BUS:B<n>:ETHERnet:MAC:TYPe:VALue :TRIGger:A|B:BUS:B<n>:ETHERnet:MAC:LENgth:VALue
+:TRIGger:A|B:BUS:B<n>:ETHERnet:MAC:TYPe:HIVALue :TRIGger:A|B:BUS:B<n>:ETHERnet:MAC:LENgth:HIVALue
+:TRIGger:A|B:BUS:B<n>:EUSB:QUAlifier :TRIGger:A|B:BUS:B<n>:EUSB:DATa:QUAlifier
+:TRIGger:A|B:BUS:B<n>:EUSB:EOP:QUAlifier :TRIGger:A|B:BUS:B<n>:EUSB:EOP:QUAlifier
+:TRIGger:A|B:BUS:B<n>:EUSB:SYNC:QUAlifier :TRIGger:A|B:BUS:B<n>:EUSB:SYNC:QUAlifier
+:TRIGger:A|B:BUS:B<n>:PARallel:VALue :TRIGger:A|B:BUS:B<n>:PARallel:DATa:VALue
+:TRIGger:A|B:BUS:B<n>:RS232C:RX:DATa:VALue :TRIGger:A|B:BUS:B<n>:RS232C:DATa:VALue
+:TRIGger:A|B:BUS:B<n>:RS232C:RX:DATa:VALue :TRIGger:A|B:BUS:B<n>:RS232C:DATa:VALue
+:TRIGger:A|B:BUS:B<n>:RS232C:RX:DATa:SIZe :TRIGger:A|B:BUS:B<n>:RS232C:DATa:SIZe
+Getting Started
+4/5/6 Series MSO Programmer Manual (MSO4XB, MSO5XB, MSO58LP, MSO6XB, LPD64)

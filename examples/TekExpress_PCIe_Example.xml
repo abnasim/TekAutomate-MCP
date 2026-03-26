@@ -1,0 +1,129 @@
+<xml xmlns="https://developers.google.com/blockly/xml">
+  <variables>
+    <variable>state</variable>
+    <variable>popup_info</variable>
+    <variable>popup_log</variable>
+  </variables>
+
+  <!-- Connect to TekExpress -->
+  <block type="connect_tekexpress" id="connect_tx" x="20" y="20">
+    <field name="DEVICE_NAME">tekexp</field>
+    <field name="HOST">localhost</field>
+    <field name="PORT">5000</field>
+    <field name="TIMEOUT">30000</field>
+    <next>
+
+      <!-- Set DUT ID -->
+      <block type="tekexp_write" id="set_dutid">
+        <field name="COMMAND">TEKEXP:VALUE DUTID,"Test DUTID"</field>
+        <next>
+
+          <!-- Select Device: CEM -->
+          <block type="tekexp_select_device" id="select_device">
+            <field name="DEVICE">CEM</field>
+            <next>
+
+              <!-- Select Suite: Add-In-Card -->
+              <block type="tekexp_write" id="select_suite">
+                <field name="COMMAND">TEKEXP:SELECT SUITE,"Add-In-Card"</field>
+                <next>
+
+                  <!-- Select Version: Gen1 - 1.1 -->
+                  <block type="tekexp_write" id="select_version">
+                    <field name="COMMAND">TEKEXP:SELECT VERSION,"Gen1 - 1.1"</field>
+                    <next>
+
+                      <!-- Set Signal Validation to Turn Off -->
+                      <block type="tekexp_set_value" id="set_signal_val">
+                        <field name="CATEGORY">GENERAL</field>
+                        <field name="PARAMETER">Signal Validation</field>
+                        <field name="VALUE">Turn Off Signal Check</field>
+                        <next>
+
+                          <!-- Deselect all tests first -->
+                          <block type="tekexp_select_test" id="deselect_all">
+                            <field name="TEST">ALL</field>
+                            <field name="SELECTED">FALSE</field>
+                            <next>
+
+                              <!-- Wait for deselection to complete -->
+                              <block type="wait_seconds" id="wait_deselect">
+                                <field name="SECONDS">2</field>
+                                <next>
+
+                                  <!-- Select Unit Interval Gen1 test -->
+                                  <block type="tekexp_select_test" id="select_test">
+                                    <field name="TEST">Unit Interval Gen1</field>
+                                    <field name="SELECTED">TRUE</field>
+                                    <next>
+
+                                      <!-- Wait for selection -->
+                                      <block type="wait_seconds" id="wait_select">
+                                        <field name="SECONDS">2</field>
+                                        <next>
+
+                                          <!-- Run TekExpress -->
+                                          <block type="tekexp_run" id="run_tx">
+                                            <next>
+
+                                              <!-- Wait for completion (handles RUNNING/WAIT/ERROR states) -->
+                                              <block type="tekexp_wait_state" id="wait_complete">
+                                                <field name="EXPECTED">COMPLETE</field>
+                                                <field name="POLL_INTERVAL">2</field>
+                                                <field name="TIMEOUT">3600</field>
+                                                <field name="HANDLE_POPUP">TRUE</field>
+                                                <field name="POPUP_RESPONSE">OK</field>
+                                                <field name="LOG_VARIABLE">popup_log</field>
+                                                <next>
+
+                                                  <!-- Generate Report and Copy Images -->
+                                                  <block type="tekexp_export_report" id="export_report">
+                                                    <field name="GENERATE_REPORT">TRUE</field>
+                                                    <field name="COPY_IMAGES">TRUE</field>
+                                                    <field name="DESTINATION">C:/Test_PCI_Results</field>
+                                                    <next>
+
+                                                      <!-- Disconnect -->
+                                                      <block type="disconnect" id="disconnect_tx">
+                                                        <field name="DEVICE_NAME">tekexp</field>
+                                                      </block>
+
+                                                    </next>
+                                                  </block>
+
+                                                </next>
+                                              </block>
+
+                                            </next>
+                                          </block>
+
+                                        </next>
+                                      </block>
+
+                                    </next>
+                                  </block>
+
+                                </next>
+                              </block>
+
+                            </next>
+                          </block>
+
+                        </next>
+                      </block>
+
+                    </next>
+                  </block>
+
+                </next>
+              </block>
+
+            </next>
+          </block>
+
+        </next>
+      </block>
+
+    </next>
+  </block>
+</xml>

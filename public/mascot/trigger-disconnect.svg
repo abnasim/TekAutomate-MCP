@@ -1,0 +1,411 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="-25 -20 300 270" width="300" height="270">
+  <defs>
+    <clipPath id="screenClip">
+      <rect x="18" y="38" width="158" height="88" rx="2"/>
+    </clipPath>
+    <filter id="glow">
+      <feGaussianBlur stdDeviation="1.5" result="coloredBlur"/>
+      <feMerge>
+        <feMergeNode in="coloredBlur"/>
+        <feMergeNode in="SourceGraphic"/>
+      </feMerge>
+    </filter>
+    <linearGradient id="metal-grad" x1="0%" y1="0%" x2="0%" y2="100%">
+      <stop offset="0%" stop-color="#fff"/>
+      <stop offset="100%" stop-color="#ccc"/>
+    </linearGradient>
+    <linearGradient id="fire-grad" x1="0%" y1="0%" x2="0%" y2="100%">
+      <stop offset="0%" stop-color="#ff8844"/> 
+      <stop offset="100%" stop-color="#ff4400" stop-opacity="0"/>
+    </linearGradient>
+  </defs>
+
+  <style>
+    /* Unstable hover - worried wobble */
+    .hover-body { animation: hoverWorry 1.8s ease-in-out infinite; }
+    @keyframes hoverWorry {
+      0%, 100% { transform: translateY(0px) rotate(0deg); } 
+      25% { transform: translateY(-2px) rotate(-0.5deg); }
+      50% { transform: translateY(-3px) rotate(0deg); }
+      75% { transform: translateY(-1px) rotate(0.5deg); }
+    }
+
+    /* Thrusters flickering - unstable */
+    .flame { animation: thrustFlicker 0.3s ease-in-out infinite alternate; transform-origin: center top; }
+    @keyframes thrustFlicker {
+      0% { transform: scaleY(0.5); opacity: 0.2; }
+      50% { transform: scaleY(1.0); opacity: 0.6; }
+      100% { transform: scaleY(0.7); opacity: 0.4; }
+    }
+
+    .handle { 
+      animation: handleShake 1.5s ease-in-out infinite; 
+      transform-origin: 120px 28px;
+    }
+    @keyframes handleShake {
+      0%, 100% { transform: translateY(0); }
+      25% { transform: translateY(1px); }
+      75% { transform: translateY(-1px); }
+    }
+
+    /* Left arm reaching out - trying to reconnect */
+    .left-arm-assembly { 
+      animation: reachLeft 2s ease-in-out infinite; 
+      transform-origin: 0px 70px;
+    }
+    @keyframes reachLeft {
+      0%, 100% { transform: rotate(-5deg); }
+      50% { transform: rotate(-15deg); }
+    }
+
+    /* Right arm - probe dangling loose */
+    .right-arm-assembly { 
+      animation: armDangle 2s ease-in-out infinite; 
+      transform-origin: 37px 146px;
+    }
+    @keyframes armDangle {
+      0%, 100% { transform: translate(37px, 146px) rotate(8deg); }
+      50% { transform: translate(37px, 146px) rotate(12deg); }
+    }
+
+    /* Claws worried movement */
+    .left-claw-L, .left-claw-R {
+      animation: clawReach 2s ease-in-out infinite;
+      transform-origin: center;
+    }
+    @keyframes clawReach {
+      0%, 100% { transform: translateY(0) rotate(0deg); }
+      50% { transform: translateY(-2px) rotate(-3deg); }
+    }
+
+    .right-claw-L, .right-claw-R {
+      animation: clawDangle 2s ease-in-out infinite;
+      transform-origin: center;
+    }
+    @keyframes clawDangle {
+      0%, 100% { transform: translateY(0); }
+      50% { transform: translateY(3px); }
+    }
+
+    .grid-line {
+      stroke: #201510;
+      stroke-width: 0.7;
+      opacity: 0.3;
+    }
+
+    /* Worried eyes - looking at disconnected wire */
+    .worry-eye {
+      fill: #ffaa44;
+      filter: url(#glow);
+    }
+    .eye-group {
+      animation: eyeWorry 2s ease-in-out infinite;
+    }
+    @keyframes eyeWorry {
+      0%, 100% { transform: translateY(0); }
+      50% { transform: translateY(2px); }
+    }
+
+    /* Eyebrows - worried angle */
+    .worry-brow {
+      fill: none;
+      stroke: #ffaa44;
+      stroke-width: 2;
+      stroke-linecap: round;
+      filter: url(#glow);
+    }
+
+    /* Broken link icon */
+    .broken-link {
+      fill: none;
+      stroke: #ff6644;
+      stroke-width: 2;
+      stroke-linecap: round;
+      filter: url(#glow);
+    }
+    .link-break {
+      animation: breakPulse 1s ease-in-out infinite;
+    }
+    @keyframes breakPulse {
+      0%, 100% { opacity: 1; }
+      50% { opacity: 0.4; }
+    }
+
+    /* Signal lost waves */
+    .signal-wave {
+      fill: none;
+      stroke: #ff8855;
+      stroke-width: 1.5;
+      opacity: 0;
+      animation: signalFade 2s ease-out infinite;
+    }
+    .wave1 { animation-delay: 0s; }
+    .wave2 { animation-delay: 0.5s; }
+    .wave3 { animation-delay: 1s; }
+    @keyframes signalFade {
+      0% { transform: scale(0.5); opacity: 0.8; }
+      100% { transform: scale(1.5); opacity: 0; }
+    }
+
+    /* Disconnect text */
+    .disc-text {
+      font-family: "Courier New", monospace;
+      font-size: 7px;
+      fill: #ff6644;
+      animation: textBlink 0.8s ease-in-out infinite;
+    }
+    @keyframes textBlink {
+      0%, 100% { opacity: 1; }
+      50% { opacity: 0.4; }
+    }
+
+    /* Warning indicator */
+    .warning-indicator {
+      fill: #ff4422;
+      filter: url(#glow);
+      animation: warnPulse 0.6s ease-in-out infinite;
+    }
+    @keyframes warnPulse {
+      0%, 100% { opacity: 0.6; transform: scale(1); }
+      50% { opacity: 1; transform: scale(1.1); }
+    }
+
+    /* Probe wire - disconnected, dangling */
+    .probe-wire {
+      fill: none;
+      stroke: #222;
+      stroke-width: 3;
+      stroke-linecap: round;
+    }
+    .wire-disconnected {
+      stroke-dasharray: 8 4;
+      animation: wireDash 0.5s linear infinite;
+    }
+    @keyframes wireDash {
+      0% { stroke-dashoffset: 0; }
+      100% { stroke-dashoffset: 12; }
+    }
+
+    /* CH1 LED warning */
+    .ch1-warn {
+      animation: ch1Warn 0.5s ease-in-out infinite;
+    }
+    @keyframes ch1Warn {
+      0%, 100% { stroke: #ff4400; }
+      50% { stroke: #ff8800; }
+    }
+
+    /* Handle bar warning color */
+    .handle-bar-warn {
+      animation: handleWarn 1s ease-in-out infinite;
+    }
+    @keyframes handleWarn {
+      0%, 100% { fill: #dd6600; }
+      50% { fill: #ff8800; }
+    }
+  </style>
+
+  <g class="hover-body">
+    <!-- Thruster flames - flickering orange -->
+    <path class="flame" d="M 38 168 L 52 168 L 45 188 Z" fill="url(#fire-grad)"/>
+    <path class="flame" d="M 188 168 L 202 168 L 195 188 Z" fill="url(#fire-grad)"/>
+
+    <!-- HANDLE -->
+    <g class="handle">
+      <path d="M 12 28 L 12 5 Q 12 -2 19 -2 L 30 -2" fill="none" stroke="#a0a0a0" stroke-width="5" stroke-linecap="round"/>
+      <path d="M 228 28 L 228 5 Q 228 -2 221 -2 L 210 -2" fill="none" stroke="#a0a0a0" stroke-width="5" stroke-linecap="round"/>
+      <rect class="handle-bar-code" x="30" y="-5" width="180" height="7" rx="3.5"/>
+    </g>
+    
+    <!-- Main body -->
+    <rect x="8" y="28" width="224" height="120" rx="5" fill="#f8f8f8" stroke="#c0c0c0" stroke-width="1"/>
+
+    <!-- Black bezel -->
+    <rect x="12" y="32" width="180" height="104" rx="3" fill="#1a1a1a"/>
+    
+    <!-- Tektronix branding -->
+    <text x="16" y="36" font-family="Arial" font-size="5" font-weight="bold" fill="#777" letter-spacing="0.5">Tektronix</text>
+    <text x="140" y="36" font-family="Arial" font-size="3.5" fill="#ff6644">DISCONNECTED</text>
+    
+    <!-- Screen frame -->
+    <rect x="18" y="38" width="158" height="88" rx="2" fill="#0a0805"/>
+
+    <!-- Screen content -->
+    <g clip-path="url(#screenClip)">
+      <!-- Grid - orangeish tint -->
+      <g>
+        <line class="grid-line" x1="18" y1="58" x2="176" y2="58"/>
+        <line class="grid-line" x1="18" y1="78" x2="176" y2="78"/>
+        <line class="grid-line" x1="18" y1="98" x2="176" y2="98"/>
+        <line class="grid-line" x1="18" y1="118" x2="176" y2="118"/>
+        <line class="grid-line" x1="46" y1="38" x2="46" y2="126"/>
+        <line class="grid-line" x1="74" y1="38" x2="74" y2="126"/>
+        <line class="grid-line" x1="102" y1="38" x2="102" y2="126"/>
+        <line class="grid-line" x1="130" y1="38" x2="130" y2="126"/>
+        <line class="grid-line" x1="158" y1="38" x2="158" y2="126"/>
+      </g>
+
+      <!-- Worried eyes -->
+      <g class="eye-group" transform="translate(0, 3)">
+        <ellipse class="worry-eye" cx="72" cy="70" rx="9" ry="11"/>
+        <ellipse class="worry-eye" cx="122" cy="70" rx="9" ry="11"/>
+        <!-- Pupils looking down/right at wire -->
+        <circle cx="75" cy="73" r="4" fill="#0a0805"/>
+        <circle cx="125" cy="73" r="4" fill="#0a0805"/>
+        <!-- Highlights -->
+        <circle cx="74" cy="71" r="1.5" fill="#fff" opacity="0.5"/>
+        <circle cx="124" cy="71" r="1.5" fill="#fff" opacity="0.5"/>
+        
+        <!-- Worried eyebrows - angled up in center -->
+        <path class="worry-brow" d="M 60 58 Q 72 62 84 60"/>
+        <path class="worry-brow" d="M 110 60 Q 122 62 134 58"/>
+      </g>
+
+      <!-- Broken link icon -->
+      <g class="link-break" transform="translate(85, 45)">
+        <!-- Left chain link -->
+        <path class="broken-link" d="M 0 8 L 6 8 Q 12 8 12 14 Q 12 20 6 20 L 0 20"/>
+        <!-- Right chain link - separated -->
+        <path class="broken-link" d="M 18 8 L 24 8 Q 30 8 30 14 Q 30 20 24 20 L 18 20"/>
+        <!-- Break marks -->
+        <line class="broken-link" x1="13" y1="10" x2="17" y2="6" stroke-width="1.5"/>
+        <line class="broken-link" x1="13" y1="18" x2="17" y2="22" stroke-width="1.5"/>
+      </g>
+
+      <!-- Signal lost waves emanating from center -->
+      <circle class="signal-wave wave1" cx="97" cy="58" r="8"/>
+      <circle class="signal-wave wave2" cx="97" cy="58" r="8"/>
+      <circle class="signal-wave wave3" cx="97" cy="58" r="8"/>
+
+      <!-- Disconnect status -->
+      <text x="55" y="105" class="disc-text">CONNECTION LOST</text>
+
+      <!-- Warning triangle -->
+      <g transform="translate(137, 90)">
+        <polygon class="warning-indicator" points="10,0 20,18 0,18"/>
+        <text x="10" y="14" font-family="Arial" font-size="10" fill="#fff" text-anchor="middle" font-weight="bold">!</text>
+      </g>
+    </g>
+
+    <!-- Right side control panel -->
+    <rect x="194" y="32" width="36" height="104" rx="3" fill="#f0f0f0" stroke="#ccc" stroke-width="1"/>
+    
+    <!-- TRIGGER section -->
+    <rect x="197" y="35" width="30" height="7" rx="1" fill="#333"/>
+    <text x="212" y="40" font-family="Arial" font-size="4" fill="#f80" text-anchor="middle">TRIGGER</text>
+    
+    <!-- Top knob -->
+    <text x="212" y="48" font-family="Arial" font-size="3" fill="#555" text-anchor="middle">Level</text>
+    <circle cx="212" cy="56" r="7" fill="#e0e0e0" stroke="#999" stroke-width="1"/>
+    <circle cx="212" cy="56" r="2.5" fill="#888"/>
+    
+    <!-- VERTICAL section -->
+    <rect x="197" y="66" width="30" height="6" rx="1" fill="#444"/>
+    <text x="212" y="70.5" font-family="Arial" font-size="3.5" fill="#fff" text-anchor="middle">VERTICAL</text>
+    
+    <!-- Channel buttons -->
+    <circle cx="203" cy="80" r="4" fill="#222" stroke="#884400" stroke-width="2"/> 
+    <circle cx="221" cy="80" r="4" fill="#222" stroke="#006666" stroke-width="2"/> 
+    <circle cx="203" cy="92" r="4" fill="#222" stroke="#883333" stroke-width="2"/> 
+    <circle cx="221" cy="92" r="4" fill="#222" stroke="#554477" stroke-width="2"/>
+    
+    <!-- HORIZONTAL section -->
+    <rect x="197" y="100" width="30" height="6" rx="1" fill="#444"/>
+    <text x="212" y="104.5" font-family="Arial" font-size="3" fill="#fff" text-anchor="middle">HORIZONTAL</text>
+    
+    <!-- Bottom knob -->
+    <text x="212" y="112" font-family="Arial" font-size="3" fill="#555" text-anchor="middle">Scale</text>
+    <circle cx="212" cy="120" r="8" fill="#e0e0e0" stroke="#999" stroke-width="1"/>
+    <circle cx="212" cy="120" r="3" fill="#888"/>
+    
+    <!-- Function buttons -->
+    <rect x="197" y="130" width="14" height="5" rx="1" fill="#4a4"/>
+    <rect x="213" y="130" width="14" height="5" rx="1" fill="#48f"/>
+    
+    <!-- Bottom channel inputs bar -->
+    <rect x="8" y="138" width="224" height="16" rx="2" fill="#e8e8e8"/>
+    
+    <!-- CH1 - warning state -->
+    <g id="ch1-input" transform="translate(25, 140)">
+      <rect x="0" y="0" width="24" height="12" rx="2" fill="#3a3a3a"/>
+      <circle class="ch1-warn" cx="12" cy="6" r="5" fill="#222" stroke="#ff4400" stroke-width="2"/>
+    </g>
+    <!-- CH2 -->
+    <g transform="translate(60, 140)">
+      <rect x="0" y="0" width="24" height="12" rx="2" fill="#3a3a3a"/>
+      <circle cx="12" cy="6" r="5" fill="#222" stroke="#006666" stroke-width="2"/>
+    </g>
+    <!-- CH3 -->
+    <g transform="translate(95, 140)">
+      <rect x="0" y="0" width="24" height="12" rx="2" fill="#3a3a3a"/>
+      <circle cx="12" cy="6" r="5" fill="#222" stroke="#883333" stroke-width="2"/>
+    </g>
+    <!-- CH4 -->
+    <g transform="translate(130, 140)">
+      <rect x="0" y="0" width="24" height="12" rx="2" fill="#3a3a3a"/>
+      <circle cx="12" cy="6" r="5" fill="#222" stroke="#554477" stroke-width="2"/>
+    </g>
+    
+    <!-- Aux In -->
+    <circle cx="190" cy="146" r="4" fill="#222" stroke="#666" stroke-width="1"/>
+
+    <!-- Feet -->
+    <rect x="35" y="154" width="24" height="14" rx="3" fill="#f0f0f0" stroke="#c0c0c0" stroke-width="1"/>
+    <rect x="181" y="154" width="24" height="14" rx="3" fill="#f0f0f0" stroke="#c0c0c0" stroke-width="1"/>
+
+    <!-- Disconnected wire - ends at CH1 but breaks before reaching probe -->
+    <path class="probe-wire wire-disconnected" d="M 37 146 Q 70 155 100 165 Q 130 175 150 170" />
+    <!-- Wire end sparking effect -->
+    <g transform="translate(150, 168)">
+      <circle r="3" fill="#ff8844" opacity="0.6">
+        <animate attributeName="r" values="2;4;2" dur="0.5s" repeatCount="indefinite"/>
+        <animate attributeName="opacity" values="0.8;0.3;0.8" dur="0.5s" repeatCount="indefinite"/>
+      </circle>
+    </g>
+
+    <!-- Right arm assembly - dangling with loose wire -->
+    <g class="right-arm-assembly">
+      <!-- Short wire stub from probe - disconnected -->
+      <path class="probe-wire" d="M 205 8 Q 200 20 198 35" stroke-dasharray="4 3"/>
+
+      <!-- right arm in local coords -->
+      <g class="right-arm">
+        <circle cx="203" cy="-76" r="10" fill="#00aad2" stroke="#0088aa" stroke-width="1"/>
+        <rect x="195" y="-74" width="16" height="24" rx="4" fill="url(#metal-grad)" stroke="#999" stroke-width="1" transform="rotate(-8 203 -62)"/>
+        <rect x="197" y="-52" width="14" height="20" rx="3" fill="#fff" stroke="#999" stroke-width="1" transform="rotate(15 204 -42)"/>
+        <ellipse cx="205" cy="-30" rx="8" ry="5" fill="#e8e8e8" stroke="#999" stroke-width="1"/>
+        
+        <g class="right-claw-L">
+          <path d="M 199 -30 Q 192 -20 195 -10" fill="none" stroke="#e0e0e0" stroke-width="5" stroke-linecap="round"/>
+          <circle cx="195" cy="-10" r="4" fill="#2d5a5a"/>
+        </g>
+        <g class="right-claw-R">
+          <path d="M 211 -30 Q 218 -20 215 -10" fill="none" stroke="#e0e0e0" stroke-width="5" stroke-linecap="round"/>
+          <circle cx="215" cy="-10" r="4" fill="#2d5a5a"/>
+        </g>
+        
+        <!-- Probe body - dangling -->
+        <rect x="200" y="-26" width="10" height="30" rx="2" fill="#555"/>
+        <rect x="202" y="2" width="6" height="6" rx="1" fill="#333"/>
+        <line x1="205" y1="8" x2="205" y2="19" stroke="#aaa" stroke-width="2" stroke-linecap="round"/>
+      </g>
+    </g>
+
+    <!-- LEFT ARM - reaching out -->
+    <g class="left-arm-assembly">
+      <circle cx="0" cy="70" r="10" fill="#00aad2" stroke="#0088aa" stroke-width="1"/>
+      <rect x="-8" y="72" width="16" height="24" rx="4" fill="url(#metal-grad)" stroke="#999" stroke-width="1" transform="rotate(10 0 75)"/>
+      <rect x="-10" y="94" width="14" height="20" rx="3" fill="#fff" stroke="#999" stroke-width="1" transform="rotate(-12 -3 100)"/>
+      <ellipse cx="-2" cy="116" rx="8" ry="5" fill="#e8e8e8" stroke="#999" stroke-width="1"/>
+      
+      <g class="left-claw-L">
+        <path d="M -8 116 Q -15 126 -12 136" fill="none" stroke="#e0e0e0" stroke-width="5" stroke-linecap="round"/>
+        <circle cx="-12" cy="136" r="4" fill="#2d5a5a"/>
+      </g>
+      <g class="left-claw-R">
+        <path d="M 4 116 Q 11 126 8 136" fill="none" stroke="#e0e0e0" stroke-width="5" stroke-linecap="round"/>
+        <circle cx="8" cy="136" r="4" fill="#2d5a5a"/>
+      </g>
+    </g>
+  </g>
+</svg>

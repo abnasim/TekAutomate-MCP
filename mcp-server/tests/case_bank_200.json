@@ -1,0 +1,1829 @@
+[
+  {
+    "id": "GEN_001",
+    "level": "Level 1 - Basics",
+    "userMessage": "Put the scope back to factory default so I can start clean",
+    "difficulty": "easy",
+    "expectedBackend": "pyvisa",
+    "expectedDeviceType": "SCOPE",
+    "notes": "Factory reset on scope"
+  },
+  {
+    "id": "GEN_002",
+    "level": "Level 1 - Basics",
+    "userMessage": "Tell me what scope I'm connected to",
+    "difficulty": "easy",
+    "expectedBackend": "pyvisa",
+    "expectedDeviceType": "SCOPE",
+    "notes": "Instrument ID query"
+  },
+  {
+    "id": "GEN_003",
+    "level": "Level 1 - Basics",
+    "userMessage": "Turn channel 1 on and leave the others alone",
+    "difficulty": "easy",
+    "expectedBackend": "pyvisa",
+    "expectedDeviceType": "SCOPE",
+    "notes": "Simple channel enable"
+  },
+  {
+    "id": "GEN_004",
+    "level": "Level 1 - Basics",
+    "userMessage": "Hide channel 4 for me",
+    "difficulty": "easy",
+    "expectedBackend": "pyvisa",
+    "expectedDeviceType": "SCOPE",
+    "notes": "Simple channel disable"
+  },
+  {
+    "id": "GEN_005",
+    "level": "Level 1 - Basics",
+    "userMessage": "I'm probing a 3.3 volt digital line on CH1, make the vertical scale sensible",
+    "difficulty": "easy",
+    "expectedBackend": "pyvisa",
+    "expectedDeviceType": "SCOPE",
+    "notes": "Basic channel scale configuration from context"
+  },
+  {
+    "id": "GEN_006",
+    "level": "Level 1 - Basics",
+    "userMessage": "Move channel 2 down a couple divisions so it isn't on top of channel 1",
+    "difficulty": "easy",
+    "expectedBackend": "pyvisa",
+    "expectedDeviceType": "SCOPE",
+    "notes": "Channel position adjustment"
+  },
+  {
+    "id": "GEN_007",
+    "level": "Level 1 - Basics",
+    "userMessage": "Set CH3 to 50 ohms, this is a fast clock line",
+    "difficulty": "easy",
+    "expectedBackend": "pyvisa",
+    "expectedDeviceType": "SCOPE",
+    "notes": "Input termination configuration"
+  },
+  {
+    "id": "GEN_008",
+    "level": "Level 1 - Basics",
+    "userMessage": "Label channel 1 as Vcore",
+    "difficulty": "easy",
+    "expectedBackend": "pyvisa",
+    "expectedDeviceType": "SCOPE",
+    "notes": "Channel label setup"
+  },
+  {
+    "id": "GEN_009",
+    "level": "Level 1 - Basics",
+    "userMessage": "AC couple channel 2, I'm only interested in the ripple riding on it",
+    "difficulty": "easy",
+    "expectedBackend": "pyvisa",
+    "expectedDeviceType": "SCOPE",
+    "notes": "Coupling change to AC"
+  },
+  {
+    "id": "GEN_010",
+    "level": "Level 1 - Basics",
+    "userMessage": "Cap channel 1 bandwidth at 20 meg so the noise settles down",
+    "difficulty": "easy",
+    "expectedBackend": "pyvisa",
+    "expectedDeviceType": "SCOPE",
+    "notes": "Bandwidth limit configuration"
+  },
+  {
+    "id": "GEN_011",
+    "level": "Level 1 - Basics",
+    "userMessage": "Put channel 2 back on DC coupling",
+    "difficulty": "easy",
+    "expectedBackend": "pyvisa",
+    "expectedDeviceType": "SCOPE",
+    "notes": "Coupling change to DC"
+  },
+  {
+    "id": "GEN_012",
+    "level": "Level 1 - Basics",
+    "userMessage": "Set the timebase so I can see about 10 microseconds across the screen",
+    "difficulty": "easy",
+    "expectedBackend": "pyvisa",
+    "expectedDeviceType": "SCOPE",
+    "notes": "Horizontal scale configuration"
+  },
+  {
+    "id": "GEN_013",
+    "level": "Level 1 - Basics",
+    "userMessage": "Make channel 1 a little more sensitive, around half a volt per division should do it",
+    "difficulty": "easy",
+    "expectedBackend": "pyvisa",
+    "expectedDeviceType": "SCOPE",
+    "notes": "Direct vertical scale set"
+  },
+  {
+    "id": "GEN_014",
+    "level": "Level 1 - Basics",
+    "userMessage": "Zero out the offset on channel 3",
+    "difficulty": "easy",
+    "expectedBackend": "pyvisa",
+    "expectedDeviceType": "SCOPE",
+    "notes": "Channel offset reset"
+  },
+  {
+    "id": "GEN_015",
+    "level": "Level 1 - Basics",
+    "userMessage": "Turn on channel 1 and channel 2, I want to compare them side by side",
+    "difficulty": "easy",
+    "expectedBackend": "pyvisa",
+    "expectedDeviceType": "SCOPE",
+    "notes": "Multi-channel display enable"
+  },
+  {
+    "id": "GEN_016",
+    "level": "Level 1 - Basics",
+    "userMessage": "My signal is around 25 MHz, set the timebase so I see roughly five cycles",
+    "difficulty": "medium",
+    "expectedBackend": "pyvisa",
+    "expectedDeviceType": "SCOPE",
+    "notes": "Infer horizontal scale from frequency and desired cycles"
+  },
+  {
+    "id": "GEN_017",
+    "level": "Level 1 - Basics",
+    "userMessage": "Set bandwidth to match my probe",
+    "difficulty": "medium",
+    "expectedBackend": "pyvisa",
+    "expectedDeviceType": "SCOPE",
+    "notes": "Implicit probe-dependent configuration"
+  },
+  {
+    "id": "GEN_018",
+    "level": "Level 1 - Basics",
+    "userMessage": "Actually make that CH2 not CH1",
+    "difficulty": "medium",
+    "expectedBackend": "pyvisa",
+    "expectedDeviceType": "SCOPE",
+    "notes": "Context-dependent correction referencing prior state"
+  },
+  {
+    "id": "GEN_019",
+    "level": "Level 1 - Basics",
+    "userMessage": "Center this waveform on screen, it's sitting too high",
+    "difficulty": "medium",
+    "expectedBackend": "pyvisa",
+    "expectedDeviceType": "SCOPE",
+    "notes": "Imprecise request requiring position or offset adjustment"
+  },
+  {
+    "id": "GEN_020",
+    "level": "Level 1 - Basics",
+    "userMessage": "Set the trigger level",
+    "difficulty": "should_fail",
+    "expectedBackend": "pyvisa",
+    "expectedDeviceType": "SCOPE",
+    "notes": "Missing trigger source and level context"
+  },
+  {
+    "id": "GEN_021",
+    "level": "Level 2 - Measurements",
+    "userMessage": "I just want the frequency of whatever is on channel 1",
+    "difficulty": "easy",
+    "expectedBackend": "pyvisa",
+    "expectedDeviceType": "SCOPE",
+    "notes": "Add basic frequency measurement"
+  },
+  {
+    "id": "GEN_022",
+    "level": "Level 2 - Measurements",
+    "userMessage": "Measure peak to peak on CH2",
+    "difficulty": "easy",
+    "expectedBackend": "pyvisa",
+    "expectedDeviceType": "SCOPE",
+    "notes": "Add pk-to-pk measurement"
+  },
+  {
+    "id": "GEN_023",
+    "level": "Level 2 - Measurements",
+    "userMessage": "Give me the RMS value on channel 3",
+    "difficulty": "easy",
+    "expectedBackend": "pyvisa",
+    "expectedDeviceType": "SCOPE",
+    "notes": "Add RMS measurement"
+  },
+  {
+    "id": "GEN_024",
+    "level": "Level 2 - Measurements",
+    "userMessage": "Check the mean voltage on channel 1",
+    "difficulty": "easy",
+    "expectedBackend": "pyvisa",
+    "expectedDeviceType": "SCOPE",
+    "notes": "Add mean measurement"
+  },
+  {
+    "id": "GEN_025",
+    "level": "Level 2 - Measurements",
+    "userMessage": "Measure the period on my clock at CH4",
+    "difficulty": "easy",
+    "expectedBackend": "pyvisa",
+    "expectedDeviceType": "SCOPE",
+    "notes": "Add period measurement"
+  },
+  {
+    "id": "GEN_026",
+    "level": "Level 2 - Measurements",
+    "userMessage": "I need the rise time on channel 1",
+    "difficulty": "easy",
+    "expectedBackend": "pyvisa",
+    "expectedDeviceType": "SCOPE",
+    "notes": "Add rise time measurement"
+  },
+  {
+    "id": "GEN_027",
+    "level": "Level 2 - Measurements",
+    "userMessage": "How much overshoot do I have on CH2",
+    "difficulty": "easy",
+    "expectedBackend": "pyvisa",
+    "expectedDeviceType": "SCOPE",
+    "notes": "Add overshoot measurement"
+  },
+  {
+    "id": "GEN_028",
+    "level": "Level 2 - Measurements",
+    "userMessage": "Compare rise times between CH1 and CH3",
+    "difficulty": "easy",
+    "expectedBackend": "pyvisa",
+    "expectedDeviceType": "SCOPE",
+    "notes": "Multiple rise time measurements for comparison"
+  },
+  {
+    "id": "GEN_029",
+    "level": "Level 2 - Measurements",
+    "userMessage": "Measure propagation delay from clock on CH1 to data on CH2, rising edges",
+    "difficulty": "medium",
+    "expectedBackend": "pyvisa",
+    "expectedDeviceType": "SCOPE",
+    "notes": "Delay measurement between two channels with edge polarity"
+  },
+  {
+    "id": "GEN_030",
+    "level": "Level 2 - Measurements",
+    "userMessage": "Can you show both frequency and amplitude on channel 2",
+    "difficulty": "medium",
+    "expectedBackend": "pyvisa",
+    "expectedDeviceType": "SCOPE",
+    "notes": "Multiple measurements on same source"
+  },
+  {
+    "id": "GEN_031",
+    "level": "Level 2 - Measurements",
+    "userMessage": "Measure setup and hold between my clock on CH1 and data on CH2",
+    "difficulty": "hard",
+    "expectedBackend": "pyvisa",
+    "expectedDeviceType": "SCOPE",
+    "notes": "Timing measurements requiring two sources and measurement type selection"
+  },
+  {
+    "id": "GEN_032",
+    "level": "Level 2 - Measurements",
+    "userMessage": "I want the frequency result after the next single acquisition",
+    "difficulty": "medium",
+    "expectedBackend": "pyvisa",
+    "expectedDeviceType": "SCOPE",
+    "notes": "Single sequence with measurement readback and implied OPC sync"
+  },
+  {
+    "id": "GEN_033",
+    "level": "Level 2 - Measurements",
+    "userMessage": "Measure low level ripple on my 1.2 volt rail on CH1 using RMS",
+    "difficulty": "medium",
+    "expectedBackend": "pyvisa",
+    "expectedDeviceType": "SCOPE",
+    "notes": "Measurement with engineering context"
+  },
+  {
+    "id": "GEN_034",
+    "level": "Level 2 - Measurements",
+    "userMessage": "Add rise time and fall time on channel 4 and query the values",
+    "difficulty": "medium",
+    "expectedBackend": "pyvisa",
+    "expectedDeviceType": "SCOPE",
+    "notes": "Create measurements and fetch results"
+  },
+  {
+    "id": "GEN_035",
+    "level": "Level 2 - Measurements",
+    "userMessage": "I need pk to pk and mean on the math trace, not the raw input",
+    "difficulty": "medium",
+    "expectedBackend": "pyvisa",
+    "expectedDeviceType": "SCOPE",
+    "notes": "Measurements on non-channel source"
+  },
+  {
+    "id": "GEN_036",
+    "level": "Level 2 - Measurements",
+    "userMessage": "Set the top and base reference levels to 10 and 90 percent and then measure rise time on CH1",
+    "difficulty": "medium",
+    "expectedBackend": "pyvisa",
+    "expectedDeviceType": "SCOPE",
+    "notes": "Measurement reference configuration before measurement"
+  },
+  {
+    "id": "GEN_037",
+    "level": "Level 2 - Measurements",
+    "userMessage": "Tell me the minimum and maximum frequency seen over the next average acquisition",
+    "difficulty": "hard",
+    "expectedBackend": "pyvisa",
+    "expectedDeviceType": "SCOPE",
+    "notes": "Statistics or measurement result extraction over acquisition"
+  },
+  {
+    "id": "GEN_038",
+    "level": "Level 2 - Measurements",
+    "userMessage": "Measure pulse width on channel 2, it's a PWM around 200 kHz",
+    "difficulty": "medium",
+    "expectedBackend": "pyvisa",
+    "expectedDeviceType": "SCOPE",
+    "notes": "Width measurement with signal context"
+  },
+  {
+    "id": "GEN_039",
+    "level": "Level 2 - Measurements",
+    "userMessage": "Set up an eye diagram and measure eye height on this serial stream",
+    "difficulty": "hard",
+    "expectedBackend": "pyvisa",
+    "expectedDeviceType": "SCOPE",
+    "notes": "Eye diagram measurement workflow"
+  },
+  {
+    "id": "GEN_040",
+    "level": "Level 2 - Measurements",
+    "userMessage": "I need the delay from CH3 falling edge to CH4 rising edge",
+    "difficulty": "medium",
+    "expectedBackend": "pyvisa",
+    "expectedDeviceType": "SCOPE",
+    "notes": "Cross-edge delay measurement"
+  },
+  {
+    "id": "GEN_041",
+    "level": "Level 2 - Measurements",
+    "userMessage": "Measure duty cycle on channel 1 and keep updating it",
+    "difficulty": "medium",
+    "expectedBackend": "pyvisa",
+    "expectedDeviceType": "SCOPE",
+    "notes": "Continuous duty cycle measurement"
+  },
+  {
+    "id": "GEN_042",
+    "level": "Level 2 - Measurements",
+    "userMessage": "I need the waveform amplitude on CH1 after one clean single shot at 10M record length",
+    "difficulty": "hard",
+    "expectedBackend": "pyvisa",
+    "expectedDeviceType": "SCOPE",
+    "notes": "Single sequence, record length, and measurement readback"
+  },
+  {
+    "id": "GEN_043",
+    "level": "Level 2 - Measurements",
+    "userMessage": "Put frequency, period, and pk to pk on channel 1 all at once",
+    "difficulty": "medium",
+    "expectedBackend": "pyvisa",
+    "expectedDeviceType": "SCOPE",
+    "notes": "Multiple standard measurements"
+  },
+  {
+    "id": "GEN_044",
+    "level": "Level 2 - Measurements",
+    "userMessage": "Check the skew between CH1 and CH2 on the rising edges",
+    "difficulty": "medium",
+    "expectedBackend": "pyvisa",
+    "expectedDeviceType": "SCOPE",
+    "notes": "Timing/skew measurement variant"
+  },
+  {
+    "id": "GEN_045",
+    "level": "Level 2 - Measurements",
+    "userMessage": "Measure the thing from before again but only on the next capture",
+    "difficulty": "medium",
+    "expectedBackend": "pyvisa",
+    "expectedDeviceType": "SCOPE",
+    "notes": "Context-dependent repeated measurement request"
+  },
+  {
+    "id": "GEN_046",
+    "level": "Level 2 - Measurements",
+    "userMessage": "Set up measurement tracking for jitter histogram",
+    "difficulty": "hard",
+    "expectedBackend": "pyvisa",
+    "expectedDeviceType": "SCOPE",
+    "notes": "Advanced measurement request with vague scope feature mapping"
+  },
+  {
+    "id": "GEN_047",
+    "level": "Level 2 - Measurements",
+    "userMessage": "Measure this",
+    "difficulty": "should_fail",
+    "expectedBackend": "pyvisa",
+    "expectedDeviceType": "SCOPE",
+    "notes": "No measurement type or source provided"
+  },
+  {
+    "id": "GEN_048",
+    "level": "Level 3 - Channel + Trigger",
+    "userMessage": "Set CH1 up for a 1 volt logic signal and trigger on its rising edge",
+    "difficulty": "easy",
+    "expectedBackend": "pyvisa",
+    "expectedDeviceType": "SCOPE",
+    "notes": "Basic channel config plus edge trigger"
+  },
+  {
+    "id": "GEN_049",
+    "level": "Level 3 - Channel + Trigger",
+    "userMessage": "I'm looking at a 3.3 volt clock on channel 2, get the scope triggering cleanly on it",
+    "difficulty": "easy",
+    "expectedBackend": "pyvisa",
+    "expectedDeviceType": "SCOPE",
+    "notes": "Channel setup and inferred edge trigger"
+  },
+  {
+    "id": "GEN_050",
+    "level": "Level 3 - Channel + Trigger",
+    "userMessage": "Use CH3 for a 50 ohm RF-ish signal and trigger on the falling edge",
+    "difficulty": "easy",
+    "expectedBackend": "pyvisa",
+    "expectedDeviceType": "SCOPE",
+    "notes": "Termination plus falling edge trigger"
+  },
+  {
+    "id": "GEN_051",
+    "level": "Level 3 - Channel + Trigger",
+    "userMessage": "Set channel 1 to half a volt per division and trigger mid-level on it",
+    "difficulty": "easy",
+    "expectedBackend": "pyvisa",
+    "expectedDeviceType": "SCOPE",
+    "notes": "Simple scale and trigger level setup"
+  },
+  {
+    "id": "GEN_052",
+    "level": "Level 3 - Channel + Trigger",
+    "userMessage": "My pulse is on CH4, about 5 volts, just make it stable and visible",
+    "difficulty": "easy",
+    "expectedBackend": "pyvisa",
+    "expectedDeviceType": "SCOPE",
+    "notes": "Infer vertical scale and trigger from pulse context"
+  },
+  {
+    "id": "GEN_053",
+    "level": "Level 3 - Channel + Trigger",
+    "userMessage": "Trigger on CH1 only when the pulse is wider than 200 nanoseconds",
+    "difficulty": "medium",
+    "expectedBackend": "pyvisa",
+    "expectedDeviceType": "SCOPE",
+    "notes": "Pulse width trigger"
+  },
+  {
+    "id": "GEN_054",
+    "level": "Level 3 - Channel + Trigger",
+    "userMessage": "Set CH2 for a noisy 1.2 volt rail and trigger on the droop event",
+    "difficulty": "medium",
+    "expectedBackend": "pyvisa",
+    "expectedDeviceType": "SCOPE",
+    "notes": "Channel setup plus trigger on negative-going event"
+  },
+  {
+    "id": "GEN_055",
+    "level": "Level 3 - Channel + Trigger",
+    "userMessage": "I need to catch a runt pulse on channel 1 around 1.8 volts logic",
+    "difficulty": "medium",
+    "expectedBackend": "pyvisa",
+    "expectedDeviceType": "SCOPE",
+    "notes": "Runt trigger with signal context"
+  },
+  {
+    "id": "GEN_056",
+    "level": "Level 3 - Channel + Trigger",
+    "userMessage": "Watch CH1 and only trigger if it stays inside a 1 to 2 volt window",
+    "difficulty": "medium",
+    "expectedBackend": "pyvisa",
+    "expectedDeviceType": "SCOPE",
+    "notes": "Window trigger configuration"
+  },
+  {
+    "id": "GEN_057",
+    "level": "Level 3 - Channel + Trigger",
+    "userMessage": "Set up CH1 and CH2 then trigger when both are high",
+    "difficulty": "medium",
+    "expectedBackend": "pyvisa",
+    "expectedDeviceType": "SCOPE",
+    "notes": "Logic trigger with two channels"
+  },
+  {
+    "id": "GEN_058",
+    "level": "Level 3 - Channel + Trigger",
+    "userMessage": "My signal is about 50 MHz on CH1, show me five cycles and trigger on it",
+    "difficulty": "medium",
+    "expectedBackend": "pyvisa",
+    "expectedDeviceType": "SCOPE",
+    "notes": "Infer timebase and trigger from signal frequency"
+  },
+  {
+    "id": "GEN_059",
+    "level": "Level 3 - Channel + Trigger",
+    "userMessage": "Use channel 2 for the data line but trigger off channel 1 clock",
+    "difficulty": "medium",
+    "expectedBackend": "pyvisa",
+    "expectedDeviceType": "SCOPE",
+    "notes": "Different source for display and trigger"
+  },
+  {
+    "id": "GEN_060",
+    "level": "Level 3 - Channel + Trigger",
+    "userMessage": "I need a single shot on CH3 when the pulse width is too narrow",
+    "difficulty": "hard",
+    "expectedBackend": "pyvisa",
+    "expectedDeviceType": "SCOPE",
+    "notes": "Single sequence with pulse width qualifier"
+  },
+  {
+    "id": "GEN_061",
+    "level": "Level 3 - Channel + Trigger",
+    "userMessage": "Set the trigger on a negative glitch riding on the 5 volt rail at CH2",
+    "difficulty": "hard",
+    "expectedBackend": "pyvisa",
+    "expectedDeviceType": "SCOPE",
+    "notes": "Glitch-like event detection on power rail"
+  },
+  {
+    "id": "GEN_062",
+    "level": "Level 3 - Channel + Trigger",
+    "userMessage": "Put CH1 in 1 meg mode, CH2 in 50 ohm, and trigger when CH1 rises while CH2 is already high",
+    "difficulty": "hard",
+    "expectedBackend": "pyvisa",
+    "expectedDeviceType": "SCOPE",
+    "notes": "Mixed channel settings plus logic/qualified trigger"
+  },
+  {
+    "id": "GEN_063",
+    "level": "Level 3 - Channel + Trigger",
+    "userMessage": "Catch the first burst after a long idle on channel 4",
+    "difficulty": "hard",
+    "expectedBackend": "pyvisa",
+    "expectedDeviceType": "SCOPE",
+    "notes": "Burst/timeout style trigger scenario"
+  },
+  {
+    "id": "GEN_064",
+    "level": "Level 3 - Channel + Trigger",
+    "userMessage": "I'm debugging reset timing, put reset on CH1, clock on CH2, and trigger when reset deasserts",
+    "difficulty": "medium",
+    "expectedBackend": "pyvisa",
+    "expectedDeviceType": "SCOPE",
+    "notes": "Multi-channel setup with edge trigger on specific signal"
+  },
+  {
+    "id": "GEN_065",
+    "level": "Level 3 - Channel + Trigger",
+    "userMessage": "Zoom in on the rising edge and make the trigger land right there",
+    "difficulty": "medium",
+    "expectedBackend": "pyvisa",
+    "expectedDeviceType": "SCOPE",
+    "notes": "Horizontal adjustment and trigger position request"
+  },
+  {
+    "id": "GEN_066",
+    "level": "Level 3 - Channel + Trigger",
+    "userMessage": "On CH1 I have a pulse train around 10 kHz, trigger only on the runt events",
+    "difficulty": "hard",
+    "expectedBackend": "pyvisa",
+    "expectedDeviceType": "SCOPE",
+    "notes": "Runt trigger with acquisition context"
+  },
+  {
+    "id": "GEN_067",
+    "level": "Level 3 - Channel + Trigger",
+    "userMessage": "Make channel 3 more sensitive and trigger at about half the waveform height",
+    "difficulty": "medium",
+    "expectedBackend": "pyvisa",
+    "expectedDeviceType": "SCOPE",
+    "notes": "Relative trigger level plus scale adjustment"
+  },
+  {
+    "id": "GEN_068",
+    "level": "Level 3 - Channel + Trigger",
+    "userMessage": "Trigger on a timeout if the serial line on CH2 stays high too long",
+    "difficulty": "hard",
+    "expectedBackend": "pyvisa",
+    "expectedDeviceType": "SCOPE",
+    "notes": "Timeout trigger scenario"
+  },
+  {
+    "id": "GEN_069",
+    "level": "Level 3 - Channel + Trigger",
+    "userMessage": "Actually use channel 3 for the trigger, not channel 1",
+    "difficulty": "medium",
+    "expectedBackend": "pyvisa",
+    "expectedDeviceType": "SCOPE",
+    "notes": "Context-dependent trigger source correction"
+  },
+  {
+    "id": "GEN_070",
+    "level": "Level 3 - Channel + Trigger",
+    "userMessage": "Trigger on the weird event",
+    "difficulty": "should_fail",
+    "expectedBackend": "pyvisa",
+    "expectedDeviceType": "SCOPE",
+    "notes": "Trigger type and source are unspecified"
+  },
+  {
+    "id": "GEN_071",
+    "level": "Level 3 - Channel + Trigger",
+    "userMessage": "Set CH1 for a 5 volt pulse and CH2 for the return path, then trigger on CH1's rising edge",
+    "difficulty": "easy",
+    "expectedBackend": "pyvisa",
+    "expectedDeviceType": "SCOPE",
+    "notes": "Straightforward dual channel setup with edge trigger"
+  },
+  {
+    "id": "GEN_072",
+    "level": "Level 4 - Bus Decode",
+    "userMessage": "Set up for I2C decode, clock is on channel 1 and data is channel 2, 400 kHz fast mode",
+    "difficulty": "easy",
+    "expectedBackend": "pyvisa",
+    "expectedDeviceType": "SCOPE",
+    "notes": "Standard I2C decode setup"
+  },
+  {
+    "id": "GEN_073",
+    "level": "Level 4 - Bus Decode",
+    "userMessage": "I need SPI decode with clock on CH1, MOSI on CH2, and chip select on CH3",
+    "difficulty": "easy",
+    "expectedBackend": "pyvisa",
+    "expectedDeviceType": "SCOPE",
+    "notes": "Basic SPI bus decode"
+  },
+  {
+    "id": "GEN_074",
+    "level": "Level 4 - Bus Decode",
+    "userMessage": "Decode CAN on channel 4, it's the single differential probe output",
+    "difficulty": "easy",
+    "expectedBackend": "pyvisa",
+    "expectedDeviceType": "SCOPE",
+    "notes": "Basic CAN decode on one source"
+  },
+  {
+    "id": "GEN_075",
+    "level": "Level 4 - Bus Decode",
+    "userMessage": "Put LIN decode on CH2 and show me the packet list",
+    "difficulty": "easy",
+    "expectedBackend": "pyvisa",
+    "expectedDeviceType": "SCOPE",
+    "notes": "LIN decode and results display"
+  },
+  {
+    "id": "GEN_076",
+    "level": "Level 4 - Bus Decode",
+    "userMessage": "I have RS232 on channel 1 at 115200, decode it",
+    "difficulty": "medium",
+    "expectedBackend": "pyvisa",
+    "expectedDeviceType": "SCOPE",
+    "notes": "Serial decode with baud rate"
+  },
+  {
+    "id": "GEN_077",
+    "level": "Level 4 - Bus Decode",
+    "userMessage": "Set up SPI decode for mode 0, MISO is CH3, MOSI is CH2, clock is CH1",
+    "difficulty": "medium",
+    "expectedBackend": "pyvisa",
+    "expectedDeviceType": "SCOPE",
+    "notes": "SPI mode-specific decode configuration"
+  },
+  {
+    "id": "GEN_078",
+    "level": "Level 4 - Bus Decode",
+    "userMessage": "Decode I2C and trigger on address 0x50 if you can",
+    "difficulty": "medium",
+    "expectedBackend": "pyvisa",
+    "expectedDeviceType": "SCOPE",
+    "notes": "Bus decode plus bus trigger"
+  },
+  {
+    "id": "GEN_079",
+    "level": "Level 4 - Bus Decode",
+    "userMessage": "I'm on a CAN FD bus, set up decode on CH1 and trigger on the next frame",
+    "difficulty": "medium",
+    "expectedBackend": "pyvisa",
+    "expectedDeviceType": "SCOPE",
+    "notes": "CAN FD decode with trigger"
+  },
+  {
+    "id": "GEN_080",
+    "level": "Level 4 - Bus Decode",
+    "userMessage": "Use CH1 and CH2 for differential CAN decode and make the bus waveform visible too",
+    "difficulty": "medium",
+    "expectedBackend": "pyvisa",
+    "expectedDeviceType": "SCOPE",
+    "notes": "Bus decode with display considerations"
+  },
+  {
+    "id": "GEN_081",
+    "level": "Level 4 - Bus Decode",
+    "userMessage": "Set up LIN decode on channel 3 at 19200 and save me from counting bits",
+    "difficulty": "medium",
+    "expectedBackend": "pyvisa",
+    "expectedDeviceType": "SCOPE",
+    "notes": "Decode with protocol timing context"
+  },
+  {
+    "id": "GEN_082",
+    "level": "Level 4 - Bus Decode",
+    "userMessage": "I need SENT decode on CH4 for this sensor line",
+    "difficulty": "medium",
+    "expectedBackend": "pyvisa",
+    "expectedDeviceType": "SCOPE",
+    "notes": "SENT decode setup"
+  },
+  {
+    "id": "GEN_083",
+    "level": "Level 4 - Bus Decode",
+    "userMessage": "Decode ARINC429 on channel 2 and show labels",
+    "difficulty": "medium",
+    "expectedBackend": "pyvisa",
+    "expectedDeviceType": "SCOPE",
+    "notes": "ARINC429 decode configuration"
+  },
+  {
+    "id": "GEN_084",
+    "level": "Level 4 - Bus Decode",
+    "userMessage": "I need to see SPI writes only, trigger on chip select going active and decode the bytes",
+    "difficulty": "hard",
+    "expectedBackend": "pyvisa",
+    "expectedDeviceType": "SCOPE",
+    "notes": "SPI decode combined with qualified triggering"
+  },
+  {
+    "id": "GEN_085",
+    "level": "Level 4 - Bus Decode",
+    "userMessage": "Set up I2C decode, then measure setup and hold around the SDA transitions relative to SCL",
+    "difficulty": "hard",
+    "expectedBackend": "pyvisa",
+    "expectedDeviceType": "SCOPE",
+    "notes": "Bus decode plus timing measurements"
+  },
+  {
+    "id": "GEN_086",
+    "level": "Level 4 - Bus Decode",
+    "userMessage": "I'm debugging a 100BASE-T1 automotive ethernet link, can you decode it on CH1 and CH2",
+    "difficulty": "should_fail",
+    "expectedBackend": "pyvisa",
+    "expectedDeviceType": "SCOPE",
+    "notes": "Requested protocol decode is unsupported"
+  },
+  {
+    "id": "GEN_087",
+    "level": "Level 4 - Bus Decode",
+    "userMessage": "Catch the next UART break condition on CH1 and decode what follows",
+    "difficulty": "hard",
+    "expectedBackend": "pyvisa",
+    "expectedDeviceType": "SCOPE",
+    "notes": "Serial decode with specific bus trigger condition"
+  },
+  {
+    "id": "GEN_088",
+    "level": "Level 4 - Bus Decode",
+    "userMessage": "Decode CAN and only stop when ID 0x123 shows up",
+    "difficulty": "hard",
+    "expectedBackend": "pyvisa",
+    "expectedDeviceType": "SCOPE",
+    "notes": "Bus-triggered acquisition on CAN identifier"
+  },
+  {
+    "id": "GEN_089",
+    "level": "Level 4 - Bus Decode",
+    "userMessage": "Put I2C on the screen and make the decoded bytes line up under the waveform",
+    "difficulty": "medium",
+    "expectedBackend": "pyvisa",
+    "expectedDeviceType": "SCOPE",
+    "notes": "Decode display overlay configuration"
+  },
+  {
+    "id": "GEN_090",
+    "level": "Level 4 - Bus Decode",
+    "userMessage": "I changed my mind, clock is CH2 and data is CH1 for that I2C bus",
+    "difficulty": "medium",
+    "expectedBackend": "pyvisa",
+    "expectedDeviceType": "SCOPE",
+    "notes": "Contextual correction of bus source assignment"
+  },
+  {
+    "id": "GEN_091",
+    "level": "Level 4 - Bus Decode",
+    "userMessage": "Set up RS232 decode and trigger on the start bit, baud is 9600 on CH3",
+    "difficulty": "medium",
+    "expectedBackend": "pyvisa",
+    "expectedDeviceType": "SCOPE",
+    "notes": "Decode plus serial trigger"
+  },
+  {
+    "id": "GEN_092",
+    "level": "Level 5 - Save / Recall",
+    "userMessage": "Grab a screenshot of what I'm seeing right now",
+    "difficulty": "easy",
+    "expectedBackend": "pyvisa",
+    "expectedDeviceType": "SCOPE",
+    "notes": "Save screenshot"
+  },
+  {
+    "id": "GEN_093",
+    "level": "Level 5 - Save / Recall",
+    "userMessage": "Save channel 1 as a CSV so I can poke at it in Excel",
+    "difficulty": "easy",
+    "expectedBackend": "pyvisa",
+    "expectedDeviceType": "SCOPE",
+    "notes": "Waveform export to CSV"
+  },
+  {
+    "id": "GEN_094",
+    "level": "Level 5 - Save / Recall",
+    "userMessage": "Store the current setup as lab_debug_01",
+    "difficulty": "easy",
+    "expectedBackend": "pyvisa",
+    "expectedDeviceType": "SCOPE",
+    "notes": "Save setup/state"
+  },
+  {
+    "id": "GEN_095",
+    "level": "Level 5 - Save / Recall",
+    "userMessage": "Recall the setup I saved yesterday called power_rail_check",
+    "difficulty": "easy",
+    "expectedBackend": "pyvisa",
+    "expectedDeviceType": "SCOPE",
+    "notes": "Recall setup by name"
+  },
+  {
+    "id": "GEN_096",
+    "level": "Level 5 - Save / Recall",
+    "userMessage": "Save channel 2 as a binary waveform file",
+    "difficulty": "easy",
+    "expectedBackend": "pyvisa",
+    "expectedDeviceType": "SCOPE",
+    "notes": "Waveform save in binary format"
+  },
+  {
+    "id": "GEN_097",
+    "level": "Level 5 - Save / Recall",
+    "userMessage": "Save the whole session before I start changing things",
+    "difficulty": "easy",
+    "expectedBackend": "pyvisa",
+    "expectedDeviceType": "SCOPE",
+    "notes": "Save session/state request"
+  },
+  {
+    "id": "GEN_098",
+    "level": "Level 5 - Save / Recall",
+    "userMessage": "Capture 100 frames of this burst signal and save all as CSV",
+    "difficulty": "medium",
+    "expectedBackend": "pyvisa",
+    "expectedDeviceType": "SCOPE",
+    "notes": "FastFrame or repeated acquisitions with bulk export"
+  },
+  {
+    "id": "GEN_099",
+    "level": "Level 5 - Save / Recall",
+    "userMessage": "Take a single shot and save the waveform as MAT format after it finishes",
+    "difficulty": "medium",
+    "expectedBackend": "pyvisa",
+    "expectedDeviceType": "SCOPE",
+    "notes": "Single acquisition plus waveform export with sync"
+  },
+  {
+    "id": "GEN_100",
+    "level": "Level 5 - Save / Recall",
+    "userMessage": "Save screenshots and the setup with the same base name boardA_boot",
+    "difficulty": "medium",
+    "expectedBackend": "pyvisa",
+    "expectedDeviceType": "SCOPE",
+    "notes": "Multiple save operations using a shared naming convention"
+  },
+  {
+    "id": "GEN_101",
+    "level": "Level 5 - Save / Recall",
+    "userMessage": "Recall my serial_debug setup and then save the next screenshot",
+    "difficulty": "medium",
+    "expectedBackend": "pyvisa",
+    "expectedDeviceType": "SCOPE",
+    "notes": "Recall followed by save action"
+  },
+  {
+    "id": "GEN_102",
+    "level": "Level 5 - Save / Recall",
+    "userMessage": "I want CH1 and the math trace exported as WFM files",
+    "difficulty": "medium",
+    "expectedBackend": "pyvisa",
+    "expectedDeviceType": "SCOPE",
+    "notes": "Waveform export from multiple sources"
+  },
+  {
+    "id": "GEN_103",
+    "level": "Level 5 - Save / Recall",
+    "userMessage": "Save everything",
+    "difficulty": "should_fail",
+    "expectedBackend": "pyvisa",
+    "expectedDeviceType": "SCOPE",
+    "notes": "Ambiguous save request without scope or destination details"
+  },
+  {
+    "id": "GEN_104",
+    "level": "Level 5 - Save / Recall",
+    "userMessage": "Take one clean capture, save a screenshot, then dump CH1 to CSV and CH2 to MAT",
+    "difficulty": "hard",
+    "expectedBackend": "pyvisa",
+    "expectedDeviceType": "SCOPE",
+    "notes": "Coordinated acquisition and mixed-format exports"
+  },
+  {
+    "id": "GEN_105",
+    "level": "Level 5 - Save / Recall",
+    "userMessage": "Save the current setup, factory reset the scope, then recall that setup",
+    "difficulty": "hard",
+    "expectedBackend": "pyvisa",
+    "expectedDeviceType": "SCOPE",
+    "notes": "End-to-end setup persistence validation"
+  },
+  {
+    "id": "GEN_106",
+    "level": "Level 5 - Save / Recall",
+    "userMessage": "Export channel 3 as CSV after averaging 64 acquisitions",
+    "difficulty": "medium",
+    "expectedBackend": "pyvisa",
+    "expectedDeviceType": "SCOPE",
+    "notes": "Acquisition mode plus export workflow"
+  },
+  {
+    "id": "GEN_107",
+    "level": "Level 6 - tm_devices",
+    "userMessage": "Use tm_devices for this one and reset the scope",
+    "difficulty": "easy",
+    "expectedBackend": "tm_devices",
+    "expectedDeviceType": "SCOPE",
+    "notes": "Explicit tm_devices backend with factory reset"
+  },
+  {
+    "id": "GEN_108",
+    "level": "Level 6 - tm_devices",
+    "userMessage": "With tm_devices, turn on CH1 and set it up for a 3.3 volt clock",
+    "difficulty": "easy",
+    "expectedBackend": "tm_devices",
+    "expectedDeviceType": "SCOPE",
+    "notes": "Basic channel configuration using tm_devices"
+  },
+  {
+    "id": "GEN_109",
+    "level": "Level 6 - tm_devices",
+    "userMessage": "I want tm_devices backend and a frequency measurement on channel 2",
+    "difficulty": "easy",
+    "expectedBackend": "tm_devices",
+    "expectedDeviceType": "SCOPE",
+    "notes": "Measurement via alternate backend"
+  },
+  {
+    "id": "GEN_110",
+    "level": "Level 6 - tm_devices",
+    "userMessage": "Use tm_devices and grab a screenshot after the next acquisition",
+    "difficulty": "easy",
+    "expectedBackend": "tm_devices",
+    "expectedDeviceType": "SCOPE",
+    "notes": "Simple save workflow on tm_devices"
+  },
+  {
+    "id": "GEN_111",
+    "level": "Level 6 - tm_devices",
+    "userMessage": "Set up I2C decode with tm_devices, SCL on CH1 and SDA on CH2",
+    "difficulty": "medium",
+    "expectedBackend": "tm_devices",
+    "expectedDeviceType": "SCOPE",
+    "notes": "Protocol decode using tm_devices"
+  },
+  {
+    "id": "GEN_112",
+    "level": "Level 6 - tm_devices",
+    "userMessage": "Do a single sequence with tm_devices at 10M record length and then read frequency on CH1",
+    "difficulty": "medium",
+    "expectedBackend": "tm_devices",
+    "expectedDeviceType": "SCOPE",
+    "notes": "Single acquisition plus measurement with sync"
+  },
+  {
+    "id": "GEN_113",
+    "level": "Level 6 - tm_devices",
+    "userMessage": "With tm_devices, set CH1 and CH2 and trigger on CH1 rising edge",
+    "difficulty": "medium",
+    "expectedBackend": "tm_devices",
+    "expectedDeviceType": "SCOPE",
+    "notes": "Channel and trigger combo on alternate backend"
+  },
+  {
+    "id": "GEN_114",
+    "level": "Level 6 - tm_devices",
+    "userMessage": "Use tm_devices to save channel 1 as CSV and the screenshot too",
+    "difficulty": "medium",
+    "expectedBackend": "tm_devices",
+    "expectedDeviceType": "SCOPE",
+    "notes": "Multiple save actions through tm_devices"
+  },
+  {
+    "id": "GEN_115",
+    "level": "Level 6 - tm_devices",
+    "userMessage": "I need pulse width trigger on CH3 using tm_devices",
+    "difficulty": "medium",
+    "expectedBackend": "tm_devices",
+    "expectedDeviceType": "SCOPE",
+    "notes": "Advanced trigger request with alternate backend"
+  },
+  {
+    "id": "GEN_116",
+    "level": "Level 6 - tm_devices",
+    "userMessage": "Use tm_devices and measure delay from CH1 to CH2 on the rising edges",
+    "difficulty": "medium",
+    "expectedBackend": "tm_devices",
+    "expectedDeviceType": "SCOPE",
+    "notes": "Timing measurement on alternate backend"
+  },
+  {
+    "id": "GEN_117",
+    "level": "Level 6 - tm_devices",
+    "userMessage": "Configure tm_devices for SPI decode, trigger on chip select, then save a screenshot",
+    "difficulty": "hard",
+    "expectedBackend": "tm_devices",
+    "expectedDeviceType": "SCOPE",
+    "notes": "Decode, trigger, and save workflow on tm_devices"
+  },
+  {
+    "id": "GEN_118",
+    "level": "Level 6 - tm_devices",
+    "userMessage": "Using tm_devices, set up FastFrame for 50 bursts and export them all",
+    "difficulty": "hard",
+    "expectedBackend": "tm_devices",
+    "expectedDeviceType": "SCOPE",
+    "notes": "Frame acquisition and export on alternate backend"
+  },
+  {
+    "id": "GEN_119",
+    "level": "Level 6 - tm_devices",
+    "userMessage": "Use tm_devices to turn on AI denoising mode",
+    "difficulty": "should_fail",
+    "expectedBackend": "tm_devices",
+    "expectedDeviceType": "SCOPE",
+    "notes": "Nonexistent feature request"
+  },
+  {
+    "id": "GEN_120",
+    "level": "Level 6 - tm_devices",
+    "userMessage": "Same thing as before but with tm_devices and on channel 4",
+    "difficulty": "should_fail",
+    "expectedBackend": "tm_devices",
+    "expectedDeviceType": "SCOPE",
+    "notes": "Depends on prior context and unspecified operation"
+  },
+  {
+    "id": "GEN_121",
+    "level": "Level 6 - tm_devices",
+    "userMessage": "Use tm_devices to recall setup serial_bus_lab and capture the next single shot",
+    "difficulty": "medium",
+    "expectedBackend": "tm_devices",
+    "expectedDeviceType": "SCOPE",
+    "notes": "Recall plus single acquisition via tm_devices"
+  },
+  {
+    "id": "GEN_122",
+    "level": "Level 7 - Complex Multi-step",
+    "userMessage": "Set up both channels, decode I2C, measure setup and hold times, and save a screenshot",
+    "difficulty": "hard",
+    "expectedBackend": "pyvisa",
+    "expectedDeviceType": "SCOPE",
+    "notes": "Multi-domain workflow combining channels, decode, measurements, and save"
+  },
+  {
+    "id": "GEN_123",
+    "level": "Level 7 - Complex Multi-step",
+    "userMessage": "Take a single shot at 10M record length, measure frequency after, then save CH1 as CSV",
+    "difficulty": "medium",
+    "expectedBackend": "pyvisa",
+    "expectedDeviceType": "SCOPE",
+    "notes": "Acquisition, measurement, and export with synchronization"
+  },
+  {
+    "id": "GEN_124",
+    "level": "Level 7 - Complex Multi-step",
+    "userMessage": "I need to catch a burst on CH1, save 50 frames, and tell me the pk to pk on the first frame",
+    "difficulty": "hard",
+    "expectedBackend": "pyvisa",
+    "expectedDeviceType": "SCOPE",
+    "notes": "Burst capture with frame handling and measurement extraction"
+  },
+  {
+    "id": "GEN_125",
+    "level": "Level 7 - Complex Multi-step",
+    "userMessage": "Set channel 1 for my 25 MHz clock, channel 2 for data, trigger on clock, measure delay, and save the setup",
+    "difficulty": "medium",
+    "expectedBackend": "pyvisa",
+    "expectedDeviceType": "SCOPE",
+    "notes": "Channel setup, trigger, timing measurement, and setup save"
+  },
+  {
+    "id": "GEN_126",
+    "level": "Level 7 - Complex Multi-step",
+    "userMessage": "Use the AFG to drive a 1 kHz sine into CH1 and have the scope trigger on it and measure amplitude",
+    "difficulty": "hard",
+    "expectedBackend": "pyvisa",
+    "expectedDeviceType": "SCOPE",
+    "notes": "Multi-instrument coordination with AFG stimulus and scope measurement"
+  },
+  {
+    "id": "GEN_127",
+    "level": "Level 7 - Complex Multi-step",
+    "userMessage": "Reset the scope, bring up CH1 and CH2, trigger on CH1 rising edge, and save a screenshot once it's stable",
+    "difficulty": "easy",
+    "expectedBackend": "pyvisa",
+    "expectedDeviceType": "SCOPE",
+    "notes": "Clean start workflow with trigger and save"
+  },
+  {
+    "id": "GEN_128",
+    "level": "Level 7 - Complex Multi-step",
+    "userMessage": "I want to debug an SPI transaction: set up the channels, decode it, trigger on chip select, and save the waveform",
+    "difficulty": "hard",
+    "expectedBackend": "pyvisa",
+    "expectedDeviceType": "SCOPE",
+    "notes": "Full SPI debug flow"
+  },
+  {
+    "id": "GEN_129",
+    "level": "Level 7 - Complex Multi-step",
+    "userMessage": "Configure for a power rail ripple check on CH1, AC couple it, use hi-res mode, measure RMS, and save a screenshot",
+    "difficulty": "medium",
+    "expectedBackend": "pyvisa",
+    "expectedDeviceType": "SCOPE",
+    "notes": "Channel config, acquisition mode, measurement, and save"
+  },
+  {
+    "id": "GEN_130",
+    "level": "Level 7 - Complex Multi-step",
+    "userMessage": "My signal is about 50 MHz, show five cycles, trigger on it, add frequency and rise time, then export CH1",
+    "difficulty": "medium",
+    "expectedBackend": "pyvisa",
+    "expectedDeviceType": "SCOPE",
+    "notes": "Timebase inference, trigger, measurement, and export"
+  },
+  {
+    "id": "GEN_131",
+    "level": "Level 7 - Complex Multi-step",
+    "userMessage": "Set up CAN decode on CH1, trigger on ID 0x123, take a single acquisition, and save the screenshot and setup",
+    "difficulty": "hard",
+    "expectedBackend": "pyvisa",
+    "expectedDeviceType": "SCOPE",
+    "notes": "Bus trigger, acquisition, and persistence actions"
+  },
+  {
+    "id": "GEN_132",
+    "level": "Level 7 - Complex Multi-step",
+    "userMessage": "I need CH1 and CH3 compared for rise time, with CH2 as the trigger source, then save all waveforms",
+    "difficulty": "medium",
+    "expectedBackend": "pyvisa",
+    "expectedDeviceType": "SCOPE",
+    "notes": "Multi-source measurement and save workflow"
+  },
+  {
+    "id": "GEN_133",
+    "level": "Level 7 - Complex Multi-step",
+    "userMessage": "Set channel labels for CLK and DATA, decode I2C, measure setup and hold, then recall my previous serial setup when you're done",
+    "difficulty": "hard",
+    "expectedBackend": "pyvisa",
+    "expectedDeviceType": "SCOPE",
+    "notes": "Temporary setup, decode, measurement, and recall sequence"
+  },
+  {
+    "id": "GEN_134",
+    "level": "Level 7 - Complex Multi-step",
+    "userMessage": "Capture a single glitch event on the 1.0 volt rail, zoom in on it, measure overshoot, and save a screenshot",
+    "difficulty": "hard",
+    "expectedBackend": "pyvisa",
+    "expectedDeviceType": "SCOPE",
+    "notes": "Event capture, zoom, measurement, and save"
+  },
+  {
+    "id": "GEN_135",
+    "level": "Level 7 - Complex Multi-step",
+    "userMessage": "Use FastFrame to catch 100 startup pulses, measure period on each if possible, and dump the data",
+    "difficulty": "hard",
+    "expectedBackend": "pyvisa",
+    "expectedDeviceType": "SCOPE",
+    "notes": "Frame capture with repeated measurement/data extraction"
+  },
+  {
+    "id": "GEN_136",
+    "level": "Level 7 - Complex Multi-step",
+    "userMessage": "Put the scope in average mode, trigger on CH1, measure mean and pk to pk on CH2, then save the setup",
+    "difficulty": "medium",
+    "expectedBackend": "pyvisa",
+    "expectedDeviceType": "SCOPE",
+    "notes": "Acquisition mode plus cross-channel measurement and save"
+  },
+  {
+    "id": "GEN_137",
+    "level": "Level 7 - Complex Multi-step",
+    "userMessage": "Actually do all of that with tm_devices instead",
+    "difficulty": "should_fail",
+    "expectedBackend": "pyvisa",
+    "expectedDeviceType": "SCOPE",
+    "notes": "Backend switch request depends on prior context"
+  },
+  {
+    "id": "GEN_138",
+    "level": "Level 7 - Complex Multi-step",
+    "userMessage": "Drive the DUT from the AFG with a burst, trigger the scope on the burst, and save the first captured waveform",
+    "difficulty": "hard",
+    "expectedBackend": "pyvisa",
+    "expectedDeviceType": "SCOPE",
+    "notes": "AFG burst plus scope capture coordination"
+  },
+  {
+    "id": "GEN_139",
+    "level": "Level 7 - Complex Multi-step",
+    "userMessage": "Reset, set CH1 for a 3.3 volt clock, CH2 for data, single-shot on CH1, measure delay, and export both channels",
+    "difficulty": "hard",
+    "expectedBackend": "pyvisa",
+    "expectedDeviceType": "SCOPE",
+    "notes": "Full timing debug workflow from clean state"
+  },
+  {
+    "id": "GEN_140",
+    "level": "Level 7 - Complex Multi-step",
+    "userMessage": "Set up RS232 decode on CH1, trigger on a start bit, capture one packet, and save the screenshot",
+    "difficulty": "medium",
+    "expectedBackend": "pyvisa",
+    "expectedDeviceType": "SCOPE",
+    "notes": "Serial decode, trigger, single acquisition, and save"
+  },
+  {
+    "id": "GEN_141",
+    "level": "Level 7 - Complex Multi-step",
+    "userMessage": "Use CH1 for the rail, CH2 for enable, trigger when enable rises, then measure the rail settling and screenshot it",
+    "difficulty": "hard",
+    "expectedBackend": "pyvisa",
+    "expectedDeviceType": "SCOPE",
+    "notes": "Power sequencing workflow with trigger and measurement intent"
+  },
+  {
+    "id": "GEN_142",
+    "level": "Level 7 - Complex Multi-step",
+    "userMessage": "Get me ready to debug a boot sequence: four channels on, labels set, single shot, and save the whole session after capture",
+    "difficulty": "medium",
+    "expectedBackend": "pyvisa",
+    "expectedDeviceType": "SCOPE",
+    "notes": "Multi-channel prep, single capture, and session save"
+  },
+  {
+    "id": "GEN_143",
+    "level": "Level 7 - Complex Multi-step",
+    "userMessage": "Do the same debug setup as my last board but for this new one",
+    "difficulty": "should_fail",
+    "expectedBackend": "pyvisa",
+    "expectedDeviceType": "SCOPE",
+    "notes": "Relies on unavailable prior setup context"
+  },
+  {
+    "id": "GEN_144",
+    "level": "Level 7 - Complex Multi-step",
+    "userMessage": "I need an eye diagram on CH1, measure eye height, and save the screenshot and waveform",
+    "difficulty": "hard",
+    "expectedBackend": "pyvisa",
+    "expectedDeviceType": "SCOPE",
+    "notes": "Eye analysis plus save operations"
+  },
+  {
+    "id": "GEN_145",
+    "level": "Level 7 - Complex Multi-step",
+    "userMessage": "Take one shot, measure frequency, period, and pk to pk on CH1, then recall my default setup",
+    "difficulty": "medium",
+    "expectedBackend": "pyvisa",
+    "expectedDeviceType": "SCOPE",
+    "notes": "Single acquisition with measurements and cleanup recall"
+  },
+  {
+    "id": "GEN_146",
+    "level": "Level 7 - Complex Multi-step",
+    "userMessage": "Set up channels, decode the bus, save all frames, and email me the plot",
+    "difficulty": "should_fail",
+    "expectedBackend": "pyvisa",
+    "expectedDeviceType": "SCOPE",
+    "notes": "Email action is outside supported automation scope"
+  },
+  {
+    "id": "GEN_147",
+    "level": "Level 8 - Engineering / Technical",
+    "userMessage": "I'm debugging a DDR-style interface, put clock on CH1 and data on CH2 and measure setup and hold around the active edge",
+    "difficulty": "hard",
+    "expectedBackend": "pyvisa",
+    "expectedDeviceType": "SCOPE",
+    "notes": "Real timing-analysis scenario"
+  },
+  {
+    "id": "GEN_148",
+    "level": "Level 8 - Engineering / Technical",
+    "userMessage": "Configure for power rail ripple measurement on the 1.2 volt rail",
+    "difficulty": "easy",
+    "expectedBackend": "pyvisa",
+    "expectedDeviceType": "SCOPE",
+    "notes": "Common power integrity workflow with implicit AC coupling/scale considerations"
+  },
+  {
+    "id": "GEN_149",
+    "level": "Level 8 - Engineering / Technical",
+    "userMessage": "I need to check the ringing on my clock signal, it's a 3.3 volt LVCMOS on CH1",
+    "difficulty": "medium",
+    "expectedBackend": "pyvisa",
+    "expectedDeviceType": "SCOPE",
+    "notes": "Signal integrity setup with engineering context"
+  },
+  {
+    "id": "GEN_150",
+    "level": "Level 8 - Engineering / Technical",
+    "userMessage": "My reset line glitches low once in a while during power up, catch that event and save it",
+    "difficulty": "hard",
+    "expectedBackend": "pyvisa",
+    "expectedDeviceType": "SCOPE",
+    "notes": "Rare-event trigger and save for power-up debugging"
+  },
+  {
+    "id": "GEN_151",
+    "level": "Level 8 - Engineering / Technical",
+    "userMessage": "I have a 25 MHz XO on CH1 with about 1 volt peak to peak, set me up to verify amplitude and period",
+    "difficulty": "medium",
+    "expectedBackend": "pyvisa",
+    "expectedDeviceType": "SCOPE",
+    "notes": "Oscillator validation scenario"
+  },
+  {
+    "id": "GEN_152",
+    "level": "Level 8 - Engineering / Technical",
+    "userMessage": "I'm chasing a brownout on the 3.3 volt rail, use CH1 for the rail and CH2 for reset and catch when reset asserts",
+    "difficulty": "hard",
+    "expectedBackend": "pyvisa",
+    "expectedDeviceType": "SCOPE",
+    "notes": "Power/reset interaction debug"
+  },
+  {
+    "id": "GEN_153",
+    "level": "Level 8 - Engineering / Technical",
+    "userMessage": "Set up a single-shot capture of startup and give me the delay from enable on CH2 to rail-up on CH1",
+    "difficulty": "hard",
+    "expectedBackend": "pyvisa",
+    "expectedDeviceType": "SCOPE",
+    "notes": "Startup timing measurement with single-shot acquisition"
+  },
+  {
+    "id": "GEN_154",
+    "level": "Level 8 - Engineering / Technical",
+    "userMessage": "I need to look at PWM on CH1, around 200 kHz, and check duty cycle and rise time",
+    "difficulty": "medium",
+    "expectedBackend": "pyvisa",
+    "expectedDeviceType": "SCOPE",
+    "notes": "Power-control waveform characterization"
+  },
+  {
+    "id": "GEN_155",
+    "level": "Level 8 - Engineering / Technical",
+    "userMessage": "We're bringing up an I2C EEPROM, clock on CH1, data on CH2, trigger on address 0x50 and save the transaction",
+    "difficulty": "hard",
+    "expectedBackend": "pyvisa",
+    "expectedDeviceType": "SCOPE",
+    "notes": "Practical serial bus bring-up case"
+  },
+  {
+    "id": "GEN_156",
+    "level": "Level 8 - Engineering / Technical",
+    "userMessage": "I have a 100 MHz differential clock through a probe amp, show me five cycles and measure skew between CH1 and CH2",
+    "difficulty": "hard",
+    "expectedBackend": "pyvisa",
+    "expectedDeviceType": "SCOPE",
+    "notes": "High-speed clock comparison workflow"
+  },
+  {
+    "id": "GEN_157",
+    "level": "Level 8 - Engineering / Technical",
+    "userMessage": "Check the overshoot on my MOSFET gate drive on CH3, it's roughly 10 volts switching fast",
+    "difficulty": "medium",
+    "expectedBackend": "pyvisa",
+    "expectedDeviceType": "SCOPE",
+    "notes": "Power electronics gate-drive analysis"
+  },
+  {
+    "id": "GEN_158",
+    "level": "Level 8 - Engineering / Technical",
+    "userMessage": "I need a compliance-style eye diagram for USB 2.0 on CH1",
+    "difficulty": "hard",
+    "expectedBackend": "pyvisa",
+    "expectedDeviceType": "SCOPE",
+    "notes": "Eye diagram request in standards context"
+  },
+  {
+    "id": "GEN_159",
+    "level": "Level 8 - Engineering / Technical",
+    "userMessage": "Catch the first packet after wake-up on this LIN bus and save the screenshot",
+    "difficulty": "medium",
+    "expectedBackend": "pyvisa",
+    "expectedDeviceType": "SCOPE",
+    "notes": "Wake-up bus event capture"
+  },
+  {
+    "id": "GEN_160",
+    "level": "Level 8 - Engineering / Technical",
+    "userMessage": "I'm validating CAN FD timing, decode CH1 and measure bit timing around the frame start",
+    "difficulty": "hard",
+    "expectedBackend": "pyvisa",
+    "expectedDeviceType": "SCOPE",
+    "notes": "Automotive bus timing/debug scenario"
+  },
+  {
+    "id": "GEN_161",
+    "level": "Level 8 - Engineering / Technical",
+    "userMessage": "Use CH1 for the sensor output, AC couple it, and tell me the RMS noise",
+    "difficulty": "easy",
+    "expectedBackend": "pyvisa",
+    "expectedDeviceType": "SCOPE",
+    "notes": "Sensor noise measurement"
+  },
+  {
+    "id": "GEN_162",
+    "level": "Level 8 - Engineering / Technical",
+    "userMessage": "I need to capture a rare runt pulse on a 1.8 volt FPGA signal during configuration",
+    "difficulty": "hard",
+    "expectedBackend": "pyvisa",
+    "expectedDeviceType": "SCOPE",
+    "notes": "Rare digital fault capture"
+  },
+  {
+    "id": "GEN_163",
+    "level": "Level 8 - Engineering / Technical",
+    "userMessage": "Set up to compare clock arrival at the MCU on CH1 and the peripheral on CH3",
+    "difficulty": "medium",
+    "expectedBackend": "pyvisa",
+    "expectedDeviceType": "SCOPE",
+    "notes": "Clock distribution timing comparison"
+  },
+  {
+    "id": "GEN_164",
+    "level": "Level 8 - Engineering / Technical",
+    "userMessage": "I'm checking inrush on the 12 volt input, trigger when current sense on CH2 spikes and keep the rail on CH1 visible",
+    "difficulty": "hard",
+    "expectedBackend": "pyvisa",
+    "expectedDeviceType": "SCOPE",
+    "notes": "Power event correlation"
+  },
+  {
+    "id": "GEN_165",
+    "level": "Level 8 - Engineering / Technical",
+    "userMessage": "Zoom in on the rising edge of my 3.3 volt clock and measure the rise time after a single capture",
+    "difficulty": "medium",
+    "expectedBackend": "pyvisa",
+    "expectedDeviceType": "SCOPE",
+    "notes": "Edge-focused single-shot characterization"
+  },
+  {
+    "id": "GEN_166",
+    "level": "Level 8 - Engineering / Technical",
+    "userMessage": "I need to verify the delay from trigger out on CH1 to analog response on CH4, use one clean acquisition",
+    "difficulty": "medium",
+    "expectedBackend": "pyvisa",
+    "expectedDeviceType": "SCOPE",
+    "notes": "Cross-domain timing measurement"
+  },
+  {
+    "id": "GEN_167",
+    "level": "Level 8 - Engineering / Technical",
+    "userMessage": "My boot ROM talks over SPI right after reset, catch the first transaction and save the waveform and screenshot",
+    "difficulty": "hard",
+    "expectedBackend": "pyvisa",
+    "expectedDeviceType": "SCOPE",
+    "notes": "Boot-time serial transaction capture"
+  },
+  {
+    "id": "GEN_168",
+    "level": "Level 8 - Engineering / Technical",
+    "userMessage": "I'm bringing up RS232 to an old modem, decode CH1 at 9600 and save the first complete line",
+    "difficulty": "medium",
+    "expectedBackend": "pyvisa",
+    "expectedDeviceType": "SCOPE",
+    "notes": "Legacy serial bring-up scenario"
+  },
+  {
+    "id": "GEN_169",
+    "level": "Level 8 - Engineering / Technical",
+    "userMessage": "Use hi-res mode on CH1 and measure the ripple on this low-noise LDO output",
+    "difficulty": "medium",
+    "expectedBackend": "pyvisa",
+    "expectedDeviceType": "SCOPE",
+    "notes": "Low-noise power analysis"
+  },
+  {
+    "id": "GEN_170",
+    "level": "Level 8 - Engineering / Technical",
+    "userMessage": "I need to find out if my ADC clock has too much jitter, set up the scope for that on CH2",
+    "difficulty": "hard",
+    "expectedBackend": "pyvisa",
+    "expectedDeviceType": "SCOPE",
+    "notes": "Advanced timing quality characterization"
+  },
+  {
+    "id": "GEN_171",
+    "level": "Level 8 - Engineering / Technical",
+    "userMessage": "Capture startup with FastFrame, around 100 events, and let me compare pulse widths across the frames",
+    "difficulty": "hard",
+    "expectedBackend": "pyvisa",
+    "expectedDeviceType": "SCOPE",
+    "notes": "Repeated startup-event analysis"
+  },
+  {
+    "id": "GEN_172",
+    "level": "Level 8 - Engineering / Technical",
+    "userMessage": "Check my SENT sensor line on CH1 and save the decoded packets from the next capture",
+    "difficulty": "medium",
+    "expectedBackend": "pyvisa",
+    "expectedDeviceType": "SCOPE",
+    "notes": "Automotive sensor protocol debug"
+  },
+  {
+    "id": "GEN_173",
+    "level": "Level 8 - Engineering / Technical",
+    "userMessage": "I need to set bandwidth to match the probe and then measure a 500 ps rise time",
+    "difficulty": "hard",
+    "expectedBackend": "pyvisa",
+    "expectedDeviceType": "SCOPE",
+    "notes": "Probe-aware high-speed edge measurement"
+  },
+  {
+    "id": "GEN_174",
+    "level": "Level 8 - Engineering / Technical",
+    "userMessage": "Put the rail on CH1, the clock on CH2, and show whether clock starts before the rail is stable",
+    "difficulty": "hard",
+    "expectedBackend": "pyvisa",
+    "expectedDeviceType": "SCOPE",
+    "notes": "System-level power/clock sequencing analysis"
+  },
+  {
+    "id": "GEN_175",
+    "level": "Level 8 - Engineering / Technical",
+    "userMessage": "Get me a quick frequency read on the 10 MHz reference going into CH4",
+    "difficulty": "easy",
+    "expectedBackend": "pyvisa",
+    "expectedDeviceType": "SCOPE",
+    "notes": "Straightforward engineering validation"
+  },
+  {
+    "id": "GEN_176",
+    "level": "Level 8 - Engineering / Technical",
+    "userMessage": "I'm debugging a Rigol scope over USB, can you configure that instead",
+    "difficulty": "should_fail",
+    "expectedBackend": "pyvisa",
+    "expectedDeviceType": "SCOPE",
+    "notes": "Unsupported instrument vendor"
+  },
+  {
+    "id": "GEN_177",
+    "level": "Level 8 - Engineering / Technical",
+    "userMessage": "Enable AI denoising and automatic root cause mode for this waveform",
+    "difficulty": "should_fail",
+    "expectedBackend": "pyvisa",
+    "expectedDeviceType": "SCOPE",
+    "notes": "Unsupported fictitious features"
+  },
+  {
+    "id": "GEN_178",
+    "level": "Level 8 - Engineering / Technical",
+    "userMessage": "Set CH1 to AC coupling with 2 volts of DC offset and keep the baseline accurate",
+    "difficulty": "should_fail",
+    "expectedBackend": "pyvisa",
+    "expectedDeviceType": "SCOPE",
+    "notes": "Contradictory or invalid analog-front-end request"
+  },
+  {
+    "id": "GEN_179",
+    "level": "Level 9 - AFG",
+    "userMessage": "Generate a 1 kHz sine at 2 volts peak to peak into 50 ohms",
+    "difficulty": "easy",
+    "expectedBackend": "pyvisa",
+    "expectedDeviceType": "AFG",
+    "notes": "Basic sine output configuration"
+  },
+  {
+    "id": "GEN_180",
+    "level": "Level 9 - AFG",
+    "userMessage": "Put out a 100 kHz square wave at 3 volts peak to peak",
+    "difficulty": "easy",
+    "expectedBackend": "pyvisa",
+    "expectedDeviceType": "AFG",
+    "notes": "Basic square wave setup"
+  },
+  {
+    "id": "GEN_181",
+    "level": "Level 9 - AFG",
+    "userMessage": "Set channel 1 of the AFG to a 10 kHz ramp with 1 volt offset",
+    "difficulty": "easy",
+    "expectedBackend": "pyvisa",
+    "expectedDeviceType": "AFG",
+    "notes": "Basic waveform type plus offset"
+  },
+  {
+    "id": "GEN_182",
+    "level": "Level 9 - AFG",
+    "userMessage": "Give me a 5 volt pulse at 1 kHz with 20 percent duty cycle",
+    "difficulty": "easy",
+    "expectedBackend": "pyvisa",
+    "expectedDeviceType": "AFG",
+    "notes": "Pulse waveform configuration"
+  },
+  {
+    "id": "GEN_183",
+    "level": "Level 9 - AFG",
+    "userMessage": "Turn the AFG output on and make it a 1 MHz sine",
+    "difficulty": "easy",
+    "expectedBackend": "pyvisa",
+    "expectedDeviceType": "AFG",
+    "notes": "Output enable and frequency set"
+  },
+  {
+    "id": "GEN_184",
+    "level": "Level 9 - AFG",
+    "userMessage": "I need a 10 kHz sine burst, 5 cycles per trigger",
+    "difficulty": "medium",
+    "expectedBackend": "pyvisa",
+    "expectedDeviceType": "AFG",
+    "notes": "Burst mode configuration"
+  },
+  {
+    "id": "GEN_185",
+    "level": "Level 9 - AFG",
+    "userMessage": "Sweep from 1 kHz to 100 kHz on the AFG over about 2 seconds",
+    "difficulty": "medium",
+    "expectedBackend": "pyvisa",
+    "expectedDeviceType": "AFG",
+    "notes": "Sweep setup"
+  },
+  {
+    "id": "GEN_186",
+    "level": "Level 9 - AFG",
+    "userMessage": "Set up AM modulation on a 100 kHz carrier with a 1 kHz modulating tone",
+    "difficulty": "medium",
+    "expectedBackend": "pyvisa",
+    "expectedDeviceType": "AFG",
+    "notes": "Modulation feature configuration"
+  },
+  {
+    "id": "GEN_187",
+    "level": "Level 9 - AFG",
+    "userMessage": "Generate a burst that lines up with my scope single shot and only happens once per trigger",
+    "difficulty": "hard",
+    "expectedBackend": "pyvisa",
+    "expectedDeviceType": "AFG",
+    "notes": "Triggered burst behavior for instrument coordination"
+  },
+  {
+    "id": "GEN_188",
+    "level": "Level 9 - AFG",
+    "userMessage": "Make the AFG output a random Ethernet packet pattern",
+    "difficulty": "should_fail",
+    "expectedBackend": "pyvisa",
+    "expectedDeviceType": "AFG",
+    "notes": "Request is beyond supported generic AFG waveform configuration"
+  },
+  {
+    "id": "GEN_189",
+    "level": "Level 10 - SMU",
+    "userMessage": "Source 1 volt and measure current",
+    "difficulty": "easy",
+    "expectedBackend": "pyvisa",
+    "expectedDeviceType": "SMU",
+    "notes": "Basic SMU source-measure operation"
+  },
+  {
+    "id": "GEN_190",
+    "level": "Level 10 - SMU",
+    "userMessage": "Sweep voltage from 0 to 5 volts and measure current",
+    "difficulty": "easy",
+    "expectedBackend": "pyvisa",
+    "expectedDeviceType": "SMU",
+    "notes": "Simple voltage sweep"
+  },
+  {
+    "id": "GEN_191",
+    "level": "Level 10 - SMU",
+    "userMessage": "Force 10 milliamps and read back the voltage",
+    "difficulty": "easy",
+    "expectedBackend": "pyvisa",
+    "expectedDeviceType": "SMU",
+    "notes": "Current source with voltage measurement"
+  },
+  {
+    "id": "GEN_192",
+    "level": "Level 10 - SMU",
+    "userMessage": "Turn the output off on the Keithley",
+    "difficulty": "easy",
+    "expectedBackend": "pyvisa",
+    "expectedDeviceType": "SMU",
+    "notes": "Basic SMU output disable"
+  },
+  {
+    "id": "GEN_193",
+    "level": "Level 10 - SMU",
+    "userMessage": "Sweep from 0 to 3.3 volts in 100 millivolt steps and log the current",
+    "difficulty": "medium",
+    "expectedBackend": "pyvisa",
+    "expectedDeviceType": "SMU",
+    "notes": "Stepped source-measure sweep"
+  },
+  {
+    "id": "GEN_194",
+    "level": "Level 10 - SMU",
+    "userMessage": "Source 5 volts with a 20 milliamp current limit and tell me what current it settles at",
+    "difficulty": "medium",
+    "expectedBackend": "pyvisa",
+    "expectedDeviceType": "SMU",
+    "notes": "Voltage source with compliance limit"
+  },
+  {
+    "id": "GEN_195",
+    "level": "Level 10 - SMU",
+    "userMessage": "Do a current sweep from 0 to 10 milliamps and measure voltage each step",
+    "difficulty": "medium",
+    "expectedBackend": "pyvisa",
+    "expectedDeviceType": "SMU",
+    "notes": "Current sweep operation"
+  },
+  {
+    "id": "GEN_196",
+    "level": "Level 10 - SMU",
+    "userMessage": "Run an IV curve on this diode from 0 to 1 volt with fine steps and save the readings",
+    "difficulty": "hard",
+    "expectedBackend": "pyvisa",
+    "expectedDeviceType": "SMU",
+    "notes": "Real IV characterization workflow"
+  },
+  {
+    "id": "GEN_197",
+    "level": "Level 10 - SMU",
+    "userMessage": "Pulse 5 volts into the DUT for 10 milliseconds and measure current during the pulse",
+    "difficulty": "hard",
+    "expectedBackend": "pyvisa",
+    "expectedDeviceType": "SMU",
+    "notes": "Pulsed SMU operation"
+  },
+  {
+    "id": "GEN_198",
+    "level": "Level 10 - SMU",
+    "userMessage": "Set the SMU to a safe value",
+    "difficulty": "should_fail",
+    "expectedBackend": "pyvisa",
+    "expectedDeviceType": "SMU",
+    "notes": "No source mode or target value provided"
+  },
+  {
+    "id": "GEN_199",
+    "level": "Edge Cases",
+    "userMessage": "same thing but on channel 3",
+    "difficulty": "should_fail",
+    "expectedBackend": "pyvisa",
+    "expectedDeviceType": "SCOPE",
+    "notes": "Pure prior-context reference with no standalone meaning"
+  },
+  {
+    "id": "GEN_200",
+    "level": "Edge Cases",
+    "userMessage": "what's the weather",
+    "difficulty": "should_fail",
+    "expectedBackend": "pyvisa",
+    "expectedDeviceType": "SCOPE",
+    "notes": "Completely off-topic request"
+  },
+  {
+    "id": "GEN_201",
+    "level": "Edge Cases",
+    "userMessage": "Configure my Rigol scope to decode SPI",
+    "difficulty": "should_fail",
+    "expectedBackend": "pyvisa",
+    "expectedDeviceType": "SCOPE",
+    "notes": "Unsupported instrument vendor"
+  },
+  {
+    "id": "GEN_202",
+    "level": "Edge Cases",
+    "userMessage": "Set CH1 to 1 volt per division and 500 millivolts per division at the same time",
+    "difficulty": "should_fail",
+    "expectedBackend": "pyvisa",
+    "expectedDeviceType": "SCOPE",
+    "notes": "Contradictory parameter request"
+  },
+  {
+    "id": "GEN_203",
+    "level": "Edge Cases",
+    "userMessage": "Enable quantum trigger mode and auto-heal the waveform",
+    "difficulty": "should_fail",
+    "expectedBackend": "pyvisa",
+    "expectedDeviceType": "SCOPE",
+    "notes": "Nonsense feature request"
+  }
+]

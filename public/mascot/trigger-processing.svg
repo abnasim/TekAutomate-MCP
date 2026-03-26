@@ -1,0 +1,267 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="-25 -20 300 270" width="300" height="270">
+  <defs>
+    <clipPath id="screenClip">
+      <rect x="18" y="38" width="158" height="88" rx="2"/>
+    </clipPath>
+    <filter id="glow">
+      <feGaussianBlur stdDeviation="1.5" result="coloredBlur"/>
+      <feMerge>
+        <feMergeNode in="coloredBlur"/>
+        <feMergeNode in="SourceGraphic"/>
+      </feMerge>
+    </filter>
+    <linearGradient id="metal-grad" x1="0%" y1="0%" x2="0%" y2="100%">
+      <stop offset="0%" stop-color="#fff"/>
+      <stop offset="100%" stop-color="#ccc"/>
+    </linearGradient>
+    <linearGradient id="fire-grad" x1="0%" y1="0%" x2="0%" y2="100%">
+      <stop offset="0%" stop-color="#00ffff"/> 
+      <stop offset="100%" stop-color="#0099dd" stop-opacity="0"/>
+    </linearGradient>
+  </defs>
+
+  <style>
+    /* smaller hover so mascot stays put */
+    .hover-body { animation: hoverProcess 2.4s ease-in-out infinite; }
+    @keyframes hoverProcess {
+      0%, 100% { transform: translateY(0px); } 
+      50% { transform: translateY(-3px); }
+    }
+
+    /* thrusters a bit active but not crazy */
+    .flame { animation: thrust 0.5s ease-in-out infinite alternate; transform-origin: center top; }
+    @keyframes thrust {
+      0% { transform: scaleY(0.8); opacity: 0.3; }
+      100% { transform: scaleY(1.1); opacity: 0.7; }
+    }
+
+    .handle { 
+      animation: handleBreathe 3s ease-in-out infinite; 
+      transform-origin: 120px 28px;
+    }
+    @keyframes handleBreathe {
+      0%, 100% { transform: translateY(0); }
+      50% { transform: translateY(1px); }
+    }
+
+    .left-arm { animation: armSwayLeft 3s ease-in-out infinite; transform-origin: 0px 70px; }
+    .right-arm-assembly { animation: armSwayRight 3s ease-in-out infinite; transform-origin: 37px 146px; }
+
+    @keyframes armSwayLeft {
+      0%, 100% { transform: rotate(0deg); }
+      50% { transform: rotate(4deg); }
+    }
+    @keyframes armSwayRight {
+      0%, 100% { transform: rotate(0deg); }
+      50% { transform: rotate(-4deg); }
+    }
+
+    .left-claw-L, .left-claw-R, .right-claw-L, .right-claw-R {
+      animation: clawSoft 3s ease-in-out infinite;
+      transform-origin: center;
+    }
+    @keyframes clawSoft {
+      0%, 100% { transform: translateY(0); }
+      50% { transform: translateY(1.5px); }
+    }
+
+    .grid-line {
+      stroke: #08252e;
+      stroke-width: 0.7;
+      opacity: 0.5;
+    }
+
+    .proc-wave {
+      fill: none;
+      stroke: #00ffdd;
+      stroke-width: 3;
+      stroke-linejoin: round;
+      stroke-linecap: square;
+      filter: url(#glow);
+    }
+
+    .wave-scroll { animation: scrollWave 1.4s linear infinite; }
+    @keyframes scrollWave {
+      0% { transform: translateX(0); }
+      100% { transform: translateX(-52px); } /* seamless loop */
+    }
+
+    .probe-wire {
+      fill: none;
+      stroke: #222;
+      stroke-width: 3;
+      stroke-linecap: round;
+    }
+  </style>
+
+  <g class="hover-body">
+    <!-- Thruster flames -->
+    <path class="flame" d="M 38 168 L 52 168 L 45 192 Z" fill="url(#fire-grad)"/>
+    <path class="flame" d="M 188 168 L 202 168 L 195 192 Z" fill="url(#fire-grad)"/>
+
+    <!-- HANDLE -->
+    <g class="handle">
+      <path d="M 12 28 L 12 5 Q 12 -2 19 -2 L 30 -2" fill="none" stroke="#b0b0b0" stroke-width="5" stroke-linecap="round"/>
+      <path d="M 228 28 L 228 5 Q 228 -2 221 -2 L 210 -2" fill="none" stroke="#b0b0b0" stroke-width="5" stroke-linecap="round"/>
+      <rect x="30" y="-5" width="180" height="7" rx="3.5" fill="#00b8d4"/>
+    </g>
+    
+    <!-- Main body -->
+    <rect x="8" y="28" width="224" height="120" rx="5" fill="#f8f8f8" stroke="#c0c0c0" stroke-width="1"/>
+
+    <!-- Black bezel -->
+    <rect x="12" y="32" width="180" height="104" rx="3" fill="#1a1a1a"/>
+    
+    <!-- Tektronix branding -->
+    <text x="16" y="36" font-family="Arial" font-size="5" font-weight="bold" fill="#777" letter-spacing="0.5">Tektronix</text>
+    <text x="140" y="36" font-family="Arial" font-size="3.5" fill="#555">4 SERIES MSO</text>
+    
+    <!-- Screen frame -->
+    <rect x="18" y="38" width="158" height="88" rx="2" fill="#02080b"/>
+
+    <!-- Screen content -->
+    <g clip-path="url(#screenClip)">
+      <!-- Grid -->
+      <g>
+        <line class="grid-line" x1="18" y1="58" x2="176" y2="58"/>
+        <line class="grid-line" x1="18" y1="78" x2="176" y2="78"/>
+        <line class="grid-line" x1="18" y1="98" x2="176" y2="98"/>
+        <line class="grid-line" x1="18" y1="118" x2="176" y2="118"/>
+
+        <line class="grid-line" x1="46" y1="38" x2="46" y2="126"/>
+        <line class="grid-line" x1="74" y1="38" x2="74" y2="126"/>
+        <line class="grid-line" x1="102" y1="38" x2="102" y2="126"/>
+        <line class="grid-line" x1="130" y1="38" x2="130" y2="126"/>
+        <line class="grid-line" x1="158" y1="38" x2="158" y2="126"/>
+      </g>
+
+      <!-- Scrolling square wave, moved higher (centered more in middle) -->
+      <g class="wave-scroll">
+        <path class="proc-wave"
+          d="
+            M 0 88
+            V 68 H 13 V 108 H 26
+            V 68 H 39 V 108 H 52
+            V 68 H 65 V 108 H 78
+            V 68 H 91 V 108 H 104
+            V 68 H 117 V 108 H 130
+            V 68 H 143 V 108 H 156
+            V 68 H 169 V 108 H 182
+            V 68 H 195 V 108 H 208
+            V 68 H 221 V 108 H 234
+          " />
+      </g>
+    </g>
+
+    <!-- Right side control panel -->
+    <rect x="194" y="32" width="36" height="104" rx="3" fill="#f0f0f0" stroke="#ccc" stroke-width="1"/>
+    
+    <!-- TRIGGER section -->
+    <rect x="197" y="35" width="30" height="7" rx="1" fill="#333"/>
+    <text x="212" y="40" font-family="Arial" font-size="4" fill="#0f0" text-anchor="middle">TRIGGER</text>
+    
+    <!-- Top knob -->
+    <text x="212" y="48" font-family="Arial" font-size="3" fill="#555" text-anchor="middle">Level</text>
+    <circle cx="212" cy="56" r="7" fill="#e0e0e0" stroke="#999" stroke-width="1"/>
+    <circle cx="212" cy="56" r="2.5" fill="#888"/>
+    
+    <!-- VERTICAL section -->
+    <rect x="197" y="66" width="30" height="6" rx="1" fill="#444"/>
+    <text x="212" y="70.5" font-family="Arial" font-size="3.5" fill="#fff" text-anchor="middle">VERTICAL</text>
+    
+    <!-- Channel buttons -->
+    <circle cx="203" cy="80" r="4" fill="#222" stroke="#f4b400" stroke-width="2"/> 
+    <circle cx="221" cy="80" r="4" fill="#222" stroke="#00c8c8" stroke-width="2"/> 
+    <circle cx="203" cy="92" r="4" fill="#222" stroke="#e06666" stroke-width="2"/> 
+    <circle cx="221" cy="92" r="4" fill="#222" stroke="#8e7cc3" stroke-width="2"/>
+    
+    <!-- HORIZONTAL section -->
+    <rect x="197" y="100" width="30" height="6" rx="1" fill="#444"/>
+    <text x="212" y="104.5" font-family="Arial" font-size="3" fill="#fff" text-anchor="middle">HORIZONTAL</text>
+    
+    <!-- Bottom knob -->
+    <text x="212" y="112" font-family="Arial" font-size="3" fill="#555" text-anchor="middle">Scale</text>
+    <circle cx="212" cy="120" r="8" fill="#e0e0e0" stroke="#999" stroke-width="1"/>
+    <circle cx="212" cy="120" r="3" fill="#888"/>
+    
+    <!-- Function buttons -->
+    <rect x="197" y="130" width="14" height="5" rx="1" fill="#4a4"/>
+    <rect x="213" y="130" width="14" height="5" rx="1" fill="#48f"/>
+    
+    <!-- Bottom channel inputs bar -->
+    <rect x="8" y="138" width="224" height="16" rx="2" fill="#e8e8e8"/>
+    
+    <!-- CH1 -->
+    <g id="ch1-input" transform="translate(25, 140)">
+      <rect x="0" y="0" width="24" height="12" rx="2" fill="#3a3a3a"/>
+      <circle cx="12" cy="6" r="5" fill="#222" stroke="#f4b400" stroke-width="2"/>
+    </g>
+    <!-- CH2 -->
+    <g transform="translate(60, 140)">
+      <rect x="0" y="0" width="24" height="12" rx="2" fill="#3a3a3a"/>
+      <circle cx="12" cy="6" r="5" fill="#222" stroke="#00c8c8" stroke-width="2"/>
+    </g>
+    <!-- CH3 -->
+    <g transform="translate(95, 140)">
+      <rect x="0" y="0" width="24" height="12" rx="2" fill="#3a3a3a"/>
+      <circle cx="12" cy="6" r="5" fill="#222" stroke="#e06666" stroke-width="2"/>
+    </g>
+    <!-- CH4 -->
+    <g transform="translate(130, 140)">
+      <rect x="0" y="0" width="24" height="12" rx="2" fill="#3a3a3a"/>
+      <circle cx="12" cy="6" r="5" fill="#222" stroke="#8e7cc3" stroke-width="2"/>
+    </g>
+    
+    <!-- Aux In -->
+    <circle cx="190" cy="146" r="4" fill="#222" stroke="#666" stroke-width="1"/>
+
+    <!-- Feet -->
+    <rect x="35" y="154" width="24" height="14" rx="3" fill="#f0f0f0" stroke="#c0c0c0" stroke-width="1"/>
+    <rect x="181" y="154" width="24" height="14" rx="3" fill="#f0f0f0" stroke="#c0c0c0" stroke-width="1"/>
+
+    <!-- Right arm assembly (wire + arm) -->
+    <g class="right-arm-assembly">
+      <!-- probe wire from CH1 region (37,146) to probe tip -->
+      <path class="probe-wire" d="M 37 146 Q 90 150 150 165 Q 210 178 242 154" />
+
+      <!-- right arm with probe -->
+      <g class="right-arm">
+        <circle cx="240" cy="70" r="10" fill="#00aad2" stroke="#0088aa" stroke-width="1"/>
+        <rect x="232" y="72" width="16" height="24" rx="4" fill="url(#metal-grad)" stroke="#999" stroke-width="1" transform="rotate(-15 240 75)"/>
+        <rect x="234" y="94" width="14" height="20" rx="3" fill="#fff" stroke="#999" stroke-width="1" transform="rotate(8 243 100)"/>
+        <ellipse cx="242" cy="116" rx="8" ry="5" fill="#e8e8e8" stroke="#999" stroke-width="1"/>
+        
+        <g class="right-claw-L">
+          <path d="M 236 116 Q 229 126 232 136" fill="none" stroke="#e0e0e0" stroke-width="5" stroke-linecap="round"/>
+          <circle cx="232" cy="136" r="4" fill="#2d5a5a"/>
+        </g>
+        <g class="right-claw-R">
+          <path d="M 248 116 Q 255 126 252 136" fill="none" stroke="#e0e0e0" stroke-width="5" stroke-linecap="round"/>
+          <circle cx="252" cy="136" r="4" fill="#2d5a5a"/>
+        </g>
+        
+        <!-- Probe body -->
+        <rect x="237" y="120" width="10" height="30" rx="2" fill="#555"/>
+        <rect x="239" y="148" width="6" height="6" rx="1" fill="#333"/>
+        <line x1="242" y1="154" x2="242" y2="165" stroke="#aaa" stroke-width="2" stroke-linecap="round"/>
+      </g>
+    </g>
+
+    <!-- LEFT ARM -->
+    <g class="left-arm">
+      <circle cx="0" cy="70" r="10" fill="#00aad2" stroke="#0088aa" stroke-width="1"/>
+      <rect x="-8" y="72" width="16" height="24" rx="4" fill="url(#metal-grad)" stroke="#999" stroke-width="1" transform="rotate(15 0 75)"/>
+      <rect x="-10" y="94" width="14" height="20" rx="3" fill="#fff" stroke="#999" stroke-width="1" transform="rotate(-8 -3 100)"/>
+      <ellipse cx="-2" cy="116" rx="8" ry="5" fill="#e8e8e8" stroke="#999" stroke-width="1"/>
+      
+      <g class="left-claw-L">
+        <path d="M -8 116 Q -15 126 -12 136" fill="none" stroke="#e0e0e0" stroke-width="5" stroke-linecap="round"/>
+        <circle cx="-12" cy="136" r="4" fill="#2d5a5a"/>
+      </g>
+      <g class="left-claw-R">
+        <path d="M 4 116 Q 11 126 8 136" fill="none" stroke="#e0e0e0" stroke-width="5" stroke-linecap="round"/>
+        <circle cx="8" cy="136" r="4" fill="#2d5a5a"/>
+      </g>
+    </g>
+  </g>
+</svg>
