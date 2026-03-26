@@ -9531,6 +9531,14 @@ Keep under 120 words. No headings. Bullets only. Stay on this command. Do not de
             lastAuditReport={lastExecutionAudit}
             onClearRunLog={() => setRunWindowLog('')}
             onApplyAiActions={applyAiActionsAndRerun}
+            onLiveScreenshot={(screenshot) => {
+              setLiveModeCapture({
+                dataUrl: screenshot.dataUrl,
+                mimeType: screenshot.mimeType,
+                sizeBytes: screenshot.sizeBytes,
+                capturedAt: screenshot.capturedAt,
+              });
+            }}
             onBack={() => setCurrentView(executionSource === 'blockly' ? 'flow-designer' : 'builder')}
             blocklyContent={
               <BlocklyBuilder

@@ -228,7 +228,7 @@ async function streamSse(res: Response, onChunk: (chunk: string) => void): Promi
 export async function streamMcpChat(
   request: McpChatRequest,
   onChunk: (chunk: string) => void
-): Promise<{ openaiThreadId?: string; parseText?: string }> {
+): Promise<{ openaiThreadId?: string; parseText?: string; screenshots?: Array<{ base64: string; mimeType: string; capturedAt: string }> }> {
   const enriched = await buildMcpRequest(request);
   const hosts = resolveMcpHostCandidates();
   if (!hosts.length) {
@@ -268,7 +268,12 @@ export async function streamMcpChat(
 
   const contentType = (res.headers.get('content-type') || '').toLowerCase();
   if (contentType.includes('application/json')) {
-    const payload = (await res.json()) as { text?: string; displayText?: string; openaiThreadId?: string };
+    const payload = (await res.json()) as {
+      text?: string;
+      displayText?: string;
+      openaiThreadId?: string;
+      screenshots?: Array<{ base64: string; mimeType: string; capturedAt: string }>;
+    };
     const displayText =
       typeof payload?.displayText === 'string' && payload.displayText
         ? payload.displayText
@@ -279,6 +284,7 @@ export async function streamMcpChat(
     return {
       openaiThreadId: typeof payload.openaiThreadId === 'string' ? payload.openaiThreadId : undefined,
       parseText: typeof payload?.text === 'string' ? payload.text : undefined,
+      screenshots: Array.isArray(payload?.screenshots) ? payload.screenshots : undefined,
     };
   }
 

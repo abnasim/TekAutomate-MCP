@@ -6925,6 +6925,7 @@ async function runOpenAiToolLoop(
     let totalLiveToolCalls = 0;
     let liveIterations = 0;
     let liveFinalText = '';
+    const liveScreenshots: Array<{ base64: string; mimeType: string; capturedAt: string }> = [];
 
     for (let i = 0; i < _maxCalls; i += 1) {
       liveIterations = i + 1;
@@ -6974,6 +6975,8 @@ async function runOpenAiToolLoop(
           if (imageData) {
             const textSummary = buildImageToolResultSummary(result);
             console.log(`[MCP] OpenAI live tool result for ${toolName}: screenshot (${imageData.mimeType}, ${imageData.base64.length} b64 chars)`);
+            // Collect for UI update
+            liveScreenshots.push({ base64: imageData.base64, mimeType: imageData.mimeType, capturedAt: new Date().toISOString() });
             // OpenAI can't receive images in tool results — send text summary as tool result
             liveMessages.push({ role: 'tool', tool_call_id: toolId, content: textSummary });
             // Then inject the image as a user message so OpenAI vision can see it
@@ -7008,6 +7011,7 @@ async function runOpenAiToolLoop(
 
     return {
       text: liveFinalText,
+      screenshots: liveScreenshots.length > 0 ? liveScreenshots : undefined,
       metrics: {
         totalMs: 0, usedShortcut: false, provider: 'openai',
         iterations: liveIterations, toolCalls: totalLiveToolCalls,
@@ -7323,6 +7327,7 @@ async function runAnthropicToolLoop(
   let iterations = 0;
   let finalText = '';
   const providerRequests: Record<string, unknown>[] = [];
+  const anthScreenshots: Array<{ base64: string; mimeType: string; capturedAt: string }> = [];
 
   for (let i = 0; i < Math.max(1, maxCalls); i += 1) {
     iterations = i + 1;
@@ -7426,6 +7431,7 @@ async function runAnthropicToolLoop(
           // Build multimodal tool_result with image block so Claude can see the screenshot
           const textSummary = buildImageToolResultSummary(result);
           console.log(`[MCP] Anthropic tool result: image block (${imageData.mimeType}, ${imageData.base64.length} base64 chars)`);
+          anthScreenshots.push({ base64: imageData.base64, mimeType: imageData.mimeType, capturedAt: new Date().toISOString() });
           toolResultBlocks.push({
             type: 'tool_result',
             tool_use_id: toolId,
@@ -7507,6 +7513,7 @@ async function runAnthropicToolLoop(
 
   return {
     text: finalText,
+    screenshots: anthScreenshots.length > 0 ? anthScreenshots : undefined,
     metrics: {
       totalMs: 0,
       usedShortcut: false,
@@ -7578,7 +7585,7 @@ function buildLiveSystemPrompt(req: McpChatRequest, sessionContext?: string): st
     '- Read command entries fully: syntax.set, syntax.query, arguments, validValues, examples.',
     '- Replace placeholders: <NR3> → number, CH<x> → CH1, {A|B} → pick one.',
     '- If a command fails, try the query form (?) first to read the current value, then adjust.',
-    '- After visual changes, capture_screenshot to verify.',
+    '- ALWAYS call capture_screenshot after sending SCPI commands that change scope state (add measurement, change scale, trigger, channel settings, etc.). This verifies the result AND updates the live UI panel.',
     '- No ACTIONS_JSON, no "build it", no code blocks. Just use tools.',
     '',
     '## Response style',
@@ -7740,6 +7747,7 @@ export async function runToolLoop(req: McpChatRequest): Promise<ToolLoopResult> 
       text: liveResult.text,
       displayText: liveResult.displayText || liveResult.text,
       assistantThreadId: liveResult.assistantThreadId,
+      screenshots: (liveResult as any).screenshots,
       errors: [],
       warnings: [],
       metrics: {

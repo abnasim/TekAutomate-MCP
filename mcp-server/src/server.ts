@@ -598,6 +598,7 @@ export async function createServer(port = 8787): Promise<http.Server> {
           text: result.text,
           displayText: result.displayText,
           commands: result.commands, // Include commands for apply card
+          screenshots: (result as any).screenshots, // Live mode screenshots for UI update
           openaiThreadId: result.assistantThreadId,
           errors: result.errors,
           warnings: result.warnings,

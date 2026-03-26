@@ -669,6 +669,7 @@ export function useAiChat(params: {
   instrumentEndpoint?: { executorUrl: string; visaResource: string; backend: string; liveMode?: boolean } | null;
   instrumentOutputMode?: 'clean' | 'verbose';
   lastAuditReport?: import('../../utils/executionAudit').ExecutionAuditReport | null;
+  onLiveScreenshot?: (screenshot: { dataUrl: string; mimeType: string; sizeBytes: number; capturedAt: string }) => void;
   onApplyAiActions?: (actions: AiAction[]) => Promise<{ applied: number; rerunStarted: boolean; changed: boolean }>;
 }) {
   const { state, dispatch } = useAiChatContext();
@@ -879,6 +880,16 @@ export function useAiChat(params: {
         finalText += chunk;
         dispatch({ type: 'STREAM_CHUNK', chunk });
       });
+      // Update live UI with any screenshots captured during AI tool calls
+      if (streamMeta.screenshots?.length && params.onLiveScreenshot) {
+        const last = streamMeta.screenshots[streamMeta.screenshots.length - 1];
+        params.onLiveScreenshot({
+          dataUrl: `data:${last.mimeType};base64,${last.base64}`,
+          mimeType: last.mimeType,
+          sizeBytes: Math.round(last.base64.length * 0.75),
+          capturedAt: last.capturedAt,
+        });
+      }
       const parseText = streamMeta.parseText || finalText;
 
       try {

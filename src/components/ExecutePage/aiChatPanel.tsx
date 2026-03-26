@@ -44,6 +44,7 @@ interface AiChatPanelProps {
   contextAttachments?: McpChatAttachment[];
   lastAuditReport?: ExecutionAuditReport | null;
   onApplyAiActions?: (actions: AiAction[]) => Promise<{ applied: number; rerunStarted: boolean; changed: boolean }>;
+  onLiveScreenshot?: (screenshot: { dataUrl: string; mimeType: string; sizeBytes: number; capturedAt: string }) => void;
   onRun?: () => void;
 }
 
@@ -107,6 +108,7 @@ export function AiChatPanel({
   contextAttachments = [],
   lastAuditReport,
   onApplyAiActions,
+  onLiveScreenshot,
   onRun,
 }: AiChatPanelProps) {
   const TRANSIENT_HINT_MS = 5500;
@@ -185,6 +187,7 @@ export function AiChatPanel({
     instrumentEndpoint,
     instrumentOutputMode,
     lastAuditReport,
+    onLiveScreenshot,
     onApplyAiActions,
   });
 
