@@ -1,10 +1,15 @@
 import http from 'http';
 import { initCommandIndex } from './core/commandIndex';
+import { initProviderCatalog, providerSupplementsEnabled } from './core/providerCatalog';
 import { initTmDevicesIndex } from './core/tmDevicesIndex';
 import { initRagIndexes } from './core/ragIndex';
 import { initTemplateIndex } from './core/templateIndex';
 import { runToolLoop } from './core/toolLoop';
 import type { McpChatRequest } from './core/schemas';
+import { bootRouter, createReloadProvidersHandler, createRouterHandler, getRouterHealth } from './core/routerIntegration';
+import { getCommandIndex } from './core/commandIndex';
+import { getRagIndexes } from './core/ragIndex';
+import { getTemplateIndex } from './core/templateIndex';
 import fs from 'fs';
 import path from 'path';
 import { fileURLToPath } from 'url';
@@ -55,12 +60,63 @@ function flattenStepTypes(steps: unknown[]): string[] {
 }
 
 function extractActionsJson(text: string): Record<string, unknown> | null {
-  const cleaned = text.replace(/ACTIONS_JSON:\s*```json\s*/gi, 'ACTIONS_JSON: ').replace(/```/g, '');
-  const match = cleaned.match(/ACTIONS_JSON:\s*(\{[\s\S]*\})/);
-  if (!match) return null;
+  // FIX BUG-004: Previous regex was too greedy, matching from first { to last }
+  // This causes it to consume text after the JSON object
   try {
-    return JSON.parse(match[1]);
-  } catch {
+    // Step 1: Find ACTIONS_JSON marker
+    const actionJsonMatch = text.match(/ACTIONS_JSON:\s*/i);
+    if (!actionJsonMatch) {
+      return null;
+    }
+
+    // Step 2: Start from marker position
+    const startIdx = actionJsonMatch.index! + actionJsonMatch[0].length;
+    let jsonText = text.substring(startIdx).trim();
+
+    // Step 3: Remove code block markers if present
+    if (jsonText.startsWith('```json')) {
+      jsonText = jsonText.substring('```json'.length);
+    } else if (jsonText.startsWith('```')) {
+      jsonText = jsonText.substring('```'.length);
+    }
+
+    // Step 4: Find matching braces (non-greedy: find first complete JSON object)
+    let braceCount = 0;
+    let endIdx = -1;
+    for (let i = 0; i < jsonText.length; i += 1) {
+      const ch = jsonText[i];
+      if (ch === '{') braceCount += 1;
+      else if (ch === '}') {
+        braceCount -= 1;
+        if (braceCount === 0) {
+          endIdx = i + 1;
+          break;
+        }
+      }
+    }
+
+    if (endIdx === -1) {
+      console.warn('[POST_CHECK] Could not find complete JSON object in ACTIONS_JSON');
+      return null;
+    }
+
+    // Step 5: Parse the JSON
+    const jsonStr = jsonText.substring(0, endIdx);
+    const parsed = JSON.parse(jsonStr);
+
+    // Step 6: Validate structure (should be object)
+    if (typeof parsed !== 'object' || parsed === null || Array.isArray(parsed)) {
+      console.warn('[POST_CHECK] ACTIONS_JSON is not an object:', typeof parsed);
+      return null;
+    }
+
+    return parsed;
+  } catch (error) {
+    if (error instanceof SyntaxError) {
+      console.warn('[POST_CHECK] Invalid JSON in ACTIONS_JSON:', error.message);
+    } else {
+      console.warn('[POST_CHECK] Error parsing ACTIONS_JSON:', error);
+    }
     return null;
   }
 }
@@ -188,13 +244,60 @@ function parseProviderError(status: number, raw: string): { code: string; messag
 }
 
 export async function createServer(port = 8787): Promise<http.Server> {
-  await Promise.all([
+  // CRITICAL FIX: Initialize ALL indexes BEFORE creating HTTP server
+  // Previously: initialization happened inside request handlers (race condition)
+  const startInit = Date.now();
+  console.log('[SERVER] Initializing indexes before HTTP server starts...');
+
+  const results = await Promise.allSettled([
     initCommandIndex(),
     initTmDevicesIndex(),
     initRagIndexes(),
     initTemplateIndex(),
+    ...(providerSupplementsEnabled() ? [initProviderCatalog()] : []),
   ]);
 
+  // Check for initialization failures
+  const failures = results
+    .map((r, i) => r.status === 'rejected' ? { index: i, error: r.reason } : null)
+    .filter((f): f is { index: number; error: unknown } => Boolean(f));
+
+  if (failures.length > 0) {
+    const names = ['CommandIndex', 'TmDevicesIndex', 'RagIndexes', 'TemplateIndex', 'ProviderCatalog'];
+    const failedNames = failures.map(f => names[f.index]).join(', ');
+    const error = new Error(`[CRITICAL] Initialization failed: ${failedNames}`);
+    console.error(error.message);
+    for (const failure of failures) {
+      console.error(`  ${names[failure.index]}: ${failure.error}`);
+    }
+    throw error;
+  }
+
+  console.log(`✅ All indexes initialized in ${Date.now() - startInit}ms`);
+
+  // Now bootstrap router if enabled
+  if (String(process.env.MCP_ROUTER_ENABLED || '').trim() === 'true') {
+    try {
+      const commandIndex = await getCommandIndex();
+      const ragIndexes = await getRagIndexes();
+      const templates = (await getTemplateIndex()).all().map((doc) => ({
+        id: doc.id,
+        name: doc.name,
+        description: doc.description,
+        backend: 'template',
+        deviceType: 'workflow',
+        tags: [],
+        steps: doc.steps,
+      }));
+      const report = await bootRouter({ commandIndex, ragIndexes, templates });
+      console.log(`[MCP:router] ${report.total} tools in ${report.durationMs}ms`);
+    } catch (error) {
+      console.error('[MCP:router] Boot failed:', error);
+      throw error;
+    }
+  }
+
+  // NOW create the HTTP server (all indexes are ready)
   const server = http.createServer(async (req, res) => {
     if (req.method === 'OPTIONS') {
       res.statusCode = 204;
@@ -207,6 +310,39 @@ export async function createServer(port = 8787): Promise<http.Server> {
 
     if (req.method === 'GET' && req.url === '/health') {
       sendJson(res, 200, { ok: true, status: 'ready' });
+      return;
+    }
+
+    if (String(process.env.MCP_ROUTER_ENABLED || '').trim() === 'true' && req.method === 'GET' && req.url === '/ai/router/health') {
+      // FIX BUG-005: getRouterHealth() can return undefined, causing malformed JSON
+      const health = getRouterHealth();
+      if (!health) {
+        sendJson(res, 503, { ok: false, status: 'initializing', message: 'Router still initializing' });
+      } else {
+        sendJson(res, 200, health);
+      }
+      return;
+    }
+
+    if (String(process.env.MCP_ROUTER_ENABLED || '').trim() === 'true' && req.method === 'POST' && req.url === '/ai/router') {
+      try {
+        const body = (await readJsonBody(req)) as Record<string, unknown>;
+        const result = await createRouterHandler(body as any);
+        sendJson(res, 200, result);
+      } catch (err) {
+        sendJson(res, 500, { ok: false, error: err instanceof Error ? err.message : 'Router error' });
+      }
+      return;
+    }
+
+    if (String(process.env.MCP_ROUTER_ENABLED || '').trim() === 'true' && req.method === 'POST' && req.url === '/ai/router/reload-providers') {
+      try {
+        const body = (await readJsonBody(req)) as { providersDir?: string };
+        const result = await createReloadProvidersHandler(body);
+        sendJson(res, 200, result);
+      } catch (err) {
+        sendJson(res, 500, { ok: false, error: err instanceof Error ? err.message : 'Router reload error' });
+      }
       return;
     }
 
@@ -353,6 +489,7 @@ export async function createServer(port = 8787): Promise<http.Server> {
                 developerPrompt: (result.debug as Record<string, unknown>).developerPrompt,
                 providerRequest: (result.debug as Record<string, unknown>).providerRequest,
                 shortcutResponse: result.debug.shortcutResponse,
+                resolutionPath: (result.debug as Record<string, unknown>).resolutionPath,
               }
             : undefined,
           tools: result.debug
@@ -378,6 +515,7 @@ export async function createServer(port = 8787): Promise<http.Server> {
           ok: true,
           text: result.text,
           displayText: result.displayText,
+          commands: result.commands, // Include commands for apply card
           openaiThreadId: result.assistantThreadId,
           errors: result.errors,
           warnings: result.warnings,

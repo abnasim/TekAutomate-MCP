@@ -908,6 +908,45 @@ function toCommandRecord(
 
 function parseGroupedCommands(sourceFile: string, root: Record<string, unknown>): CommandRecord[] {
   const out: CommandRecord[] = [];
+  
+  // Handle commandGroups.json structure (groups at root level with string arrays)
+  if (sourceFile === 'commandGroups.json') {
+    Object.entries(root).forEach(([groupName, groupRaw]) => {
+      if (typeof groupRaw !== 'object' || !groupRaw) return;
+      const groupObj = groupRaw as Record<string, unknown>;
+      const commands = Array.isArray(groupObj?.commands) ? (groupObj.commands as unknown[]) : [];
+      
+      commands.forEach((cmd) => {
+        if (typeof cmd !== 'string') return;
+        
+        // Create a minimal command record from string
+        const rec: CommandRecord = {
+          commandId: cmd,
+          sourceFile,
+          group: groupName,
+          header: cmd,
+          shortDescription: `Command from ${groupName} group`,
+          description: `Command from ${groupName} group: ${cmd}`,
+          category: groupName,
+          tags: [groupName.toLowerCase()],
+          commandType: 'both',
+          families: ['MSO2', 'MSO4', 'MSO5', 'MSO6', 'MSO7'], // Default to MSO families
+          models: [],
+          syntax: { set: cmd, query: cmd + '?' },
+          arguments: [],
+          codeExamples: [],
+          relatedCommands: [],
+          notes: [],
+          raw: { header: cmd, command: cmd }
+        };
+        
+        if (rec) out.push(rec);
+      });
+    });
+    return out;
+  }
+  
+  // Handle original structure (root.groups with full command objects)
   const groups = root.groups as Record<string, unknown> | undefined;
   if (!groups || typeof groups !== 'object') return out;
   Object.entries(groups).forEach(([groupName, groupRaw]) => {

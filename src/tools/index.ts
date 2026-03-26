@@ -17,12 +17,14 @@ import { retrieveRagChunks } from './retrieveRagChunks';
 import { searchKnownFailures } from './searchKnownFailures';
 import { searchScpi } from './searchScpi';
 import { searchTmDevices } from './searchTmDevices';
+import { smartScpiLookup } from '../core/smartScpiAssistant';
 import { validateActionPayload } from './validateActionPayload';
 import { validateDeviceContext } from './validateDeviceContext';
 import { verifyScpiCommands } from './verifyScpiCommands';
 import { GROUP_NAMES } from '../core/commandGroups';
 
 export const TOOL_HANDLERS = {
+  smart_scpi_lookup: smartScpiLookup,
   search_scpi: searchScpi,
   get_command_group: getCommandGroup,
   get_command_by_header: getCommandByHeader,
@@ -52,6 +54,38 @@ export type ToolName = keyof typeof TOOL_HANDLERS;
 export function getToolDefinitions() {
   return [
     {
+      name: 'smart_scpi_lookup',
+      description:
+        'Natural language SCPI command finder for Tektronix oscilloscopes. ' +
+        'Ask in plain English what you want to do with the scope, get back exact SCPI commands ' +
+        'with syntax, arguments, valid values, and code examples.\n\n' +
+        'Examples of good queries:\n' +
+        '- "how do I measure voltage on channel 1"\n' +
+        '- "add eye diagram measurement"\n' +
+        '- "configure I2C bus decode on bus 1"\n' +
+        '- "set trigger to falling edge at 1.5V"\n' +
+        '- "save screenshot to USB"\n' +
+        '- "what is the sampling rate"\n' +
+        '- "add jitter measurement with detailed results"\n\n' +
+        'Returns: matching SCPI commands with full syntax, valid argument values, ' +
+        'and Python/SCPI code examples. For broad queries, returns a conversational ' +
+        'menu to narrow down options.',
+      parameters: {
+        type: 'object',
+        properties: {
+          query: { 
+            type: 'string', 
+            description: 'What you want to do with the oscilloscope, in plain English. ' +
+              'Include the measurement type, channel, or feature you want to control.'
+          },
+          modelFamily: { type: 'string', description: 'Optional model family filter: MSO2, MSO4, MSO5, MSO6, MSO7, DPO5000, AFG, AWG, etc.' },
+          context: { type: 'string', description: 'Additional context about the use case or instrument setup.' },
+        },
+        required: ['query'],
+        additionalProperties: false,
+      },
+    },
+    {
       name: 'search_scpi',
       description: 'Search SCPI commands by feature or keyword (e.g. "FastFrame", "trigger edge", "measurement frequency"). Use for normal scope SCPI work when backend is pyvisa/vxi11/tekhsi or when the user wants SCPI. Do not overfit exact submodels; the scope corpus is already split into modern MSO 2/4/5/6/7 vs legacy 5k/7k/70k families.',
       parameters: {
@@ -75,9 +109,9 @@ export function getToolDefinitions() {
         properties: {
           groupName: {
             type: 'string',
-            enum: GROUP_NAMES,
-            description: 'The command group to retrieve.',
+            description: 'Exact group name from the known groups list.',
           },
+          modelFamily: { type: 'string', description: 'Instrument model family filter, e.g. mso_5_series.' },
         },
         required: ['groupName'],
         additionalProperties: false,
@@ -398,13 +432,15 @@ export function getToolDefinitions() {
     },
     {
       name: 'get_instrument_state',
-      description: 'Probe instrument identity/state via code_executor.',
+      description: 'Probe instrument identity/state via code_executor. Requires liveMode=true. Use outputMode="verbose" for full Python stdout/stderr/transcript.',
       parameters: {
         type: 'object',
         properties: {
           executorUrl: { type: 'string' },
           visaResource: { type: 'string' },
           backend: { type: 'string' },
+          liveMode: { type: 'boolean' },
+          outputMode: { type: 'string', enum: ['clean', 'verbose'] },
         },
         required: [],
         additionalProperties: false,
@@ -412,7 +448,7 @@ export function getToolDefinitions() {
     },
     {
       name: 'probe_command',
-      description: 'Probe a single SCPI command via code_executor.',
+      description: 'Probe a single SCPI command via code_executor. Requires liveMode=true. Use outputMode="verbose" to return full runtime output instead of only the query result.',
       parameters: {
         type: 'object',
         properties: {
@@ -420,6 +456,8 @@ export function getToolDefinitions() {
           executorUrl: { type: 'string' },
           visaResource: { type: 'string' },
           backend: { type: 'string' },
+          liveMode: { type: 'boolean' },
+          outputMode: { type: 'string', enum: ['clean', 'verbose'] },
         },
         required: ['command'],
         additionalProperties: false,
@@ -427,13 +465,15 @@ export function getToolDefinitions() {
     },
     {
       name: 'get_visa_resources',
-      description: 'List VISA resources via code_executor.',
+      description: 'List VISA resources via code_executor. Requires liveMode=true. Use outputMode="verbose" for full runtime output.',
       parameters: {
         type: 'object',
         properties: {
           executorUrl: { type: 'string' },
           visaResource: { type: 'string' },
           backend: { type: 'string' },
+          liveMode: { type: 'boolean' },
+          outputMode: { type: 'string', enum: ['clean', 'verbose'] },
         },
         required: [],
         additionalProperties: false,
@@ -441,13 +481,15 @@ export function getToolDefinitions() {
     },
     {
       name: 'get_environment',
-      description: 'Inspect runtime environment via code_executor.',
+      description: 'Inspect runtime environment via code_executor. Requires liveMode=true. Use outputMode="verbose" for full runtime output.',
       parameters: {
         type: 'object',
         properties: {
           executorUrl: { type: 'string' },
           visaResource: { type: 'string' },
           backend: { type: 'string' },
+          liveMode: { type: 'boolean' },
+          outputMode: { type: 'string', enum: ['clean', 'verbose'] },
         },
         required: [],
         additionalProperties: false,

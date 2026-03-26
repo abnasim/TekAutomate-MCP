@@ -3,7 +3,7 @@ import * as path from 'path';
 import { Bm25Index } from './bm25';
 import { resolveTemplatesDir } from './paths';
 
-interface TemplateDoc {
+export interface TemplateDoc {
   id: string;
   name: string;
   description: string;
@@ -23,6 +23,10 @@ export class TemplateIndex {
 
   search(query: string, limit = 5): TemplateDoc[] {
     return this.bm25.search(query, limit).map((r) => r.doc);
+  }
+
+  all(): TemplateDoc[] {
+    return [...this.docs];
   }
 }
 

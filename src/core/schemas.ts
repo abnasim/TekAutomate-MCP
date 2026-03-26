@@ -12,12 +12,34 @@ export interface ToolResult<T = unknown> {
   warnings: string[];
 }
 
+export type InstrumentOutputMode = 'clean' | 'verbose';
+
 export interface McpChatRequest {
   userMessage: string;
   attachments?: McpChatAttachment[];
-  outputMode: 'steps_json' | 'blockly_xml';
+  outputMode: 'steps_json' | 'blockly_xml' | 'chat';
+  buildNew?: boolean;
+  buildBrief?: {
+    intent: string;
+    diagnosticDomain: string[];
+    channels: string[];
+    protocols: string[];
+    signalType?: string;
+    dataRate?: string;
+    closureType?: string;
+    probing?: string;
+    measurementGoals: string[];
+    artifactGoals: string[];
+    operatingModeHints: string[];
+    unresolvedQuestions: string[];
+    suggestedChecks: string[];
+    secondaryEvidence?: string[];
+  };
   intent?: 'default' | 'command_explain';
   mode?: 'mcp_only' | 'mcp_ai';
+  routerEnabled?: boolean;
+  routerPreferred?: boolean;
+  routerOnly?: boolean;
   provider: 'openai' | 'anthropic';
   apiKey: string;
   model: string;
@@ -64,7 +86,10 @@ export interface McpChatRequest {
     executorUrl: string;
     visaResource: string;
     backend: string;
+    liveMode?: boolean;
+    outputMode?: InstrumentOutputMode;
   };
+  routerBaselineText?: string;
 }
 
 export interface McpChatAttachment {

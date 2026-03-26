@@ -139,6 +139,44 @@ describe('behavioral.searchScpi', () => {
     }
   });
 
+  it('uses the measurement catalog to surface power harmonics command families from UI-style language', async () => {
+    const result = await searchScpi({
+      query: 'add power measurement with harmonics',
+      modelFamily: 'MSO4/5/6 Series',
+      limit: 10,
+    });
+
+    expect(result.ok).toBe(true);
+    const headers = (result.data as Array<{ header?: string }>).map((row) => String(row.header || ''));
+    expect(headers).toContain('POWer:ADDNew');
+    expect(headers.some((header) => header.includes('POWer:POWer<x>:HARMONICS:'))).toBe(true);
+  });
+
+  it('uses the measurement catalog to surface standard time measurement commands from UI-style language', async () => {
+    const result = await searchScpi({
+      query: 'scpi for frequency measurement',
+      modelFamily: 'MSO4/5/6 Series',
+      limit: 10,
+    });
+
+    expect(result.ok).toBe(true);
+    const headers = (result.data as Array<{ header?: string }>).map((row) => String(row.header || ''));
+    expect(headers).toContain('MEASUrement:ADDMEAS');
+    expect(headers).toContain('MEASUrement:MEAS<x>:SOURCE');
+  });
+
+  it('uses direct jitter-summary anchors for jitter summary phrases', async () => {
+    const result = await searchScpi({
+      query: 'add jitter summary on ch1',
+      modelFamily: 'MSO4/5/6 Series',
+      limit: 10,
+    });
+
+    expect(result.ok).toBe(true);
+    const headers = (result.data as Array<{ header?: string }>).map((row) => String(row.header || ''));
+    expect(headers).toContain('MEASUrement:MEAS<x>:JITTERSummary:TIE');
+  });
+
   it('prefers legacy manual override records over the legacy vendor extract when headers collide', async () => {
     const tmpDir = await mkdtemp(path.join(os.tmpdir(), 'tek-command-index-'));
     try {

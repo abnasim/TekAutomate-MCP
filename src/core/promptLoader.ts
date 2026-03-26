@@ -9,7 +9,10 @@ function resolvePromptPath(pathValue: string): URL {
   return new URL(pathValue, new URL('../../', import.meta.url));
 }
 
-export function getPromptPath(outputMode: 'steps_json' | 'blockly_xml'): URL {
+export function getPromptPath(outputMode: 'steps_json' | 'blockly_xml' | 'chat'): URL {
+  if (outputMode === 'chat') {
+    return DEFAULT_PROMPTS.steps_json;
+  }
   const configured =
     outputMode === 'blockly_xml'
       ? process.env.TEKAUTOMATE_BLOCKLY_INSTRUCTIONS_FILE
@@ -18,7 +21,7 @@ export function getPromptPath(outputMode: 'steps_json' | 'blockly_xml'): URL {
   return configured ? resolvePromptPath(configured) : DEFAULT_PROMPTS[outputMode];
 }
 
-export function loadPromptText(outputMode: 'steps_json' | 'blockly_xml'): string {
+export function loadPromptText(outputMode: 'steps_json' | 'blockly_xml' | 'chat'): string {
   const path = getPromptPath(outputMode);
   if (!fs.existsSync(path)) {
     throw new Error(`Prompt file not found: ${path.pathname}`);

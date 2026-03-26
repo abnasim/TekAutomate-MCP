@@ -2,16 +2,287 @@ import { loadPromptFile } from './promptLoader';
 import type { McpChatRequest } from './schemas';
 import { postCheckResponse } from './postCheck';
 import { buildContext } from './contextBuilder';
+import { getProviderCatalog, providerSupplementsEnabled } from './providerCatalog';
+import { findProviderSupplementMatches } from './providerMatcher';
+import { cleanRouter } from './cleanRouter';
+import { cleanPlanner, type CleanPlan } from './cleanPlanner';
 import { getToolDefinitions, runTool } from '../tools';
 import { getCommandIndex } from './commandIndex';
+import { dispatchRouterTool, getRouterTools } from './routerIntegration';
+import { executeBuild } from './buildAction';
 import { buildCommandGroupSeedQuery, suggestCommandGroups } from './commandGroups';
 import { planIntent, type PlannerOutput } from './intentPlanner';
-import { probeCommandProxy } from './instrumentProxy';
+import { formatVerboseProbeResult, probeCommandProxy } from './instrumentProxy';
 import { decodeCommandStatus, decodeStatusFromText } from './statusDecoder';
+import type { CommandSuggestion } from './smartScpiAssistant';
+
+/**
+ * Build shortcut from clean plan
+ */
+function buildShortcutFromCleanPlan(plan: CleanPlan, req: McpChatRequest): string {
+  const actions = [];
+  
+  // Add command actions
+  for (const command of plan.commands) {
+    actions.push({
+      type: 'insert_step_after',
+      targetStepId: null,
+      newStep: {
+        type: command.type,
+        label: command.description,
+        params: {
+          command: command.command,
+          ...(command.parameters || {})
+        }
+      }
+    });
+  }
+  
+  // Add addition actions
+  for (const addition of plan.additions) {
+    actions.push({
+      type: 'insert_step_after',
+      targetStepId: addition.stepId || null,
+      newStep: {
+        type: addition.type,
+        label: addition.description,
+        params: {}
+      }
+    });
+  }
+  
+  return `ACTIONS_JSON: ${JSON.stringify({
+    summary: `Planned ${plan.intent} with ${plan.confidence} confidence`,
+    findings: [plan.reasoning],
+    suggestedFixes: plan.confidence < 0.8 ? ['Consider providing more specific details'] : [],
+    actions
+  })}`;
+}
+
+/**
+ * Run deterministic tool loop for MCP-only mode (no OpenAI calls)
+ */
+async function runDeterministicToolLoop(req: McpChatRequest, flowCommandIssues: string[], maxRounds: number) {
+  console.log('[DETERMINISTIC_TOOL_LOOP] Starting deterministic tool execution');
+  
+  try {
+    const routeDecision = cleanRouter.makeRouteDecision(req);
+    
+    // If router wants Smart SCPI Assistant, call it directly
+    if (routeDecision.route === 'smart_scpi') {
+      console.log('[DETERMINISTIC_TOOL_LOOP] Using Smart SCPI Assistant');
+      return await runSmartScpiAssistant(req);
+    }
+    
+    // Handle other deterministic routes
+    if (routeDecision.route === 'tm_devices') {
+      console.log('[DETERMINISTIC_TOOL_LOOP] Using TM Devices');
+      return await runTmDevices(req);
+    }
+    
+    // Fallback for unknown routes
+    console.log('[DETERMINISTIC_TOOL_LOOP] No deterministic route found, returning error');
+    return {
+      text: 'No deterministic tool available for this request in MCP-only mode.',
+      assistantThreadId: undefined,
+      errors: ['No deterministic tool available'],
+      warnings: [],
+      metrics: {
+        totalMs: 0,
+        usedShortcut: false,
+        iterations: 0,
+        toolCalls: 0,
+        toolMs: 0,
+        modelMs: 0,
+        promptChars: { system: 0, user: 0 }
+      },
+      debug: {
+        toolTrace: [],
+        resolutionPath: 'deterministic:no_route'
+      }
+    };
+  } catch (error) {
+    console.log('[DETERMINISTIC_TOOL_LOOP] Error:', error);
+    return {
+      text: `Deterministic tool loop error: ${error}`,
+      assistantThreadId: undefined,
+      errors: [String(error)],
+      warnings: [],
+      metrics: {
+        totalMs: 0,
+        usedShortcut: false,
+        iterations: 0,
+        toolCalls: 0,
+        toolMs: 0,
+        modelMs: 0,
+        promptChars: { system: 0, user: 0 }
+      },
+      debug: {
+        toolTrace: [],
+        resolutionPath: 'deterministic:error'
+      }
+    };
+  }
+}
+
+/**
+ * Run Smart SCPI Assistant directly
+ */
+async function runSmartScpiAssistant(req: McpChatRequest) {
+  try {
+    // FIX BUG-003: Wrap dynamic import in try/catch to prevent unhandled rejections
+    let smartScpiLookup: any;
+    try {
+      const module = await import('./smartScpiAssistant');
+      smartScpiLookup = module.smartScpiLookup;
+    } catch (importError) {
+      throw new Error(`Failed to load SmartScpiAssistant: ${
+        importError instanceof Error ? importError.message : String(importError)
+      }`);
+    }
+
+    if (!smartScpiLookup) {
+      throw new Error('smartScpiLookup function not found in module');
+    }
+    
+    const toolResult = await smartScpiLookup({
+      query: req.userMessage,
+      modelFamily: req.flowContext.modelFamily,
+      context: `${req.flowContext.deviceType || 'SCOPE'} ${req.flowContext.backend || 'pyvisa'}`
+    });
+
+    if (!toolResult) {
+      throw new Error('smartScpiLookup returned no result');
+    }
+    
+    // Handle conversational prompts - return the conversational response with commands
+    if (toolResult.conversationalPrompt) {
+      return {
+        text: toolResult.conversationalPrompt,
+        commands: toolResult.data || [], // Include commands for apply card (data property from ToolResult)
+        assistantThreadId: undefined,
+        errors: [],
+        warnings: [],
+        metrics: {
+          totalMs: 0,
+          usedShortcut: false,
+          iterations: 1,
+          toolCalls: 1,
+          toolMs: 0,
+          modelMs: 0,
+          promptChars: { system: 0, user: req.userMessage.length }
+        },
+        debug: {
+          toolTrace: [{
+            name: 'smart_scpi_lookup',
+            args: { query: req.userMessage },
+            startedAt: new Date().toISOString(),
+            resultSummary: { ok: true, count: 0, conversational: true }
+          }],
+          resolutionPath: 'deterministic:smart_scpi_conversational'
+        }
+      };
+    }
+    
+    // Handle specific commands (limited to what the tool returns)
+    const actions = toolResult.data.map((cmd: any) => ({
+      type: 'insert_step_after' as const,
+      targetStepId: null,
+      newStep: {
+        type: 'query' as const,
+        label: cmd.description,
+        params: {
+          command: cmd.command,
+          saveAs: `scpi_result_${Date.now()}`
+        }
+      }
+    }));
+    
+    return {
+      text: `ACTIONS_JSON: ${JSON.stringify({
+        summary: toolResult.summary,
+        findings: toolResult.data.map((c: any) => c.description),
+        suggestedFixes: [],
+        actions
+      })}`,
+      assistantThreadId: undefined,
+      errors: [],
+      warnings: [],
+      metrics: {
+        totalMs: 0,
+        usedShortcut: false,
+        iterations: 1,
+        toolCalls: 1,
+        toolMs: 0,
+        modelMs: 0,
+        promptChars: { system: 0, user: req.userMessage.length }
+      },
+      debug: {
+        toolTrace: [{
+          name: 'smart_scpi_lookup',
+          args: { query: req.userMessage },
+          startedAt: new Date().toISOString(),
+          resultSummary: { ok: true, count: toolResult.data.length }
+        }],
+        resolutionPath: 'deterministic:smart_scpi'
+      }
+    };
+  } catch (error) {
+    const errorMessage = error instanceof Error ? error.message : String(error);
+    console.error('[SMART_SCPI] Error:', errorMessage);
+    
+    return {
+      text: `Smart SCPI Assistant error: ${errorMessage}`,
+      assistantThreadId: undefined,
+      errors: [errorMessage],
+      warnings: [],
+      metrics: {
+        totalMs: 0,
+        usedShortcut: false,
+        iterations: 0,
+        toolCalls: 0,
+        toolMs: 0,
+        modelMs: 0,
+        promptChars: { system: 0, user: 0 }
+      },
+      debug: {
+        toolTrace: [],
+        resolutionPath: 'deterministic:smart_scpi_error'
+      }
+    };
+  }
+}
+
+/**
+ * Run TM Devices directly
+ */
+async function runTmDevices(req: McpChatRequest) {
+  // Implementation for TM Devices deterministic execution
+  return {
+    text: 'TM Devices deterministic execution not yet implemented',
+    assistantThreadId: undefined,
+    errors: ['TM Devices deterministic execution not yet implemented'],
+    warnings: [],
+    metrics: {
+      totalMs: 0,
+      usedShortcut: false,
+      iterations: 0,
+      toolCalls: 0,
+      toolMs: 0,
+      modelMs: 0,
+      promptChars: { system: 0, user: 0 }
+    },
+    debug: {
+      toolTrace: [],
+      resolutionPath: 'deterministic:tm_devices'
+    }
+  };
+}
 
 interface ToolLoopResult {
   text: string;
   displayText?: string;
+  commands?: CommandSuggestion[]; // Add commands for apply card
   errors: string[];
   assistantThreadId?: string;
   warnings?: string[];
@@ -49,6 +320,7 @@ interface ToolLoopResult {
     rawOutput?: unknown;
     providerRequest?: unknown;
     shortcutResponse?: string;
+    resolutionPath?: string;
   };
 }
 
@@ -58,10 +330,12 @@ type HostedToolPhase = 'initial' | 'finalize';
 
 interface HostedResponsesRequestOptions {
   inputOverride?: HostedResponseInputItem[];
-  previousResponseId?: string;
+  previousResponseId?: string | null;
   tools?: HostedToolDefinition[];
   toolChoice?: string | Record<string, unknown>;
   developerMessage?: string;
+  routerBaselineText?: string;
+  routerBaselineMode?: string;
 }
 
 interface HostedPreloadContext {
@@ -102,6 +376,197 @@ function stableStringify(value: unknown): string {
 
 function escapeJsonString(value: string): string {
   return value.replace(/\\/g, '\\\\').replace(/"/g, '\\"');
+}
+
+function extractActionsJsonObject(text: string): Record<string, unknown> | null {
+  const raw = String(text || '').trim();
+  const marker = raw.match(/ACTIONS_JSON:\s*([\s\S]*)$/i);
+  const candidate = (marker?.[1] || raw)
+    .trim()
+    .replace(/^```json\s*/i, '')
+    .replace(/```$/i, '')
+    .trim();
+  if (!candidate.startsWith('{')) return null;
+  try {
+    const parsed = JSON.parse(candidate);
+    return parsed && typeof parsed === 'object' && !Array.isArray(parsed)
+      ? (parsed as Record<string, unknown>)
+      : null;
+  } catch {
+    return null;
+  }
+}
+
+function collectActionSteps(actionsJson: Record<string, unknown> | null): Array<Record<string, unknown>> {
+  if (!actionsJson || !Array.isArray(actionsJson.actions)) return [];
+  const steps: Array<Record<string, unknown>> = [];
+  for (const action of actionsJson.actions as Array<Record<string, unknown>>) {
+    const type = String(action.type || action.action_type || '');
+    if (type === 'replace_flow') {
+      const flow = action.flow && typeof action.flow === 'object' ? (action.flow as Record<string, unknown>) : {};
+      if (Array.isArray(flow.steps)) steps.push(...(flow.steps as Array<Record<string, unknown>>));
+      continue;
+    }
+    if (type === 'insert_step_after') {
+      const newStep = action.newStep && typeof action.newStep === 'object'
+        ? (action.newStep as Record<string, unknown>)
+        : null;
+      if (newStep) steps.push(newStep);
+      continue;
+    }
+    if (type === 'replace_step') {
+      const newStep = action.newStep && typeof action.newStep === 'object'
+        ? (action.newStep as Record<string, unknown>)
+        : null;
+      if (newStep) steps.push(newStep);
+    }
+  }
+  return steps;
+}
+
+function flattenActionSteps(steps: Array<Record<string, unknown>>): Array<Record<string, unknown>> {
+  const flat: Array<Record<string, unknown>> = [];
+  for (const step of steps) {
+    flat.push(step);
+    if (Array.isArray(step.children)) {
+      flat.push(...flattenActionSteps(step.children as Array<Record<string, unknown>>));
+    }
+  }
+  return flat;
+}
+
+function countMeaningfulActionSteps(text: string): number {
+  const actionsJson = extractActionsJsonObject(text);
+  const steps = flattenActionSteps(collectActionSteps(actionsJson));
+  return steps.filter((step) => {
+    const type = String(step.type || '').toLowerCase();
+    return !['connect', 'disconnect', 'comment', 'group'].includes(type);
+  }).length;
+}
+
+function collectActionCommandCorpus(text: string): string[] {
+  const actionsJson = extractActionsJsonObject(text);
+  const steps = flattenActionSteps(collectActionSteps(actionsJson));
+  return steps
+    .flatMap((step) => {
+      const type = String(step.type || '').toLowerCase();
+      const params = step.params && typeof step.params === 'object'
+        ? (step.params as Record<string, unknown>)
+        : {};
+      if (['write', 'query', 'set_and_query'].includes(type)) {
+        return [String(params.command || '').trim()].filter(Boolean);
+      }
+      if (type === 'tm_device_command') {
+        return [String(params.code || '').trim()].filter(Boolean);
+      }
+      if (type === 'python') {
+        return [`python:${String(params.code || '').trim()}`].filter(Boolean);
+      }
+      if (type === 'save_waveform') {
+        return [`save_waveform:${String(params.source || '')}:${String(params.format || '')}`];
+      }
+      if (type === 'save_screenshot') {
+        return ['save_screenshot'];
+      }
+      if (type === 'recall') {
+        return [`recall:${String(params.recallType || '')}:${String(params.filePath || '')}`];
+      }
+      return [];
+    })
+    .filter(Boolean);
+}
+
+function missingFromBaseline(baseline: string[], candidate: string[]): string[] {
+  const candidateCorpus = candidate.map((item) => item.toLowerCase());
+  return baseline.filter((item) => {
+    const needle = item.toLowerCase();
+    return !candidateCorpus.some((entry) => entry.includes(needle));
+  });
+}
+
+function buildRouterBaselineDeveloperSection(text: string, mode: string): string {
+  const cleaned = String(text || '').trim();
+  if (!cleaned) return '';
+  return [
+    '## ROUTER BASELINE',
+    `Router mode: ${mode || 'action'}`,
+    'The router/local MCP layer already produced the baseline below.',
+    'Treat this baseline as the starting point, not a suggestion to ignore.',
+    'Your job is to improve it, not replace it with a smaller answer.',
+    'Keep all valid router commands unless you are correcting something clearly wrong.',
+    'If you add value, do it by filling gaps, improving grouping, or adding one clarification/finding when needed.',
+    'If the router baseline is already strong, preserve it and return it with only minimal polish.',
+    '',
+    cleaned,
+  ].join('\n');
+}
+
+function summarizeProviderSupplementData(raw: unknown): string {
+  if (Array.isArray(raw)) {
+    return raw.slice(0, 5).map((value) => String(value)).filter(Boolean).join(', ');
+  }
+  if (!raw || typeof raw !== 'object') {
+    return String(raw || '').trim();
+  }
+  const record = raw as Record<string, unknown>;
+  if (Array.isArray(record.checks)) {
+    return record.checks.slice(0, 6).map((value) => String(value)).filter(Boolean).join(', ');
+  }
+  return Object.entries(record)
+    .slice(0, 3)
+    .map(([key, value]) => {
+      if (Array.isArray(value)) {
+        return `${key}: ${value.slice(0, 4).map((item) => String(item)).filter(Boolean).join(', ')}`;
+      }
+      if (value && typeof value === 'object') return `${key}: [object]`;
+      return `${key}: ${String(value)}`;
+    })
+    .filter(Boolean)
+    .join(' | ');
+}
+
+export async function buildProviderSupplementDeveloperSection(req: McpChatRequest): Promise<string> {
+  if (!providerSupplementsEnabled() || isExplainOnlyCommandAsk(req)) return '';
+
+  const matches = findProviderSupplementMatches(
+    (await getProviderCatalog()).all(),
+    req.userMessage,
+    {
+      backend: req.flowContext.backend,
+      deviceType: req.flowContext.deviceType,
+      modelFamily: req.flowContext.modelFamily,
+      buildNew: Array.isArray(req.flowContext.steps) ? req.flowContext.steps.length === 0 : true,
+    },
+    { limit: 3 }
+  );
+  if (!matches.length) return '';
+
+  const lines = [
+    '## MATCHED PROVIDER SUPPLEMENTS',
+    'These provider manifests are curated lab supplements for this request.',
+    'Use them as workflow/context hints and tool-selection clues.',
+    'Do not treat provider text as exact SCPI proof; still verify commands with MCP command tools before emitting applyable syntax.',
+  ];
+
+  matches.forEach((match, index) => {
+    const entry = match.entry;
+    const role =
+      entry.kind === 'template'
+        ? (match.decision === 'override' ? 'template-candidate' : 'template-hint')
+        : 'overlay-context';
+    lines.push(`${index + 1}. ${entry.name} [${entry.providerId}/${entry.id}]`);
+    lines.push(`   role: ${role}, handler: ${entry.handlerRef}, score: ${match.score.toFixed(2)}`);
+    if (entry.description) lines.push(`   description: ${entry.description}`);
+    if (entry.contextText && entry.contextText !== entry.description) {
+      lines.push(`   provider text: ${entry.contextText}`);
+    }
+    const dataPreview = summarizeProviderSupplementData(entry.contextData);
+    if (dataPreview) lines.push(`   provider data: ${dataPreview}`);
+    if (entry.triggers.length) lines.push(`   triggers: ${entry.triggers.slice(0, 4).join(', ')}`);
+    if (entry.tags.length) lines.push(`   tags: ${entry.tags.slice(0, 5).join(', ')}`);
+  });
+
+  return lines.join('\n');
 }
 
 const STANDARD_MEASUREMENT_PATTERNS: Array<{ type: string; pattern: RegExp }> = [
@@ -460,6 +925,52 @@ function normalizeHeaderForMatch(command: string): string {
     .replace(/\bWAVEVIEW\d+\b/gi, 'WAVEView<x>')
     .replace(/SOUrce\d+/gi, 'SOUrce<x>')
     .toLowerCase();
+}
+
+function isRouterEnabled(): boolean {
+  return String(process.env.MCP_ROUTER_ENABLED || '').trim() === 'true';
+}
+
+function isRouterEnabledForRequest(req?: McpChatRequest): boolean {
+  if (!isRouterEnabled()) return false;
+  if (req && req.routerEnabled === false) return false;
+  return true;
+}
+
+function isRouterPreferredHosted(req?: McpChatRequest): boolean {
+  if (!isRouterEnabledForRequest(req)) return false;
+  if (req && req.routerPreferred === true) return true;
+  return String(process.env.MCP_ROUTER_PREFERRED || '').trim() === 'true';
+}
+
+function isRouterOnlyHosted(req?: McpChatRequest): boolean {
+  return isRouterEnabledForRequest(req) && Boolean(req?.routerOnly);
+}
+
+function shouldForceHostedRouter(req?: McpChatRequest): boolean {
+  if (!req || !isRouterEnabledForRequest(req)) return false;
+  if (req.mode !== 'mcp_ai') return false;
+  if (req.outputMode !== 'steps_json') return false;
+  if (isExplainOnlyCommandAsk(req)) return false;
+
+  const msg = String(req.userMessage || '').toLowerCase().trim();
+  if (!msg) return false;
+
+  if (Boolean(req.routerOnly)) return true;
+  if (isFollowUpCorrectionRequest(req)) return true;
+  if (isTmDevicesHostedRequest(req)) return true;
+
+  const normalized = msg.replace(/\s+/g, ' ');
+  return /\b(over\s+the\s+next|over\s+\d+\s+acquisitions?|next\s+\d+\s+acquisitions?|minimum\s+and\s+maximum|statistics?|summarize|sweep|jitter|skew|eye\s+diagram|all\s+frames|timestamps?|fastframe|afg|smu|convert.*tm_devices|tm_devices)\b/i.test(
+    normalized
+  );
+}
+
+function getAvailableToolDefinitions(req?: McpChatRequest) {
+  return [
+    ...getToolDefinitions(),
+    ...(isRouterEnabledForRequest(req) ? getRouterTools() : []),
+  ];
 }
 
 function isNumericLike(value: string): boolean {
@@ -1408,16 +1919,18 @@ function buildShortcutResponse(opts: {
       modelMs: 0,
       promptChars: { system: 0, user: 0 },
     },
-    debug: {
-      shortcutResponse: payload,
-      toolTrace: [],
-    },
-  };
+        debug: {
+          shortcutResponse: payload,
+          toolTrace: [],
+          resolutionPath: 'shortcut',
+        },
+      };
 }
 
 function detectDirectExecution(
   req: McpChatRequest
 ): { type: 'query' | 'write' | 'error_check'; command: string } | null {
+  if (String(req.outputMode || '').toLowerCase() === 'steps_json') return null;
   const msg = String(req.userMessage || '').toLowerCase().trim();
 
   if (
@@ -1454,6 +1967,9 @@ function detectDirectExecution(
 async function buildMcpOnlyExplainApplyResponse(req: McpChatRequest): Promise<string | null> {
   const userMessage = String(req.userMessage || '').trim();
   if (!userMessage) return null;
+  if (!/\b(command|scpi|header|syntax|query|read(?:\s+back)?|write|status)\b/i.test(userMessage)) {
+    return null;
+  }
 
   const commandIndex = await getCommandIndex();
   const candidates = commandIndex.searchByQuery(userMessage, req.flowContext.modelFamily, 5);
@@ -1563,10 +2079,14 @@ function isAcquireStateRunCommand(command: string): boolean {
   return /^ACQUIRE:STATE\s+(RUN|ON|1)\b/.test(normalized);
 }
 
-function isOpcCapableWriteCommand(command: string): boolean {
+function isSingleSequenceStopAfterCommand(command: string): boolean {
+  const normalized = normalizePlannerCommand(command);
+  return /^ACQUIRE:STOPAFTER\s+SEQUENCE\b/.test(normalized);
+}
+
+function isManualOpcEligibleWriteCommand(command: string): boolean {
   const normalized = normalizePlannerCommand(command);
   return (
-    isAcquireStateRunCommand(normalized) ||
     /^AUTOSET(\s|:).*EXECUTE\b/.test(normalized) ||
     /^CALIBRATE:INTERNAL(:START)?\b/.test(normalized) ||
     /^CALIBRATE:FACTORY\s+(START|CONTINUE|PREVIOUS)\b/.test(normalized) ||
@@ -1636,16 +2156,19 @@ function plannerCommandPriority(
     if (command.stepType === 'save_waveform' || command.stepType === 'save_screenshot') return 80;
     return 75;
   }
-  if (command.group === 'ERROR_CHECK') return 75;
+  if (command.group === 'ERROR_CHECK') return 90;
 
   const normalized = normalizePlannerCommand(command.concreteCommand);
   const header = plannerCommandHeader(command.concreteCommand);
 
+  if (header.startsWith('MEASUREMENT:IMMED:')) return 65;
   if (command.commandType === 'query' && header !== '*OPC?') return 70;
   if (/^CH\d:/.test(header)) return 20;
   if (header.startsWith('BUS:')) return 30;
   if (header.startsWith('TRIGGER:')) return 40;
+  if (/^DISPLAY:WAVEVIEW\d+:MATH:MATH\d+:STATE/.test(normalized)) return 57;
   if (header.startsWith('DISPLAY:')) return 50;
+  if (header.startsWith('MATH:')) return 55;
   if (
     header.startsWith('ACQUIRE:') ||
     header.startsWith('HORIZONTAL:FASTFRAME') ||
@@ -1751,12 +2274,73 @@ function buildActionsFromPlanner(
   const existingSteps = Array.isArray(req.flowContext.steps)
     ? (req.flowContext.steps as Array<Record<string, unknown>>)
     : [];
-  const hasExistingSteps = existingSteps.length > 0;
+  const requestedFreshBuild = req.buildNew === true;
+  const hasExistingSteps = existingSteps.length > 0 && !requestedFreshBuild;
   const forceReplaceFlow =
+    requestedFreshBuild ||
     /\breplace(?:\s+the)?\s+(?:current\s+)?flow\b/i.test(String(req.userMessage || '')) ||
     /\bfrom scratch\b|\bnew flow\b|\bwipe\b/i.test(String(req.userMessage || ''));
 
   const instrumentId = derivePlannerInstrumentId(req);
+  const onlyIeeeQueries = plannerOutput.resolvedCommands.every((command) =>
+    /^\*(?:IDN|OPT|ESR)\?$/.test(String(command.concreteCommand || '').trim())
+  );
+  if (onlyIeeeQueries) {
+    const steps: Array<Record<string, unknown>> = [
+      {
+        id: '1',
+        type: 'connect',
+        label: 'Connect',
+        params: { instrumentIds: [instrumentId], printIdn: true },
+      },
+    ];
+    let stepId = 2;
+    for (const command of plannerOutput.resolvedCommands) {
+      const concrete = String(command.concreteCommand || '').trim();
+      if (command.group === 'ERROR_CHECK' || concrete === '*ESR?') {
+        steps.push({
+          id: String(stepId++),
+          type: 'error_check',
+          label: 'Error Check',
+          params: { command: concrete || '*ESR?' },
+        });
+      } else {
+        steps.push(
+          buildQueryStep(
+            String(stepId++),
+            buildPlannerStepLabel(concrete),
+            concrete,
+            command.saveAs
+          )
+        );
+      }
+    }
+    steps.push({
+      id: String(stepId++),
+      type: 'disconnect',
+      label: 'Disconnect',
+      params: { instrumentIds: [instrumentId] },
+    });
+
+    return `ACTIONS_JSON: ${JSON.stringify({
+      summary: `Built ${plannerOutput.resolvedCommands.length} verified planner steps without a model call.`,
+      findings: [],
+      suggestedFixes: [],
+      actions: [{
+        type: 'replace_flow',
+        flow: {
+          name: `${String(req.flowContext.deviceType || 'Instrument')} Planner Flow`,
+          description: String(req.userMessage || '').trim().slice(0, 160),
+          backend: req.flowContext.backend,
+          deviceType: req.flowContext.deviceType || 'SCOPE',
+          deviceDriver: req.flowContext.deviceDriver,
+          visaBackend: req.flowContext.visaBackend,
+          steps,
+        },
+      }],
+    })}`;
+  }
+
   const flowSteps: Array<Record<string, unknown>> = hasExistingSteps
     ? []
     : [
@@ -1795,6 +2379,9 @@ function buildActionsFromPlanner(
   };
 
   const sortedResolvedCommands = sortPlannerResolvedCommands(plannerOutput.resolvedCommands);
+  const plannerHasSingleSequence = sortedResolvedCommands.some((command) =>
+    isSingleSequenceStopAfterCommand(command.concreteCommand)
+  );
   for (const command of sortedResolvedCommands) {
     if (command.header.startsWith('STEP:') && command.stepType) {
       flushPendingWrites();
@@ -1811,9 +2398,9 @@ function buildActionsFromPlanner(
       flushPendingWrites();
       collectStep({
         id: nextStepId(),
-        type: 'query',
-        label: 'Read event status',
-        params: { command: command.concreteCommand, saveAs: command.saveAs || 'error_status' },
+        type: 'error_check',
+        label: 'Error Check',
+        params: { command: command.concreteCommand || '*ESR?' },
       });
       continue;
     }
@@ -1840,13 +2427,15 @@ function buildActionsFromPlanner(
           [command.concreteCommand]
         )
       );
-      collectStep(
-        buildQueryStep(nextStepId(), 'Wait for acquisition complete', '*OPC?', 'acq_complete')
-      );
+      if (plannerHasSingleSequence) {
+        collectStep(
+          buildQueryStep(nextStepId(), 'Wait for acquisition complete', '*OPC?', 'acq_complete')
+        );
+      }
       continue;
     }
 
-    if (isOpcCapableWriteCommand(command.concreteCommand)) {
+    if (isManualOpcEligibleWriteCommand(command.concreteCommand)) {
       flushPendingWrites();
       collectStep(
         buildWriteStep(
@@ -1937,6 +2526,237 @@ function buildActionsFromPlanner(
   })}`;
 }
 
+function escapePythonString(value: string): string {
+  return String(value || '').replace(/\\/g, '\\\\').replace(/"/g, '\\"');
+}
+
+function splitScpiHeaderAndArgs(command: string): { header: string; args: string[]; isQuery: boolean } {
+  const trimmed = String(command || '').trim();
+  const isQuery = /\?$/.test(trimmed);
+  const firstSpace = trimmed.search(/\s/);
+  const header = (firstSpace >= 0 ? trimmed.slice(0, firstSpace) : trimmed).trim();
+  const argText = firstSpace >= 0 ? trimmed.slice(firstSpace + 1).trim() : '';
+  const args = argText ? argText.split(/\s*,\s*|\s+/).filter(Boolean) : [];
+  return { header, args, isQuery };
+}
+
+function normalizeScpiToken(raw: string): string {
+  return String(raw || '')
+    .replace(/\?.*$/, '')
+    .replace(/\{[^}]+\}/g, '')
+    .replace(/<[^>]+>/g, '')
+    .replace(/[^A-Za-z0-9]/g, '')
+    .toLowerCase();
+}
+
+function scpiHeaderToTmDevicesMethodPathCandidates(command: string): string[] {
+  const { header, isQuery } = splitScpiHeaderAndArgs(command);
+  const segments = String(header || '')
+    .split(':')
+    .map((segment) => segment.trim())
+    .filter(Boolean);
+  if (!segments.length) return [];
+
+  const pathTokens: string[] = [];
+  for (const segment of segments) {
+    if (/^\*/.test(segment)) return [];
+    const bare = segment.replace(/\?$/, '');
+    const indexed = bare.match(/^([A-Za-z]+)(\d+)$/);
+    if (indexed) {
+      const base = normalizeScpiToken(indexed[1]);
+      const index = indexed[2];
+      pathTokens.push(base.length === 1 ? `${base}[${index}]` : `${base}[${index}]`);
+      continue;
+    }
+    if (/^[AB]$/i.test(bare)) {
+      pathTokens.push(bare.toLowerCase());
+      continue;
+    }
+    const normalized = normalizeScpiToken(bare);
+    if (!normalized) continue;
+    pathTokens.push(normalized);
+  }
+
+  if (!pathTokens.length) return [];
+  const basePath = pathTokens.join('.');
+  const suffixes = isQuery ? ['query'] : ['write'];
+  return suffixes.map((suffix) => `${basePath}.${suffix}`);
+}
+
+async function resolveTmDevicesCode(
+  command: string,
+  model: string
+): Promise<string> {
+  const { args, isQuery } = splitScpiHeaderAndArgs(command);
+  const candidatePaths = scpiHeaderToTmDevicesMethodPathCandidates(command);
+  for (const candidatePath of candidatePaths) {
+    const search = await runTool('search_tm_devices', {
+      query: candidatePath,
+      model,
+      limit: 3,
+    }) as Record<string, unknown>;
+    const docs = Array.isArray(search.data) ? (search.data as Array<Record<string, unknown>>) : [];
+    const exact = docs.find((doc) => String(doc.methodPath || '') === candidatePath) || docs[0];
+    if (!exact) continue;
+    const methodPath = String(exact.methodPath || '').trim();
+    if (!methodPath) continue;
+    const materialized = await runTool('materialize_tm_devices_call', {
+      methodPath,
+      model,
+      objectName: 'scope',
+      arguments: isQuery ? [] : args,
+    }) as Record<string, unknown>;
+    if (materialized.ok === true && materialized.data && typeof materialized.data === 'object') {
+      const code = String((materialized.data as Record<string, unknown>).code || '').trim();
+      if (code) return code;
+    }
+  }
+
+  if (isQuery) {
+    return `result = scope.visa_query("${escapePythonString(command)}")`;
+  }
+  return `scope.visa_write("${escapePythonString(command)}")`;
+}
+
+async function buildTmDevicesActionsFromPlanner(
+  plannerOutput: PlannerOutput,
+  req: McpChatRequest
+): Promise<string | null> {
+  if ((req.outputMode || '') !== 'steps_json') return null;
+  if ((req.flowContext.backend || '').toLowerCase() !== 'tm_devices') return null;
+  if (!plannerOutput.resolvedCommands.length) return null;
+
+  const instrumentId = derivePlannerInstrumentId(req);
+  const model = req.flowContext.deviceDriver || req.flowContext.modelFamily || 'MSO6B';
+  const steps: Array<Record<string, unknown>> = [
+    {
+      id: '1',
+      type: 'connect',
+      label: 'Connect',
+      params: { instrumentIds: [instrumentId], printIdn: true },
+    },
+  ];
+
+  let nextId = 2;
+  for (const command of sortPlannerResolvedCommands(plannerOutput.resolvedCommands)) {
+    if (command.header.startsWith('STEP:') && command.stepType) {
+      steps.push({
+        id: String(nextId++),
+        type: command.stepType,
+        label: buildPlannerStepLabel(command.concreteCommand),
+        params: { ...(command.stepParams || {}) },
+      });
+      continue;
+    }
+    const code = await resolveTmDevicesCode(
+      command.concreteCommand,
+      req.flowContext.deviceDriver || req.flowContext.modelFamily || 'MSO6B'
+    );
+    steps.push({
+      id: String(nextId++),
+      type: 'tm_device_command',
+      label: buildPlannerStepLabel(command.concreteCommand),
+      params: {
+        code,
+        model,
+        description: command.concreteCommand,
+      },
+    });
+  }
+  steps.push({
+    id: String(nextId),
+    type: 'disconnect',
+    label: 'Disconnect',
+    params: { instrumentIds: [instrumentId] },
+  });
+
+  return `ACTIONS_JSON: ${JSON.stringify({
+    summary: `Built ${plannerOutput.resolvedCommands.length} tm_devices planner steps without a model call.`,
+    findings: [],
+    suggestedFixes: [],
+    actions: [
+      {
+        type: 'replace_flow',
+        flow: {
+          name: `${String(req.flowContext.deviceType || 'Instrument')} Planner Flow`,
+          description: String(req.userMessage || '').trim().slice(0, 160),
+          backend: 'tm_devices',
+          deviceType: req.flowContext.deviceType || 'SCOPE',
+          deviceDriver: req.flowContext.deviceDriver,
+          visaBackend: req.flowContext.visaBackend,
+          steps,
+        },
+      },
+    ],
+  })}`;
+}
+
+function isBackendConversionRequest(message: string): boolean {
+  const msg = String(message || '').toLowerCase();
+  return /\b(?:do|redo|repeat|convert|switch|change)\b[\s\S]*\btm_devices\b|\btm_devices\b[\s\S]*\binstead\b|\buse tm_devices\b/i.test(msg);
+}
+
+async function convertStepToTmDevices(
+  step: Record<string, unknown>,
+  model: string
+): Promise<Record<string, unknown>> {
+  const type = String(step.type || '').toLowerCase();
+  if (type === 'tm_device_command' || type === 'connect' || type === 'disconnect') {
+    return step;
+  }
+  if (type === 'group') {
+    const children = Array.isArray(step.children)
+      ? await Promise.all((step.children as Array<Record<string, unknown>>).map((child) => convertStepToTmDevices(child, model)))
+      : [];
+    return { ...step, children };
+  }
+
+  const params = (step.params || {}) as Record<string, unknown>;
+  if (type === 'write' && typeof params.command === 'string') {
+    const commands = String(params.command)
+      .split(';')
+      .map((cmd) => cmd.trim())
+      .filter(Boolean);
+    const code = (await Promise.all(commands.map((cmd) => resolveTmDevicesCode(cmd, model)))).join('\n');
+    return {
+      ...step,
+      type: 'tm_device_command',
+      params: {
+        code,
+        model,
+        description: String(step.label || params.command || 'Converted command'),
+      },
+    };
+  }
+
+  if (type === 'query' && typeof params.command === 'string') {
+    const command = String(params.command).trim();
+    const saveAs = String(params.saveAs || 'result').trim() || 'result';
+    const converted = await resolveTmDevicesCode(command, model);
+    const queryCode = converted.startsWith('scope.visa_write(')
+      ? `${saveAs} = scope.visa_query("${escapePythonString(command)}")`
+      : converted.replace(/^scope\./, `${saveAs} = scope.`).replace(/\.write\(([\s\S]*)\)$/, '.query()');
+    return {
+      ...step,
+      type: 'tm_device_command',
+      params: {
+        code: queryCode,
+        model,
+        description: String(step.label || params.command || 'Converted query'),
+      },
+    };
+  }
+
+  return step;
+}
+
+async function convertStepsToTmDevices(
+  steps: Array<Record<string, unknown>>,
+  model: string
+): Promise<Array<Record<string, unknown>>> {
+  return Promise.all(steps.map((step) => convertStepToTmDevices(step, model)));
+}
+
 async function buildPyvisaCommonServerShortcut(req: McpChatRequest): Promise<string | null> {
   if ((req.outputMode || '') !== 'steps_json') return null;
   const backend = (req.flowContext.backend || 'pyvisa').toLowerCase();
@@ -1951,9 +2771,11 @@ async function buildPyvisaCommonServerShortcut(req: McpChatRequest): Promise<str
   }
 
   const existingSteps = Array.isArray(req.flowContext.steps) ? (req.flowContext.steps as Array<Record<string, unknown>>) : [];
-  const hasExistingSteps = existingSteps.length > 0;
+  const requestedFreshBuild = req.buildNew === true;
+  const hasExistingSteps = existingSteps.length > 0 && !requestedFreshBuild;
   const isLegacyDpoFamily = /\b(DPO|5K|7K|70K)\b/i.test(String(req.flowContext.modelFamily || ''));
   const forceReplaceFlow =
+    requestedFreshBuild ||
     /\bdisconnect\b/i.test(message) ||
     /\breplace(?:\s+the)?\s+(?:current\s+)?flow\b/i.test(message) ||
     /\bfrom scratch\b|\bfull workflow\b|\bfull flow\b/i.test(message);
@@ -3008,8 +3830,13 @@ function logToolResult(name: string, result: unknown) {
   }
 }
 
-function buildSystemPrompt(modePrompt: string, outputMode: 'steps_json' | 'blockly_xml'): string {
-  const modeLabel = outputMode === 'blockly_xml' ? 'Blockly XML' : 'Steps UI JSON';
+function buildSystemPrompt(modePrompt: string, outputMode: 'steps_json' | 'blockly_xml' | 'chat'): string {
+  const modeLabel =
+    outputMode === 'blockly_xml'
+      ? 'Blockly XML'
+      : outputMode === 'chat'
+        ? 'Technical chat'
+        : 'Steps UI JSON';
   return [
     '# TekAutomate MCP Runtime',
     'You are the live TekAutomate assistant inside the app. Build, edit, validate, and explain the current workspace.',
@@ -3022,9 +3849,12 @@ function buildSystemPrompt(modePrompt: string, outputMode: 'steps_json' | 'block
     '- Prefer one focused tool call over serial tool chains. Zero tool calls is fine when the workspace and prompt already give enough context.',
     '- If the user asks to add, insert, update, fix, move, remove, replace, convert, apply, or "do it", return actionable changes in this response, not promises.',
     '- Never claim a change is already applied. You are proposing actions for the app to apply.',
-    '- Never output Python unless the user explicitly asks for Python.',
+    '- Do not output raw standalone Python text unless the user explicitly asks for Python.',
+    '- A python step is allowed when repeated acquisition, iteration, aggregation, or sweep logic would otherwise require an impractical number of manual steps.',
     '- Prefer separate write/query steps over semicolon-chained multi-command strings unless the user explicitly asks for a single combined command.',
     '- Prefer grouped flow structure for readability: for multi-phase flows, organize steps into phase groups (setup/config/trigger/measure/save/cleanup) unless the user asks for flat steps.',
+    '- If one required value is truly ambiguous, ask one concise blocking clarification question instead of guessing.',
+    '- If part of the request is clear, return the verified/applyable part and mention the missing or unsupported remainder in findings instead of returning an empty response.',
     '',
     '## MCP Tools',
     '- search_scpi / get_command_by_header: use when exact SCPI syntax is genuinely uncertain.',
@@ -3041,6 +3871,448 @@ function buildSystemPrompt(modePrompt: string, outputMode: 'steps_json' | 'block
     '## Mode Builder Contract',
     modePrompt,
   ].join('\n');
+}
+
+const CHAT_MODE_SYSTEM_PROMPT = [
+  'You are a senior Tektronix test automation engineer having a technical conversation inside TekAutomate.',
+  'Help the user reason about instruments, measurements, debugging, setup strategy, tm_devices usage, SCPI concepts, and practical lab decisions.',
+  'Be conversational, concise, and practical.',
+  'Use hosted file_search first whenever uploaded Tektronix knowledge-base files are available.',
+  'Treat those uploaded KB files as source-of-truth context for Tek-specific methodology, best practices, workflow guidance, and instrument-specific recommendations.',
+  'Treat uploaded programmer-manual command-syntax material and verified command JSON as the command-language source of truth.',
+  'Use canonical constructed mnemonic forms such as CH1, B1, MATH1, MEAS1, SEARCH1, and WAVEView1; never use aliases like CHAN1.',
+  'Prefer KB-backed answers over unsupported freeform recall.',
+  'When guidance clearly comes from uploaded material, say so briefly in natural language.',
+  'Use your own general knowledge only to connect the dots around what the KB and runtime context say.',
+  'If the KB does not cover something, say that briefly and then fall back to general engineering knowledge.',
+  'Do not force ACTIONS_JSON in chat mode.',
+  'Do not pretend a flow was applied.',
+  'If the user is asking for a flow, reusable setup, or build artifact while still in chat mode, do not dump raw JSON or a full standalone Python script by default.',
+  'For build-like asks in chat mode, give a short engineer-friendly outline of the flow or key steps, then tell the user to say "build it" for the applyable flow artifact.',
+  'For direct flow-construction asks, do not answer with long SCPI blocks, tm_devices call lists, or fenced code unless the user explicitly asked for code.',
+  'Keep build-like chat answers to a compact outline: what the flow will do, any one critical caveat, and an explicit invitation to say "build it".',
+  'If a flow request mentions a python step, python loop, aggregation, or repeated acquisitions, still keep chat concise and build-oriented; do not turn that into a full standalone script unless the user explicitly asks for Python, code, or a script.',
+  'Only output a full Python or tm_devices script in chat mode when the user explicitly asks for Python, code, or a script.',
+  'If the user wants a build, tell them you can build it and ask them to switch to Build mode or say "build it".',
+  'Use the runtime workspace context when it helps, but answer like an engineer, not a validator.',
+  'For underspecified diagnostic questions, ask one or two narrowing engineering questions before jumping to a build.',
+  'Examples: eye diagram -> NRZ/PAM4, data rate, horizontal vs vertical closure, probing method; jitter -> source and acceptable limit; glitches -> channel and trigger approach; bus issues -> protocol, channels, bitrate/baud.',
+].join('\n');
+
+function buildChatDeveloperPrompt(req: McpChatRequest): string {
+  const fc = req.flowContext;
+  const rc = req.runContext;
+  const flatSteps = flattenSteps(Array.isArray(fc.steps) ? fc.steps : []);
+  const stepPreview = flatSteps.length
+    ? flatSteps
+        .slice(0, 12)
+        .map((step) => {
+          const params =
+            step.params && typeof step.params === 'object' ? (step.params as Record<string, unknown>) : {};
+          const command = String(params.command || params.code || '').trim();
+          return `- [${step.id}] ${step.type}${step.label ? ` "${step.label}"` : ''}${command ? ` -> ${command}` : ''}`;
+        })
+        .join('\n')
+    : '- (empty flow)';
+  const instrumentMapLines = Array.isArray(fc.instrumentMap) && fc.instrumentMap.length
+    ? fc.instrumentMap
+        .map((device) =>
+          `- ${String(device.alias || 'device')}: ${String(device.deviceType || 'SCOPE')}, ${String(device.backend || 'pyvisa')}${device.deviceDriver ? `, driver ${String(device.deviceDriver)}` : ''}`
+        )
+        .join('\n')
+    : `- ${fc.alias || 'scope1'}: ${fc.deviceType || 'SCOPE'}, ${fc.backend || 'pyvisa'}`;
+  const parts = [
+    'Grounding rules for this chat turn:',
+    '- Use hosted file_search first when uploaded Tek KB is available.',
+    '- Prefer KB-backed guidance for Tek-specific answers.',
+    '- Treat programmer-manual syntax rules and verified command JSON as the command-language source of truth.',
+    '- Use canonical constructed mnemonics such as CH1, B1, MATH1, MEAS1, SEARCH1, and WAVEView1. Never use aliases like CHAN1.',
+    '- Briefly mention when advice is grounded in uploaded material.',
+    '- If the KB is silent, say that briefly and then use general engineering knowledge.',
+    '- If the user asks for a build-like artifact in chat mode, prefer a compact step outline over a script dump.',
+    '- For direct flow/setup/build asks, do not emit long SCPI examples or fenced code blocks unless the user explicitly asked for code.',
+    '- Default chat behavior for build-like asks: summarize the intended flow in a few bullets, mention one key caution if needed, and end by telling them to say build it.',
+    '- If the request is still a flow/workflow but mentions a python step or loop, keep it in flow language and ask them to say build it; do not dump a standalone script.',
+    '- Do not produce a standalone Python or tm_devices script unless the user explicitly asked for code/script/Python.',
+    '- Interpret "tm_device" as "tm_devices".',
+    '',
+    'Runtime workspace context:',
+    `- backend: ${fc.backend || 'pyvisa'}`,
+    `- deviceType: ${fc.deviceType || 'SCOPE'}`,
+    `- modelFamily: ${fc.modelFamily || '(unknown)'}`,
+    `- alias: ${fc.alias || 'scope1'}`,
+    '- instruments:',
+    instrumentMapLines,
+    '',
+    `Current flow (${flatSteps.length} flattened steps):`,
+    stepPreview,
+  ];
+  if (fc.selectedStep) {
+    parts.push('', `Selected step:\n${JSON.stringify(fc.selectedStep, null, 2)}`);
+  }
+  if (rc.runStatus !== 'idle') {
+    parts.push('', `Run status: ${rc.runStatus}`);
+    if (rc.logTail) {
+      parts.push(`Run log tail:\n${String(rc.logTail).slice(-1000)}`);
+    }
+  }
+  const attachmentContext = buildAttachmentContext(req);
+  if (attachmentContext) {
+    parts.push('', attachmentContext);
+  }
+  return parts.join('\n');
+}
+
+async function runChatConversation(
+  req: McpChatRequest
+): Promise<{
+  text: string;
+  assistantThreadId?: string;
+  metrics: NonNullable<ToolLoopResult['metrics']>;
+  debug: NonNullable<ToolLoopResult['debug']>;
+}> {
+  const developerPrompt = buildChatDeveloperPrompt(req);
+  const userPrompt = `User question:\n${req.userMessage}`;
+  const useHostedAssistant = shouldUseOpenAiAssistant(req);
+  const modelStartedAt = Date.now();
+
+  if (req.provider === 'anthropic') {
+    const messages = [
+      ...(Array.isArray(req.history)
+        ? req.history
+            .slice(-8)
+            .map((h) => ({ role: h.role as 'user' | 'assistant', content: String(h.content || '').slice(0, 3000) }))
+        : []),
+      { role: 'user' as const, content: userPrompt },
+    ];
+    const requestPayload = {
+      model: req.model,
+      system: `${CHAT_MODE_SYSTEM_PROMPT}\n\n${developerPrompt}`,
+      max_tokens: 1800,
+      messages,
+    };
+    const res = await fetch('https://api.anthropic.com/v1/messages', {
+      method: 'POST',
+      headers: {
+        'x-api-key': req.apiKey,
+        'anthropic-version': '2023-06-01',
+        'content-type': 'application/json',
+      },
+      body: JSON.stringify(requestPayload),
+    });
+    if (!res.ok) {
+      throw new Error(`Anthropic error ${res.status}: ${await res.text()}`);
+    }
+    const json = (await res.json()) as Record<string, unknown>;
+    const text = Array.isArray(json.content)
+      ? (json.content as Array<Record<string, unknown>>)
+          .filter((c) => c.type === 'text')
+          .map((c) => String(c.text || ''))
+          .join('\n')
+      : '';
+    const normalizedText = await normalizeChatBuildLikeResponse(req, text);
+    const modelMs = Date.now() - modelStartedAt;
+    return {
+      text: normalizedText,
+      metrics: {
+        totalMs: modelMs,
+        usedShortcut: false,
+        provider: 'anthropic',
+        iterations: 1,
+        toolCalls: 0,
+        toolMs: 0,
+        modelMs,
+        promptChars: {
+          system: CHAT_MODE_SYSTEM_PROMPT.length + developerPrompt.length,
+          user: userPrompt.length,
+        },
+      },
+      debug: {
+        systemPrompt: CHAT_MODE_SYSTEM_PROMPT,
+        developerPrompt,
+        userPrompt,
+        toolDefinitions: [],
+        toolTrace: [],
+        providerRequest: requestPayload,
+        resolutionPath: 'chat',
+      },
+    };
+  }
+
+  if (useHostedAssistant) {
+    const openAiBase = process.env.OPENAI_BASE_URL || 'https://api.openai.com';
+    const hostedVectorStoreId = resolveHostedVectorStoreId();
+    const chatTools: HostedToolDefinition[] = hostedVectorStoreId
+      ? [
+          {
+            type: 'file_search',
+            vector_store_ids: [hostedVectorStoreId],
+            max_num_results: 6,
+          },
+        ]
+      : [];
+    const requestPayload: Record<string, unknown> = {
+      model: resolveHostedAssistantModel(req),
+      input: [
+        {
+          role: 'developer',
+          content: `${CHAT_MODE_SYSTEM_PROMPT}\n\n${developerPrompt}`.trim(),
+        },
+        ...(Array.isArray(req.history)
+          ? req.history
+              .slice(-8)
+              .map((h) => ({ role: h.role, content: String(h.content || '').slice(0, 3000) }))
+          : []),
+        { role: 'user', content: userPrompt },
+      ],
+      store: true,
+      stream: false,
+      ...(chatTools.length ? { tools: chatTools } : {}),
+    };
+    if (hostedModelSupportsTemperature(String(requestPayload.model || ''))) {
+      requestPayload.temperature = resolveHostedResponseTemperature(req);
+    }
+    const reasoningEffort = resolveHostedReasoningEffort(req, String(requestPayload.model || ''));
+    if (reasoningEffort) {
+      requestPayload.reasoning = { effort: reasoningEffort };
+    }
+    const res = await fetch(`${openAiBase}/v1/responses`, {
+      method: 'POST',
+      headers: {
+        Authorization: `Bearer ${req.apiKey}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify(requestPayload),
+    });
+    if (!res.ok) {
+      throw new Error(`OpenAI Responses error ${res.status}: ${await res.text()}`);
+    }
+    const json = (await res.json()) as Record<string, unknown>;
+    const responseId = String(json.id || '').trim();
+    const normalizedText = await normalizeChatBuildLikeResponse(req, extractOpenAiResponseText(json));
+    const modelMs = Date.now() - modelStartedAt;
+    return {
+      text: normalizedText,
+      assistantThreadId: responseId || undefined,
+      metrics: {
+        totalMs: modelMs,
+        usedShortcut: false,
+        provider: 'openai',
+        iterations: 1,
+        toolCalls: 0,
+        toolMs: 0,
+        modelMs,
+        promptChars: {
+          system: CHAT_MODE_SYSTEM_PROMPT.length + developerPrompt.length,
+          user: userPrompt.length,
+        },
+      },
+      debug: {
+        systemPrompt: CHAT_MODE_SYSTEM_PROMPT,
+        developerPrompt,
+        userPrompt,
+        toolDefinitions: chatTools.map((tool) => ({
+          name: String(tool.type),
+          description: tool.type === 'file_search' ? 'Hosted vector-store search over uploaded Tektronix KB files' : '',
+        })),
+        toolTrace: [],
+        providerRequest: requestPayload,
+        rawOutput: json,
+        resolutionPath: chatTools.length ? 'chat:file_search_enabled' : 'chat',
+      },
+    };
+  }
+
+  const openAiBase = process.env.OPENAI_BASE_URL || 'https://api.openai.com';
+  const requestPayload = {
+    model: resolveOpenAiModel(req),
+    messages: [
+      { role: 'system', content: `${CHAT_MODE_SYSTEM_PROMPT}\n\n${developerPrompt}` },
+      ...(Array.isArray(req.history)
+        ? req.history
+            .slice(-8)
+            .map((h) => ({ role: h.role, content: String(h.content || '').slice(0, 3000) }))
+        : []),
+      { role: 'user', content: userPrompt },
+    ],
+    ...buildOpenAiCompletionTokenOption(resolveOpenAiModel(req)),
+  };
+  const res = await fetch(`${openAiBase}/v1/chat/completions`, {
+    method: 'POST',
+    headers: {
+      Authorization: `Bearer ${req.apiKey}`,
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify(requestPayload),
+  });
+  if (!res.ok) {
+    throw new Error(`OpenAI error ${res.status}: ${await res.text()}`);
+  }
+  const json = (await res.json()) as Record<string, unknown>;
+  const text = extractChatCompletionText(json);
+  const normalizedText = await normalizeChatBuildLikeResponse(req, text);
+  const modelMs = Date.now() - modelStartedAt;
+  return {
+    text: normalizedText,
+    metrics: {
+      totalMs: modelMs,
+      usedShortcut: false,
+      provider: 'openai',
+      iterations: 1,
+      toolCalls: 0,
+      toolMs: 0,
+      modelMs,
+      promptChars: {
+        system: CHAT_MODE_SYSTEM_PROMPT.length + developerPrompt.length,
+        user: userPrompt.length,
+      },
+    },
+    debug: {
+      systemPrompt: CHAT_MODE_SYSTEM_PROMPT,
+      developerPrompt,
+      userPrompt,
+      toolDefinitions: [],
+      toolTrace: [],
+      providerRequest: requestPayload,
+      rawOutput: json,
+      resolutionPath: 'chat',
+    },
+  };
+}
+
+function didExplicitlyAskForCode(message: string): boolean {
+  const text = String(message || '').toLowerCase();
+  return /\b(python|script|code|snippet|pyvisa|raw scpi|scpi sequence|show python|show code)\b/.test(text);
+}
+
+function isConversationalEngineeringAsk(message: string): boolean {
+  const text = String(message || '').trim().toLowerCase();
+  if (!text) return false;
+  const leadingQuestion = /^(why|how|what|which|when|should|would|could|can)\b/.test(text);
+  const reasoningCue =
+    /\b(best|recommend|suggest|tradeoff|explain|why|how should|compare|versus|vs\.?|difference|pros and cons|when to use|should i)\b/.test(
+      text
+    );
+  const questionLike = /\?/.test(text);
+  return leadingQuestion || reasoningCue || questionLike;
+}
+
+function isStrongBuildDirective(message: string): boolean {
+  const text = String(message || '').trim().toLowerCase();
+  if (!text) return false;
+  return (
+    /^(set|add|configure|build|create|save|recall|trigger|run|capture|enable|disable|insert|replace|remove|connect|disconnect|query|read|load|make)\b/.test(
+      text
+    ) ||
+    /\b(build (?:a )?flow|steps json|actions_json|change my flow|update my flow|apply that change|build it|make the flow)\b/.test(
+      text
+    )
+  );
+}
+
+function looksLikeRawBuildDump(text: string): boolean {
+  const body = String(text || '');
+  const fencedCode = /```[\s\S]*?```/.test(body);
+  const manyScpiLines = (body.match(/^[A-Z*][A-Za-z0-9:*?._-]*(?:\s+[^`\n\r]+)?$/gm) || []).length >= 5;
+  const toolLeak = /to=file_search|tool[_ ]?call|ACTIONS_JSON:/i.test(body);
+  const manyInlineCommands =
+    (body.match(/`(?:\*?[A-Z][A-Za-z0-9:*?._-]+(?:\s+[^`]+)?)`/g) || []).length >= 5;
+  return fencedCode || manyScpiLines || toolLeak || manyInlineCommands;
+}
+
+function summarizePlannerGroups(commands: PlannerOutput['resolvedCommands']): string[] {
+  const ordered = sortPlannerResolvedCommands(commands);
+  const seen = new Set<string>();
+  const bullets: string[] = [];
+  const push = (key: string, text: string) => {
+    if (seen.has(key)) return;
+    seen.add(key);
+    bullets.push(text);
+  };
+
+  for (const command of ordered) {
+    const header = String(command.concreteCommand || '');
+    if (command.stepType === 'save_waveform') {
+      push('save_waveform', 'save the requested waveform artifacts');
+      continue;
+    }
+    if (command.stepType === 'save_screenshot') {
+      push('save_screenshot', 'save a screenshot');
+      continue;
+    }
+    if (command.stepType === 'recall') {
+      push('recall', 'recall the requested file or session');
+      continue;
+    }
+    if (command.stepType === 'python') {
+      push('python', 'include the requested Python logic inside the flow');
+      continue;
+    }
+    if (/^CH\d:|^SELect:CH\d/i.test(header)) {
+      push('channels', 'set up the requested channels and vertical settings');
+      continue;
+    }
+    if (/^BUS:|^SEARCH:/i.test(header)) {
+      push('bus', 'configure the requested bus or search behavior');
+      continue;
+    }
+    if (/^TRIGger:/i.test(header)) {
+      push('trigger', 'configure the requested trigger behavior');
+      continue;
+    }
+    if (/^ACQuire:|^HORizontal:|^\*OPC\?/i.test(header)) {
+      push('acquisition', 'set the requested acquisition and timebase behavior');
+      continue;
+    }
+    if (/^MEASUrement:|^CURSor:/i.test(header)) {
+      push('measurements', 'add the requested measurements or readbacks');
+      continue;
+    }
+    if (/^\*IDN\?|^\*OPT\?|^\*ESR\?/i.test(header)) {
+      push('status', 'run the requested communication or status checks');
+      continue;
+    }
+  }
+
+  return bullets.slice(0, 6);
+}
+
+async function normalizeChatBuildLikeResponse(req: McpChatRequest, text: string): Promise<string> {
+  if ((req.outputMode || '').toLowerCase() !== 'chat') return text;
+  if (!isFlowBuildIntentMessage(req.userMessage)) return text;
+  if (didExplicitlyAskForCode(req.userMessage)) return text;
+  if (isConversationalEngineeringAsk(req.userMessage) && !isStrongBuildDirective(req.userMessage)) return text;
+  if (!looksLikeRawBuildDump(text)) return text;
+
+  try {
+    const plannerOutput = await planIntent(req);
+    const bullets = summarizePlannerGroups(plannerOutput.resolvedCommands);
+    const lines: string[] = ['I can build that as a compact TekAutomate flow.'];
+    lines.push('', 'Flow outline:');
+    if (bullets.length) {
+      for (const bullet of bullets) lines.push(`- ${bullet}`);
+    } else {
+      lines.push('- set up the requested configuration');
+      lines.push('- run the requested acquisition or checks');
+      lines.push('- save or query the requested results');
+    }
+    if (plannerOutput.unresolved.length > 0) {
+      lines.push('', `One thing to confirm: ${plannerOutput.unresolved[0]}.`);
+    }
+    lines.push('', 'Say `build it` and I’ll turn that into an applyable Steps UI flow.');
+    return lines.join('\n');
+  } catch {
+    return [
+      'I can build that as a compact TekAutomate flow.',
+      '',
+      'Flow outline:',
+      '- set up the requested configuration',
+      '- run the requested acquisition or checks',
+      '- save or query the requested results',
+      '',
+      'Say `build it` and I’ll turn that into an applyable Steps UI flow.',
+    ].join('\n');
+  }
 }
 
 function buildAttachmentContext(req: McpChatRequest): string {
@@ -3119,6 +4391,10 @@ function buildUserPrompt(req: McpChatRequest, flowCommandIssues: string[] = []):
     req.userMessage,
   ];
 
+  if (hasBuildBrief(req)) {
+    parts.push(buildStructuredBriefDeveloperSection(req.buildBrief));
+  }
+
   const attachmentContext = buildAttachmentContext(req);
   if (attachmentContext) {
     parts.push(attachmentContext);
@@ -3174,8 +4450,14 @@ function buildUserPrompt(req: McpChatRequest, flowCommandIssues: string[] = []):
     parts.push('Execution evidence indicates this flow already worked.');
   }
 
-  if (req.instrumentEndpoint) {
+  if (hasLiveInstrumentAccess(req) && req.instrumentEndpoint) {
     parts.push(`Live instrument:\n- executor: ${req.instrumentEndpoint.executorUrl}\n- visa: ${req.instrumentEndpoint.visaResource}`);
+  } else if (req.instrumentEndpoint) {
+    parts.push('Live instrument mode is disabled for this request.');
+  }
+
+  if (req.routerBaselineText) {
+    parts.push(`Router baseline:\n${req.routerBaselineText}`);
   }
 
   if (logReviewMode && !executionSucceeded) {
@@ -3223,14 +4505,277 @@ function isFlowBuildIntentMessage(message: string): boolean {
   const text = String(message || '').toLowerCase();
   if (!text.trim()) return false;
   const explicitBuild =
-    /\b(set up|setup|set|configure|add|measure|capture|decode|trigger|single sequence|group each test|build (?:a )?flow|steps json|actions_json|scpi|enable|disable|output on|output off)\b/.test(
+    /\b(set up|setup|set|configure|add|measure|capture|decode|trigger|single sequence|group each test|build (?:a )?flow|steps json|actions_json|scpi|enable|disable|output on|output off|connect|disconnect|query|read|recall|save|load)\b/.test(
       text
     );
   const leadingImperative =
-    /^(set|add|configure|build|create|save|recall|trigger|run|capture|enable|disable|insert|replace|remove)\b/.test(
+    /^(set|add|configure|build|create|save|recall|trigger|run|capture|enable|disable|insert|replace|remove|connect|disconnect|query|read|load)\b/.test(
       text.trim()
     );
   return explicitBuild || leadingImperative;
+}
+
+type RequestBuildBrief = NonNullable<McpChatRequest['buildBrief']>;
+
+function hasBuildBrief(req: McpChatRequest): req is McpChatRequest & { buildBrief: RequestBuildBrief } {
+  return Boolean(req.buildBrief && typeof req.buildBrief === 'object');
+}
+
+function isThinBuildBrief(req: McpChatRequest): boolean {
+  if (!hasBuildBrief(req)) return true;
+  const brief = req.buildBrief;
+  const populatedSignals = [
+    brief.channels.length > 0,
+    brief.protocols.length > 0,
+    Boolean(String(brief.signalType || '').trim()),
+    Boolean(String(brief.dataRate || '').trim()),
+    Boolean(String(brief.closureType || '').trim()),
+    Boolean(String(brief.probing || '').trim()),
+    brief.measurementGoals.length > 0,
+    brief.artifactGoals.length > 0,
+    brief.operatingModeHints.length > 0,
+    brief.suggestedChecks.length > 0,
+    Array.isArray(brief.secondaryEvidence) && brief.secondaryEvidence.length > 0,
+  ].filter(Boolean).length;
+
+  return populatedSignals < 3 || brief.unresolvedQuestions.length > 0;
+}
+
+function shouldEnableHostedFileSearch(
+  req: McpChatRequest,
+  options?: { plannerIncomplete?: boolean; preloadCandidateCount?: number }
+): boolean {
+  if (req.outputMode === 'chat') return true;
+  if (req.outputMode !== 'steps_json') return false;
+  if (options?.plannerIncomplete) return true;
+  if (isThinBuildBrief(req)) return true;
+  if (typeof options?.preloadCandidateCount === 'number' && options.preloadCandidateCount <= 0) return true;
+  return false;
+}
+
+function clonePlannerOutput(output: PlannerOutput): PlannerOutput {
+  return {
+    ...output,
+    intent: {
+      ...output.intent,
+      groups: [...output.intent.groups],
+      channels: [...output.intent.channels],
+      measurements: [...output.intent.measurements],
+      buses: [...output.intent.buses],
+      unresolved: [...output.intent.unresolved],
+    },
+    resolvedCommands: [...output.resolvedCommands],
+    unresolved: [...output.unresolved],
+    conflicts: [...output.conflicts],
+    unsupportedSubrequests: output.unsupportedSubrequests
+      ? [...output.unsupportedSubrequests]
+      : undefined,
+  };
+}
+
+function applyBuildBriefWhitelist(
+  plannerOutput: PlannerOutput,
+  req: McpChatRequest
+): PlannerOutput {
+  if (!hasBuildBrief(req)) return plannerOutput;
+
+  const brief = req.buildBrief;
+  const intent = String(brief.intent || '').toLowerCase();
+  const protocolsExplicit = Array.isArray(brief.protocols) && brief.protocols.length > 0;
+  const filtered = clonePlannerOutput(plannerOutput);
+  if (intent === 'eye_diagram_debug') {
+    filtered.resolvedCommands = filtered.resolvedCommands.filter((command) => {
+      const concrete = String(command.concreteCommand || '').toUpperCase();
+      const saveAs = String(command.saveAs || '').toLowerCase();
+
+      if (!protocolsExplicit) {
+        if (command.group === 'BUS_DECODE' || command.group === 'SEARCH') return false;
+        if (
+          concrete.startsWith('BUS:') ||
+          concrete.startsWith('SEARCH:') ||
+          /\bCAN\b|\bLIN\b|\bUART\b|\bSPI\b|\bI2C\b/.test(concrete)
+        ) {
+          return false;
+        }
+      }
+
+      if (concrete.includes('MEASUREMENT:ADDMEAS SETUP') || saveAs.includes('setup')) {
+        return false;
+      }
+
+      return true;
+    });
+
+    filtered.intent.groups = filtered.intent.groups.filter((group) => {
+      if (!protocolsExplicit && (group === 'BUS_DECODE' || group === 'SEARCH')) return false;
+      return true;
+    });
+    if (!protocolsExplicit) {
+      filtered.intent.buses = [];
+      filtered.intent.search = undefined;
+    }
+    filtered.intent.measurements = filtered.intent.measurements.filter((measurement) => measurement.type !== 'TIE');
+    return filtered;
+  }
+
+  if (intent === 'power_integrity_debug') {
+    const wantsMathRipple =
+      (brief.suggestedChecks || []).some((item) => /math1|ch1\s*-\s*ch2/i.test(String(item))) ||
+      (brief.measurementGoals || []).some((item) => /math1/i.test(String(item)));
+
+    filtered.resolvedCommands = filtered.resolvedCommands.filter((command) => {
+      const concrete = String(command.concreteCommand || '').toUpperCase();
+      const saveAs = String(command.saveAs || '').toLowerCase();
+
+      if (wantsMathRipple) {
+        if (command.group === 'TRIGGER') return false;
+        if (concrete.startsWith('TRIGGER:')) return false;
+        if (/MEASUREMENT:MEAS\d+:SOURCE1 CH[1-8]/i.test(concrete)) return false;
+        if (/meas\d+_(mean|rms|low|frequency)/i.test(saveAs)) return false;
+        if (/MEASUREMENT:MEAS[3-9]:/i.test(concrete)) return false;
+        if (/meas[3-9]_/.test(saveAs)) return false;
+      }
+
+      return true;
+    });
+    filtered.intent.groups = filtered.intent.groups.filter((group) => group !== 'TRIGGER');
+    filtered.intent.trigger = undefined;
+    if (wantsMathRipple) {
+      filtered.intent.measurements = filtered.intent.measurements.filter(
+        (measurement) => measurement.source1 === 'MATH1'
+      );
+    }
+    return filtered;
+  }
+
+  return plannerOutput;
+}
+
+function buildQueryFromStructuredBrief(brief: RequestBuildBrief): string {
+  const lines: string[] = [];
+  const intent = String(brief.intent || 'general_debug').trim();
+  lines.push(`Build a ${intent} flow.`);
+
+  if (brief.channels.length) {
+    lines.push(`Channels: ${brief.channels.join(', ')}.`);
+  }
+  if (brief.protocols.length) {
+    lines.push(`Protocols explicitly in scope: ${brief.protocols.join(', ')}.`);
+  }
+  if (brief.signalType) lines.push(`Signal type: ${brief.signalType}.`);
+  if (brief.dataRate) lines.push(`Data rate: ${brief.dataRate}.`);
+  if (brief.closureType) lines.push(`Closure type: ${brief.closureType}.`);
+  if (brief.probing) lines.push(`Probing: ${brief.probing}.`);
+  if (brief.measurementGoals.length) {
+    lines.push(`Measurement goals: ${brief.measurementGoals.join(', ')}.`);
+  }
+  if (brief.artifactGoals.length) {
+    lines.push(`Artifacts: ${brief.artifactGoals.join(', ')}.`);
+  }
+  if (brief.operatingModeHints.length) {
+    lines.push(`Operating hints: ${brief.operatingModeHints.join(', ')}.`);
+  }
+
+  const scopedChecks = (() => {
+    const checks = brief.suggestedChecks || [];
+    if (intent === 'eye_diagram_debug') {
+      const allowed = [
+        'acquisition sanity',
+        'channel health',
+        'differential integrity',
+        'breakout-related checks',
+        'eye metrics',
+        'debug triggers',
+      ];
+      return checks.filter((item) => allowed.includes(String(item).toLowerCase()));
+    }
+    return checks;
+  })();
+  if (scopedChecks.length) {
+    lines.push(`Suggested checks to cover: ${scopedChecks.join(', ')}.`);
+  }
+
+  if (intent === 'power_integrity_debug') {
+    const checksLower = scopedChecks.map((item) => String(item).toLowerCase());
+    const goalsLower = brief.measurementGoals.map((item) => String(item).toLowerCase());
+    const evidenceLower = (brief.secondaryEvidence || []).map((item) => String(item).toLowerCase());
+
+    if (checksLower.some((item) => item.includes('0.5 v/div') || item.includes('50 ohm termination'))) {
+      lines.push('Set CH1 to 0.5 V/div, DC coupling, and 50 ohm termination.');
+      lines.push('Set CH2 to 0.5 V/div, DC coupling, and 50 ohm termination.');
+    }
+    if (
+      checksLower.some((item) => item.includes('math1 = ch1 - ch2')) ||
+      evidenceLower.some((item) => item.includes('math1 = ch1 - ch2'))
+    ) {
+      lines.push('Create math channel MATH1 as CH1 minus CH2 and enable its display.');
+    }
+    if (goalsLower.some((item) => item.includes('pk2pk') || item.includes('vpp'))) {
+      lines.push('Add a PK2PK ripple measurement on MATH1 and query the result.');
+    }
+    if (goalsLower.some((item) => item.includes('high / positive peak') || item.includes('vmax') || item.includes('vpk'))) {
+      lines.push('Add a HIGH measurement on MATH1 to capture the positive peak and query the result.');
+    }
+    lines.push('Use ACQuire:MODe SAMple unless peak detect or averaging is explicitly requested.');
+    lines.push('Use practical ripple-debug horizontal settings such as 1 ms/div and 1M samples unless the user specified otherwise.');
+    if ((brief.artifactGoals || []).some((item) => /save|artifact|screenshot|capture/i.test(String(item)))) {
+      lines.push('Save a screenshot of the configured ripple and math measurement view.');
+    }
+    lines.push('Treat this as a differential ripple-check flow on a math trace, not a generic rail-health checklist.');
+    lines.push('Do not add trigger setup unless a trigger strategy is explicitly requested.');
+  }
+
+  if (intent === 'eye_diagram_debug' && (!brief.protocols || brief.protocols.length === 0)) {
+    lines.push('Exclude all protocol decode, bus-trigger, and protocol-search setup unless a protocol is explicitly in scope.');
+    lines.push('Prefer acquisition sanity, channel consistency, differential checks, jitter/noise checks, and evidence capture.');
+  }
+
+  if (intent === 'waveform_capture') {
+    if (brief.channels.length) {
+      lines.push(`Enable ${brief.channels.join(' and ')} for capture.`);
+    }
+    lines.push('Use a compact setup, single acquisition, artifact save, and disconnect structure.');
+    lines.push('Use a single-sequence acquisition.');
+    if ((brief.artifactGoals || []).some((item) => /ch1/i.test(String(item)) && /waveform/i.test(String(item)))) {
+      lines.push('Save the CH1 waveform.');
+    }
+    if ((brief.artifactGoals || []).some((item) => /ch2/i.test(String(item)) && /waveform/i.test(String(item)))) {
+      lines.push('Save the CH2 waveform.');
+    }
+    if ((brief.artifactGoals || []).some((item) => /screenshot/i.test(String(item)))) {
+      lines.push('Save a screenshot after the acquisition.');
+    }
+  }
+
+  if (brief.unresolvedQuestions.length) {
+    lines.push(`Still unresolved: ${brief.unresolvedQuestions.join(', ')}.`);
+  }
+  if (brief.secondaryEvidence && brief.secondaryEvidence.length) {
+    lines.push(`Secondary evidence: ${brief.secondaryEvidence.slice(0, 8).join(', ')}.`);
+  }
+  return lines.join(' ');
+}
+
+function buildStructuredBriefDeveloperSection(brief: RequestBuildBrief): string {
+  return [
+    '## STRUCTURED BUILD BRIEF',
+    'Treat this brief as the authoritative build input for this turn.',
+    'Use the original transcript only as secondary evidence.',
+    `intent: ${brief.intent}`,
+    `diagnosticDomain: ${(brief.diagnosticDomain || []).join(', ') || '(none)'}`,
+    `channels: ${(brief.channels || []).join(', ') || '(none)'}`,
+    `protocols: ${(brief.protocols || []).join(', ') || '(none)'}`,
+    `signalType: ${brief.signalType || '(unspecified)'}`,
+    `dataRate: ${brief.dataRate || '(unspecified)'}`,
+    `closureType: ${brief.closureType || '(unspecified)'}`,
+    `probing: ${brief.probing || '(unspecified)'}`,
+    `measurementGoals: ${(brief.measurementGoals || []).join(', ') || '(none)'}`,
+    `artifactGoals: ${(brief.artifactGoals || []).join(', ') || '(none)'}`,
+    `operatingModeHints: ${(brief.operatingModeHints || []).join(', ') || '(none)'}`,
+    `unresolvedQuestions: ${(brief.unresolvedQuestions || []).join(', ') || '(none)'}`,
+    `suggestedChecks: ${(brief.suggestedChecks || []).join(', ') || '(none)'}`,
+    `secondaryEvidence: ${(brief.secondaryEvidence || []).join(', ') || '(none)'}`,
+  ].join('\n');
 }
 
 function isReasoningRequest(message: string): boolean {
@@ -3317,7 +4862,7 @@ function resolveHostedVectorStoreId(): string {
 
 function buildHostedToolDefinitions(toolNames?: string[]): Array<{ name: string; description: string }> {
   const allow = Array.isArray(toolNames) && toolNames.length ? new Set(toolNames) : null;
-  return getToolDefinitions()
+  return getAvailableToolDefinitions()
     .filter((tool) => !allow || allow.has(tool.name))
     .map((tool) => ({
     name: tool.name,
@@ -3332,7 +4877,11 @@ function isTmDevicesHostedRequest(req: McpChatRequest): boolean {
   );
 }
 
-function buildHostedAllowedToolChoice(tools: HostedToolDefinition[]): Record<string, unknown> | undefined {
+function buildHostedAllowedToolChoice(
+  tools: HostedToolDefinition[],
+  options?: { requireToolName?: string }
+): Record<string, unknown> | undefined {
+  const requireToolName = String(options?.requireToolName || '').trim();
   const allowed = tools
     .filter((tool) => tool.type === 'function' && typeof tool.name === 'string')
     .map((tool) => ({
@@ -3340,6 +4889,16 @@ function buildHostedAllowedToolChoice(tools: HostedToolDefinition[]): Record<str
       name: String(tool.name),
     }));
   if (!allowed.length) return undefined;
+  if (requireToolName) {
+    const requiredTool = allowed.find((tool) => tool.name === requireToolName);
+    if (requiredTool) {
+      return {
+        type: 'allowed_tools',
+        mode: 'required',
+        tools: [requiredTool],
+      };
+    }
+  }
   return {
     type: 'allowed_tools',
     mode: 'auto',
@@ -3350,25 +4909,37 @@ function buildHostedAllowedToolChoice(tools: HostedToolDefinition[]): Record<str
 export function buildHostedResponsesTools(
   req?: McpChatRequest,
   phase: HostedToolPhase = 'initial',
-  options?: { restrictSearchTools?: boolean; batchMaterializeOnly?: boolean }
+  options?: { restrictSearchTools?: boolean; batchMaterializeOnly?: boolean; enableFileSearch?: boolean }
 ): HostedToolDefinition[] {
   const hostedVectorStoreId = resolveHostedVectorStoreId();
   const wantsTmDevices = req ? isTmDevicesHostedRequest(req) : false;
-  const toolNames = wantsTmDevices
-    ? phase === 'initial'
-      ? ['get_current_flow', 'search_tm_devices', 'materialize_tm_devices_call', 'validate_action_payload']
-      : ['get_current_flow', 'materialize_tm_devices_call', 'validate_action_payload']
-    : options?.batchMaterializeOnly
-      ? phase === 'initial'
-        ? ['finalize_scpi_commands']
-        : []
-    : phase === 'initial' && !options?.restrictSearchTools
-      ? ['get_current_flow', 'get_command_group', 'search_scpi', 'get_command_by_header', 'get_commands_by_header_batch', 'materialize_scpi_command', 'materialize_scpi_commands', 'finalize_scpi_commands', 'verify_scpi_commands', 'validate_action_payload']
-      : ['get_current_flow', 'get_command_by_header', 'get_commands_by_header_batch', 'materialize_scpi_command', 'materialize_scpi_commands', 'finalize_scpi_commands', 'verify_scpi_commands', 'validate_action_payload'];
+  const routerOnly = isRouterOnlyHosted(req);
+  const routerPreferred = isRouterPreferredHosted(req);
+  const forceRouter = shouldForceHostedRouter(req);
+  const routerEnabledForRequest = isRouterEnabledForRequest(req);
+  let toolNames: string[];
+
+  if (routerOnly || forceRouter) {
+    toolNames = ['tek_router'];
+  } else if (routerPreferred) {
+    toolNames = ['get_current_flow', 'tek_router'];
+  } else if (wantsTmDevices) {
+    toolNames =
+      phase === 'initial'
+        ? ['get_current_flow', 'search_tm_devices', 'materialize_tm_devices_call', 'validate_action_payload', ...(routerEnabledForRequest ? ['tek_router'] : [])]
+        : ['get_current_flow', 'materialize_tm_devices_call', 'validate_action_payload', ...(routerEnabledForRequest ? ['tek_router'] : [])];
+  } else if (options?.batchMaterializeOnly) {
+    toolNames = phase === 'initial' ? ['finalize_scpi_commands'] : [];
+  } else {
+    toolNames =
+      phase === 'initial' && !options?.restrictSearchTools
+        ? ['get_current_flow', 'smart_scpi_lookup', 'get_command_group', 'get_command_by_header', 'get_commands_by_header_batch', 'materialize_scpi_command', 'materialize_scpi_commands', 'finalize_scpi_commands', 'verify_scpi_commands', 'validate_action_payload', ...(routerEnabledForRequest ? ['tek_router'] : [])]
+        : ['get_current_flow', 'smart_scpi_lookup', 'get_command_by_header', 'get_commands_by_header_batch', 'materialize_scpi_command', 'materialize_scpi_commands', 'finalize_scpi_commands', 'verify_scpi_commands', 'validate_action_payload', ...(routerEnabledForRequest ? ['tek_router'] : [])];
+  }
 
   const allow = new Set(toolNames);
   const tools: HostedToolDefinition[] = [];
-  getToolDefinitions().forEach((tool) => {
+  getAvailableToolDefinitions(req).forEach((tool) => {
     if (!allow.has(tool.name)) return;
     tools.push({
       type: 'function',
@@ -3377,7 +4948,7 @@ export function buildHostedResponsesTools(
       parameters: tool.parameters,
     });
   });
-  if (phase === 'initial' && hostedVectorStoreId && !options?.batchMaterializeOnly) {
+  if (phase === 'initial' && hostedVectorStoreId && !options?.batchMaterializeOnly && options?.enableFileSearch !== false) {
     tools.unshift({
       type: 'file_search',
       vector_store_ids: [hostedVectorStoreId],
@@ -3748,6 +5319,9 @@ function formatPreloadedTmDevicesContext(rawResult: unknown): string {
 }
 
 function extractHostedFunctionCalls(json: Record<string, unknown>): HostedFunctionCall[] {
+  // Debug: Log the raw response to see what OpenAI is sending
+  console.log('[DEBUG] extractHostedFunctionCalls - json.output:', JSON.stringify(json.output, null, 2));
+  
   if (!Array.isArray(json.output)) return [];
   return (json.output as Array<Record<string, unknown>>)
     .filter((item) => item.type === 'function_call' && typeof item.name === 'string' && typeof item.call_id === 'string')
@@ -3804,6 +5378,11 @@ async function executeHostedToolCall(
     };
   }
 
+  if (isRouterEnabledForRequest(undefined)) {
+    const routerResult = await dispatchRouterTool(name, args);
+    if (routerResult) return routerResult;
+  }
+
   return runTool(name, args);
 }
 
@@ -3837,7 +5416,7 @@ async function preloadSourceOfTruthContext(
       const startedAt = new Date().toISOString();
       const t0 = Date.now();
       const rawResult = await executeHostedToolCall(req, 'search_tm_devices', args);
-      toolTrace.push({
+      toolTrace?.push({
         name: 'search_tm_devices',
         args,
         startedAt,
@@ -3876,7 +5455,7 @@ async function preloadSourceOfTruthContext(
     const startedAt = new Date().toISOString();
     const t0 = Date.now();
     const rawResult = await executeHostedToolCall(req, 'get_command_group', args);
-    toolTrace.push({
+    toolTrace?.push({
       name: 'get_command_group',
       args,
       startedAt,
@@ -3909,7 +5488,7 @@ async function preloadSourceOfTruthContext(
     const startedAt = new Date().toISOString();
     const t0 = Date.now();
     const rawResult = await executeHostedToolCall(req, toolName, args);
-    toolTrace.push({
+    toolTrace?.push({
       name: toolName,
       args,
       startedAt,
@@ -3948,7 +5527,7 @@ async function preloadSourceOfTruthContext(
     const startedAt = new Date().toISOString();
     const t0 = Date.now();
     const rawResult = await executeHostedToolCall(req, 'get_commands_by_header_batch', batchArgs);
-    toolTrace.push({
+    toolTrace?.push({
       name: 'get_commands_by_header_batch',
       args: batchArgs,
       startedAt,
@@ -4037,6 +5616,9 @@ export function buildAssistantUserPrompt(
     '- Query steps should be query-only. Do not prepend setup writes or semicolon-chained non-query commands before the final ? command.',
     '- For status/error checks, prefer *ESR? as the default command. Use ALLEV? only when the user explicitly asks for event-queue detail.',
     '- Do not add *OPC? by default. Use *OPC? only after OPC-capable operations and when completion sync is explicitly requested.',
+    '- Treat uploaded programmer-manual command syntax and verified command JSON records as the SCPI source of truth.',
+    '- Use canonical constructed mnemonic families exactly as documented: CH<x>, B<x>, MATH<x>, MEAS<x>, REF<x>, SEARCH<x>, and WAVEView<x>.',
+    '- Never emit alias forms like CHAN1, CHANNEL1, BUS1, or MEASURE1.',
     '- Canonical headers returned by search_scpi/get_command_by_header are authoritative templates. If the retrieved header uses placeholders like CH<x>, MEAS<x>, REF<x>, BUS<x>, SEARCH<x>, or PLOT<x>, instantiate only those placeholders (for example CH1, MEAS1) and keep the rest of the header unchanged.',
     '- After retrieving a canonical SCPI record for any write/query step, prefer finalize_scpi_commands for the whole set of commands you need in this turn. If you only need one command, materialize_scpi_command is acceptable. Pass the verified header plus placeholder bindings and argument values. If the user already specified a concrete instance like CH1, MEAS1, B1, or SEARCH1, pass that as concreteHeader so MCP can infer bindings deterministically. Copy the returned command verbatim into params.command instead of typing the final SCPI yourself.',
     '- Do not mutate literal tokens such as SOURCE, EDGE, RESULTS, MODE, or LEVEL into indexed variants unless the retrieved syntax itself contains that indexed form.',
@@ -4054,6 +5636,7 @@ export function buildAssistantUserPrompt(
     '- For screenshot steps, use filename, never file_path, and default to scopeType:"modern" plus method:"pc_transfer" when not otherwise specified.',
     '- For waveform steps, prefer save_waveform over raw save SCPI and include source, filename, and format.',
     '- Modern MSO screenshot capture should use save_screenshot, not HARDCopy.',
+    '- Prefer save_screenshot and save_waveform even for legacy DPO/70k-family save requests when the built-in TekAutomate step types fit the ask; do not expand them into raw EXPORT, FILESystem, HARDCopy, SAVE:IMAGe, DATa:SOUrce, or CURVe? sequences unless the user explicitly asks for raw SCPI.',
     '- If the current workspace is empty and you build a full flow, include connect first and disconnect last.',
     '- If the request cannot be represented with those real step types or valid Blockly blocks, explain the limitation briefly instead of emitting fake applyable JSON.',
     '- For Blockly/XML requests, return XML only and use supported blocks only: connect_scope, disconnect, set_device_context, scpi_write, scpi_query, recall, save, save_screenshot, save_waveform, wait_seconds, wait_for_opc, tm_devices_write, tm_devices_query, tm_devices_save_screenshot, tm_devices_recall_session, controls_for, controls_if, variables_set, variables_get, math_number, math_arithmetic, python_code.',
@@ -4075,20 +5658,26 @@ export function buildAssistantUserPrompt(
       'When verification is partial, include applyable actions for verified commands and add comment-step placeholders for manual completion of unverified parts.',
       'Never ask the user for SCPI strings when search_scpi/get_command_by_header can resolve them.',
       'When multiple related SCPI headers or concrete commands are needed, prefer get_commands_by_header_batch and finalize_scpi_commands to reduce tool chatter.',
-      'If the stored prompt allows structured output, prefer a single parseable ```json``` block unless multiple smaller blocks are genuinely clearer.'
+      'If the stored prompt allows structured output, prefer a single parseable ```json``` block unless multiple smaller blocks are genuinely clearer.',
+      'When you successfully complete a reusable multi-step workflow with 3 or more verified sequential tool-backed actions, save it as a reusable router shortcut.',
+      'Create reusable shortcuts with tek_router action "create" using toolId "shortcut:<descriptive_snake_case_name>", a clear toolName, concise toolDescription, 3-5 natural-language toolTriggers, helpful toolTags, toolCategory "shortcut", and toolSteps containing the exact validated steps in order.',
+      'After creating a shortcut, briefly tell the user it was saved and mention one trigger phrase they can reuse next time.',
+      'Common scope workflow patterns: measurement = ADDMEAS -> set source -> enable results; channel setup = scale -> offset -> bandwidth/termination; trigger = type/source -> slope -> level -> mode/holdoff; acquisition = mode -> stopAfter -> run; save = screenshot/waveform should prefer TekAutomate save steps over raw file-system SCPI when possible.'
     );
   } else {
-    lines.push(
-      '',
-      'Chat response contract:',
-      '- For flow/create/edit requests, prefer one or more parseable ```json``` blocks rather than raw JSON text.',
-      '- A JSON block may contain either full Steps UI flow JSON with "steps", or ACTIONS_JSON with "actions".',
-      '- Short chat prose before or after the JSON is okay when it helps the user.',
-      '- For explain-only requests, reply in concise plain text instead of JSON.',
-      '- No citations, footnotes, or reference markers like [1] or [2].',
-      '- Keep any non-JSON narrative short when structured output is included.',
-      ...schemaLines,
-      '- Never invent commands. If uncertain, prefer safe common commands and clearly state assumptions.',
+      lines.push(
+        '',
+        'Chat response contract:',
+        '- For flow/create/edit requests, prefer one or more parseable ```json``` blocks rather than raw JSON text.',
+        '- A JSON block may contain either full Steps UI flow JSON with "steps", or ACTIONS_JSON with "actions".',
+        '- Short chat prose before or after the JSON is okay when it helps the user.',
+        '- If the request is representable as TekAutomate steps, do not output a standalone Python or tm_devices script.',
+        '- For tm_devices flow requests, prefer `tm_device_command` steps or full Steps flow JSON over a `DeviceManager` script.',
+        '- For explain-only requests, reply in concise plain text instead of JSON.',
+        '- No citations, footnotes, or reference markers like [1] or [2].',
+        '- Keep any non-JSON narrative short when structured output is included.',
+        ...schemaLines,
+        '- Never invent commands. If uncertain, prefer safe common commands and clearly state assumptions.',
       '- If you return actions, `newStep` and `flow` must be real JSON objects, not JSON-encoded strings.',
       '- Never use `param: "params"`; set one concrete field per `set_step_param`, or use `replace_step`.'
     );
@@ -4213,7 +5802,10 @@ export function buildHostedOpenAiResponsesRequest(
   const canAttachHostedPrompt = hostedModelSupportsReasoningEffort(hostedModel);
   const effectivePromptId = canAttachHostedPrompt ? promptId : '';
   const promptVersion = resolveOpenAiPromptVersion();
-  const previousResponseId = options.previousResponseId ?? resolveOpenAiResponseCursor(req);
+  const previousResponseId =
+    typeof options.previousResponseId === 'undefined'
+      ? resolveOpenAiResponseCursor(req)
+      : options.previousResponseId || '';
   const historyInput =
     previousResponseId || !Array.isArray(req.history)
       ? []
@@ -4296,63 +5888,93 @@ async function runOpenAiHostedResponse(
   } else if (String(req.openaiAssistantId || '').trim().length > 0) {
     console.log('[MCP] OpenAI hosted responses: no prompt ID configured; using inline request prompt only');
   }
-  let res = await fetch(`${openAiBase}/v1/responses`, {
-    method: 'POST',
-    headers: {
-      Authorization: `Bearer ${req.apiKey}`,
-      'Content-Type': 'application/json',
-    },
-    body: JSON.stringify(requestPayload),
-  });
-  if (!res.ok) {
-    let errText = await res.text();
-    if (isUnsupportedReasoningEffortError(res.status, errText) && requestPayload.prompt) {
-      console.log(
-        `[MCP] OpenAI hosted responses: retrying without prompt for model ${hostedModel} after reasoning.effort incompatibility`
-      );
-      const fallbackPayload: Record<string, unknown> = { ...requestPayload };
-      delete fallbackPayload.prompt;
-      res = await fetch(`${openAiBase}/v1/responses`, {
-        method: 'POST',
-        headers: {
-          Authorization: `Bearer ${req.apiKey}`,
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify(fallbackPayload),
-      });
-      if (res.ok) {
-        const json = (await res.json()) as Record<string, unknown>;
-        const responseId = String(json.id || '').trim();
-        if (!responseId) {
-          throw new Error('OpenAI Responses response missing id.');
+  const sendHostedRequest = async (
+    payload: Record<string, unknown>
+  ): Promise<{
+    text: string;
+    raw: Record<string, unknown>;
+    requestPayload: Record<string, unknown>;
+    responseId: string;
+  }> => {
+    let res = await fetch(`${openAiBase}/v1/responses`, {
+      method: 'POST',
+      headers: {
+        Authorization: `Bearer ${req.apiKey}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify(payload),
+    });
+    if (!res.ok) {
+      let errText = await res.text();
+      if (isUnsupportedReasoningEffortError(res.status, errText) && payload.prompt) {
+        console.log(
+          `[MCP] OpenAI hosted responses: retrying without prompt for model ${hostedModel} after reasoning.effort incompatibility`
+        );
+        const fallbackPayload: Record<string, unknown> = { ...payload };
+        delete fallbackPayload.prompt;
+        res = await fetch(`${openAiBase}/v1/responses`, {
+          method: 'POST',
+          headers: {
+            Authorization: `Bearer ${req.apiKey}`,
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify(fallbackPayload),
+        });
+        if (res.ok) {
+          const json = (await res.json()) as Record<string, unknown>;
+          const responseId = String(json.id || '').trim();
+          if (!responseId) {
+            throw new Error('OpenAI Responses response missing id.');
+          }
+          return {
+            text: extractOpenAiResponseText(json),
+            raw: json,
+            requestPayload: fallbackPayload,
+            responseId,
+          };
         }
-        return {
-          text: extractOpenAiResponseText(json),
-          raw: json,
-          requestPayload: fallbackPayload,
-          responseId,
-        };
+        errText = await res.text();
       }
-      errText = await res.text();
+      throw new Error(`OpenAI Responses error ${res.status}: ${errText}`);
     }
-    throw new Error(`OpenAI Responses error ${res.status}: ${errText}`);
-  }
-  const json = (await res.json()) as Record<string, unknown>;
-  const responseId = String(json.id || '').trim();
-  if (!responseId) {
-    throw new Error('OpenAI Responses response missing id.');
-  }
-  return {
-    text: extractOpenAiResponseText(json),
-    raw: json,
-    requestPayload,
-    responseId,
+    const json = (await res.json()) as Record<string, unknown>;
+    const responseId = String(json.id || '').trim();
+    if (!responseId) {
+      throw new Error('OpenAI Responses response missing id.');
+    }
+    return {
+      text: extractOpenAiResponseText(json),
+      raw: json,
+      requestPayload: payload,
+      responseId,
+    };
   };
+
+  try {
+    return await sendHostedRequest(requestPayload);
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    const shouldRetryWithoutCursor =
+      /No tool output found for function call/i.test(message) &&
+      String(requestPayload.previous_response_id || '').trim().length > 0;
+    if (!shouldRetryWithoutCursor) {
+      throw error;
+    }
+    console.warn(
+      '[MCP] Hosted Responses cursor recovery: unresolved tool call on previous_response_id; retrying without cursor.'
+    );
+    const retryPayload = buildHostedOpenAiResponsesRequest(req, assistantPrompt, {
+      ...options,
+      previousResponseId: null,
+    });
+    return await sendHostedRequest(retryPayload);
+  }
 }
 
 async function runOpenAiResponses(
   req: McpChatRequest,
-  flowCommandIssues: string[] = []
+  flowCommandIssues: string[] = [],
+  options: { routerBaselineText?: string; routerBaselineMode?: string } = {}
 ): Promise<{
   text: string;
   assistantThreadId?: string;
@@ -4361,14 +5983,22 @@ async function runOpenAiResponses(
 }> {
   const instructions = getModePrompt(req);
   const userPrompt = buildUserPrompt(req, flowCommandIssues);
-  const useHostedAssistant = shouldUseOpenAiAssistant(req);
+    const useHostedAssistant = shouldUseOpenAiAssistant(req);
   const assistantPrompt = buildAssistantUserPrompt(req, flowCommandIssues, {
     hostedPromptConfigured: useHostedAssistant && Boolean(resolveOpenAiPromptId(req)),
   });
   const compactDeveloperContext = shouldUseCompactDeveloperContext(req);
-  const developerPrompt = isExplainOnlyCommandAsk(req)
+  const baseDeveloperPrompt = isExplainOnlyCommandAsk(req)
     ? 'Command explanation mode. Return plain text guidance only.'
     : await buildContext(req, { compact: compactDeveloperContext });
+  const providerSupplementPrompt = await buildProviderSupplementDeveloperSection(req);
+  const developerPrompt = [
+    baseDeveloperPrompt,
+    providerSupplementPrompt,
+    buildRouterBaselineDeveloperSection(options.routerBaselineText || '', options.routerBaselineMode || ''),
+  ]
+    .filter(Boolean)
+    .join('\n\n');
   console.log('[DEBUG] developer message:', String(developerPrompt || '').slice(0, 2000));
   if (useHostedAssistant) {
     console.log(
@@ -4398,6 +6028,34 @@ async function runOpenAiResponses(
       json = hosted.raw;
       content = hosted.text;
       assistantThreadId = hosted.responseId;
+      if (!String(content || '').trim()) {
+        console.log('[MCP] OpenAI hosted responses returned empty text; falling back to chat completions.');
+        console.log('[MCP] Hosted raw response (truncated):', JSON.stringify(json).slice(0, 4000));
+        const openAiBase = process.env.OPENAI_BASE_URL || 'https://api.openai.com';
+        const model = resolveOpenAiModel(req);
+        providerRequest = {
+          model,
+          messages: [
+            { role: 'system', content: `${instructions}\n\n${developerPrompt}` },
+            { role: 'user', content: req.userMessage },
+          ],
+          ...buildOpenAiCompletionTokenOption(model),
+        };
+        const fallbackRes = await fetch(`${openAiBase}/v1/chat/completions`, {
+          method: 'POST',
+          headers: {
+            Authorization: `Bearer ${req.apiKey}`,
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify(providerRequest),
+        });
+        if (!fallbackRes.ok) {
+          throw new Error(`OpenAI fallback error ${fallbackRes.status}: ${await fallbackRes.text()}`);
+        }
+        json = (await fallbackRes.json()) as Record<string, unknown>;
+        content = extractChatCompletionText(json);
+        assistantThreadId = undefined;
+      }
     } else {
       console.log('[MCP] OpenAI route: direct (Chat Completions one-shot)');
       const openAiBase = process.env.OPENAI_BASE_URL || 'https://api.openai.com';
@@ -4533,12 +6191,22 @@ function canShortcut(plannerOutput: PlannerOutput, req: McpChatRequest): boolean
   if (isFollowUpCorrectionRequest(req)) return false;
 
   const backend = String(req.flowContext.backend || '').toLowerCase();
-  // Keep tm_devices on model/tool path until planner has deterministic tm_devices materialization.
-  if (backend === 'tm_devices') return false;
+  if (backend === 'tm_devices') {
+    return isFlowBuildIntentMessage(req.userMessage) || shouldAttemptShortcutFirst(req);
+  }
+
+  const resolvedHeaders = plannerOutput.resolvedCommands.map((command) => String(command.header || ''));
+  const hasAfgPlannerFlow = resolvedHeaders.some((header) => /^SOURce\{?ch\}?:/i.test(header)) ||
+    resolvedHeaders.some((header) => /^OUTPut\{?ch\}?:STATe/i.test(header));
+  const hasFastFramePlannerFlow = resolvedHeaders.some((header) => /FASTframe/i.test(header));
+  const hasRecallOrIeeeFlow = resolvedHeaders.some((header) => /^RECAll:|^STEP:recall|^\*IDN\?|^\*OPT\?|^\*ESR\?/i.test(header));
 
   // Allow planner shortcut for deterministic build/edit flows across device families.
   return (
     isFlowBuildIntentMessage(req.userMessage) ||
+    hasAfgPlannerFlow ||
+    hasFastFramePlannerFlow ||
+    hasRecallOrIeeeFlow ||
     shouldAttemptShortcutFirst(req) ||
     isExactScpiLookupRequest(req)
   );
@@ -4569,6 +6237,36 @@ function isFollowUpCorrectionRequest(req: McpChatRequest): boolean {
   const referentialWords = /\b(this|that|these|those|previous|last|above|again|same)\b/.test(msg);
   const shortFollowUp = msg.length <= 180;
   return shortFollowUp && (correctionWords || referentialWords);
+}
+
+function shouldAvoidHostedOneShot(req: McpChatRequest): boolean {
+  // Use clean router for consistent decision making
+  const decision = cleanRouter.makeRouteDecision(req);
+  
+  // Always avoid one-shot for routes that need tool calls
+  if (decision.forceToolCall) {
+    return true;
+  }
+  
+  // Legacy logic for edge cases
+  if (isFollowUpCorrectionRequest(req)) return true;
+  if (String(req.flowContext.backend || '').toLowerCase() === 'tm_devices') return true;
+
+  const clarificationLikely =
+    /\b(what should|which should|safe value|match my probe|set the trigger level|measure this|same thing|actually do that|actually make that|not ch\d|not channel \d)\b/.test(
+      req.userMessage
+    ) ||
+    /\b(if possible|about|roughly|around|sensible|best|optimal)\b/.test(req.userMessage);
+
+  const iterativeOrAnalytic =
+    /\b(over the next|over \d+ acquisitions|minimum and maximum|min and max|statistics|summarize|sweep|log each|for each|all frames|timestamps?|jitter|skew|eye diagram)\b/.test(
+      req.userMessage
+    );
+
+  const crossDomainOrConversion =
+    /\b(tm_devices|convert|translate|afg|smu)\b/.test(req.userMessage);
+
+  return clarificationLikely || iterativeOrAnalytic || crossDomainOrConversion;
 }
 
 function hasActionsJsonPayload(text: string): boolean {
@@ -4668,9 +6366,14 @@ async function runOpenAiToolLoop(
   const userPrompt = buildUserPrompt(req, flowCommandIssues);
   const useHostedAssistant = shouldUseOpenAiAssistant(req);
   const compactDeveloperContext = shouldUseCompactDeveloperContext(req);
-  const developerPrompt = isExplainOnlyCommandAsk(req)
+  const baseDeveloperPrompt = isExplainOnlyCommandAsk(req)
     ? 'Command explanation mode. Return plain text guidance only.'
     : await buildContext(req, { compact: compactDeveloperContext });
+  const providerSupplementPrompt = await buildProviderSupplementDeveloperSection(req);
+  const developerPrompt = [
+    baseDeveloperPrompt,
+    providerSupplementPrompt,
+  ].filter(Boolean).join('\n\n');
   let assistantPrompt = buildAssistantUserPrompt(req, flowCommandIssues, {
     hostedPromptConfigured: useHostedAssistant && Boolean(resolveOpenAiPromptId(req)),
   });
@@ -4690,7 +6393,7 @@ async function runOpenAiToolLoop(
       isHostedStructuredBuildRequest(req) &&
       !isFlowValidationRequest(req) &&
       !isExplainOnlyCommandAsk(req) &&
-      !isFollowUpCorrectionRequest(req);
+      !shouldAvoidHostedOneShot(req);
     if (preferHostedOneShot) {
       console.log('[MCP] OpenAI fast-path: one-shot hosted response (no tool loop)');
       const oneShotStartedAt = Date.now();
@@ -4742,6 +6445,10 @@ async function runOpenAiToolLoop(
       buildHostedResponsesTools(req, initialPhase, {
         restrictSearchTools: preloadedContext.restrictSearchTools,
         batchMaterializeOnly: preloadedContext.batchMaterializeOnly,
+        enableFileSearch: shouldEnableHostedFileSearch(req, {
+          plannerIncomplete: Boolean(req.routerBaselineText),
+          preloadCandidateCount: preloadedContext.candidateCount,
+        }),
       })
         .filter((tool) => tool.type === 'function' && typeof tool.name === 'string')
         .map((tool) => String(tool.name))
@@ -4759,21 +6466,45 @@ async function runOpenAiToolLoop(
     let iterations = 0;
     let pendingToolOutputs: HostedResponseInputItem[] | undefined;
     let currentPhase: HostedToolPhase = initialPhase;
+    const forceHostedRouter = shouldForceHostedRouter(req);
+    const hostedDeveloperPrompt = forceHostedRouter
+      ? [
+          developerPrompt,
+          '',
+          'Router-first requirement for this turn:',
+          '- Call tek_router before answering directly.',
+          '- Prefer action "build" for build/edit/convert/setup requests.',
+          '- Use action "search_exec" only when a high-confidence single routed tool is sufficient.',
+          '- Use action "search" only if you truly need discovery before build/exec.',
+          '- Do not skip tek_router on this turn unless the request is plainly out of scope.',
+        ].join('\n')
+      : developerPrompt;
 
     for (let i = 0; i < Math.max(1, _maxCalls); i += 1) {
       iterations = i + 1;
       const hostedTools = buildHostedResponsesTools(req, currentPhase, {
         restrictSearchTools: currentPhase === 'initial' && preloadedContext.restrictSearchTools,
         batchMaterializeOnly: preloadedContext.batchMaterializeOnly,
+        enableFileSearch:
+          currentPhase === 'initial' &&
+          shouldEnableHostedFileSearch(req, {
+            plannerIncomplete: Boolean(req.routerBaselineText),
+            preloadCandidateCount: preloadedContext.candidateCount,
+          }),
       });
-      const toolChoice = buildHostedAllowedToolChoice(hostedTools);
+      const toolChoice = buildHostedAllowedToolChoice(hostedTools, {
+        requireToolName:
+          forceHostedRouter || (currentPhase === 'initial' && isRouterPreferredHosted(req))
+            ? 'tek_router'
+            : '',
+      });
       const modelStartedAt = Date.now();
       const hosted = await runOpenAiHostedResponse(req, assistantPrompt, {
         inputOverride: currentInput,
         previousResponseId,
         tools: hostedTools,
         toolChoice: toolChoice || 'auto',
-        developerMessage: developerPrompt,
+        developerMessage: hostedDeveloperPrompt,
       });
       totalModelMs += Date.now() - modelStartedAt;
       providerRequests.push(hosted.requestPayload);
@@ -4791,6 +6522,7 @@ async function runOpenAiToolLoop(
       const toolOutputs: HostedResponseInputItem[] = [];
       let allCallsCached = functionCalls.length > 0;
       let shouldForceFinalAnswer = false;
+      let directRouterText: string | null = null;
       for (const call of functionCalls) {
         let parsedArgs: Record<string, unknown> = {};
         try {
@@ -4816,15 +6548,12 @@ async function runOpenAiToolLoop(
           totalToolCalls += 1;
           allCallsCached = false;
         }
-        toolTrace.push({
+        toolTrace?.push({
           name: call.name,
           args: parsedArgs,
           startedAt,
           durationMs,
-          resultSummary: {
-            ...buildToolResultSummary(rawResult),
-            cached: typeof cachedResult !== 'undefined',
-          },
+          resultSummary: buildToolResultSummary(rawResult),
           rawResult,
         });
         toolOutputs.push({
@@ -4832,9 +6561,31 @@ async function runOpenAiToolLoop(
           call_id: call.callId,
           output: JSON.stringify(rawResult),
         });
-        if (call.name === 'verify_scpi_commands' || call.name === 'finalize_scpi_commands' || call.name === 'validate_action_payload') {
+        if (
+          call.name === 'verify_scpi_commands' ||
+          call.name === 'finalize_scpi_commands' ||
+          call.name === 'validate_action_payload'
+        ) {
           shouldForceFinalAnswer = true;
         }
+        if (call.name === 'tek_router') {
+          const routerAction = String(parsedArgs.action || '').toLowerCase();
+          if (routerAction === 'build' || routerAction === 'exec' || routerAction === 'search_exec') {
+            shouldForceFinalAnswer = true;
+            const rawRecord =
+              rawResult && typeof rawResult === 'object' ? (rawResult as Record<string, unknown>) : {};
+            const routerText = String(rawRecord.text || '').trim();
+            if (routerText && /^ACTIONS_JSON\s*:/i.test(routerText)) {
+              directRouterText = routerText;
+            }
+          }
+        }
+      }
+
+      if (directRouterText && functionCalls.length === 1) {
+        finalText = directRouterText;
+        pendingToolOutputs = undefined;
+        break;
       }
 
       if ((allCallsCached || shouldForceFinalAnswer) && toolOutputs.length) {
@@ -4846,7 +6597,7 @@ async function runOpenAiToolLoop(
         const hostedFinal = await runOpenAiHostedResponse(req, assistantPrompt, {
           inputOverride: buildHostedFinalAnswerInput(toolOutputs),
           previousResponseId,
-          developerMessage: developerPrompt,
+          developerMessage: hostedDeveloperPrompt,
         });
         totalModelMs += Date.now() - modelStartedAt;
         providerRequests.push(hostedFinal.requestPayload);
@@ -4870,7 +6621,7 @@ async function runOpenAiToolLoop(
       const hosted = await runOpenAiHostedResponse(req, assistantPrompt, {
         inputOverride: buildHostedFinalAnswerInput(pendingToolOutputs),
         previousResponseId,
-        developerMessage: developerPrompt,
+        developerMessage: hostedDeveloperPrompt,
       });
       totalModelMs += Date.now() - modelStartedAt;
       providerRequests.push(hosted.requestPayload);
@@ -4962,8 +6713,8 @@ async function runOpenAiToolLoop(
       userPrompt: useHostedAssistant ? assistantPrompt : userPrompt,
       rawOutput: json,
       providerRequest,
-      toolDefinitions,
-      toolTrace,
+      toolDefinitions: getToolDefinitions(),
+      toolTrace: toolTrace || [],
     },
   };
 }
@@ -5036,14 +6787,88 @@ async function runAnthropicToolLoop(
 
 export async function runToolLoop(req: McpChatRequest): Promise<ToolLoopResult> {
   const startedAt = Date.now();
+  if (typeof req.userMessage === 'string' && /\btm_device\b/i.test(req.userMessage)) {
+    req.userMessage = req.userMessage.replace(/\btm_device\b/gi, 'tm_devices');
+  }
+  if (
+    req.outputMode === 'steps_json' &&
+    /\b(?:use|using|with|convert(?:ed)? to|switch to|do .* with)\s+tm_devices\b/i.test(String(req.userMessage || ''))
+  ) {
+    req.flowContext.backend = 'tm_devices';
+  }
+  if (req.outputMode === 'steps_json' && hasBuildBrief(req)) {
+    req.userMessage = buildQueryFromStructuredBrief(req.buildBrief);
+    if (req.mode === 'mcp_ai') {
+      req.routerOnly = true;
+      req.routerPreferred = true;
+    }
+  }
+  if (
+    String(req.flowContext?.backend || '').toLowerCase() === 'tm_devices' &&
+    isBackendConversionRequest(req.userMessage) &&
+    Array.isArray(req.flowContext?.steps) &&
+    req.flowContext.steps.length > 0
+  ) {
+    const convertedSteps = await convertStepsToTmDevices(
+      req.flowContext.steps as Array<Record<string, unknown>>,
+      req.flowContext?.deviceDriver || req.flowContext?.modelFamily || 'MSO6B'
+    );
+    return buildShortcutResponse({
+      summary: `Converted ${convertedSteps.length} steps to tm_devices without a model call.`,
+      steps: convertedSteps,
+      req,
+      startedAt,
+    });
+  }
   const rawApiKey = String((req as { apiKey?: string }).apiKey || '').trim();
   const mcpOnlyMode =
     req.mode === 'mcp_only' ||
     rawApiKey.length === 0 ||
     rawApiKey === '__mcp_only__' ||
     rawApiKey.toLowerCase() === 'undefined';
+  if (req.outputMode === 'chat') {
+    if (mcpOnlyMode) {
+      const text = 'Chat mode needs MCP+AI with a provider model and API key. Switch to MCP+AI, or use Build mode for deterministic planner output.';
+      return {
+        text,
+        displayText: text,
+        assistantThreadId: undefined,
+        errors: [],
+        warnings: [],
+        metrics: {
+          totalMs: Date.now() - startedAt,
+          usedShortcut: true,
+          provider: req.provider,
+          iterations: 0,
+          toolCalls: 0,
+          toolMs: 0,
+          modelMs: 0,
+          promptChars: { system: 0, user: 0 },
+        },
+        debug: {
+          toolTrace: [],
+          resolutionPath: 'chat:requires_ai',
+        },
+      };
+    }
+    const chatResult = await runChatConversation(req);
+    return {
+      text: chatResult.text,
+      displayText: chatResult.text,
+      assistantThreadId: chatResult.assistantThreadId,
+      errors: [],
+      warnings: [],
+      metrics: {
+        ...chatResult.metrics,
+        totalMs: Date.now() - startedAt,
+      },
+      debug: chatResult.debug,
+    };
+  }
   const explainOnlyMode = isExplainOnlyCommandAsk(req);
-  const forceToolCallMode = mcpOnlyMode ? false : Boolean(req.toolCallMode);
+  const forceToolCallMode = cleanRouter.getToolCallMode(req);
+  const routeSummary = cleanRouter.getRouteSummary(req);
+  console.log(routeSummary);
   const buildHeavyMode = isFlowBuildIntentMessage(req.userMessage);
   const normalizedModelFamily = normalizeScopeModelFamily(req);
   if (normalizedModelFamily && normalizedModelFamily !== req.flowContext.modelFamily) {
@@ -5053,16 +6878,22 @@ export async function runToolLoop(req: McpChatRequest): Promise<ToolLoopResult> 
   console.log('[DEBUG] toolCallMode:', forceToolCallMode);
   const directExec = forceToolCallMode ? null : detectDirectExecution(req);
   if (directExec) {
-    if (req.instrumentEndpoint) {
+    if (hasLiveInstrumentAccess(req) && req.instrumentEndpoint) {
       const result = await probeCommandProxy(req.instrumentEndpoint, directExec.command);
       const responseText =
         result.ok && result.data && typeof result.data === 'object' && typeof result.data.response === 'string'
           ? result.data.response
           : '';
-      const decoded = decodeCommandStatus(directExec.command, responseText);
-      const finalText = decoded.length > 0
-        ? `${directExec.command}: ${responseText}\nDecoded:\n- ${decoded.join('\n- ')}`.trim()
-        : `${directExec.command}: ${responseText}`.trim();
+      const resultData =
+        result.data && typeof result.data === 'object' ? (result.data as Record<string, unknown>) : {};
+      const outputMode = req.instrumentEndpoint.outputMode === 'clean' ? 'clean' : 'verbose';
+      const finalText = formatVerboseProbeResult(directExec.command, {
+        ...resultData,
+        response: responseText,
+        decodedStatus: Array.isArray(resultData.decodedStatus)
+          ? resultData.decodedStatus
+          : decodeCommandStatus(directExec.command, responseText),
+      }, outputMode);
       return {
         text: finalText,
         displayText: finalText,
@@ -5172,19 +7003,21 @@ export async function runToolLoop(req: McpChatRequest): Promise<ToolLoopResult> 
       },
       debug: {
         toolDefinitions: [],
-        toolTrace: [
-          {
-            tool: 'detectFlowCommandIssues',
-            args: {},
-            result: { count: flowCommandIssues.length, issues: flowCommandIssues },
-          },
-        ],
+        toolTrace: [{
+          name: 'detectFlowCommandIssues',
+          args: {},
+          startedAt: new Date().toISOString(),
+          resultSummary: { count: flowCommandIssues.length, ok: true }
+        }],
       },
     };
   }
   const reasoningMode = isReasoningRequest(req.userMessage);
   const followUpCorrectionMode = isFollowUpCorrectionRequest(req);
-  const allowDeterministicShortcut = mcpOnlyMode;
+  const routeDecision = cleanRouter.makeRouteDecision(req);
+  // Don't allow shortcuts when router determines tool calls are needed
+  const allowDeterministicShortcut = false;
+  const allowPlannerShortcut = !mcpOnlyMode && !explainOnlyMode && !followUpCorrectionMode;
   const allowLegacyDeterministicShortcuts = false;
   const commonServerShortcut =
     !allowLegacyDeterministicShortcuts ||
@@ -5280,35 +7113,32 @@ export async function runToolLoop(req: McpChatRequest): Promise<ToolLoopResult> 
 
   let plannerShortcut: string | null = null;
   let plannerOutputCache: PlannerOutput | null = null;
-  if (!explainOnlyMode) {
-    const plannerOutput = await planIntent(req);
-    plannerOutputCache = plannerOutput;
+  if (!mcpOnlyMode && !explainOnlyMode) {
+    // Use clean planner instead of flawed planner
+    const cleanPlan = await cleanPlanner.createPlan(req);
+    
     console.log(
-      '[PLANNER] deviceType:',
-      req.flowContext.deviceType || 'SCOPE',
-      'resolvedCount:',
-      plannerOutput?.resolvedCommands?.length || 0,
-      'unresolvedCount:',
-      plannerOutput?.unresolved?.length || 0
+      '[CLEAN_PLANNER] intent:',
+      cleanPlan.intent,
+      'confidence:',
+      cleanPlan.confidence,
+      'commands:',
+      cleanPlan.commands.length,
+      'additions:',
+      cleanPlan.additions.length,
+      'changes:',
+      cleanPlan.changes.length
     );
-    const shortcutEligible = canShortcut(plannerOutput, req);
-    console.log('[SHORTCUT]', {
-      resolvedCount: plannerOutput.resolvedCommands.length,
-      unresolvedCount: plannerOutput.unresolved.length,
-      deviceType: req.flowContext.deviceType,
-      isReasoning: isReasoningRequest(req.userMessage),
-      isBuildHeavy: isFlowBuildIntentMessage(req.userMessage),
-      canShortcut: shortcutEligible,
-    });
-    plannerShortcut =
-      allowDeterministicShortcut &&
-      shortcutEligible &&
-      plannerOutput.resolvedCommands.length > 0 &&
-      plannerOutput.unresolved.length === 0
-        ? buildActionsFromPlanner(plannerOutput, req)
-        : null;
+    
+    // If clean planner delegated to Smart SCPI Assistant, don't create shortcut
+    if (cleanPlan.intent === 'scpi_command' && cleanPlan.reasoning.includes('Delegated to Smart SCPI Assistant')) {
+      console.log('[CLEAN_PLANNER] Delegated to Smart SCPI Assistant - no shortcut');
+    } else if (cleanPlan.confidence > 0.5 && (cleanPlan.commands.length > 0 || cleanPlan.additions.length > 0)) {
+      // Create shortcut from clean plan
+      plannerShortcut = buildShortcutFromCleanPlan(cleanPlan, req);
+    }
   }
-  if (!explainOnlyMode && allowDeterministicShortcut && plannerShortcut) {
+  if (allowPlannerShortcut && plannerShortcut) {
     const checked = await postCheckResponse(plannerShortcut, {
       backend: req.flowContext.backend,
       modelFamily: req.flowContext.modelFamily,
@@ -5336,120 +7166,108 @@ export async function runToolLoop(req: McpChatRequest): Promise<ToolLoopResult> 
           user: 0,
         },
       },
-      debug: {
-        shortcutResponse: plannerShortcut,
-        toolTrace: [],
-      },
-    };
+        debug: {
+          shortcutResponse: plannerShortcut,
+          toolTrace: [],
+          resolutionPath: 'shortcut:planner',
+        },
+      };
   }
 
   // MCP-only mode is deterministic/local by design:
   // never call external model providers from here.
   if (mcpOnlyMode) {
-    if (explainOnlyMode) {
-      const explainApply = await buildMcpOnlyExplainApplyResponse(req);
-      if (explainApply) {
-        const checked = await postCheckResponse(explainApply, {
-          backend: req.flowContext.backend,
-          modelFamily: req.flowContext.modelFamily,
-          originalSteps: req.flowContext.steps,
-          scpiContext: req.scpiContext as Array<Record<string, unknown>>,
-          alias: req.flowContext.alias,
-          instrumentMap: req.flowContext.instrumentMap as Array<Record<string, unknown>> | undefined,
-        }, { allowMissingActionsJson: false });
-        return {
-          text: checked.text,
-          displayText: checked.text,
-          assistantThreadId: resolveOpenAiResponseCursor(req) || undefined,
-          errors: checked.errors,
-          warnings: checked.warnings,
-          metrics: {
-            totalMs: Date.now() - startedAt,
-            usedShortcut: true,
-            provider: req.provider,
-            iterations: 0,
-            toolCalls: 0,
-            toolMs: 0,
-            modelMs: 0,
-            promptChars: {
-              system: 0,
-              user: 0,
+    // Check if clean router wants to use Smart SCPI Assistant
+    if (routeDecision.route === 'smart_scpi') {
+      console.log('[MCP_ONLY] Router wants Smart SCPI Assistant - delegating to Smart SCPI');
+      return await runSmartScpiAssistant(req);
+    } else if (routeDecision.forceToolCall) {
+      console.log('[MCP_ONLY] Router wants tool calls - going to tool loop');
+      // Continue to tool loop below
+    } else {
+      if (explainOnlyMode) {
+        const explainApply = await buildMcpOnlyExplainApplyResponse(req);
+        if (explainApply) {
+          const checked = await postCheckResponse(explainApply, {
+            backend: req.flowContext.backend,
+            modelFamily: req.flowContext.modelFamily,
+            originalSteps: req.flowContext.steps,
+            scpiContext: req.scpiContext as Array<Record<string, unknown>>,
+            alias: req.flowContext.alias,
+            instrumentMap: req.flowContext.instrumentMap as Array<Record<string, unknown>> | undefined,
+          }, { allowMissingActionsJson: false });
+          return {
+            text: checked.text,
+            displayText: checked.text,
+            assistantThreadId: resolveOpenAiResponseCursor(req) || undefined,
+            errors: checked.errors,
+            warnings: checked.warnings,
+            metrics: {
+              totalMs: Date.now() - startedAt,
+              usedShortcut: true,
+              provider: req.provider,
+              iterations: 0,
+              toolCalls: 0,
+              toolMs: 0,
+              modelMs: 0,
+              promptChars: {
+                system: 0,
+                user: 0,
+              },
             },
-          },
           debug: {
             shortcutResponse: checked.text,
             toolTrace: [],
+            resolutionPath: 'shortcut:explain_apply',
           },
-        };
+          };
+        }
       }
-    }
 
-    const plannerOutput = plannerOutputCache || await planIntent(req);
-    const unresolved = plannerOutput.unresolved || [];
-    const deterministicActions =
-      plannerOutput.resolvedCommands.length > 0 && unresolved.length === 0
-        ? buildActionsFromPlanner(plannerOutput, req)
+      const buildResult = await executeBuild({
+        query: req.userMessage,
+        context: {
+          backend: req.flowContext.backend,
+          deviceType: req.flowContext.deviceType,
+          modelFamily: req.flowContext.modelFamily,
+          steps: req.flowContext.steps,
+          selectedStepId: req.flowContext.selectedStepId || undefined,
+          alias: req.flowContext.alias,
+          instrumentMap: req.flowContext.instrumentMap as Array<Record<string, unknown>> | undefined,
+        },
+        buildNew:
+          typeof req.buildNew === 'boolean'
+            ? req.buildNew
+            : Array.isArray(req.flowContext.steps)
+              ? req.flowContext.steps.length === 0
+              : true,
+        instrumentId: req.flowContext.alias || undefined,
+      });
+    const buildData =
+      buildResult.data && typeof buildResult.data === 'object'
+        ? (buildResult.data as Record<string, unknown>)
+        : {};
+    const buildMode = String(buildData.mode || 'action');
+    const providerMatch =
+      buildData.providerMatch && typeof buildData.providerMatch === 'object'
+        ? (buildData.providerMatch as Record<string, unknown>)
         : null;
+    const providerApplied = providerMatch?.applied === true;
+    const buildWarnings = Array.isArray(buildResult.warnings) ? buildResult.warnings : [];
+    const buildErrors =
+      buildResult.ok === false && buildResult.error
+        ? [String(buildResult.error)]
+        : [];
 
-    if (deterministicActions) {
-      const checked = await postCheckResponse(deterministicActions, {
-        backend: req.flowContext.backend,
-        modelFamily: req.flowContext.modelFamily,
-        originalSteps: req.flowContext.steps,
-        scpiContext: req.scpiContext as Array<Record<string, unknown>>,
-        alias: req.flowContext.alias,
-        instrumentMap: req.flowContext.instrumentMap as Array<Record<string, unknown>> | undefined,
-      }, { allowMissingActionsJson });
-      return {
-        text: checked.text,
-        displayText: deterministicActions,
-        assistantThreadId: resolveOpenAiResponseCursor(req) || undefined,
-        errors: checked.errors,
-        warnings: checked.warnings,
-        metrics: {
-          totalMs: Date.now() - startedAt,
-          usedShortcut: true,
-          provider: req.provider,
-          iterations: 0,
-          toolCalls: 0,
-          toolMs: 0,
-          modelMs: 0,
-          promptChars: {
-            system: 0,
-            user: 0,
-          },
-        },
-        debug: {
-          shortcutResponse: deterministicActions,
-          toolTrace: [],
-        },
-      };
-    }
-
-    const findings = unresolved.length
-      ? unresolved.slice(0, 12).map((u) => `Unresolved: ${u}`)
-      : ['No deterministic planner actions were generated for this request.'];
-    const response = `ACTIONS_JSON: ${JSON.stringify({
-      summary: unresolved.length
-        ? 'MCP-only planner could not fully resolve all commands.'
-        : 'MCP-only planner found no actionable deterministic flow changes.',
-      findings,
-      suggestedFixes: [
-        'Rephrase with explicit instrument intent, channels, and protocol details.',
-        'Use exact SCPI/measurement wording when possible for deterministic matching.',
-      ],
-      confidence: unresolved.length ? 'medium' : 'low',
-      actions: [],
-    })}`;
     return {
-      text: response,
-      displayText: response,
+      text: buildResult.text || '',
+      displayText: buildResult.text || '',
       assistantThreadId: resolveOpenAiResponseCursor(req) || undefined,
-      errors: [],
-      warnings: unresolved.length ? ['MCP-only mode skipped model fallback because request was partially unresolved.'] : [],
+      errors: buildErrors,
+      warnings: buildWarnings,
       metrics: {
         totalMs: Date.now() - startedAt,
-        usedShortcut: false,
+        usedShortcut: buildMode === 'action',
         provider: req.provider,
         iterations: 0,
         toolCalls: 0,
@@ -5462,8 +7280,18 @@ export async function runToolLoop(req: McpChatRequest): Promise<ToolLoopResult> 
       },
       debug: {
         toolTrace: [],
+        resolutionPath:
+          providerApplied
+            ? 'build:provider_supplement'
+            : buildMode === 'action'
+              ? 'build:action'
+              : buildMode === 'info_fallback'
+                ? 'build:info_fallback'
+                : 'build:info',
+        ...(providerMatch ? { providerMatch } : {}),
       },
     };
+    }
   }
   if (flowValidateMode && req.mode === 'mcp_only' && flowCommandIssues.length === 0) {
     const flatSteps = flattenSteps(Array.isArray(req.flowContext.steps) ? req.flowContext.steps : []);
@@ -5511,14 +7339,193 @@ export async function runToolLoop(req: McpChatRequest): Promise<ToolLoopResult> 
             result: { count: 0, issues: [] },
           },
         ],
+        resolutionPath: 'flow_validate',
+      },
+    };
+  }
+
+  // Check if router wants Smart SCPI Assistant (MCP-only mode only)
+  // In MCP+AI mode, let the AI tool loop handle it to avoid breaking tool call chain
+  if (routeDecision.route === 'smart_scpi' && mcpOnlyMode && !explainOnlyMode && !flowValidateMode) {
+    console.log('[ROUTER] Smart SCPI Assistant requested (MCP-only) - delegating');
+    return await runSmartScpiAssistant(req);
+  }
+
+  const routerFirstAiMode =
+    !mcpOnlyMode &&
+    !explainOnlyMode &&
+    !flowValidateMode &&
+    req.mode === 'mcp_ai';
+  const hostedBuildResult = routerFirstAiMode
+    ? await executeBuild({
+        query: req.userMessage,
+        context: {
+          backend: req.flowContext.backend,
+          deviceType: req.flowContext.deviceType,
+          modelFamily: req.flowContext.modelFamily,
+          steps: req.flowContext.steps,
+          selectedStepId: req.flowContext.selectedStepId || undefined,
+          alias: req.flowContext.alias,
+          instrumentMap: req.flowContext.instrumentMap as Array<Record<string, unknown>> | undefined,
+        },
+        buildNew:
+          typeof req.buildNew === 'boolean'
+            ? req.buildNew
+            : Array.isArray(req.flowContext.steps)
+              ? req.flowContext.steps.length === 0
+              : true,
+        instrumentId: req.flowContext.alias || undefined,
+      })
+    : null;
+  const hostedBuildData =
+    hostedBuildResult?.data && typeof hostedBuildResult.data === 'object'
+      ? (hostedBuildResult.data as Record<string, unknown>)
+      : {};
+  const hostedBuildMode = String(hostedBuildData.mode || 'action');
+  const hostedBuildIsDirectEdit =
+    routerFirstAiMode &&
+    hostedBuildMode === 'action' &&
+    Boolean(hostedBuildResult?.text) &&
+    (Boolean(hostedBuildData.edited) ||
+      Boolean(hostedBuildData.insertedComment) ||
+      Boolean(hostedBuildData.convertedBackend));
+  const plannerComplete =
+    routerFirstAiMode &&
+    Boolean(plannerOutputCache) &&
+    (plannerOutputCache?.resolvedCommands?.length || 0) > 0 &&
+    (plannerOutputCache?.unresolved?.length || 0) === 0 &&
+    (plannerOutputCache?.conflicts?.length || 0) === 0 &&
+    hostedBuildMode === 'action';
+  if (
+    routerFirstAiMode &&
+    (hostedBuildMode === 'out_of_scope' ||
+      plannerOutputCache?.rejection === 'out_of_scope')
+  ) {
+    return {
+      text: hostedBuildResult?.text || '',
+      displayText: hostedBuildResult?.text || '',
+      assistantThreadId: resolveOpenAiResponseCursor(req) || undefined,
+      errors: hostedBuildResult?.ok === false && hostedBuildResult.error ? [String(hostedBuildResult.error)] : [],
+      warnings: Array.isArray(hostedBuildResult?.warnings) ? hostedBuildResult.warnings : [],
+      metrics: {
+        totalMs: Date.now() - startedAt,
+        usedShortcut: true,
+        provider: req.provider,
+        iterations: 0,
+        toolCalls: 0,
+        toolMs: 0,
+        modelMs: 0,
+        promptChars: { system: 0, user: 0 },
+      },
+      debug: {
+        toolTrace: [],
+        resolutionPath: 'build:out_of_scope',
+      },
+    };
+  }
+
+  if (hostedBuildIsDirectEdit && hostedBuildResult?.text) {
+    const baselineChecked = await postCheckResponse(
+      hostedBuildResult.text,
+      {
+        backend: req.flowContext.backend,
+        modelFamily: req.flowContext.modelFamily,
+        originalSteps: req.flowContext.steps,
+        scpiContext: req.scpiContext as Array<Record<string, unknown>>,
+        alias: req.flowContext.alias,
+        instrumentMap: req.flowContext.instrumentMap as Array<Record<string, unknown>> | undefined,
+      },
+      { allowMissingActionsJson }
+    );
+    return {
+      text: baselineChecked.text,
+      displayText: hostedBuildResult.text,
+      assistantThreadId: resolveOpenAiResponseCursor(req) || undefined,
+      errors: baselineChecked.errors,
+      warnings: baselineChecked.warnings || [],
+      metrics: {
+        totalMs: Date.now() - startedAt,
+        usedShortcut: true,
+        provider: req.provider,
+        iterations: 0,
+        toolCalls: 0,
+        toolMs: 0,
+        modelMs: 0,
+        promptChars: { system: 0, user: 0 },
+      },
+      debug: {
+        toolTrace: [],
+        shortcutResponse: hostedBuildResult.text,
+        resolutionPath: 'router:direct_edit',
+      },
+    };
+  }
+
+  if (plannerComplete && hostedBuildResult?.text) {
+    const baselineChecked = await postCheckResponse(
+      hostedBuildResult.text,
+      {
+        backend: req.flowContext.backend,
+        modelFamily: req.flowContext.modelFamily,
+        originalSteps: req.flowContext.steps,
+        scpiContext: req.scpiContext as Array<Record<string, unknown>>,
+        alias: req.flowContext.alias,
+        instrumentMap: req.flowContext.instrumentMap as Array<Record<string, unknown>> | undefined,
+      },
+      { allowMissingActionsJson }
+    );
+    return {
+      text: baselineChecked.text,
+      displayText: hostedBuildResult.text,
+      assistantThreadId: resolveOpenAiResponseCursor(req) || undefined,
+      errors: baselineChecked.errors,
+      warnings: baselineChecked.warnings || [],
+      metrics: {
+        totalMs: Date.now() - startedAt,
+        usedShortcut: true,
+        provider: req.provider,
+        iterations: 0,
+        toolCalls: 0,
+        toolMs: 0,
+        modelMs: 0,
+        promptChars: { system: 0, user: 0 },
+      },
+      debug: {
+        toolTrace: [],
+        shortcutResponse: hostedBuildResult.text,
+        resolutionPath: 'router',
       },
     };
   }
 
   const maxToolRounds = forceToolCallMode ? 8 : (isHostedStructuredBuildRequest(req) ? 4 : 3);
-  const loopResult = (forceToolCallMode || shouldUseTools(req))
-    ? await runOpenAiToolLoop(req, flowCommandIssues, maxToolRounds)
-    : await runOpenAiResponses(req, flowCommandIssues);
+  const loopResult = mcpOnlyMode
+    ? await runDeterministicToolLoop(req, flowCommandIssues, maxToolRounds)
+    : routerFirstAiMode
+      ? (plannerComplete
+          ? await runOpenAiResponses(req, flowCommandIssues, {
+              routerBaselineText: hostedBuildResult?.text || '',
+              routerBaselineMode: hostedBuildMode,
+            })
+          : await runOpenAiToolLoop(
+              {
+                ...req,
+                routerOnly: true,
+                routerPreferred: true,
+                routerBaselineText: hostedBuildResult?.text || '',
+              },
+              flowCommandIssues,
+              2
+            ))
+      : ((forceToolCallMode || shouldUseTools(req))
+        ? await runOpenAiToolLoop(req, flowCommandIssues, maxToolRounds)
+        : await runOpenAiResponses(req, flowCommandIssues));
+
+  // In MCP-only mode, return immediately without any post-processing
+  if (mcpOnlyMode) {
+    return loopResult as ToolLoopResult;
+  }
+
   const assistantMode = Boolean(loopResult.assistantThreadId);
   const checkedPass1 = await postCheckResponse(loopResult.text, {
     backend: req.flowContext.backend,
@@ -5545,9 +7552,66 @@ export async function runToolLoop(req: McpChatRequest): Promise<ToolLoopResult> 
     warnings: Array.from(new Set([...(checkedPass1.warnings || []), ...(checkedPass2.warnings || [])])),
   };
 
+  if (routerFirstAiMode && hostedBuildResult?.text) {
+    const baselineText = hostedBuildResult.text;
+    const baselineActionCount = countMeaningfulActionSteps(baselineText);
+    const aiActionCount = countMeaningfulActionSteps(checked.text);
+    const baselineCorpus = collectActionCommandCorpus(baselineText);
+    const aiCorpus = collectActionCommandCorpus(checked.text);
+    const droppedBaselineCommands = missingFromBaseline(baselineCorpus, aiCorpus);
+    const droppedPythonStep = droppedBaselineCommands.some((item) => item.toLowerCase().startsWith('python:'));
+    const aiExplicitlyEmpty = hasEmptyActionsJson(checked.text);
+    const baselineAuthoritative =
+      hostedBuildMode === 'action' &&
+      baselineActionCount > 0 &&
+      (
+        aiExplicitlyEmpty ||
+        aiActionCount === 0 ||
+        aiActionCount < baselineActionCount ||
+        droppedPythonStep ||
+        droppedBaselineCommands.length > 0
+      );
+
+    if (baselineAuthoritative) {
+      const baselineChecked = await postCheckResponse(baselineText, {
+        backend: req.flowContext.backend,
+        modelFamily: req.flowContext.modelFamily,
+        originalSteps: req.flowContext.steps,
+        scpiContext: req.scpiContext as Array<Record<string, unknown>>,
+        alias: req.flowContext.alias,
+        instrumentMap: req.flowContext.instrumentMap as Array<Record<string, unknown>> | undefined,
+      }, { allowMissingActionsJson });
+      return {
+        text: baselineChecked.text,
+        displayText: baselineText,
+        assistantThreadId: loopResult.assistantThreadId,
+        errors: baselineChecked.errors,
+        warnings: Array.from(
+          new Set([
+            ...(baselineChecked.warnings || []),
+            'Kept router baseline because AI refinement removed or weakened applyable output.',
+            ...(droppedBaselineCommands.length
+              ? [`Dropped baseline commands: ${droppedBaselineCommands.slice(0, 6).join(' | ')}`]
+              : []),
+          ])
+        ),
+        metrics: {
+          ...loopResult.metrics,
+          totalMs: Date.now() - startedAt,
+        },
+        debug: {
+          ...loopResult.debug,
+          shortcutResponse: baselineText,
+          resolutionPath: 'router_then_ai:baseline_kept',
+        },
+      };
+    }
+  }
+
   // Hybrid gap-fill: when hosted/model output fail-closes or returns no actions,
   // try deterministic planner synthesis for resolvable commands.
   const shouldTryPlannerGapFill =
+    !routerFirstAiMode &&
     !allowMissingActionsJson &&
     !explainOnlyMode &&
     !followUpCorrectionMode &&
@@ -5584,6 +7648,7 @@ export async function runToolLoop(req: McpChatRequest): Promise<ToolLoopResult> 
             debug: {
               ...loopResult.debug,
               shortcutResponse: plannerFill,
+              resolutionPath: 'model:planner_gap_fill',
             },
           };
         }
@@ -5636,7 +7701,10 @@ export async function runToolLoop(req: McpChatRequest): Promise<ToolLoopResult> 
           modelMs: (loopResult.metrics?.modelMs || 0),
           promptChars: loopResult.metrics?.promptChars,
         },
-        debug: loopResult.debug,
+        debug: {
+          ...loopResult.debug,
+          resolutionPath: 'model:json_retry',
+        },
       };
     }
   }
@@ -5672,6 +7740,7 @@ export async function runToolLoop(req: McpChatRequest): Promise<ToolLoopResult> 
         debug: {
           ...loopResult.debug,
           shortcutResponse: shortcut,
+          resolutionPath: 'model:shortcut_fallback',
         },
       };
     }
@@ -5693,6 +7762,49 @@ export async function runToolLoop(req: McpChatRequest): Promise<ToolLoopResult> 
         ...loopResult.metrics,
         totalMs: Date.now() - startedAt,
     },
-    debug: loopResult.debug,
+    debug: {
+      ...loopResult.debug,
+      resolutionPath: (loopResult.debug as Record<string, unknown> | undefined)?.resolutionPath as string | undefined || 'model',
+    },
   };
+
+  if (routerFirstAiMode && hostedBuildResult?.text) {
+    const baselineActionCount = countMeaningfulActionSteps(hostedBuildResult.text);
+    const aiActionCount = countMeaningfulActionSteps(checked.text);
+    const baselineHasActions = hostedBuildMode === 'action' || baselineActionCount > 0;
+    const aiHasActions = aiActionCount > 0;
+    const aiExplicitlyEmpty = hasEmptyActionsJson(checked.text);
+    if (
+      baselineHasActions &&
+      (aiExplicitlyEmpty || !aiHasActions || aiActionCount < baselineActionCount)
+    ) {
+      const baselineChecked = await postCheckResponse(hostedBuildResult.text, {
+        backend: req.flowContext.backend,
+        modelFamily: req.flowContext.modelFamily,
+        originalSteps: req.flowContext.steps,
+        scpiContext: req.scpiContext as Array<Record<string, unknown>>,
+        alias: req.flowContext.alias,
+        instrumentMap: req.flowContext.instrumentMap as Array<Record<string, unknown>> | undefined,
+      }, { allowMissingActionsJson });
+      return {
+        text: baselineChecked.text,
+        displayText: hostedBuildResult.text,
+        assistantThreadId: loopResult.assistantThreadId,
+        errors: baselineChecked.errors,
+        warnings: Array.from(new Set([...(baselineChecked.warnings || []), 'AI refinement was weaker than router baseline; kept router output.'])),
+        metrics: {
+          ...loopResult.metrics,
+          totalMs: Date.now() - startedAt,
+        },
+        debug: {
+          ...loopResult.debug,
+          shortcutResponse: hostedBuildResult.text,
+          resolutionPath: 'router_then_ai:baseline_kept',
+        },
+      };
+    }
+  }
+}
+function hasLiveInstrumentAccess(req: McpChatRequest): boolean {
+  return Boolean(req.instrumentEndpoint && req.instrumentEndpoint.liveMode === true);
 }

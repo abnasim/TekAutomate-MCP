@@ -36,3 +36,17 @@ export function resolvePoliciesDir(): string {
   if (existsSync(inRepo)) return inRepo;
   return path.join(process.cwd(), 'policies');
 }
+
+export function resolveProvidersDir(customDir?: string): string {
+  const candidate = String(customDir || '').trim();
+  if (candidate) return path.resolve(process.cwd(), candidate);
+
+  const repoRoot = resolveRepoRoot();
+  const inRepo = path.join(repoRoot, 'mcp-server', 'providers');
+  if (existsSync(inRepo)) return inRepo;
+
+  const local = path.join(process.cwd(), 'providers');
+  if (existsSync(local)) return local;
+
+  return inRepo;
+}

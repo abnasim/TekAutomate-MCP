@@ -3,10 +3,12 @@ import { planIntent } from './intentPlanner';
 
 const OUTPUT_RULE = [
   'OUTPUT FORMAT:',
-  '1) One short sentence.',
+  '1) 1-3 short sentences when needed.',
   '2) ACTIONS_JSON: {"summary":"...","findings":[],"suggestedFixes":[],"actions":[...]}',
   'No code fences. No prose after ACTIONS_JSON.',
-  'If no changes needed: actions:[].',
+  'If one required detail is truly ambiguous, ask one concise blocking clarification question and use actions:[].',
+  'If part of the request is clear, still return the applyable part and list the missing or unsupported part in findings.',
+  'Use actions:[] only for genuine no-op, clarification, or out-of-scope cases.',
   'For pyvisa/vxi11 use write/query/save_* only; tm_device_command only for tm_devices.',
   'Every query step must include saveAs.',
 ].join('\n');
@@ -14,6 +16,8 @@ const OUTPUT_RULE = [
 const OUTPUT_RULE_COMPACT = [
   'Follow-up mode: keep output concise.',
   'Return one short sentence + ACTIONS_JSON only.',
+  'One blocking clarification question is allowed when one required value is missing.',
+  'Prefer useful partial output over empty actions when some of the request is clear.',
   'Do not repeat long explanations unless asked.',
 ].join('\n');
 
@@ -89,9 +93,11 @@ export async function buildContext(
     );
 
     if (scpiCommands.length > 0) {
+      const backend = String(req.flowContext.backend || '').toLowerCase();
+      const tmDevicesMode = backend === 'tm_devices';
       if (compact) {
         sections.push(
-          '## PLANNER RESOLVED\n\n' +
+          `${tmDevicesMode ? '## PLANNER RESOLVED — CONVERT TO tm_devices' : '## PLANNER RESOLVED'}\n\n` +
             scpiCommands
               .map((resolved) => {
                 const saveAs = resolved.saveAs ? `\n  saveAs: ${resolved.saveAs}` : '';
@@ -101,9 +107,18 @@ export async function buildContext(
         );
       } else {
         sections.push(
-          '## PLANNER RESOLVED - USE THESE EXACT COMMANDS\n\n' +
-            'These commands are verified against the command index.\n' +
-            'Use them exactly as shown. Do not substitute or invent alternatives.\n\n' +
+          (tmDevicesMode
+            ? '## PLANNER RESOLVED — CONVERT THESE TO tm_devices STEPS\n\n' +
+              'These SCPI commands are verified against the command index.\n' +
+              'Since backend is tm_devices, convert each verified SCPI command into a tm_device_command step.\n' +
+              'Use this pattern when a matching tm_devices path is obvious from the SCPI header:\n' +
+              "SCPI: BUS:B1:TYPe I2C\n→ scope.commands.bus.b[1].type.write('I2C')\n" +
+              "SCPI: BUS:B1:I2C:CLOCk:SOUrce CH1\n→ scope.commands.bus.b[1].i2c.clock.source.write('CH1')\n" +
+              "General rule: SCPI header tokens become a lowercase dot-path under scope.commands.\n" +
+              "If the exact tm_devices path is still uncertain, use scope.visa_write('SCPI_COMMAND') as a fallback instead of returning empty actions.\n\n"
+            : '## PLANNER RESOLVED - USE THESE EXACT COMMANDS\n\n' +
+              'These commands are verified against the command index.\n' +
+              'Use them exactly as shown for pyvisa/vxi11. Do not invent different SCPI alternatives.\n\n') +
             scpiCommands
               .map((resolved) => {
                 const lines = [

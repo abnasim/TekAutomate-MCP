@@ -889,7 +889,7 @@ describe('behavioral.hostedResponses', () => {
     expect(result.text).toContain('"replace_flow"');
   });
 
-  it('forces a final hosted answer pass after repeated tool rounds', async () => {
+  it('continues the hosted finalize phase after repeated tool rounds until the model returns a final answer', async () => {
     const finalFlow = {
       name: 'Generated Flow',
       description: 'Forced final answer after tool rounds',
@@ -972,11 +972,12 @@ describe('behavioral.hostedResponses', () => {
     expect(fetchMock).toHaveBeenCalledTimes(5);
     const lastBody = JSON.parse(String(fetchMock.mock.calls[4]?.[1]?.body || '{}')) as Record<string, unknown>;
     expect(lastBody.previous_response_id).toBe('resp_4');
-    expect(lastBody.tools).toBeUndefined();
+    expect(Array.isArray(lastBody.tools)).toBe(true);
     expect(Array.isArray(lastBody.input)).toBe(true);
     expect((lastBody.input as Array<Record<string, unknown>>)[0]?.type).toBe('function_call_output');
-    expect((lastBody.input as Array<Record<string, unknown>>)[1]?.role).toBe('user');
-    expect(String((lastBody.input as Array<Record<string, unknown>>)[1]?.content || '')).toContain('Tool retrieval is complete for this turn');
+    expect(
+      (lastBody.tools as Array<Record<string, unknown>>).some((tool) => tool.name === 'finalize_scpi_commands')
+    ).toBe(true);
 
     expect(result.assistantThreadId).toBe('resp_final');
     expect(result.metrics?.iterations).toBe(5);
@@ -1067,6 +1068,102 @@ describe('behavioral.hostedResponses', () => {
     expect(Array.isArray(secondBody.input)).toBe(true);
     expect((secondBody.input as Array<Record<string, unknown>>)[0]?.type).toBe('function_call_output');
     expect(result.assistantThreadId).toBe('resp_final_verify');
+    expect(result.text).toContain('"type":"replace_flow"');
+  });
+
+  it('recovers from a stale previous response cursor that is missing tool outputs', async () => {
+    const finalFlow = {
+      name: 'Recovered Flow',
+      description: 'Fresh turn after stale cursor recovery',
+      backend: 'pyvisa',
+      deviceType: 'SCOPE',
+      steps: [
+        { id: '1', type: 'connect', params: { printIdn: true } },
+        { id: '2', type: 'disconnect', params: {} },
+      ],
+    };
+
+    const fetchMock = vi
+      .spyOn(globalThis, 'fetch')
+      .mockResolvedValueOnce({
+        ok: false,
+        status: 400,
+        text: async () =>
+          JSON.stringify({
+            error: {
+              message: 'No tool output found for function call call_stale_123.',
+              type: 'invalid_request_error',
+              param: 'input',
+              code: null,
+            },
+          }),
+      } as Response)
+      .mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({
+          id: 'resp_recovered',
+          output_text: `\`\`\`json\n${JSON.stringify(finalFlow)}\n\`\`\``,
+          output: [
+            {
+              id: 'msg_recovered',
+              type: 'message',
+              role: 'assistant',
+              status: 'completed',
+              content: [
+                {
+                  type: 'output_text',
+                  text: `\`\`\`json\n${JSON.stringify(finalFlow)}\n\`\`\``,
+                },
+              ],
+            },
+          ],
+        }),
+      } as Response);
+
+    const result = await runToolLoop({
+      userMessage: 'Build a connect flow',
+      outputMode: 'steps_json',
+      provider: 'openai',
+      apiKey: 'test-key',
+      model: 'gpt-4.1',
+      openaiAssistantId: 'pmpt_12345',
+      openaiThreadId: 'resp_stale_cursor',
+      history: [
+        { role: 'user', content: 'Earlier turn' },
+        { role: 'assistant', content: 'Earlier reply' },
+      ],
+      flowContext: {
+        backend: 'pyvisa',
+        host: '127.0.0.1',
+        connectionType: 'tcpip',
+        modelFamily: 'MSO4/5/6 Series',
+        steps: [],
+        selectedStepId: null,
+        executionSource: 'steps',
+        deviceType: 'SCOPE',
+      },
+      runContext: {
+        runStatus: 'idle',
+        logTail: '',
+        auditOutput: '',
+        exitCode: null,
+      },
+    });
+
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+    const firstBody = JSON.parse(String(fetchMock.mock.calls[0]?.[1]?.body || '{}')) as Record<string, unknown>;
+    expect(firstBody.previous_response_id).toBe('resp_stale_cursor');
+
+    const secondBody = JSON.parse(String(fetchMock.mock.calls[1]?.[1]?.body || '{}')) as Record<string, unknown>;
+    expect(secondBody.previous_response_id).toBeUndefined();
+    expect(secondBody.input).toEqual([
+      { role: 'developer', content: expect.any(String) },
+      { role: 'user', content: 'Earlier turn' },
+      { role: 'assistant', content: 'Earlier reply' },
+      { role: 'user', content: expect.any(String) },
+    ]);
+
+    expect(result.assistantThreadId).toBe('resp_recovered');
     expect(result.text).toContain('"type":"replace_flow"');
   });
 

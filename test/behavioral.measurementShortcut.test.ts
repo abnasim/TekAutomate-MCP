@@ -2,12 +2,13 @@ import { describe, expect, it } from 'vitest';
 import { runToolLoop } from '../src/core/toolLoop';
 
 describe('behavioral.measurementShortcut', () => {
-  it('short-circuits a standard multi-measurement CH1 request without tool calls', async () => {
+  it('keeps MCP-only measurement requests on the deterministic smart scpi path without needing an API key', async () => {
     const result = await runToolLoop({
       userMessage: 'Add frequency, amplitude, pk2pk, mean, rms, and positive overshoot measurements on CH1 and keep any existing scope measurements.',
       outputMode: 'steps_json',
+      mode: 'mcp_only',
       provider: 'openai',
-      apiKey: 'test-key',
+      apiKey: '',
       model: 'gpt-5-mini',
       flowContext: {
         backend: 'pyvisa',
@@ -32,20 +33,21 @@ describe('behavioral.measurementShortcut', () => {
       history: [],
     });
 
-    expect(result.metrics?.usedShortcut).toBe(true);
-    expect(result.metrics?.toolCalls).toBe(0);
-    expect(result.text).toContain('MEASUrement:ADDMEAS FREQUENCY');
-    expect(result.text).toContain('MEASUrement:ADDMEAS PK2PK');
-    expect(result.text).toContain('MEASUrement:ADDMEAS RMS');
-    expect(result.text).not.toContain('search_scpi');
+    expect(result.errors).toEqual([]);
+    expect(result.metrics?.usedShortcut).toBe(false);
+    expect((result.debug as { resolutionPath?: string } | undefined)?.resolutionPath).toContain('deterministic:smart_scpi');
+    expect(result.text).toContain('MEASUrement:ADDMEAS');
+    expect(result.text).toContain('FREQUENCY');
+    expect(result.text).not.toContain('Incorrect API key');
   });
 
-  it('uses a default 6-measurement set when the user asks for six CH1 measurements without naming each one', async () => {
+  it('does not require a hosted provider key for MCP-only measurement lookup prompts', async () => {
     const result = await runToolLoop({
       userMessage: 'Add 6 measurements on channel 1 and do not overwrite existing measurements already on the scope.',
       outputMode: 'steps_json',
+      mode: 'mcp_only',
       provider: 'openai',
-      apiKey: 'test-key',
+      apiKey: '',
       model: 'gpt-5-mini',
       flowContext: {
         backend: 'pyvisa',
@@ -66,12 +68,10 @@ describe('behavioral.measurementShortcut', () => {
       history: [],
     });
 
-    expect(result.metrics?.usedShortcut).toBe(true);
-    expect(result.text).toContain('MEASUrement:ADDMEAS FREQUENCY');
-    expect(result.text).toContain('MEASUrement:ADDMEAS AMPLITUDE');
-    expect(result.text).toContain('MEASUrement:ADDMEAS PK2PK');
-    expect(result.text).toContain('MEASUrement:ADDMEAS MEAN');
-    expect(result.text).toContain('MEASUrement:ADDMEAS RMS');
-    expect(result.text).toContain('MEASUrement:ADDMEAS POVERSHOOT');
+    expect(result.errors).toEqual([]);
+    expect(result.metrics?.usedShortcut).toBe(false);
+    expect((result.debug as { resolutionPath?: string } | undefined)?.resolutionPath).toContain('deterministic:smart_scpi');
+    expect(result.text).toContain('MEASUrement:ADDMEAS');
+    expect(result.text).not.toContain('Incorrect API key');
   });
 });

@@ -1,5 +1,6 @@
 import { validateActionPayload } from '../tools/validateActionPayload';
 import { verifyScpiCommands } from '../tools/verifyScpiCommands';
+import { getCommandIndex } from './commandIndex';
 import { extractReplaceFlowSteps } from './schemas';
 import { normalizeActionsJsonPayload, parseJsonValueString } from './actionNormalizer';
 
@@ -46,11 +47,15 @@ function classifyPhase(step: Record<string, unknown>): string {
   const type = String(step.type || '').toLowerCase();
   const params = (step.params || {}) as Record<string, unknown>;
   const cmd = String(params.command || '').toLowerCase();
+  if (/measurement:immed:/.test(cmd)) return 'Measurements';
+  if (type === 'query') return 'Read Results';
   if (type === 'save_screenshot' || type === 'save_waveform' || /save|hardcopy|filesystem|export/.test(cmd)) return 'Save Results';
   if (/\*rst|\*cls|recall|preset|clear/.test(cmd)) return 'Setup';
-  if (/display:waveview|ch\d|math\d|ref\d|bus/.test(cmd)) return 'Channel / Bus Configuration';
-  if (/trig|trigger|acq|acquire|horizontal:recordlength|hor:record/.test(cmd)) return 'Trigger / Acquisition';
-  if (/meas|measure/.test(cmd)) return 'Measurements';
+  if (/measurement:meas\d+:source\d?\b|measurement:addmeas\b|meas|measure/.test(cmd)) return 'Measurements';
+  if (/math:|display:waveview\d+:math:|display:global:math\d+:state/.test(cmd)) return 'Math / Differential Setup';
+  if (/display:waveview|ch\d|ref\d|bus/.test(cmd)) return 'Channel / Bus Configuration';
+  if (/trig|trigger/.test(cmd)) return 'Trigger';
+  if (/acq|acquire|horizontal:|hor:/.test(cmd)) return 'Acquisition';
   if (type === 'error_check') return 'Validation / Error Check';
   return 'Operation';
 }
@@ -83,7 +88,27 @@ function groupFlatFlowSteps(steps: Array<Record<string, unknown>>): Array<Record
     byPhase.get(phase)!.push(step);
   });
 
-  const grouped = phaseOrder.map((phase, idx) => ({
+  const canonicalPhaseOrder = [
+    'Setup',
+    'Channel / Bus Configuration',
+    'Math / Differential Setup',
+    'Trigger',
+    'Acquisition',
+    'Measurements',
+    'Read Results',
+    'Save Results',
+    'Validation / Error Check',
+    'Operation',
+  ];
+  const orderedPhases = [...phaseOrder].sort((left, right) => {
+    const leftIdx = canonicalPhaseOrder.indexOf(left);
+    const rightIdx = canonicalPhaseOrder.indexOf(right);
+    const safeLeft = leftIdx === -1 ? canonicalPhaseOrder.length : leftIdx;
+    const safeRight = rightIdx === -1 ? canonicalPhaseOrder.length : rightIdx;
+    return safeLeft - safeRight;
+  });
+
+  const grouped = orderedPhases.map((phase, idx) => ({
     id: `g_auto_${idx + 1}`,
     type: 'group',
     label: phase,
@@ -107,6 +132,39 @@ function upsertFinding(actionsJson: Record<string, unknown>, message: string): v
   const next = current.map((x) => String(x));
   if (!next.includes(message)) next.push(message);
   actionsJson.findings = next;
+}
+
+function normalizeOpcCheckCommand(command: string): string {
+  return String(command || '').trim().replace(/\s+/g, ' ').toUpperCase();
+}
+
+function isSingleSequenceStopAfterCommand(command: string): boolean {
+  return /^ACQUIRE:STOPAFTER\s+SEQUENCE\b/.test(normalizeOpcCheckCommand(command));
+}
+
+function isAcquireStateRunCommand(command: string): boolean {
+  return /^ACQUIRE:STATE\s+(RUN|ON|1)\b/.test(normalizeOpcCheckCommand(command));
+}
+
+function isManualOpcEligibleCommand(command: string, hasSingleSequence: boolean): boolean {
+  const normalized = normalizeOpcCheckCommand(command);
+  if (isAcquireStateRunCommand(normalized)) return hasSingleSequence;
+  return (
+    /^AUTOSET(\s|:).*EXECUTE\b/.test(normalized) ||
+    /^CALIBRATE:INTERNAL(:START)?\b/.test(normalized) ||
+    /^CALIBRATE:FACTORY\s+(START|CONTINUE|PREVIOUS)\b/.test(normalized) ||
+    /^CH[1-8]:PROBE:(AUTOZERO|DEGAUSS)\s+EXECUTE\b/.test(normalized) ||
+    /^DIAG:STATE\s+EXECUTE\b/.test(normalized) ||
+    /^FACTORY\b/.test(normalized) ||
+    /^RECALL:SETUP\b/.test(normalized) ||
+    /^RECALL:WAVEFORM\b/.test(normalized) ||
+    /^\*RST\b/.test(normalized) ||
+    /^SAVE:IMAGE\b/.test(normalized) ||
+    /^SAVE:SETUP\b/.test(normalized) ||
+    /^SAVE:WAVEFORM\b/.test(normalized) ||
+    /^TEKSECURE\b/.test(normalized) ||
+    /^TRIGGER:A\s+SETLEVEL\b/.test(normalized)
+  );
 }
 
 function sanitizeSuggestedFixes(actionsJson: Record<string, unknown>): boolean {
@@ -405,6 +463,16 @@ function synthesizeApplyActionsFromSuggestions(
   };
   flatten(originalSteps);
 
+  const hasSingleSequence = flat.some((step) => {
+    const type = String(step.type || '').toLowerCase();
+    if (type !== 'write' && type !== 'set_and_query') return false;
+    const params =
+      step.params && typeof step.params === 'object' && !Array.isArray(step.params)
+        ? (step.params as Record<string, unknown>)
+        : null;
+    return isSingleSequenceStopAfterCommand(String(params?.command || ''));
+  });
+
   const hasOpcCapableOperation = flat.some((step) => {
     const type = String(step.type || '').toLowerCase();
     if (type !== 'write' && type !== 'set_and_query' && type !== 'query') return false;
@@ -414,27 +482,22 @@ function synthesizeApplyActionsFromSuggestions(
         : null;
     const command = String(params?.command || '');
     if (!command) return false;
-    return (
-      /\bACQuire:STOPAfter\s+SEQuence\b/i.test(command) ||
-      /\bACQuire:STATE\s+(ON|RUN|1)\b/i.test(command) ||
-      /\bAUTOset\b/i.test(command) ||
-      /\bCALibrate:/i.test(command) ||
-      /\bRECAll:/i.test(command) ||
-      /\bSAVe:/i.test(command) ||
-      /\*RST\b/i.test(command) ||
-      /\bTEKSecure\b/i.test(command) ||
-      /\bTRIGger:A\s+SETLevel\b/i.test(command)
-    );
+    return isManualOpcEligibleCommand(command, hasSingleSequence);
   });
   if (!hasOpcCapableOperation) return false;
 
   const pickTargetId = (): string => {
     const withId = flat.filter((step) => typeof step.id === 'string' && String(step.id || '').trim());
-    const lastWrite = [...withId].reverse().find((step) => {
+    const lastEligibleWrite = [...withId].reverse().find((step) => {
       const type = String(step.type || '').toLowerCase();
-      return type === 'write' || type === 'set_and_query';
+      if (type !== 'write' && type !== 'set_and_query') return false;
+      const params =
+        step.params && typeof step.params === 'object' && !Array.isArray(step.params)
+          ? (step.params as Record<string, unknown>)
+          : null;
+      return isManualOpcEligibleCommand(String(params?.command || ''), hasSingleSequence);
     });
-    if (lastWrite?.id) return String(lastWrite.id);
+    if (lastEligibleWrite?.id) return String(lastEligibleWrite.id);
 
     const lastConnect = [...withId].reverse().find((step) => String(step.type || '').toLowerCase() === 'connect');
     if (lastConnect?.id) return String(lastConnect.id);
@@ -1272,10 +1335,49 @@ export async function postCheckResponse(
     const failures = verificationRows.filter((item) => item.verified !== true);
 
     if (failures.length) {
+      const commandIndex = await getCommandIndex();
+      const lenientVerification = await verifyScpiCommands({
+        commands: failures.map((item) => String(item.command || '')).filter(Boolean),
+        modelFamily: flowContext?.modelFamily,
+        requireExactSyntax: false,
+      });
+      const lenientMap = new Map(
+        ((lenientVerification.data as Array<Record<string, unknown>>) || []).map((item) => [
+          String(item.command || ''),
+          item.verified === true,
+        ])
+      );
+      const stillFailing: Array<Record<string, unknown>> = [];
+      const tolerated: string[] = [];
+
       failures.forEach((f) => {
+        const command = String(f.command || '').trim();
+        const header = splitCommands(command)[0] || command;
+        const lenientlyVerified = lenientMap.get(command) === true;
+        const indexed =
+          commandIndex.getByHeader(header, flowContext?.modelFamily) ||
+          commandIndex.getByHeader(header.toUpperCase(), flowContext?.modelFamily) ||
+          commandIndex.getByHeader(header.toLowerCase(), flowContext?.modelFamily) ||
+          commandIndex.getByHeaderPrefix(header, flowContext?.modelFamily) ||
+          commandIndex.getByHeader(header) ||
+          commandIndex.getByHeader(header.toUpperCase()) ||
+          commandIndex.getByHeader(header.toLowerCase()) ||
+          commandIndex.getByHeaderPrefix(header);
+        if (lenientlyVerified || indexed) {
+          tolerated.push(command);
+          return;
+        }
+        stillFailing.push(f);
+      });
+
+      tolerated.forEach((command) => {
+        warnings.push(`Command kept with lenient post-check validation: ${command}`);
+      });
+
+      stillFailing.forEach((f) => {
         errors.push(`Unverified command: ${String(f.command || '')}`);
       });
-      if (Array.isArray(actionsJson.actions) && actionsJson.actions.length > 0) {
+      if (stillFailing.length && Array.isArray(actionsJson.actions) && actionsJson.actions.length > 0) {
         actionsJson.actions = [];
         upsertFinding(
           actionsJson,
