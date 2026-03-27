@@ -6837,10 +6837,8 @@ async function runOpenAiToolLoop(
     const liveToolNames = new Set([
       // Execution — direct scope actions
       'send_scpi', 'capture_screenshot', 'get_instrument_state',
-      // Router — single tool for ALL discovery (search, browse groups, RAG, exec, build, save)
+      // Router — ALL discovery + knowledge (search auto-includes RAG)
       'tek_router',
-      // Knowledge
-      'retrieve_rag_chunks',
     ]);
     // Strip infra params from tool schemas (same as Anthropic path)
     const infraParams = new Set(['executorUrl', 'visaResource', 'backend', 'liveMode', 'outputMode', 'modelFamily', 'deviceDriver', 'scopeType']);
@@ -7057,10 +7055,8 @@ function selectAnthropicTools(req: McpChatRequest): Array<{ name: string; descri
     const liveToolNames = new Set([
       // Execution — direct scope actions
       'send_scpi', 'capture_screenshot', 'get_instrument_state',
-      // Router — single tool for ALL discovery (search, browse groups, RAG, exec, build, save)
+      // Router — ALL discovery + knowledge (search auto-includes RAG)
       'tek_router',
-      // Knowledge
-      'retrieve_rag_chunks',
     ]);
     const filtered = allTools.filter((t) => liveToolNames.has(t.name));
     // Strip server-injected infra params from schemas so AI only sees user-facing params
@@ -7435,12 +7431,11 @@ function buildLiveSystemPrompt(req: McpChatRequest, sessionContext?: string): st
     '# TekAutomate Live Mode',
     'You control a Tektronix oscilloscope. Execute commands silently. Report results briefly.',
     '',
-    '## Tools',
+    '## Tools (4 only)',
     '- **send_scpi** — {commands:["CMD1","CMD2?"]} → [{command, response, ok, error}]',
     '- **capture_screenshot** — Capture display. Call after visual changes.',
     '- **get_instrument_state** — *IDN?/*ESR?/ALLEV?',
-    '- **tek_router** — action:"search"|"search_exec"|"exec"|"list"|"create", query:"..."',
-    '- **retrieve_rag_chunks** — corpus="errors"|"app_logic"|"pyvisa_tekhsi"|"tmdevices"',
+    '- **tek_router** — action:"search" returns SCPI commands + knowledge base results in ONE call. Also: "exec", "search_exec", "list", "create".',
     '',
     '## RULES',
     '1. JUST DO IT. Never explain how. Never suggest manual UI steps. Never list options.',

@@ -213,10 +213,30 @@ async function handleSearch(req: RouterRequest, startedAt: number): Promise<Rout
   const hits = await engine.searchCompound(req.query, opts);
   const results = hits.map((hit) => serializeHit(hit, req.debug === true));
 
+  // Enrich with RAG knowledge in the same response — zero extra latency for AI
+  let knowledge: Array<{ corpus: string; title: string; body: string }> | undefined;
+  try {
+    const { retrieveRagChunks } = await import('../tools/retrieveRagChunks');
+    const ragResults: Array<{ corpus: string; title: string; body: string }> = [];
+    for (const corpus of ['errors', 'app_logic'] as const) {
+      const res = await retrieveRagChunks({ corpus, query: req.query, topK: 1 });
+      if (res.ok && Array.isArray(res.data)) {
+        for (const chunk of res.data) {
+          const c = chunk as { title?: string; body?: string; corpus?: string };
+          if (c.body && c.body.length > 30) {
+            ragResults.push({ corpus, title: c.title || '', body: c.body.slice(0, 300) });
+          }
+        }
+      }
+    }
+    if (ragResults.length > 0) knowledge = ragResults;
+  } catch { /* non-fatal */ }
+
   return {
     ok: true,
     action: 'search',
     results,
+    knowledge,
     text: results.length
       ? `Found ${results.length} tool(s) for "${req.query}". Top: ${results[0].name} (${results[0].id})`
       : `No tools found for "${req.query}".`,
