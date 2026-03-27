@@ -15194,9 +15194,22 @@ Instructions:
                 <p className="text-sm">Ab Nasim (ab.nasim@tek.com)</p>
               </div>
 
+              <div>
+                <h3 className="font-semibold text-lg mb-2">License</h3>
+                <div className="bg-gray-50 dark:bg-zinc-800 border border-gray-200 dark:border-zinc-700 rounded-lg p-3 max-h-40 overflow-y-auto">
+                  <p className="text-[11px] leading-relaxed text-gray-600 dark:text-zinc-400 font-medium mb-2">TEKTRONIX SAMPLE SOURCE CODE LICENSE AGREEMENT</p>
+                  <p className="text-[11px] leading-relaxed text-gray-600 dark:text-zinc-400">
+                    Source code written by Tektronix, Inc. or its affiliates (&ldquo;Tektronix&rdquo;) that is designated as a &ldquo;sample,&rdquo; &ldquo;example,&rdquo; &ldquo;sample code,&rdquo; or any similar designation will be considered &ldquo;Sample Source Code.&rdquo; Tektronix grants you a license to download, reproduce, display, distribute, modify, and create derivative works of Tektronix Sample Source Code, only for use in or with Tektronix products. You may not remove or alter any copyright notices or trademarks.
+                  </p>
+                  <p className="text-[11px] leading-relaxed text-gray-600 dark:text-zinc-400 mt-2">
+                    SAMPLE SOURCE CODE IS PROVIDED &ldquo;AS-IS,&rdquo; WITHOUT ANY EXPRESS OR IMPLIED WARRANTIES OF ANY KIND, INCLUDING BUT NOT LIMITED TO THE IMPLIED WARRANTIES OF MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE, AND NON-INFRINGEMENT OF INTELLECTUAL PROPERTY. IN NO EVENT SHALL TEKTRONIX, ITS AFFILIATES, OFFICERS, EMPLOYEES, DIRECTORS, AGENTS, SUPPLIERS, OR OTHER THIRD PARTIES BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL, PUNITIVE, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES ARISING IN ANY WAY OUT OF THE USE OF THIS SAMPLE SOURCE CODE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
+                  </p>
+                </div>
+              </div>
+
               <div className="pt-4 border-t">
-                <p className="text-xs text-gray-500 text-center">
-                  © 2026 Tektronix, Inc. All rights reserved.
+                <p className="text-xs text-gray-500 dark:text-zinc-400 text-center">
+                  &copy; 2026 Tektronix, Inc. All rights reserved.
                 </p>
               </div>
             </div>
