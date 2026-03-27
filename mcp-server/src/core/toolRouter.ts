@@ -412,6 +412,8 @@ async function handleCreate(req: RouterRequest, startedAt: number): Promise<Rout
   }
   registry.register(tool);
   await rebuildRouterIndexes();
+  // Mark for persistence so the timer saves it
+  try { const { markShortcutsDirty } = await import('./routerIntegration'); markShortcutsDirty(); } catch {}
   return {
     ok: true,
     action: 'create',
@@ -452,6 +454,8 @@ async function handleUpdate(req: RouterRequest, startedAt: number): Promise<Rout
   }
   registry.register(tool);
   await rebuildRouterIndexes();
+  // Mark for persistence so the timer saves it
+  try { const { markShortcutsDirty } = await import('./routerIntegration'); markShortcutsDirty(); } catch {}
   return {
     ok: true,
     action: 'update',

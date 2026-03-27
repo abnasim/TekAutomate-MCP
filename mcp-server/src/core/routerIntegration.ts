@@ -68,22 +68,28 @@ async function prepareSemanticIndex(): Promise<void> {
   }
 }
 
+let _shortcutsDirty = false;
+
+export function markShortcutsDirty(): void {
+  _shortcutsDirty = true;
+}
+
 export async function persistRuntimeShortcuts(): Promise<void> {
   try {
     const registry = getToolRegistry();
     const allTools = registry.all();
-    
+
     // Filter to runtime shortcuts only (exclude builtins)
-    const runtimeShortcuts = allTools.filter(tool => 
-      tool.category === 'shortcut' && 
+    const runtimeShortcuts = allTools.filter(tool =>
+      tool.category === 'shortcut' &&
       !BUILTIN_SHORTCUT_IDS.has(tool.id) &&
       tool.steps
     );
-    
+
     if (runtimeShortcuts.length === 0) {
       return;
     }
-    
+
     const shortcutsData = runtimeShortcuts.map(tool => ({
       id: tool.id,
       name: tool.name,
@@ -94,13 +100,14 @@ export async function persistRuntimeShortcuts(): Promise<void> {
       steps: tool.steps,
       createdAt: Date.now(),
     }));
-    
+
     const dataPath = path.resolve(process.cwd(), DATA_DIR);
     await fs.mkdir(dataPath, { recursive: true });
-    
+
     const shortcutsPath = path.join(dataPath, RUNTIME_SHORTCUTS_FILE);
     await fs.writeFile(shortcutsPath, JSON.stringify(shortcutsData, null, 2));
-    
+
+    _shortcutsDirty = false;
     console.log(`[PERSIST] Saved ${runtimeShortcuts.length} runtime shortcuts`);
   } catch (error) {
     console.error('[PERSIST] Failed to persist runtime shortcuts:', error);
@@ -196,7 +203,7 @@ export async function bootRouter(
 
   const timer = setInterval(() => {
     persistUsageStats(statsPath);
-    persistRuntimeShortcuts(); // Also persist shortcuts every 5 minutes
+    if (_shortcutsDirty) persistRuntimeShortcuts(); // Only save when changes exist
   }, 5 * 60 * 1000);
   timer.unref?.();
   return hydrationReport;
