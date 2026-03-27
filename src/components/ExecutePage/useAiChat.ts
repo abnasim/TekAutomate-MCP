@@ -2,8 +2,7 @@ import { useMemo, useState, useEffect, useRef } from 'react';
 import type { AiAction, AiActionParseResult } from '../../utils/aiActions';
 import { canMaterializeAiAction, parseAiActionResponse } from '../../utils/aiActions';
 import { streamMcpChat, disconnectLiveSession, type McpChatAttachment } from '../../utils/ai/mcpClient';
-// liveToolLoop kept for future browser-direct use when CORS is resolved
-// import { runLiveToolLoop, fetchLiveTools, buildLiveSystemPrompt, buildAiSystemPrompt } from '../../utils/ai/liveToolLoop';
+import { runLiveToolLoop, fetchLiveTools, buildLiveSystemPrompt } from '../../utils/ai/liveToolLoop';
 import type { ChatTurn, PredefinedAction, RagCorpus } from '../../utils/ai/types';
 import type { StepPreview } from './StepsListPreview';
 import { useAiChatContext } from './aiChatContext';
@@ -750,7 +749,48 @@ export function useAiChat(params: {
       let finalText = '';
       const requestStartedAt = Date.now();
 
-      // ── All modes route through MCP server (avoids browser CORS issues) ──
+      // ── Live mode: browser calls AI API directly, MCP only for tool execution ──
+      // API key stays in browser, never passes through MCP server.
+      // Uses anthropic-dangerous-direct-browser-access header for Anthropic CORS.
+      if (effectiveTekMode === 'live') {
+        const liveTools = await fetchLiveTools();
+        const executorUrl = params.instrumentEndpoint?.executorUrl || '';
+        const visaResource = params.instrumentEndpoint?.visaResource || '';
+        const backend = params.instrumentEndpoint?.backend || 'pyvisa';
+        const modelFamily = params.flowContext?.modelFamily || '';
+        const deviceDriver = params.flowContext?.deviceDriver || '';
+        const systemPrompt = buildLiveSystemPrompt(params.instrumentEndpoint ? {
+          executorUrl, visaResource, backend, modelFamily, deviceDriver,
+        } : undefined);
+
+        const result = await runLiveToolLoop({
+          provider: state.provider,
+          apiKey: trimmedKey,
+          model: state.model,
+          systemPrompt,
+          userMessage: effectiveMessage,
+          history: state.history.slice(-6).map((h) => ({
+            role: h.role,
+            content: String(h.content || '').slice(0, 1500),
+          })),
+          tools: liveTools,
+          instrumentEndpoint: params.instrumentEndpoint ?? undefined,
+          flowContext: { modelFamily, deviceDriver },
+          maxIterations: 15,
+        });
+
+        if (result.error) {
+          dispatch({ type: 'STREAM_DONE' });
+          dispatch({ type: 'SET_ERROR', error: result.error });
+          return;
+        }
+        finalText = result.text || '';
+        if (finalText) dispatch({ type: 'STREAM_CHUNK', chunk: finalText });
+        dispatch({ type: 'STREAM_DONE' });
+        return;
+      }
+
+      // ── MCP and AI Chat modes route through MCP server ──
       // MCP mode: deterministic planner, no API key needed
       // AI mode: server proxies AI call, chat interaction
       // Live mode: server proxies AI call with tool loop (send_scpi, screenshot, etc.)

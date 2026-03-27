@@ -51,14 +51,56 @@ export interface LiveToolLoopResult {
   error?: string;
 }
 
-// ── MCP Tool Execution ──
+// ── Tool Execution ──
 
+const EXECUTOR_TOOLS = new Set([
+  'send_scpi', 'capture_screenshot', 'get_instrument_state',
+  'probe_command', 'get_visa_resources', 'get_environment',
+]);
+
+/**
+ * Execute a tool call. Instrument tools go directly to the executor (browser → executor).
+ * Knowledge/search tools go through MCP server (/tools/execute).
+ * This means live mode works even when MCP is hosted — browser reaches executor directly.
+ */
 async function executeMcpTool(
   toolName: string,
   args: Record<string, unknown>,
   instrumentEndpoint?: LiveToolLoopParams['instrumentEndpoint'],
   flowContext?: LiveToolLoopParams['flowContext']
 ): Promise<unknown> {
+  // Instrument tools: call executor directly from browser (no MCP needed)
+  if (EXECUTOR_TOOLS.has(toolName) && instrumentEndpoint?.executorUrl) {
+    const execUrl = instrumentEndpoint.executorUrl.replace(/\/$/, '');
+    const scopeVisa = instrumentEndpoint.visaResource;
+
+    // Map tool name to executor action + payload
+    let action = toolName;
+    let payload: Record<string, unknown> = { ...args };
+    if (toolName === 'get_instrument_state') {
+      action = 'send_scpi';
+      payload = { commands: ['*IDN?', '*ESR?', 'ALLEV?'], timeout_ms: 10000 };
+    }
+
+    const res = await fetch(`${execUrl}/run`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        protocol_version: 1,
+        action,
+        timeout_sec: 90,
+        scope_visa: scopeVisa,
+        liveMode: true,
+        ...payload,
+      }),
+    });
+    if (!res.ok) throw new Error(`Executor error ${res.status}`);
+    const json = await res.json() as Record<string, unknown>;
+    // Executor flattens result_data into top level for send_scpi/capture_screenshot
+    return json.result_data ?? (json.base64 ? json : json.responses ? json : json);
+  }
+
+  // Knowledge/search tools: call MCP server
   const mcpHost = resolveMcpHost();
   if (!mcpHost) throw new Error('MCP server not configured');
 
@@ -118,6 +160,7 @@ async function runAnthropicLoop(params: LiveToolLoopParams): Promise<LiveToolLoo
       headers: {
         'x-api-key': apiKey,
         'anthropic-version': '2023-06-01',
+        'anthropic-dangerous-direct-browser-access': 'true',
         'content-type': 'application/json',
       },
       body: JSON.stringify({
@@ -347,46 +390,26 @@ export function buildLiveSystemPrompt(instrument?: {
   deviceDriver?: string;
 }): string {
   const parts = [
-    '# TekAutomate Live Copilot',
-    'You are a live instrument copilot inside TekAutomate.',
-    'You have direct access to a connected Tektronix oscilloscope via MCP tools.',
+    '# TekAutomate Live Mode',
+    'You control a Tektronix oscilloscope. Execute commands silently. Report results briefly.',
     '',
     '## Tools',
+    '- **send_scpi** — {commands:["CMD1","CMD2?"]} → [{command, response, ok, error}]',
+    '- **capture_screenshot** — Capture display. Call after visual changes.',
+    '- **get_instrument_state** — *IDN?/*ESR?/ALLEV?',
+    '- **smart_scpi_lookup** — Natural language SCPI search.',
+    '- **search_scpi** — Keyword search.',
+    '- **get_command_by_header** — Exact header lookup.',
+    '- **retrieve_rag_chunks** — Knowledge base: corpus="errors"|"app_logic"|"pyvisa_tekhsi"|"tmdevices"',
     '',
-    '### Instrument actions',
-    '- **send_scpi** — Send SCPI commands to scope. Params: commands[], timeoutMs',
-    '- **capture_screenshot** — Grab scope display as PNG. No required params',
-    '- **get_instrument_state** — Query scope identity/status. No required params',
-    '- **probe_command** — Test a single SCPI command. Params: command',
-    '- **get_visa_resources** — List available VISA instruments. No required params',
-    '',
-    '### SCPI lookup',
-    '- **smart_scpi_lookup** — Natural-language SCPI finder. Params: query',
-    '- **search_scpi** — Keyword search for SCPI commands. Params: query',
-    '- **get_command_by_header** — Exact header lookup. Params: header',
-    '- **verify_scpi_commands** — Batch-validate SCPI strings. Params: commands[]',
-    '',
-    '### Knowledge',
-    '- **retrieve_rag_chunks** — Search docs/knowledge base. Params: corpus, query',
-    '- **search_known_failures** — Find known errors and fixes. Params: query',
-    '',
-    '## Rules — CRITICAL',
-    '- YOU MUST ACT, NOT SUGGEST. When the user asks you to do something, USE YOUR TOOLS TO DO IT IMMEDIATELY.',
-    '- Do NOT say "you could run this command" or "try this". Instead, CALL send_scpi and DO IT.',
-    '- Do NOT output Python code or SCPI snippets for the user to run manually.',
-    '- Do NOT suggest "build it" or "say build it". You execute directly via tools.',
-    '- No ACTIONS_JSON. No flow steps. Just call the tools.',
-    '',
-    '## Workflow',
-    '- For known commands (*RST, *IDN?, *CLS): call send_scpi immediately.',
-    '- For uncertain commands: search first (smart_scpi_lookup), then send_scpi.',
-    '- After config changes: capture_screenshot to verify, describe what you see.',
-    '- Chain naturally: search → send → screenshot → verify → adjust.',
-    '',
-    '## Response style',
-    '- Be conversational and concise. Report what you DID, not what could be done.',
-    '- After executing: "Done — scope reset to defaults" not "Here is the command to reset".',
-    '- When you see a screenshot, describe the waveform/display state briefly.',
+    '## RULES',
+    '1. JUST DO IT. Never explain how. Never suggest manual UI steps.',
+    '2. Common commands — send_scpi IMMEDIATELY: *RST, *IDN?, AUTOSet EXECute, MEASUrement:ADDMEAS <type>, CH<x>:SCAle <NR3>',
+    '3. Unknown commands — smart_scpi_lookup → send_scpi. Two calls max.',
+    '4. Errors — read response, fix, retry. Never stop to ask.',
+    '5. Be natural. Brief for actions, detailed only when asked to explain.',
+    '6. Replace placeholders: <NR3>→number, CH<x>→CH1.',
+    '7. capture_screenshot after visual changes.',
   ];
   if (instrument) {
     parts.push('');

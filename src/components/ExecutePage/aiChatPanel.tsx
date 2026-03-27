@@ -3,7 +3,7 @@ import { Bot, KeyRound, Loader2, Paperclip, Play, Send, Settings, Sparkles, Term
 import { parseAiActionResponse, type AiAction } from '../../utils/aiActions';
 import type { ExecutionAuditReport } from '../../utils/executionAudit';
 import type { StepPreview } from './StepsListPreview';
-import { isMcpLocal } from '../../utils/ai/mcpClient';
+
 import { useAiChat } from './useAiChat';
 import type { TekMode } from './aiChatReducer';
 import {
@@ -1008,9 +1008,9 @@ export function AiChatPanel({
       showApplyStatus(mcpStatus.message || 'MCP not reachable. Check MCP server URL in settings.');
       return;
     }
-    // Live mode with hosted MCP can't reach local executor — warn user
-    if (state.tekMode === 'live' && !isMcpLocal()) {
-      showApplyStatus('Live mode requires local MCP server. The hosted MCP cannot reach your local executor. Switch MCP host to localhost:8787 in settings.');
+    // Live mode needs a local executor — warn if no executor endpoint configured
+    if (state.tekMode === 'live' && !instrumentEndpoint?.executorUrl) {
+      showApplyStatus('Live mode requires an executor connection. Connect to a scope in the Live tab first.');
       return;
     }
     setQuickActionsCollapsed(true);
