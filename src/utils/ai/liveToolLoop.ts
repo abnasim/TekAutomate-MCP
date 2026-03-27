@@ -443,7 +443,12 @@ export function buildLiveSystemPrompt(instrument?: {
     '5. Errors — read response, fix, retry. Briefly say what failed before trying next.',
     '6. Be natural. Brief for actions, detailed only when asked to explain.',
     '7. Replace placeholders: <NR3>→number, CH<x>→CH1.',
-    '8. capture_screenshot — you can see the image. Use your judgement.',
+    '8. capture_screenshot — Take a screenshot:',
+    '   - AFTER making changes (scale, offset, trigger, measurement) to verify they took effect',
+    '   - When an error occurs, to see the scope state and diagnose',
+    '   - When user asks to analyze, inspect, or look at the display',
+    '   - Before and after complex multi-step operations',
+    '   You CAN see the image. Describe what you observe briefly.',
     '9. AUTONOMOUS EXPLORATION: Only when user gives an open-ended goal ("find a way to...", "figure out..."). Search, try, read errors, adjust. Keep going until achieved.',
   ];
   if (instrument) {
