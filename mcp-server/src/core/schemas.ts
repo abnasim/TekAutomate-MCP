@@ -72,6 +72,7 @@ export interface McpChatRequest {
       deviceType?: string;
       deviceDriver?: string;
       visaBackend?: string;
+      visaResource?: string;
     }>;
     selectedStep?: Record<string, unknown> | null;
     validationErrors?: string[];

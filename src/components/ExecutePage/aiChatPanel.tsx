@@ -37,6 +37,7 @@ interface AiChatPanelProps {
       deviceType?: string;
       deviceDriver?: string;
       visaBackend?: string;
+      visaResource?: string;
     }>;
   };
   executorEndpoint?: { host: string; port: number } | null;

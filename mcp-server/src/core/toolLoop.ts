@@ -3959,7 +3959,7 @@ function buildChatDeveloperPrompt(req: McpChatRequest): string {
   const instrumentMapLines = Array.isArray(fc.instrumentMap) && fc.instrumentMap.length
     ? fc.instrumentMap
         .map((device) =>
-          `- ${String(device.alias || 'device')}: ${String(device.deviceType || 'SCOPE')}, ${String(device.backend || 'pyvisa')}${device.deviceDriver ? `, driver ${String(device.deviceDriver)}` : ''}`
+          `- ${String(device.alias || 'device')}: ${String(device.deviceType || 'SCOPE')}, ${String(device.backend || 'pyvisa')}${device.deviceDriver ? `, driver ${String(device.deviceDriver)}` : ''}${device.visaResource ? ` [${String(device.visaResource)}]` : ''}`
         )
         .join('\n')
     : `- ${fc.alias || 'scope1'}: ${fc.deviceType || 'SCOPE'}, ${fc.backend || 'pyvisa'}`;
@@ -4498,7 +4498,7 @@ function buildUserPrompt(req: McpChatRequest, flowCommandIssues: string[] = []):
   const instrumentMapLines = Array.isArray(fc.instrumentMap) && fc.instrumentMap.length
     ? fc.instrumentMap
         .map((device) =>
-          `  - ${String(device.alias || 'device')}: ${String(device.deviceType || 'SCOPE')}, ${String(device.backend || 'pyvisa')}${device.deviceDriver ? `, driver ${String(device.deviceDriver)}` : ''}${device.visaBackend ? `, visa ${String(device.visaBackend)}` : ''}${device.host ? ` @ ${String(device.host)}` : ''}`
+          `  - ${String(device.alias || 'device')}: ${String(device.deviceType || 'SCOPE')}, ${String(device.backend || 'pyvisa')}${device.deviceDriver ? `, driver ${String(device.deviceDriver)}` : ''}${device.visaBackend ? `, visa ${String(device.visaBackend)}` : ''}${device.host ? ` @ ${String(device.host)}` : ''}${device.visaResource ? ` [${String(device.visaResource)}]` : ''}`
         )
         .join('\n')
     : instrumentLine;
@@ -4512,7 +4512,7 @@ function buildUserPrompt(req: McpChatRequest, flowCommandIssues: string[] = []):
     `- deviceDriver: ${fc.deviceDriver || '(unknown)'}`,
     `- visaBackend: ${fc.visaBackend || '(unknown)'}`,
     `- alias: ${fc.alias || 'scope1'}`,
-    '- instruments:',
+    '- instruments (use visaResource in brackets to target a specific instrument with send_scpi/probe_command):',
     instrumentMapLines,
     '',
     `Current flow (${flatSteps.length} flattened steps):`,

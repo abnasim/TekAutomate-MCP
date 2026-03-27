@@ -520,7 +520,7 @@ export function getToolDefinitions() {
     },
     {
       name: 'get_instrument_state',
-      description: 'Probe instrument identity/state via code_executor. Requires liveMode=true. Use outputMode="verbose" for full Python stdout/stderr/transcript.',
+      description: 'Probe instrument identity/state via code_executor. Requires liveMode=true. Use outputMode="verbose" for full Python stdout/stderr/transcript. To target a different instrument, pass its VISA resource string as visaResource (e.g. "TCPIP::192.168.1.100::INSTR").',
       parameters: {
         type: 'object',
         properties: {
@@ -536,7 +536,7 @@ export function getToolDefinitions() {
     },
     {
       name: 'probe_command',
-      description: 'Probe a single SCPI command via code_executor. Requires liveMode=true. Use outputMode="verbose" to return full runtime output instead of only the query result.',
+      description: 'Probe a single SCPI command on any VISA instrument via code_executor. Requires liveMode=true. Use outputMode="verbose" to return full runtime output instead of only the query result. To target a different instrument, pass its VISA resource string as visaResource (e.g. "TCPIP::192.168.1.100::INSTR").',
       parameters: {
         type: 'object',
         properties: {
@@ -553,7 +553,7 @@ export function getToolDefinitions() {
     },
     {
       name: 'send_scpi',
-      description: 'Send one or more SCPI commands via code_executor. Requires liveMode=true. Queries return responses; writes return OK or error status.',
+      description: 'Send one or more SCPI commands to any VISA instrument via code_executor. Requires liveMode=true. Queries return responses; writes return OK or error status. To target a different instrument than the default, pass its VISA resource string as visaResource (e.g. "TCPIP::192.168.1.100::INSTR"). Check the instruments list in the workspace context for available VISA resources.',
       parameters: {
         type: 'object',
         properties: {
@@ -571,7 +571,7 @@ export function getToolDefinitions() {
     },
     {
       name: 'capture_screenshot',
-      description: 'Capture a fresh scope screenshot via code_executor and return PNG image data. Requires liveMode=true. Use this when AI needs to see the current waveform or display state after an action.',
+      description: 'Capture a fresh scope screenshot via code_executor and return PNG image data. Requires liveMode=true. Use this when AI needs to see the current waveform or display state after an action. To target a different instrument, pass its VISA resource string as visaResource.',
       parameters: {
         type: 'object',
         properties: {
@@ -590,7 +590,7 @@ export function getToolDefinitions() {
     },
     {
       name: 'get_visa_resources',
-      description: 'List VISA resources via code_executor. Requires liveMode=true. Use outputMode="verbose" for full runtime output.',
+      description: 'List all available VISA resources (instruments) via code_executor. Requires liveMode=true. Use this to discover which instruments are connected and their VISA resource strings. Use outputMode="verbose" for full runtime output.',
       parameters: {
         type: 'object',
         properties: {

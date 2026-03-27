@@ -1497,7 +1497,30 @@ function AppInner() {
     if (executorEndpoint) localStorage.setItem('tekautomate_executor', JSON.stringify(executorEndpoint));
     else localStorage.removeItem('tekautomate_executor');
     setConnectedInstrumentIdn(null); // clear IDN when endpoint changes
+    setExecutorScannedInstruments([]); // clear scanned instruments
   }, [executorEndpoint]);
+
+  // Fetch scanned instruments from executor when endpoint is set
+  useEffect(() => {
+    if (!executorEndpoint) return;
+    let cancelled = false;
+    const fetchScanned = async () => {
+      try {
+        const res = await fetch(`http://${executorEndpoint.host}:${executorEndpoint.port}/scan`, {
+          signal: AbortSignal.timeout(35000),
+        });
+        const json = await res.json() as { ok?: boolean; instruments?: Array<{ resource: string; identity: string; manufacturer: string; model: string; serial: string; reachable: boolean; connType: string }> };
+        if (!cancelled && json.ok && Array.isArray(json.instruments)) {
+          setExecutorScannedInstruments(json.instruments.filter((i) => i.reachable));
+        }
+      } catch {
+        // Non-critical — scanned instruments are supplementary
+      }
+    };
+    fetchScanned();
+    return () => { cancelled = true; };
+  }, [executorEndpoint]);
+
   const [showQRScanner, setShowQRScanner] = useState(false);
   const [showExecutorModal, setShowExecutorModal] = useState(false);
   const [showRunWindow, setShowRunWindow] = useState(false);
@@ -1508,6 +1531,15 @@ function AppInner() {
   const [liveModeCapturing, setLiveModeCapturing] = useState(false);
   const [liveModeAutoRefresh, setLiveModeAutoRefresh] = useState(false);
   const [connectedInstrumentIdn, setConnectedInstrumentIdn] = useState<string | null>(null);
+  const [executorScannedInstruments, setExecutorScannedInstruments] = useState<Array<{
+    resource: string;
+    identity: string;
+    manufacturer: string;
+    model: string;
+    serial: string;
+    reachable: boolean;
+    connType: string;
+  }>>([]);
   const [runWindowResult, setRunWindowResult] = useState<{ ok: boolean; stdout: string; stderr: string; error: string | null; exit_code?: number } | null>(null);
   const [lastExecutionAudit, setLastExecutionAudit] = useState<ExecutionAuditReport | null>(null);
   const [askAiModalOpen, setAskAiModalOpen] = useState(false);
@@ -9517,15 +9549,33 @@ Keep under 120 words. No headings. Bullets only. Stay on this command. Do not de
               deviceDriver: activeInstrumentConfig.deviceDriver,
               visaBackend: activeInstrumentConfig.visaBackend,
               alias: activeInstrumentConfig.alias,
-              instrumentMap: (devices.length > 0 ? devices : [{ ...config, id: 'default', enabled: true }]).map((device) => ({
-                alias: device.alias,
-                backend: device.backend,
-                host: device.host,
-                connectionType: device.connectionType,
-                deviceType: device.deviceType,
-                deviceDriver: device.deviceDriver,
-                visaBackend: device.visaBackend,
-              })),
+              instrumentMap: (() => {
+                const configuredDevices = (devices.length > 0 ? devices : [{ ...config, id: 'default', enabled: true }]).map((device) => ({
+                  alias: device.alias,
+                  backend: device.backend,
+                  host: device.host,
+                  connectionType: device.connectionType,
+                  deviceType: device.deviceType,
+                  deviceDriver: device.deviceDriver,
+                  visaBackend: device.visaBackend,
+                  visaResource: getVisaResourceString(device),
+                }));
+                // Merge executor-scanned instruments that aren't already in the configured list
+                const configuredResources = new Set(configuredDevices.map((d) => d.visaResource));
+                const scannedExtras = executorScannedInstruments
+                  .filter((inst) => !configuredResources.has(inst.resource))
+                  .map((inst) => ({
+                    alias: inst.model ? `${inst.manufacturer} ${inst.model}`.trim() : inst.resource,
+                    backend: 'pyvisa',
+                    host: inst.resource.match(/TCPIP::([^:]+)::/)?.[1] || '',
+                    connectionType: inst.connType || 'tcpip',
+                    deviceType: 'INSTRUMENT' as string,
+                    deviceDriver: undefined as string | undefined,
+                    visaBackend: undefined as string | undefined,
+                    visaResource: inst.resource,
+                  }));
+                return [...configuredDevices, ...scannedExtras];
+              })(),
             }}
             onRun={() => runOnScope(true)}
             lastAuditReport={lastExecutionAudit}
