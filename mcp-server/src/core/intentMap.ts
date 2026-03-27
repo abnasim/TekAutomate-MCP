@@ -165,6 +165,8 @@ const SUBJECT_GROUP_MAP: Array<{
   { pattern: /\b(bandwidth|bw)\b/i, groups: ['Vertical'], intent: 'vertical', subject: 'bandwidth' },
   { pattern: /\bhorizontal\s*scale\b/i, groups: ['Horizontal'], intent: 'horizontal', subject: 'horizontal_scale' },
   { pattern: /\b(scale)\b(?!.*\b(time|horiz))/i, groups: ['Vertical', 'Horizontal'], intent: 'vertical', subject: 'scale' },
+  { pattern: /\b(horizontal|horiz)\b.*\boffset\b/i, groups: ['Horizontal'], intent: 'horizontal', subject: 'horizontal_offset' },
+  { pattern: /\boffset\b/i, groups: ['Vertical'], intent: 'vertical', subject: 'channel_offset' },
   { pattern: /\b(label|name\s*channel)\b/i, groups: ['Vertical'], intent: 'vertical', subject: 'label' },
   { pattern: /\b(deskew)\b/i, groups: ['Vertical'], intent: 'vertical', subject: 'deskew' },
   { pattern: /\b(invert)\b/i, groups: ['Vertical'], intent: 'vertical', subject: 'invert' },
