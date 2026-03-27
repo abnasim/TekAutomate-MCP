@@ -115,6 +115,49 @@ function isLocalHostName(hostname: string): boolean {
   return normalized === 'localhost' || normalized === '127.0.0.1' || normalized === '::1';
 }
 
+/**
+ * Check if the current MCP host is local (localhost/127.0.0.1).
+ * When MCP is remote/hosted, tool execution should go direct to executor from browser.
+ */
+export function isMcpLocal(): boolean {
+  const host = resolveMcpHost();
+  if (!host) return true; // default to local
+  try {
+    const url = new URL(host);
+    return isLocalHostName(url.hostname);
+  } catch {
+    return host.includes('localhost') || host.includes('127.0.0.1');
+  }
+}
+
+/**
+ * Execute a tool call directly on the executor (bypass MCP).
+ * Used in hosted MCP mode where MCP can't reach the local executor.
+ */
+export async function executeToolDirect(
+  executorUrl: string,
+  action: string,
+  payload: Record<string, unknown>,
+  scopeVisa?: string
+): Promise<Record<string, unknown>> {
+  const res = await fetch(`${executorUrl.replace(/\/$/, '')}/run`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      protocol_version: 1,
+      action,
+      timeout_sec: 90,
+      scope_visa: scopeVisa,
+      keep_alive: true,
+      ...payload,
+    }),
+  });
+  if (!res.ok) {
+    throw new Error(`Executor error ${res.status}: ${await res.text()}`);
+  }
+  return res.json() as Promise<Record<string, unknown>>;
+}
+
 function resolveStoredMcpHost(): string {
   if (typeof window === 'undefined') return '';
   try {
