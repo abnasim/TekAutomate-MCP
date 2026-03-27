@@ -41,7 +41,7 @@ async function main() {
   await Promise.all(initTasks);
   console.log(`✅ All indexes initialized in ${Date.now() - startedAt}ms`);
 
-  if (String(process.env.MCP_ROUTER_ENABLED || '').trim() === 'true') {
+  if (String(process.env.MCP_ROUTER_DISABLED || '').trim() !== 'true') {
     console.log('🔧 MCP Router enabled - initializing router tools...');
     const routerStartedAt = Date.now();
     await bootRouter();
