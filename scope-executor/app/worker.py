@@ -62,7 +62,7 @@ def _resource_manager_instance():
     return _resource_manager
 
 
-def _get_scope_session(visa: str, timeout_ms: int = 10000):
+def _get_scope_session(visa: str):
     with _session_lock:
         session = _scope_sessions.get(visa)
         if session is not None:
@@ -76,8 +76,7 @@ def _get_scope_session(visa: str, timeout_ms: int = 10000):
                     pass
                 _scope_sessions.pop(visa, None)
         rm = _resource_manager_instance()
-        session = rm.open_resource(visa, open_timeout=timeout_ms)
-        session.timeout = timeout_ms
+        session = rm.open_resource(visa)
         _scope_sessions[visa] = session
         return session
 
@@ -116,11 +115,11 @@ def _handle_capture_screenshot(job: dict) -> dict:
     if not isinstance(visa, str) or not visa:
         raise RuntimeError("capture_screenshot requires visa")
     try:
-        scpi = _get_scope_session(visa, timeout_ms=30000)
+        scpi = _get_scope_session(visa)
     except Exception:
         # Session might be stale — force reconnect
         _reset_scope_session(visa)
-        scpi = _get_scope_session(visa, timeout_ms=30000)
+        scpi = _get_scope_session(visa)
     scpi.timeout = 30000
     scpi.write_termination = "\n"
     scpi.read_termination = None
@@ -162,7 +161,7 @@ def _handle_send_scpi(job: dict) -> dict:
     if not isinstance(commands, list) or not all(isinstance(cmd, str) for cmd in commands):
         raise RuntimeError("send_scpi requires string commands")
 
-    scpi = _get_scope_session(visa, timeout_ms=timeout_ms)
+    scpi = _get_scope_session(visa)
     scpi.timeout = timeout_ms
     scpi.write_termination = "\n"
     scpi.read_termination = "\n"
@@ -186,7 +185,7 @@ def _handle_send_scpi(job: dict) -> dict:
                 session_reset = True
                 try:
                     _reset_scope_session(visa)
-                    scpi = _get_scope_session(visa, timeout_ms=timeout_ms)
+                    scpi = _get_scope_session(visa)
                     scpi.timeout = timeout_ms
                     scpi.write_termination = "\n"
                     scpi.read_termination = "\n"
