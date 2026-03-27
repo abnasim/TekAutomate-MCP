@@ -348,16 +348,24 @@ async function runOpenAiLoop(params: LiveToolLoopParams): Promise<LiveToolLoopRe
         const result = await executeMcpTool(toolName, toolArgs, instrumentEndpoint, flowContext);
         onToolResult?.(toolName, result);
         toolCallLog.push({ tool: toolName, args: toolArgs, result });
-        // Strip verbose fields to keep token count low
-        let lean = result;
-        if (typeof result === 'object' && result !== null) {
-          const r = result as Record<string, unknown>;
-          const { rawStdout, rawStderr, combinedOutput, transcript, outputMode, durationSec, ...rest } = r;
-          lean = rest;
+        // Screenshots: don't send base64 to AI — just confirm it was captured
+        const resultObj = result && typeof result === 'object' ? result as Record<string, unknown> : null;
+        const isScreenshot = resultObj && typeof resultObj.base64 === 'string';
+        if (isScreenshot) {
+          const sizeKB = Math.round((resultObj.base64 as string).length * 0.75 / 1024);
+          messages.push({ role: 'tool', tool_call_id: toolId, content: `Screenshot captured (${sizeKB} KB). The live UI panel has been updated with the latest scope display.` });
+        } else {
+          // Strip verbose fields to keep token count low
+          let lean = result;
+          if (typeof result === 'object' && result !== null) {
+            const r = result as Record<string, unknown>;
+            const { rawStdout, rawStderr, combinedOutput, transcript, outputMode, durationSec, ...rest } = r;
+            lean = rest;
+          }
+          const resultStr = typeof lean === 'string' ? lean : JSON.stringify(lean);
+          const truncated = resultStr.length > 3000 ? resultStr.slice(0, 3000) + '\n...(truncated)' : resultStr;
+          messages.push({ role: 'tool', tool_call_id: toolId, content: truncated });
         }
-        const resultStr = typeof lean === 'string' ? lean : JSON.stringify(lean);
-        const truncated = resultStr.length > 3000 ? resultStr.slice(0, 3000) + '\n...(truncated)' : resultStr;
-        messages.push({ role: 'tool', tool_call_id: toolId, content: truncated });
       } catch (err) {
         messages.push({ role: 'tool', tool_call_id: toolId, content: `Error: ${err instanceof Error ? err.message : String(err)}` });
         toolCallLog.push({ tool: toolName, args: toolArgs, result: { error: String(err) } });
@@ -409,7 +417,7 @@ export function buildLiveSystemPrompt(instrument?: {
     '',
     '## Tools',
     '- **send_scpi** — {commands:["CMD1","CMD2?"]} → [{command, response, ok, error}]',
-    '- **capture_screenshot** — Capture display. Call after visual changes.',
+    '- **capture_screenshot** — Capture display. ONLY call when you need to visually verify something or user asks to see the scope. Do NOT call after every command — send_scpi responses already tell you if commands succeeded.',
     '- **get_instrument_state** — *IDN?/*ESR?/ALLEV?',
     '- **smart_scpi_lookup** — Natural language SCPI search.',
     '- **search_scpi** — Keyword search.',
@@ -423,7 +431,7 @@ export function buildLiveSystemPrompt(instrument?: {
     '4. Errors — read response, fix, retry. Never stop to ask.',
     '5. Be natural. Brief for actions, detailed only when asked to explain.',
     '6. Replace placeholders: <NR3>→number, CH<x>→CH1.',
-    '7. capture_screenshot after visual changes.',
+    '7. capture_screenshot ONLY when you need to see the display (verify layout, analyze waveform, user asks). NOT after every send_scpi — the response tells you if it worked.',
   ];
   if (instrument) {
     parts.push('');

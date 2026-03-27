@@ -7442,7 +7442,7 @@ function buildLiveSystemPrompt(req: McpChatRequest, sessionContext?: string): st
     '',
     '## Tools (4 only)',
     '- **send_scpi** — {commands:["CMD1","CMD2?"]} → [{command, response, ok, error}]',
-    '- **capture_screenshot** — Capture display. Call after visual changes.',
+    '- **capture_screenshot** — Capture display. ONLY when you need to see something or user asks. NOT after every command.',
     '- **get_instrument_state** — *IDN?/*ESR?/ALLEV?',
     '- **tek_router** — action:"search" returns SCPI commands + knowledge base results in ONE call. Also: "exec", "search_exec", "list", "create".',
     '',
