@@ -180,13 +180,18 @@ async function runSmartScpiAssistant(req: McpChatRequest) {
     }
     
     // Build mode: materialize matched commands into applyable ACTIONS_JSON flow steps.
-    // Extract the user's intent to fill in enum/placeholder values where possible.
+    // Detect if user wants a query vs set from their message
     const userWords = req.userMessage.toLowerCase().split(/\s+/);
+    const userWantsQuery = /\b(query|read|get|check|what\s*is|show|display|current|value)\b/i.test(req.userMessage);
     const actions = toolResult.data.map((cmd: any, idx: number) => {
       const isSetCapable = cmd.commandType === 'set' || cmd.commandType === 'both';
+      const isQueryCapable = cmd.commandType === 'query' || cmd.commandType === 'both';
+      // If user explicitly asked for a query, prefer query form
+      const useQuery = userWantsQuery && isQueryCapable;
+      const useSet = !useQuery && isSetCapable;
       let scpiCommand: string;
 
-      if (isSetCapable && cmd.syntax?.set) {
+      if (useSet && cmd.syntax?.set) {
         // Try to resolve enum values from the user's query
         let resolved = String(cmd.syntax.set).replace(/\n/g, ' ').replace(/\s+/g, ' ');
         // Match {ENUM1|ENUM2|...} patterns (multiline-safe)
@@ -211,8 +216,8 @@ async function runSmartScpiAssistant(req: McpChatRequest) {
         scpiCommand = cmd.syntax?.query || `${cmd.header}?`;
       }
 
-      const stepType = isSetCapable ? 'write' : 'query';
-      const stepLabel = isSetCapable ? `Set ${cmd.header}` : `Read ${cmd.header}`;
+      const stepType = useQuery ? 'query' : (useSet ? 'write' : 'query');
+      const stepLabel = stepType === 'query' ? `Query ${cmd.header}` : `Set ${cmd.header}`;
       const stepParams: Record<string, unknown> = { command: scpiCommand };
       if (stepType === 'query') {
         stepParams.saveAs = `result_${cmd.header.replace(/[^a-zA-Z0-9]/g, '_').toLowerCase()}`;

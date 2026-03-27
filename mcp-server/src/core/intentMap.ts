@@ -257,11 +257,16 @@ const SUBJECT_GROUP_MAP: Array<{
   { pattern: /\b(afg|function\s*generator|arbitrary)\b/i, groups: ['AFG'], intent: 'afg', subject: 'afg' },
 
   // ── Status / Misc ──
+  // ── IEEE 488.2 common commands — always search Status and Error group ──
+  { pattern: /\b(opc|\*opc|operation\s*complete)\b/i, groups: ['Status and Error', 'Miscellaneous'], intent: 'status', subject: 'opc' },
+  { pattern: /\b(cls|\*cls|clear\s*status)\b/i, groups: ['Status and Error'], intent: 'status', subject: 'cls' },
+  { pattern: /\b(ese|\*ese|event\s*status\s*enable)\b/i, groups: ['Status and Error'], intent: 'status', subject: 'ese' },
+  { pattern: /\b(sre|\*sre|service\s*request)\b/i, groups: ['Status and Error'], intent: 'status', subject: 'sre' },
+  { pattern: /\b(wai|\*wai|wait)\b/i, groups: ['Status and Error'], intent: 'status', subject: 'wai' },
   { pattern: /\b(status|esr|stb|allev|error\s*queue|event\s*queue)\b/i, groups: ['Status and Error'], intent: 'status', subject: 'status' },
   { pattern: /\b(autoset|preset)\b/i, groups: ['Miscellaneous'], intent: 'misc', subject: 'autoset' },
   { pattern: /\b(factory\s*reset|reset|\*rst)\b/i, groups: ['Miscellaneous', 'Status and Error'], intent: 'misc', subject: 'reset' },
-  { pattern: /\b(idn|\*idn|identify|id)\b/i, groups: ['Miscellaneous'], intent: 'misc', subject: 'identify' },
-  { pattern: /\b(opc|\*opc|wait|busy)\b/i, groups: ['Miscellaneous'], intent: 'misc', subject: 'opc' },
+  { pattern: /\b(idn|\*idn|identify|id)\b/i, groups: ['Miscellaneous', 'Status and Error'], intent: 'misc', subject: 'identify' },
 
   // ── Calibration ──
   { pattern: /\b(calibrat|spc|signal\s*path)\b/i, groups: ['Calibration'], intent: 'calibration', subject: 'calibration' },
