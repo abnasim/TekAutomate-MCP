@@ -87,21 +87,19 @@ export function LiveModePanel({
 
         {/* Screenshot */}
         {capture ? (
-          <div className="space-y-2">
-            <div className="flex flex-wrap items-center gap-3 rounded-xl border border-slate-200 bg-white px-3 py-2 text-[11px] text-slate-600 dark:border-slate-800 dark:bg-slate-900 dark:text-slate-300">
-              <span className="inline-flex items-center gap-1.5">
-                <ImageIcon size={12} />
-                Screenshot
-              </span>
-              <span>{new Date(capture.capturedAt).toLocaleString()}</span>
-              <span>{formatBytes(capture.sizeBytes)}</span>
-            </div>
+          <div className="relative">
             <div className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm dark:border-slate-800 dark:bg-slate-900">
               <img
                 src={capture.dataUrl}
                 alt="Latest oscilloscope screenshot"
                 className="block w-full h-auto"
               />
+            </div>
+            <div className="absolute top-2 left-2 inline-flex items-center gap-2 rounded-lg bg-black/60 px-2.5 py-1 text-[10px] text-white/80 backdrop-blur-sm">
+              <ImageIcon size={10} />
+              {new Date(capture.capturedAt).toLocaleString()}
+              <span className="text-white/50">·</span>
+              {formatBytes(capture.sizeBytes)}
             </div>
           </div>
         ) : (
