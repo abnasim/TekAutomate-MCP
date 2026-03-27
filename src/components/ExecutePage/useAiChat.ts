@@ -837,14 +837,10 @@ export function useAiChat(params: {
             }
           : undefined,
         attachments: options?.attachments || [],
-        interactionMode: effectiveTekMode === 'live'
-          ? ('live' as const)
-          : effectiveTekMode === 'ai'
+        interactionMode: effectiveTekMode === 'ai'
           ? ('chat' as const)
           : ('build' as const),
-        outputMode: effectiveTekMode === 'live'
-          ? ('chat' as const)
-          : effectiveTekMode === 'ai'
+        outputMode: effectiveTekMode === 'ai'
           ? ('chat' as const)
           : params.executionSource === 'blockly' ? 'blockly_xml' : 'steps_json',
         mode: effectiveTekMode === 'mcp' ? ('mcp_only' as const) : (undefined as any),
@@ -885,7 +881,7 @@ export function useAiChat(params: {
         instrumentEndpoint: params.instrumentEndpoint
           ? {
               ...params.instrumentEndpoint,
-              liveMode: effectiveTekMode === 'live' || params.instrumentEndpoint.liveMode === true,
+              liveMode: params.instrumentEndpoint.liveMode === true,
               outputMode: params.instrumentOutputMode || 'verbose',
             }
           : undefined,
