@@ -595,29 +595,28 @@ function inferConversationBuildFocus(history: Array<{ role: string; content?: st
 }
 
 function buildPromptFromRecentChat(history: Array<{ role: string; content?: string }>, latestMessage: string): string {
-  const focusHints = inferConversationBuildFocus(history);
-  const brief = extractStructuredBuildBrief(history);
+  // Compile the full conversation into a clean build prompt
+  // The user and AI planned together — use everything discussed
+  const userMessages = history
+    .filter((t) => t.role === 'user')
+    .map((t) => String(t.content || '').trim())
+    .filter(Boolean);
 
-  // Find the original user request (first user message in handoff history)
-  const originalRequest = history.find((t) => t.role === 'user')?.content || '';
-
-  const recent = history
-    .filter((turn) => turn.role === 'user' || turn.role === 'assistant')
-    .slice(-4)
-    .map((turn) => `${turn.role === 'user' ? 'User' : 'Assistant'}: ${String(turn.content || '').trim()}`)
+  const aiSummary = history
+    .filter((t) => t.role === 'assistant')
+    .map((t) => String(t.content || '').trim())
     .filter(Boolean)
+    .slice(-2) // last 2 AI responses have the refined plan
     .join('\n');
 
-  // Use the original user request as the primary build instruction
-  // The structured brief is secondary context
   return [
-    originalRequest || latestMessage,
+    'Build a TekAutomate flow from this conversation:',
     '',
-    'Build context:',
-    `- channels: ${brief.channels.join(', ') || '(not specified)'}`,
-    `- measurement goals: ${brief.measurementGoals.join(', ') || '(from user request above)'}`,
-    ...focusHints.map((hint) => `- ${hint}`),
-  ].join('\n');
+    'User requests:',
+    ...userMessages.map((m) => `- ${m.slice(0, 500)}`),
+    '',
+    aiSummary ? `AI plan summary:\n${aiSummary.slice(0, 2000)}` : '',
+  ].filter(Boolean).join('\n');
 }
 
 export function useAiChat(params: {
