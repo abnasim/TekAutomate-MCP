@@ -776,7 +776,10 @@ export function useAiChat(params: {
           model: state.model,
           systemPrompt,
           userMessage: effectiveMessage,
-          history: [], // Live mode = action mode. Each message is independent.
+          history: state.history.slice(-1).map((h) => ({
+            role: h.role,
+            content: String(h.content || '').slice(0, 500),
+          })),
           tools: liveTools,
           instrumentEndpoint: params.instrumentEndpoint ?? undefined,
           flowContext: { modelFamily, deviceDriver },
