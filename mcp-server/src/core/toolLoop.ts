@@ -6840,7 +6840,7 @@ async function runOpenAiToolLoop(
     const liveToolDefs = getToolDefinitions();
     const liveToolNames = new Set([
       // Execution — direct scope actions
-      'send_scpi', 'capture_screenshot', 'get_instrument_state',
+      'send_scpi', 'capture_screenshot', 'get_instrument_state', 'get_visa_resources',
       // Router — ALL discovery + knowledge (search auto-includes RAG)
       'tek_router',
     ]);
@@ -7058,7 +7058,7 @@ function selectAnthropicTools(req: McpChatRequest): Array<{ name: string; descri
     // Live mode: instrument tools + search/lookup tools only (keep it lean)
     const liveToolNames = new Set([
       // Execution — direct scope actions
-      'send_scpi', 'capture_screenshot', 'get_instrument_state',
+      'send_scpi', 'capture_screenshot', 'get_instrument_state', 'get_visa_resources',
       // Router — ALL discovery + knowledge (search auto-includes RAG)
       'tek_router',
     ]);
@@ -7449,8 +7449,8 @@ function buildLiveSystemPrompt(req: McpChatRequest, sessionContext?: string): st
     '   CH<x>:SCAle <NR3>, HORizontal:SCAle <NR3>, TRIGger:A:EDGE:SLOpe RISe',
     '3. Unknown commands — tek_router search → send_scpi. Two calls max.',
     '4. Errors — read response, fix, retry. Never stop to ask or explain.',
-    '5. Response format: "Done — [what happened]." One line. No bullet points, no explanations.',
-    '   Only give detail when user explicitly asks "explain" or "why" or "how".',
+    '5. Be natural and conversational. Brief when doing simple tasks, detailed when user asks to explain/analyze.',
+    '   Do NOT prefix every response with "Done —". Just say what happened naturally.',
     '6. Replace placeholders: <NR3>→number, CH<x>→CH1, MEAS<x>→MEAS1.',
     '7. capture_screenshot after any visual change.',
     '',
