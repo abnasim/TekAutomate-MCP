@@ -180,39 +180,114 @@ async function runSmartScpiAssistant(req: McpChatRequest) {
     }
     
     // Build mode: materialize matched commands into applyable ACTIONS_JSON flow steps.
-    // Extract the user's intent to fill in enum/placeholder values where possible.
+    // Detect if user wants a query vs set from their message
     const userWords = req.userMessage.toLowerCase().split(/\s+/);
+    const userWantsQuery = /\b(query|read|get|check|what\s*is|show|display|current|value)\b/i.test(req.userMessage);
+
+    // Extract user-provided values and channel/bus numbers from the message
+    const channelMatch = req.userMessage.match(/\b(?:ch(?:annel)?\s*)(\d+)\b/i);
+    const busMatch = req.userMessage.match(/\b(?:bus\s*)(\d+)\b/i);
+    const measMatch = req.userMessage.match(/\b(?:meas(?:urement)?\s*)(\d+)\b/i);
+    const mathMatch = req.userMessage.match(/\b(?:math\s*)(\d+)\b/i);
+    const refMatch = req.userMessage.match(/\b(?:ref(?:erence)?\s*)(\d+)\b/i);
+    const searchMatch = req.userMessage.match(/\b(?:search\s*)(\d+)\b/i);
+    const defaultChannel = channelMatch?.[1] || '1';
+    const defaultBus = busMatch?.[1] || '1';
+    const defaultMeas = measMatch?.[1] || '1';
+    // Extract numeric value with optional unit (e.g. "2v", "500mv", "200mhz", "50")
+    // Strip out channel/bus/meas references first so "channel 1 scale to 2v" doesn't pick "1" as the value
+    const msgWithoutRefs = req.userMessage
+      .replace(/\b(?:ch(?:annel)?|bus|meas(?:urement)?|math|ref(?:erence)?|search)\s*\d+\b/gi, '')
+      .replace(/\b(?:ch|b|meas)\d+\b/gi, '');
+    const valueMatch = msgWithoutRefs.match(/\b(?:to\s+)?(\d+(?:\.\d+)?)\s*(mv|v|uv|us|ns|ms|s|hz|khz|mhz|ghz|%)?(?:\b|$)/i);
+
+    function resolvePlaceholders(command: string): string {
+      let resolved = command;
+      // Resolve template placeholders with user-provided or default values
+      resolved = resolved.replace(/CH<x>/gi, `CH${defaultChannel}`);
+      resolved = resolved.replace(/\{A\|B\}/gi, 'A');
+      resolved = resolved.replace(/\{A\|B\|B:RESET\}/gi, 'A');
+      resolved = resolved.replace(/B<x>/gi, `B${defaultBus}`);
+      resolved = resolved.replace(/MEAS<x>/gi, `MEAS${defaultMeas}`);
+      resolved = resolved.replace(/MATH<x>/gi, `MATH${mathMatch?.[1] || '1'}`);
+      resolved = resolved.replace(/REF<x>/gi, `REF${refMatch?.[1] || '1'}`);
+      resolved = resolved.replace(/SEARCH<x>/gi, `SEARCH${searchMatch?.[1] || '1'}`);
+      resolved = resolved.replace(/POWer<x>/gi, 'POWer1');
+      resolved = resolved.replace(/PLOT<x>/gi, 'PLOT1');
+      resolved = resolved.replace(/SOUrce<x>/gi, `SOUrce${channelMatch?.[1] || '1'}`);
+      resolved = resolved.replace(/D<x>/gi, 'D0');
+      resolved = resolved.replace(/<x>/gi, '1'); // catch-all for remaining <x>
+      return resolved;
+    }
+
+    function resolveValue(): string | null {
+      if (!valueMatch) return null;
+      const num = parseFloat(valueMatch[1]);
+      const unit = (valueMatch[2] || '').toLowerCase();
+      // Convert to base units for SCPI
+      const multipliers: Record<string, number> = {
+        'uv': 1e-6, 'mv': 1e-3, 'v': 1, 'kv': 1e3,
+        'ns': 1e-9, 'us': 1e-6, 'ms': 1e-3, 's': 1,
+        'hz': 1, 'khz': 1e3, 'mhz': 1e6, 'ghz': 1e9,
+        '%': 1,
+      };
+      if (unit && multipliers[unit] !== undefined) {
+        return String(num * multipliers[unit]);
+      }
+      return String(num);
+    }
+
     const actions = toolResult.data.map((cmd: any, idx: number) => {
       const isSetCapable = cmd.commandType === 'set' || cmd.commandType === 'both';
+      const isQueryCapable = cmd.commandType === 'query' || cmd.commandType === 'both';
+      // If user explicitly asked for a query, prefer query form
+      const useQuery = userWantsQuery && isQueryCapable;
+      const useSet = !useQuery && isSetCapable;
       let scpiCommand: string;
 
-      if (isSetCapable && cmd.syntax?.set) {
-        // Try to resolve enum values from the user's query
+      if (useSet && cmd.syntax?.set) {
         let resolved = String(cmd.syntax.set).replace(/\n/g, ' ').replace(/\s+/g, ' ');
-        // Match {ENUM1|ENUM2|...} patterns (multiline-safe)
+        // Resolve placeholders in the header part
+        resolved = resolvePlaceholders(resolved);
+        // Match {ENUM1|ENUM2|...} patterns
         const enumMatch = resolved.match(/\{([^}]+)\}/);
         if (enumMatch) {
           const options = enumMatch[1].split('|').map((s: string) => s.trim()).filter(Boolean);
-          // Find the best matching enum value from user's words
-          const match = options.find((opt: string) =>
+          // Try direct word match first
+          let match = options.find((opt: string) =>
             userWords.some((w: string) => w.length >= 3 && (opt.toLowerCase() === w || opt.toLowerCase().includes(w)))
           );
+          // If no match but user mentioned a channel and options include CH<n>, pick that
+          if (!match && channelMatch) {
+            const chOpt = options.find((opt: string) => opt === `CH${defaultChannel}` || opt.toLowerCase() === `ch${defaultChannel}`);
+            if (chOpt) match = chOpt;
+          }
+          // If options include a "default first" like ON/OFF, RISe/FALL etc, pick the first one
           if (match) {
-            resolved = resolved.replace(enumMatch[0], `"${match}"`).trim();
+            resolved = resolved.replace(enumMatch[0], match).trim();
           } else {
             // No match — strip the enum for a cleaner command
             resolved = resolved.replace(/\s*\{[^}]+\}/, '').trim();
           }
         }
-        // Strip remaining placeholders like <NR3>, <x> etc
+        // Replace <NR3>/<NRf>/<NR1> with the user's value if available
+        const userValue = resolveValue();
+        if (userValue && /<NR[f13]>/i.test(resolved)) {
+          resolved = resolved.replace(/\s*<NR[f13]>/i, ` ${userValue}`).trim();
+        }
+        // Strip remaining angle-bracket placeholders
         resolved = resolved.replace(/\s*<[^>]+>/g, '').trim();
+        // If user provided a value but no placeholder was in the syntax, append it
+        if (userValue && !resolved.includes(userValue) && !/\d/.test(resolved.split(/\s+/).slice(-1)[0] || '')) {
+          resolved = `${resolved} ${userValue}`;
+        }
         scpiCommand = resolved;
       } else {
-        scpiCommand = cmd.syntax?.query || `${cmd.header}?`;
+        scpiCommand = resolvePlaceholders(cmd.syntax?.query || `${cmd.header}?`);
       }
 
-      const stepType = isSetCapable ? 'write' : 'query';
-      const stepLabel = isSetCapable ? `Set ${cmd.header}` : `Read ${cmd.header}`;
+      const stepType = useQuery ? 'query' : (useSet ? 'write' : 'query');
+      const stepLabel = stepType === 'query' ? `Query ${cmd.header}` : `Set ${cmd.header}`;
       const stepParams: Record<string, unknown> = { command: scpiCommand };
       if (stepType === 'query') {
         stepParams.saveAs = `result_${cmd.header.replace(/[^a-zA-Z0-9]/g, '_').toLowerCase()}`;
@@ -3959,7 +4034,7 @@ function buildChatDeveloperPrompt(req: McpChatRequest): string {
   const instrumentMapLines = Array.isArray(fc.instrumentMap) && fc.instrumentMap.length
     ? fc.instrumentMap
         .map((device) =>
-          `- ${String(device.alias || 'device')}: ${String(device.deviceType || 'SCOPE')}, ${String(device.backend || 'pyvisa')}${device.deviceDriver ? `, driver ${String(device.deviceDriver)}` : ''}`
+          `- ${String(device.alias || 'device')}: ${String(device.deviceType || 'SCOPE')}, ${String(device.backend || 'pyvisa')}${device.deviceDriver ? `, driver ${String(device.deviceDriver)}` : ''}${device.visaResource ? ` [${String(device.visaResource)}]` : ''}`
         )
         .join('\n')
     : `- ${fc.alias || 'scope1'}: ${fc.deviceType || 'SCOPE'}, ${fc.backend || 'pyvisa'}`;
@@ -4060,8 +4135,12 @@ async function runChatConversation(
     const messages = [
       ...(Array.isArray(req.history)
         ? req.history
-            .slice(-8)
-            .map((h) => ({ role: h.role as 'user' | 'assistant', content: String(h.content || '').slice(0, 3000) }))
+            .slice(-6)
+            .map((h, i, arr) => ({
+              role: h.role as 'user' | 'assistant',
+              // Older turns get shorter — save tokens for the most recent context
+              content: String(h.content || '').slice(0, i < arr.length - 2 ? 1000 : 2000),
+            }))
         : []),
       { role: 'user' as const, content: userContent },
     ];
@@ -4133,6 +4212,16 @@ async function runChatConversation(
           },
         ]
       : [];
+    // Chain via previous_response_id when available — OpenAI stores the full
+    // conversation server-side so we can skip re-sending history, saving tokens.
+    const previousResponseId = resolveOpenAiResponseCursor(req);
+    const historyInput = previousResponseId
+      ? []
+      : (Array.isArray(req.history)
+          ? req.history
+              .slice(-6)
+              .map((h) => ({ role: h.role, content: String(h.content || '').slice(0, 2000) }))
+          : []);
     const requestPayload: Record<string, unknown> = {
       model: resolveHostedAssistantModel(req),
       input: [
@@ -4140,15 +4229,12 @@ async function runChatConversation(
           role: 'developer',
           content: `${CHAT_MODE_SYSTEM_PROMPT}\n\n${developerPrompt}`.trim(),
         },
-        ...(Array.isArray(req.history)
-          ? req.history
-              .slice(-8)
-              .map((h) => ({ role: h.role, content: String(h.content || '').slice(0, 3000) }))
-          : []),
+        ...historyInput,
         { role: 'user', content: userContent },
       ],
       store: true,
       stream: false,
+      ...(previousResponseId ? { previous_response_id: previousResponseId } : {}),
       ...(chatTools.length ? { tools: chatTools } : {}),
     };
     if (hostedModelSupportsTemperature(String(requestPayload.model || ''))) {
@@ -4213,8 +4299,12 @@ async function runChatConversation(
       { role: 'system', content: `${CHAT_MODE_SYSTEM_PROMPT}\n\n${developerPrompt}` },
       ...(Array.isArray(req.history)
         ? req.history
-            .slice(-8)
-            .map((h) => ({ role: h.role, content: String(h.content || '').slice(0, 3000) }))
+            .slice(-6)
+            .map((h, i, arr) => ({
+              role: h.role,
+              // Older turns get shorter — save tokens for the most recent context
+              content: String(h.content || '').slice(0, i < arr.length - 2 ? 1000 : 2000),
+            }))
         : []),
       { role: 'user', content: userContent },
     ],
@@ -4498,7 +4588,7 @@ function buildUserPrompt(req: McpChatRequest, flowCommandIssues: string[] = []):
   const instrumentMapLines = Array.isArray(fc.instrumentMap) && fc.instrumentMap.length
     ? fc.instrumentMap
         .map((device) =>
-          `  - ${String(device.alias || 'device')}: ${String(device.deviceType || 'SCOPE')}, ${String(device.backend || 'pyvisa')}${device.deviceDriver ? `, driver ${String(device.deviceDriver)}` : ''}${device.visaBackend ? `, visa ${String(device.visaBackend)}` : ''}${device.host ? ` @ ${String(device.host)}` : ''}`
+          `  - ${String(device.alias || 'device')}: ${String(device.deviceType || 'SCOPE')}, ${String(device.backend || 'pyvisa')}${device.deviceDriver ? `, driver ${String(device.deviceDriver)}` : ''}${device.visaBackend ? `, visa ${String(device.visaBackend)}` : ''}${device.host ? ` @ ${String(device.host)}` : ''}${device.visaResource ? ` [${String(device.visaResource)}]` : ''}`
         )
         .join('\n')
     : instrumentLine;
@@ -4512,7 +4602,7 @@ function buildUserPrompt(req: McpChatRequest, flowCommandIssues: string[] = []):
     `- deviceDriver: ${fc.deviceDriver || '(unknown)'}`,
     `- visaBackend: ${fc.visaBackend || '(unknown)'}`,
     `- alias: ${fc.alias || 'scope1'}`,
-    '- instruments:',
+    '- instruments (use visaResource in brackets to target a specific instrument with send_scpi/probe_command):',
     instrumentMapLines,
     '',
     `Current flow (${flatSteps.length} flattened steps):`,
@@ -5529,6 +5619,10 @@ async function executeHostedToolCall(
   }
 
   if (isRouterEnabledForRequest(undefined)) {
+    // Inject modelFamily into tek_router calls so results are filtered to the user's scope
+    if (name === 'tek_router' && req.flowContext?.modelFamily) {
+      args = { ...args, modelFamily: req.flowContext.modelFamily };
+    }
     const routerResult = await dispatchRouterTool(name, args);
     if (routerResult) return routerResult;
   }
@@ -6835,20 +6929,10 @@ async function runOpenAiToolLoop(
     const model = resolveOpenAiModel(req);
     const liveToolDefs = getToolDefinitions();
     const liveToolNames = new Set([
-      // Instrument actions
-      'send_scpi', 'capture_screenshot', 'get_instrument_state', 'probe_command',
-      'get_visa_resources', 'get_environment',
-      // SCPI exploration (iterative — AI can browse groups, read full entries)
-      'list_command_groups', 'get_command_group', 'get_command_by_header', 'get_commands_by_header_batch',
-      // SCPI search + validation
-      'smart_scpi_lookup', 'search_scpi',
-      'verify_scpi_commands', 'materialize_scpi_command', 'finalize_scpi_commands',
-      // Learning — save successful workflows for reuse
-      'save_learned_workflow',
-      // tm_devices lookup + materialization
-      'search_tm_devices', 'materialize_tm_devices_call',
-      // Knowledge
-      'retrieve_rag_chunks', 'search_known_failures',
+      // Execution — direct scope actions
+      'send_scpi', 'capture_screenshot', 'get_instrument_state', 'get_visa_resources',
+      // Router — ALL discovery + knowledge (search auto-includes RAG)
+      'tek_router',
     ]);
     // Strip infra params from tool schemas (same as Anthropic path)
     const infraParams = new Set(['executorUrl', 'visaResource', 'backend', 'liveMode', 'outputMode', 'modelFamily', 'deviceDriver', 'scopeType']);
@@ -6876,8 +6960,8 @@ async function runOpenAiToolLoop(
     const liveMessages: Array<Record<string, unknown>> = [
       { role: 'system', content: liveSystemWithContext },
       ...(req.history || [])
-        .slice(-12)
-        .map((h) => ({ role: h.role, content: String(h.content || '').slice(0, 3000) })),
+        .slice(-6)
+        .map((h) => ({ role: h.role, content: String(h.content || '').slice(0, 1500) })),
       { role: 'user', content: buildOpenAiUserContent(req, userPrompt) },
     ];
 
@@ -7063,20 +7147,10 @@ function selectAnthropicTools(req: McpChatRequest): Array<{ name: string; descri
   if (isLive) {
     // Live mode: instrument tools + search/lookup tools only (keep it lean)
     const liveToolNames = new Set([
-      // Instrument actions
-      'send_scpi', 'capture_screenshot', 'get_instrument_state', 'probe_command',
-      'get_visa_resources', 'get_environment',
-      // SCPI exploration (iterative — AI can browse groups, read full entries)
-      'list_command_groups', 'get_command_group', 'get_command_by_header', 'get_commands_by_header_batch',
-      // SCPI search + validation
-      'smart_scpi_lookup', 'search_scpi',
-      'verify_scpi_commands', 'materialize_scpi_command', 'finalize_scpi_commands',
-      // Learning — save successful workflows for reuse
-      'save_learned_workflow',
-      // tm_devices lookup + materialization
-      'search_tm_devices', 'materialize_tm_devices_call',
-      // Knowledge
-      'retrieve_rag_chunks', 'search_known_failures',
+      // Execution — direct scope actions
+      'send_scpi', 'capture_screenshot', 'get_instrument_state', 'get_visa_resources',
+      // Router — ALL discovery + knowledge (search auto-includes RAG)
+      'tek_router',
     ]);
     const filtered = allTools.filter((t) => liveToolNames.has(t.name));
     // Strip server-injected infra params from schemas so AI only sees user-facing params
@@ -7216,10 +7290,10 @@ async function runAnthropicToolLoop(
   // Build conversation messages from history
   const messages: Array<Record<string, unknown>> = [
     ...(req.history || [])
-      .slice(isLive ? -12 : -6)
+      .slice(isLive ? -6 : -6)
       .map((h) => ({
         role: h.role as 'user' | 'assistant',
-        content: String(h.content || '').slice(0, isLive ? 3000 : 800),
+        content: String(h.content || '').slice(0, isLive ? 1500 : 800),
       })),
     { role: 'user', content: userContent },
   ];
@@ -7448,66 +7522,28 @@ async function runAnthropicToolLoop(
  */
 function buildLiveSystemPrompt(req: McpChatRequest, sessionContext?: string): string {
   const parts = [
-    '# TekAutomate Live Mode (Learn Mode)',
-    'You are a hands-on instrument copilot with direct access to a Tektronix oscilloscope.',
-    'Live mode = LEARN mode. You explore, try, observe, adjust, and achieve the goal.',
+    '# TekAutomate Live Mode',
+    'You control a Tektronix oscilloscope. Execute commands silently. Report results briefly.',
     '',
-    '## Your approach',
-    '1. **Explore** — Browse the SCPI database to find relevant commands',
-    '2. **Try** — Send a command to the scope',
-    '3. **Observe** — Read the response. If it failed or returned unexpected results, try a different command.',
-    '4. **Adjust** — Capture a screenshot if needed. Query current values. Iterate.',
-    '5. **Achieve** — Once the goal is met, report what you did.',
-    '6. **Save** — If you discovered a useful sequence, call save_learned_workflow so it can be reused instantly next time.',
+    '## Tools (4 only)',
+    '- **send_scpi** — {commands:["CMD1","CMD2?"]} → [{command, response, ok, error}]',
+    '- **capture_screenshot** — Capture scope display as image you can see and analyze. Use your judgement on when to call it.',
+    '- **get_instrument_state** — *IDN?/*ESR?/ALLEV?',
+    '- **tek_router** — action:"search" returns SCPI commands + knowledge base results in ONE call. Also: "exec", "search_exec", "list", "create".',
     '',
-    '## Tools — when to use each one',
-    '',
-    '### Execution (use these to DO things on the scope)',
-    '- **send_scpi** — Send one or more SCPI commands. Returns per-command results: {command, response, ok, error}.',
-    '  - Write commands: "CH1:SCAle 0.5" → response="OK" if successful',
-    '  - Query commands (ending with ?): "*IDN?" → response contains the value',
-    '  - You can send multiple commands in one call: ["*RST", "CH1:SCAle 0.5", "*OPC?"]',
-    '- **capture_screenshot** — Capture the scope display as PNG. Call this AFTER any visual change to verify + update the UI.',
-    '- **probe_command** — Test ONE command when you want to check if it works before sending a batch.',
-    '- **get_instrument_state** — Quick scope check: *IDN?, *ESR?, ALLEV?. Use at start of session or after errors.',
-    '',
-    '### Discovery (use these to FIND the right SCPI commands)',
-    '- **smart_scpi_lookup** — Best for natural language: "how to add jitter measurement". Returns matching commands with syntax.',
-    '- **get_command_group** — Browse ALL commands in a feature area. Groups: Vertical, Horizontal, Trigger, Measurement, Bus, Power, Plot, Display, Save and Recall, Math, Acquisition, etc. Each command entry has: header, syntax.set, syntax.query, arguments with validValues, examples.',
-    '- **get_command_by_header** — When you already know the header: "CH<x>:SCAle" → returns full entry with syntax, args, examples.',
-    '- **search_scpi** — Keyword search: "FastFrame", "eye diagram", "bandwidth". Returns matching commands.',
-    '- **list_command_groups** — See all 35 available groups with descriptions. Use when you don\'t know which group to browse.',
-    '',
-    '### Knowledge base (8,400+ docs — USE THIS, it has answers!)',
-    '- **retrieve_rag_chunks** — Search the knowledge base by corpus:',
-    '  - corpus="errors" — Known instrument errors, error codes, and fixes. ALWAYS search this when a command fails or returns an error.',
-    '  - corpus="app_logic" — TekAutomate workflows, best practices, measurement setup guides. Search when user asks "how to" or "best way to".',
-    '  - corpus="pyvisa_tekhsi" — PyVISA and TekHSI API reference. Search when dealing with connection issues or API questions.',
-    '  - corpus="tmdevices" — tm_devices Python library reference. Search when backend is tm_devices.',
-    '  - corpus="scpi" — SCPI command documentation and guides.',
-    '  - corpus="templates" — Workflow templates and examples.',
-    '- **search_known_failures** — Quick error troubleshooting. Use when something goes wrong.',
-    '',
-    '  IMPORTANT: The knowledge base has answers to most "why" and "how" questions. If the user asks about',
-    '  measurement methodology, best practices, or debugging — search RAG BEFORE answering from memory.',
-    '',
-    '### Learning (use after achieving a goal)',
-    '- **save_learned_workflow** — Save the successful command sequence so it can be reused next time. Provide: name, description, trigger phrases, and the steps that worked.',
-    '',
-    '## Rules',
-    '- ACT, don\'t suggest. Call send_scpi and DO IT.',
-    '- It\'s OK to try a command and have it fail — read the error, adjust, try again.',
-    '- Read command entries fully: syntax.set, syntax.query, arguments, validValues, examples.',
-    '- Replace placeholders: <NR3> → number, CH<x> → CH1, {A|B} → pick one.',
-    '- If a command fails, try the query form (?) first to read the current value, then adjust.',
-    '- ALWAYS call capture_screenshot after sending SCPI commands that change scope state (add measurement, change scale, trigger, channel settings, etc.). This verifies the result AND updates the live UI panel.',
-    '- No ACTIONS_JSON, no "build it", no code blocks. Just use tools.',
-    '',
-    '## Response style',
-    '- Report what you DID, not what could be done.',
-    '- When a command fails, say what went wrong and what you\'re trying next.',
-    '- After achieving the goal, summarize the steps that worked.',
-    '- If you found a useful sequence, offer to save it as a learned workflow.',
+    '## RULES',
+    '1. JUST DO IT. Never explain how. Never suggest manual UI steps. Never list options.',
+    '2. Common commands — send_scpi IMMEDIATELY, zero searching:',
+    '   *RST, *IDN?, *CLS, *OPC?, AUTOSet EXECute, MEASUrement:ADDMEAS <type>,',
+    '   MEASUrement:MEAS<x>:SOURCE CH<x>, MEASUrement:STATIstics:CYCLEMode ON,',
+    '   CH<x>:SCAle <NR3>, HORizontal:SCAle <NR3>, TRIGger:A:EDGE:SLOpe RISe',
+    '3. Unknown commands — tek_router search → send_scpi. Two calls max.',
+    '4. Errors — read response, fix, retry. Never stop to ask. Briefly mention what failed and what you are trying next.',
+    '5. Be natural and conversational. Brief when doing simple tasks, detailed when user asks to explain/analyze.',
+    '   Do NOT prefix every response with "Done —". Just say what happened naturally.',
+    '6. Replace placeholders: <NR3>→number, CH<x>→CH1, MEAS<x>→MEAS1.',
+    '7. Use your judgement on when to capture_screenshot. You can see the image.',
+    '8. AUTONOMOUS EXPLORATION: When user says "find a way to..." or gives a goal — YOU figure it out. Search, try commands, read errors, try different approaches. Keep going until you achieve the goal. Do NOT stop after one failure.',
     '',
     '## Instrument',
   ];

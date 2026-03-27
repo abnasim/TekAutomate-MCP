@@ -71,19 +71,8 @@ export class SmartScpiAssistant {
 
   private async loadCommands(): Promise<CommandRecord[]> {
     const index = await getCommandIndex();
-    // Get all commands by searching with various common terms
-    const allCommands: CommandRecord[] = [];
-    const searchTerms = ['', 'set', 'query', 'measure', 'trigger', 'bus', 'power'];
-
-    for (const term of searchTerms) {
-      const results = index.searchByQuery(term, undefined, 2000);
-      results.forEach(cmd => {
-        if (!allCommands.find(c => c.header === cmd.header)) {
-          allCommands.push(cmd);
-        }
-      });
-    }
-
+    // Load ALL commands from the index to ensure no commands are missed
+    const allCommands = index.getEntries();
     console.log(`[SmartAssistant] Loaded ${allCommands.length} unique commands`);
     return allCommands;
   }
@@ -109,8 +98,11 @@ export class SmartScpiAssistant {
         .map((cmd) => String(cmd.header || '').split(':')[0])
         .filter(Boolean)
     );
+    const queryHasMeasurement = /\bmeasurement\b/i.test(query);
     const matchesPreferredRoot = (cmd: CommandRecord): boolean =>
-      preferredRoots.size === 0 || preferredRoots.has(String(cmd.header || '').split(':')[0]);
+      preferredRoots.size === 0
+      || preferredRoots.has(String(cmd.header || '').split(':')[0])
+      || (queryHasMeasurement && String(cmd.header || '').startsWith('MEASUrement'));
     const filteredSearchMatches = searchMatches.filter(matchesPreferredRoot);
     const filteredFallbackCommands = fallbackCommands.filter(matchesPreferredRoot);
 
@@ -160,28 +152,27 @@ export class SmartScpiAssistant {
     
     const searchPool = pool.length > 0 ? pool : commands;
 
-    // ── STEP 2: Exact header match ──
+    // ── STEP 2: Exact header match (only for SCPI-style queries with : or *) ──
     const subjectLower = subject.toLowerCase();
     const queryLower = (originalQuery || subject).toLowerCase();
+    const isScpiStyleQuery = queryLower.includes(':') || queryLower.startsWith('*');
 
-    const exactMatches = searchPool.filter(cmd => {
-      const headerLower = cmd.header.toLowerCase();
-      const headerClean = headerLower.replace(/[^a-z:]/g, '');
+    if (isScpiStyleQuery) {
+      const exactMatches = searchPool.filter(cmd => {
+        const headerLower = cmd.header.toLowerCase();
+        const headerClean = headerLower.replace(/[^a-z:*]/g, '');
 
-      // Match against subject
-      if (headerLower === subjectLower) return true;
-      if (headerClean === subjectLower.replace(/[^a-z:]/g, '')) return true;
+        // Match against full query (for when user types exact SCPI header)
+        if (headerLower === queryLower) return true;
+        if (headerClean === queryLower.replace(/[^a-z:*]/g, '')) return true;
 
-      // Match against full query (for when user types exact SCPI header)
-      if (headerLower === queryLower) return true;
-      if (headerClean === queryLower.replace(/[^a-z:]/g, '')) return true;
+        return false;
+      });
 
-      return false;
-    });
-
-    if (exactMatches.length > 0) {
-      console.log(`[EXACT_MATCH] Found ${exactMatches.length} exact matches`);
-      return exactMatches.slice(0, 1);  // Return just 1 for exact match, not 8
+      if (exactMatches.length > 0) {
+        console.log(`[EXACT_MATCH] Found ${exactMatches.length} exact matches`);
+        return exactMatches.slice(0, 1);
+      }
     }
 
     // ── STEP 3: BM25 search WITHIN the filtered pool ──
@@ -233,10 +224,29 @@ export class SmartScpiAssistant {
       }
 
       // Subject-specific header boosts for disambiguation within a group
-      // "reset" subject: *RST should beat AUTOSet
-      if (subjectLower === 'reset' && /^\*rst$/i.test(cmd.header)) {
-        score += 25;
+      // IEEE 488.2 commands: boost exact *-prefixed headers for their subjects
+      const ieeeBoosts: Record<string, RegExp> = {
+        reset: /^\*RST$/i,
+        identify: /^\*IDN/i,
+        opc: /^\*OPC/i,
+        cls: /^\*CLS$/i,
+        tst: /^\*TST/i,
+        esr: /^\*ESR/i,
+        wai: /^\*WAI$/i,
+        sre: /^\*SRE/i,
+        ese: /^\*ESE/i,
+        opt: /^\*OPT/i,
+        psc: /^\*PSC/i,
+        trg: /^\*TRG$/i,
+        lrn: /^\*LRN/i,
+        ddt: /^\*DDT/i,
+        status: /^\*ESR/i,
+      };
+      const ieeeBoost = ieeeBoosts[subjectLower];
+      if (ieeeBoost && ieeeBoost.test(cmd.header)) {
+        score += 30;
       }
+
       // "edge" subject: boost commands with EDGE in header path (e.g. TRIGger:A:EDGE:SLOpe)
       if (subjectLower === 'edge' && /edge/i.test(cmd.header)) {
         score += 15;
@@ -245,10 +255,47 @@ export class SmartScpiAssistant {
       if (subjectLower === 'edge' && /slope/i.test(cmd.header) && /\b(rising|falling)\b/i.test(originalQuery || '')) {
         score += 10;
       }
+      // Trigger source: boost EDGE:SOUrce
+      if (subjectLower === 'trigger_source' && /edge.*source/i.test(cmd.header)) {
+        score += 20;
+      }
+      // Horizontal position: boost HORizontal:POSition
+      if (subjectLower === 'horizontal_position' && /horizontal.*position/i.test(cmd.header)) {
+        score += 20;
+      }
+      // Horizontal scale: prefer HORizontal:SCAle over HORizontal:MODe:SCAle (shorter = more direct)
+      if (subjectLower === 'horizontal_scale' && /^horizontal:scale$/i.test(cmd.header.replace(/[^a-z:]/gi, ''))) {
+        score += 20;
+      }
+      // Probe: boost PRObe in header
+      if ((subjectLower === 'probe' || subjectLower === 'probe_atten') && /probe/i.test(cmd.header)) {
+        score += 15;
+      }
+      // Recall session: boost RECAll:SESsion
+      if (subjectLower === 'recall_session' && /recall.*session/i.test(cmd.header)) {
+        score += 25;
+      }
+      // Measurement source: boost MEAS<x>:SOUrce<x> (Measurement group, the standard one)
+      // NOT MEAS<x>:SOURCE (IMDA group, for motor drive analysis only)
+      if (subjectLower === 'measurement_source') {
+        if (/MEAS<x>:SOUrce<x>$/i.test(cmd.header)) {
+          score += 30;
+        } else if (/MEAS.*source/i.test(cmd.header) && !/GATing|LOGIC|COMMON|HARMONICS|Symbol/i.test(cmd.header)) {
+          score += 15;
+        }
+      }
+      // Statistics: boost STATIstics
+      if (subjectLower === 'statistics' && /statist/i.test(cmd.header)) {
+        score += 20;
+      }
+      // Sample rate: boost SAMPlerate/MAXSamplerate
+      if (subjectLower === 'sample_rate' && /samp.*rate/i.test(cmd.header)) {
+        score += 20;
+      }
 
       // Action matching — use word boundaries to avoid substring matches (e.g. POWer:ADDNew matching "add")
-      if (action === 'add' && /\b(?:ADDNEW|ADDMEAS)\b/i.test(cmd.header)) score += 4;
-      if (action === 'remove' && /\b(?:DELETE|CLEAR|REMOVE)\b/i.test(cmd.header)) score += 4;
+      if (action === 'add' && /(?:ADDNEW|ADDMEAS)/i.test(cmd.header)) score += 12;
+      if (action === 'remove' && /(?:DELETE|DELete|DELETEALL|CLEAR|REMOVE)/i.test(cmd.header)) score += 12;
       if (action === 'query' && cmd.commandType !== 'set') score += 2;
       if (action === 'configure' && cmd.commandType !== 'query') score += 3;
 
@@ -406,7 +453,12 @@ export class SmartScpiAssistant {
       const setCapable = catalogBoostedCommands.filter(cmd =>
         cmd.commandType === 'set' || cmd.commandType === 'both'
       );
-      const topCmd = setCapable[0] || catalogBoostedCommands[0];
+      // Prefer commands where the subject keyword matches the header (e.g. "scale" → CH<x>:SCAle)
+      const subjectWords = intent.subject.split(/[_\s]+/).filter((w: string) => w.length > 2);
+      const headerMatched = setCapable.filter((cmd: any) =>
+        subjectWords.some((w: string) => cmd.header.toLowerCase().includes(w.toLowerCase()))
+      );
+      const topCmd = headerMatched[0] || setCapable[0] || catalogBoostedCommands[0];
 
       return {
         commands: [topCmd],
@@ -443,7 +495,7 @@ export class SmartScpiAssistant {
     if (this.isFollowUpQuestion(request.query, catalogBoostedCommands)) {
       console.log(`[FOLLOWUP_QUERY] Detected follow-up query: "${request.query}"`);
       return {
-        commands: [], // Never return commands directly - always exploratory
+        commands: catalogBoostedCommands.slice(0, 6), // Always return commands for tool results
         intent: intent.intent,
         groups: intent.groups,
         workflow: [],
@@ -452,9 +504,9 @@ export class SmartScpiAssistant {
       };
     }
 
-    // Always provide exploratory interface, never direct commands
+    // Exploratory interface - always include found commands alongside the prompt
     return {
-      commands: [], // Never return commands directly - always exploratory
+      commands: catalogBoostedCommands.slice(0, 6), // Always return commands for tool results
       intent: intent.intent,
       groups: intent.groups,
       workflow: [],

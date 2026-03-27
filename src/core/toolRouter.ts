@@ -25,6 +25,7 @@ export interface RouterRequest {
   toolTriggers?: string[];
   toolTags?: string[];
   toolCategory?: ToolCategory;
+  modelFamily?: string;
   toolSchema?: {
     type?: 'object';
     properties?: Record<string, { type: string; description: string; enum?: string[] }>;
@@ -204,22 +205,78 @@ async function handleSearch(req: RouterRequest, startedAt: number): Promise<Rout
     };
   }
 
-  const engine = getToolSearchEngine();
-  const opts: ToolSearchOptions = {
-    limit: req.limit ?? 5,
-    categories: req.categories,
-  };
+  // Primary: use smart_scpi_lookup for SCPI command search (best intent + group logic)
+  let scpiCommands: Array<Record<string, unknown>> = [];
+  try {
+    const { smartScpiLookup } = await import('./smartScpiAssistant');
+    const scpiRes = await smartScpiLookup({ query: req.query, modelFamily: req.modelFamily });
+    if (scpiRes.ok && Array.isArray(scpiRes.data) && scpiRes.data.length > 0) {
+      scpiCommands = scpiRes.data.slice(0, req.limit ?? 5).map((cmd: any) => ({
+        id: cmd.commandId || cmd.header || '',
+        name: cmd.header || '',
+        description: cmd.shortDescription || cmd.description || '',
+        category: 'scpi',
+        score: 10,
+        matchStage: 'smart_scpi',
+        syntax: cmd.syntax,
+        arguments: cmd.arguments,
+        examples: cmd.examples || cmd.codeExamples,
+        group: cmd.group,
+        commandType: cmd.commandType,
+      }));
+    }
+  } catch { /* non-fatal */ }
 
-  const hits = await engine.searchCompound(req.query, opts);
-  const results = hits.map((hit) => serializeHit(hit, req.debug === true));
+  // Secondary: router's own BM25/trigger search for shortcuts and templates
+  const engine = getToolSearchEngine();
+  const routerHits = await engine.searchCompound(req.query, {
+    limit: 3,
+    categories: req.categories,
+  });
+  // Filter DPOJET
+  const familyHint = (req.modelFamily || '').toUpperCase();
+  const filteredRouterHits = routerHits.filter((hit) => {
+    const toolId = (hit.tool.id || '').toLowerCase();
+    if (!familyHint.includes('DPO') && toolId.includes('dpojet')) return false;
+    return true;
+  });
+  const routerResults = filteredRouterHits
+    .filter((hit) => hit.tool.category === 'shortcut' || hit.tool.category === 'template' || hit.tool.category === 'instrument')
+    .map((hit) => serializeHit(hit, req.debug === true));
+
+  // Combine: SCPI commands first, then shortcuts/templates
+  const results = [...scpiCommands, ...routerResults];
+
+  // RAG knowledge — only for queries that sound like questions, not SCPI commands
+  let knowledge: Array<{ corpus: string; title: string; body: string }> | undefined;
+  const isQuestion = /\b(why|how|what|explain|error|fail|timeout|issue|problem|debug)\b/i.test(req.query);
+  if (isQuestion) {
+    try {
+      const { retrieveRagChunks } = await import('../tools/retrieveRagChunks');
+      const ragResults: Array<{ corpus: string; title: string; body: string }> = [];
+      for (const corpus of ['errors', 'app_logic', 'scpi'] as const) {
+        const res = await retrieveRagChunks({ corpus, query: req.query, topK: 1 });
+        if (res.ok && Array.isArray(res.data)) {
+          for (const chunk of res.data) {
+            const c = chunk as { title?: string; body?: string };
+            if (c.body && c.body.length > 30) {
+              ragResults.push({ corpus, title: c.title || '', body: c.body.slice(0, 300) });
+            }
+          }
+        }
+      }
+      if (ragResults.length > 0) knowledge = ragResults;
+    } catch { /* non-fatal */ }
+  }
 
   return {
     ok: true,
     action: 'search',
     results,
+    knowledge,
     text: results.length
-      ? `Found ${results.length} tool(s) for "${req.query}". Top: ${results[0].name} (${results[0].id})`
-      : `No tools found for "${req.query}".`,
+      ? `Found ${results.length} result(s) for "${req.query}".`
+      : `No results for "${req.query}".`,
     durationMs: Date.now() - startedAt,
   };
 }
@@ -412,6 +469,8 @@ async function handleCreate(req: RouterRequest, startedAt: number): Promise<Rout
   }
   registry.register(tool);
   await rebuildRouterIndexes();
+  // Mark for persistence so the timer saves it
+  try { const { markShortcutsDirty } = await import('./routerIntegration'); markShortcutsDirty(); } catch {}
   return {
     ok: true,
     action: 'create',
@@ -452,6 +511,8 @@ async function handleUpdate(req: RouterRequest, startedAt: number): Promise<Rout
   }
   registry.register(tool);
   await rebuildRouterIndexes();
+  // Mark for persistence so the timer saves it
+  try { const { markShortcutsDirty } = await import('./routerIntegration'); markShortcutsDirty(); } catch {}
   return {
     ok: true,
     action: 'update',
