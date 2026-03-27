@@ -7457,7 +7457,8 @@ function buildLiveSystemPrompt(req: McpChatRequest, sessionContext?: string): st
     '5. Be natural and conversational. Brief when doing simple tasks, detailed when user asks to explain/analyze.',
     '   Do NOT prefix every response with "Done —". Just say what happened naturally.',
     '6. Replace placeholders: <NR3>→number, CH<x>→CH1, MEAS<x>→MEAS1.',
-    '7. capture_screenshot after any visual change.',
+    '7. capture_screenshot ONLY when you need to see something or user asks. NOT after every command.',
+    '8. AUTONOMOUS EXPLORATION: When user says "find a way to..." or gives a goal — YOU figure it out. Search, try commands, read errors, try different approaches. Keep going until you achieve the goal. Do NOT stop after one failure.',
     '',
     '## Instrument',
   ];

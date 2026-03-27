@@ -432,6 +432,7 @@ export function buildLiveSystemPrompt(instrument?: {
     '5. Be natural. Brief for actions, detailed only when asked to explain.',
     '6. Replace placeholders: <NR3>→number, CH<x>→CH1.',
     '7. capture_screenshot ONLY when you need to see the display (verify layout, analyze waveform, user asks). NOT after every send_scpi — the response tells you if it worked.',
+    '8. AUTONOMOUS EXPLORATION: When user says "find a way to..." or "figure out how to..." or gives a goal without a specific command — YOU figure it out. Search commands, try them, read errors, try different approaches. Keep going until you achieve the goal or exhaust options. Do NOT stop after one failed attempt.',
   ];
   if (instrument) {
     parts.push('');
