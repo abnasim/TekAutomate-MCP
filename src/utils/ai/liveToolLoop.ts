@@ -241,8 +241,15 @@ async function runAnthropicLoop(params: LiveToolLoopParams): Promise<LiveToolLoo
             ],
           });
         } else {
-          const resultStr = typeof result === 'string' ? result : JSON.stringify(result);
-          const truncated = resultStr.length > 8000 ? resultStr.slice(0, 8000) + '\n...(truncated)' : resultStr;
+          // Strip verbose fields the AI doesn't need — keep token count low
+          let lean = result;
+          if (typeof result === 'object' && result !== null) {
+            const r = result as Record<string, unknown>;
+            const { rawStdout, rawStderr, combinedOutput, transcript, outputMode, durationSec, ...rest } = r;
+            lean = rest;
+          }
+          const resultStr = typeof lean === 'string' ? lean : JSON.stringify(lean);
+          const truncated = resultStr.length > 3000 ? resultStr.slice(0, 3000) + '\n...(truncated)' : resultStr;
           toolResults.push({
             type: 'tool_result',
             tool_use_id: toolId,
@@ -341,8 +348,15 @@ async function runOpenAiLoop(params: LiveToolLoopParams): Promise<LiveToolLoopRe
         const result = await executeMcpTool(toolName, toolArgs, instrumentEndpoint, flowContext);
         onToolResult?.(toolName, result);
         toolCallLog.push({ tool: toolName, args: toolArgs, result });
-        const resultStr = typeof result === 'string' ? result : JSON.stringify(result);
-        const truncated = resultStr.length > 8000 ? resultStr.slice(0, 8000) + '\n...(truncated)' : resultStr;
+        // Strip verbose fields to keep token count low
+        let lean = result;
+        if (typeof result === 'object' && result !== null) {
+          const r = result as Record<string, unknown>;
+          const { rawStdout, rawStderr, combinedOutput, transcript, outputMode, durationSec, ...rest } = r;
+          lean = rest;
+        }
+        const resultStr = typeof lean === 'string' ? lean : JSON.stringify(lean);
+        const truncated = resultStr.length > 3000 ? resultStr.slice(0, 3000) + '\n...(truncated)' : resultStr;
         messages.push({ role: 'tool', tool_call_id: toolId, content: truncated });
       } catch (err) {
         messages.push({ role: 'tool', tool_call_id: toolId, content: `Error: ${err instanceof Error ? err.message : String(err)}` });
