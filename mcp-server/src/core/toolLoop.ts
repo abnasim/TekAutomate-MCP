@@ -7453,7 +7453,7 @@ function buildLiveSystemPrompt(req: McpChatRequest, sessionContext?: string): st
     '   MEASUrement:MEAS<x>:SOURCE CH<x>, MEASUrement:STATIstics:CYCLEMode ON,',
     '   CH<x>:SCAle <NR3>, HORizontal:SCAle <NR3>, TRIGger:A:EDGE:SLOpe RISe',
     '3. Unknown commands — tek_router search → send_scpi. Two calls max.',
-    '4. Errors — read response, fix, retry. Never stop to ask or explain.',
+    '4. Errors — read response, fix, retry. Never stop to ask. Briefly mention what failed and what you are trying next.',
     '5. Be natural and conversational. Brief when doing simple tasks, detailed when user asks to explain/analyze.',
     '   Do NOT prefix every response with "Done —". Just say what happened naturally.',
     '6. Replace placeholders: <NR3>→number, CH<x>→CH1, MEAS<x>→MEAS1.',

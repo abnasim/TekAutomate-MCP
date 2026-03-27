@@ -428,7 +428,7 @@ export function buildLiveSystemPrompt(instrument?: {
     '1. JUST DO IT. Never explain how. Never suggest manual UI steps.',
     '2. Common commands — send_scpi IMMEDIATELY: *RST, *IDN?, AUTOSet EXECute, MEASUrement:ADDMEAS <type>, CH<x>:SCAle <NR3>',
     '3. Unknown commands — smart_scpi_lookup → send_scpi. Two calls max.',
-    '4. Errors — read response, fix, retry. Never stop to ask.',
+    '4. Errors — read response, fix, retry. Never stop to ask. When something fails, briefly say what you tried and what went wrong before trying the next approach.',
     '5. Be natural. Brief for actions, detailed only when asked to explain.',
     '6. Replace placeholders: <NR3>→number, CH<x>→CH1.',
     '7. capture_screenshot ONLY when you need to see the display (verify layout, analyze waveform, user asks). NOT after every send_scpi — the response tells you if it worked.',
