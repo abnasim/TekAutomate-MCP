@@ -83,7 +83,17 @@ export class ToolSearchEngine {
     const intentGroups = intent.groups;
     const intentGroupSet = new Set(intentGroups.map(g => g.toLowerCase()));
 
-    const triggerHits = this.registry.lookupByTrigger(normalizedQuery);
+    // Check triggers: exact full query match, then individual words
+    let triggerHits = this.registry.lookupByTrigger(normalizedQuery);
+    if (triggerHits.length === 0) {
+      const words = normalizedQuery.split(/\s+/).filter((w) => w.length >= 3);
+      const seen = new Set<string>();
+      for (const word of words) {
+        for (const tool of this.registry.lookupByTrigger(word)) {
+          if (!seen.has(tool.id)) { seen.add(tool.id); triggerHits.push(tool); }
+        }
+      }
+    }
     const filteredTriggerHits = categoryFilter
       ? triggerHits.filter((tool) => categoryFilter.has(tool.category))
       : triggerHits;
