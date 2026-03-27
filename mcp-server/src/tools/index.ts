@@ -571,7 +571,7 @@ export function getToolDefinitions() {
     },
     {
       name: 'capture_screenshot',
-      description: 'Capture a fresh scope screenshot via code_executor and return PNG image data. Requires liveMode=true. Use this when AI needs to see the current waveform or display state after an action. To target a different instrument, pass its VISA resource string as visaResource.',
+      description: 'Capture a fresh scope screenshot. The image always updates the user\'s UI. Pass analyze:true ONLY when you need to see and analyze the image yourself (e.g. diagnosing errors, reading measurements). Default: capture only (no image returned to you, saves tokens).',
       parameters: {
         type: 'object',
         properties: {
@@ -583,6 +583,7 @@ export function getToolDefinitions() {
           scopeType: { type: 'string', enum: ['modern', 'legacy'] },
           modelFamily: { type: 'string' },
           deviceDriver: { type: 'string' },
+          analyze: { type: 'boolean', description: 'Set true to receive the image for AI analysis. Default false (capture only, updates UI).' },
         },
         required: [],
         additionalProperties: false,

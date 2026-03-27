@@ -225,21 +225,30 @@ async function runAnthropicLoop(params: LiveToolLoopParams): Promise<LiveToolLoo
         const hasImage = imageData && typeof imageData.base64 === 'string' && typeof imageData.mimeType === 'string';
 
         if (hasImage) {
-          toolResults.push({
-            type: 'tool_result',
-            tool_use_id: toolId,
-            content: [
-              {
-                type: 'image',
-                source: {
-                  type: 'base64',
-                  media_type: imageData.mimeType,
-                  data: imageData.base64,
+          const wantsAnalysis = toolArgs.analyze === true;
+          if (wantsAnalysis) {
+            toolResults.push({
+              type: 'tool_result',
+              tool_use_id: toolId,
+              content: [
+                {
+                  type: 'image',
+                  source: {
+                    type: 'base64',
+                    media_type: imageData.mimeType,
+                    data: imageData.base64,
+                  },
                 },
-              },
-              { type: 'text', text: 'Screenshot captured.' },
-            ],
-          });
+                { type: 'text', text: 'Screenshot captured. Analyze the display.' },
+              ],
+            });
+          } else {
+            toolResults.push({
+              type: 'tool_result',
+              tool_use_id: toolId,
+              content: 'Screenshot captured and displayed to user.',
+            });
+          }
         } else {
           // Strip verbose fields the AI doesn't need — keep token count low
           let lean = result;
@@ -353,18 +362,21 @@ async function runOpenAiLoop(params: LiveToolLoopParams): Promise<LiveToolLoopRe
         const resultObj = result && typeof result === 'object' ? result as Record<string, unknown> : null;
         const isScreenshot = resultObj && typeof resultObj.base64 === 'string';
         if (isScreenshot) {
-          const base64 = resultObj.base64 as string;
-          const mimeType = (resultObj.mimeType as string) || 'image/png';
-          // Tool result = text confirmation
-          messages.push({ role: 'tool', tool_call_id: toolId, content: 'Screenshot captured. See image below.' });
-          // User message with the actual image for OpenAI vision
-          messages.push({
-            role: 'user',
-            content: [
-              { type: 'text', text: 'Here is the current scope display. Describe what you see briefly.' },
-              { type: 'image_url', image_url: { url: `data:${mimeType};base64,${base64}` } },
-            ],
-          });
+          const wantsAnalysis = toolArgs.analyze === true;
+          if (wantsAnalysis) {
+            const base64 = resultObj.base64 as string;
+            const mimeType = (resultObj.mimeType as string) || 'image/png';
+            messages.push({ role: 'tool', tool_call_id: toolId, content: 'Screenshot captured. See image below.' });
+            messages.push({
+              role: 'user',
+              content: [
+                { type: 'text', text: 'Here is the current scope display. Describe what you see briefly.' },
+                { type: 'image_url', image_url: { url: `data:${mimeType};base64,${base64}` } },
+              ],
+            });
+          } else {
+            messages.push({ role: 'tool', tool_call_id: toolId, content: 'Screenshot captured and displayed to user.' });
+          }
         } else {
           // Strip verbose fields to keep token count low
           let lean = result;
@@ -428,7 +440,7 @@ export function buildLiveSystemPrompt(instrument?: {
     '',
     '## Tools',
     '- **send_scpi** — {commands:["CMD1","CMD2?"]} → [{command, response, ok, error}]',
-    '- **capture_screenshot** — Capture scope display as image you can see and analyze. Use your judgement on when to call it.',
+    '- **capture_screenshot** — Capture scope display. Default: updates user UI only (no image returned). Pass analyze:true to receive image for analysis.',
     '- **get_instrument_state** — *IDN?/*ESR?/ALLEV?',
     '- **smart_scpi_lookup** — Natural language SCPI search.',
     '- **search_scpi** — Keyword search.',
@@ -443,13 +455,12 @@ export function buildLiveSystemPrompt(instrument?: {
     '5. Errors — read response, fix, retry. Briefly say what failed before trying next.',
     '6. Be natural. Brief for actions, detailed only when asked to explain.',
     '7. Replace placeholders: <NR3>→number, CH<x>→CH1.',
-    '8. capture_screenshot — ALWAYS take a screenshot in these situations:',
-    '   - ALWAYS after adding a measurement (MEASUrement:ADDMEAS) — capture to show the new measurement on screen',
-    '   - ALWAYS after adding or modifying a results table — capture to show the updated table',
-    '   - ALWAYS after send_scpi errors — capture to see the scope state and diagnose',
-    '   - After changing scale, offset, trigger, timebase — capture to verify the change',
-    '   - When user asks to analyze, inspect, or look at the display',
-    '   This is MANDATORY, not optional. You CAN see the image. Describe what you observe briefly.',
+    '8. capture_screenshot — ALWAYS capture after these (updates user UI):',
+    '   - After adding a measurement (ADDMEAS), results table, or loading a session',
+    '   - After changing scale, offset, trigger, timebase, or any visual setting',
+    '   - After send_scpi errors',
+    '   Default: just call capture_screenshot (no analyze). Image updates on user screen but is NOT sent back to you — saves tokens.',
+    '   Pass analyze:true ONLY when you need to read/diagnose the display (errors, verifying measurement values, user asks to look).',
     '9. AUTONOMOUS EXPLORATION: Only when user gives an open-ended goal ("find a way to...", "figure out..."). Search, try, read errors, adjust. Keep going until achieved.',
   ];
   if (instrument) {

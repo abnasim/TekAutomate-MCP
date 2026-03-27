@@ -7015,23 +7015,28 @@ async function runOpenAiToolLoop(
           totalLiveToolMs += Date.now() - toolStart;
           totalLiveToolCalls += 1;
 
-          // Handle screenshot results: extract image for OpenAI vision, don't stringify base64
+          // Handle screenshot results: extract image for UI, only send to AI if analyze=true
           const imageData = extractImageFromToolResult(result);
           if (imageData) {
-            const textSummary = buildImageToolResultSummary(result);
-            console.log(`[MCP] OpenAI live tool result for ${toolName}: screenshot (${imageData.mimeType}, ${imageData.base64.length} b64 chars)`);
-            // Collect for UI update
+            const wantsAnalysis = toolArgs.analyze === true;
+            console.log(`[MCP] OpenAI live screenshot: ${imageData.base64.length} b64 chars, analyze=${wantsAnalysis}`);
+            // Always collect for UI update
             liveScreenshots.push({ base64: imageData.base64, mimeType: imageData.mimeType, capturedAt: new Date().toISOString() });
-            // OpenAI can't receive images in tool results — send text summary as tool result
-            liveMessages.push({ role: 'tool', tool_call_id: toolId, content: textSummary });
-            // Then inject the image as a user message so OpenAI vision can see it
-            liveMessages.push({
-              role: 'user',
-              content: [
-                { type: 'text', text: 'Here is the screenshot you just captured. Describe what you see on the scope display.' },
-                { type: 'image_url', image_url: { url: `data:${imageData.mimeType};base64,${imageData.base64}` } },
-              ],
-            });
+            if (wantsAnalysis) {
+              // AI wants to see the image — inject it
+              const textSummary = buildImageToolResultSummary(result);
+              liveMessages.push({ role: 'tool', tool_call_id: toolId, content: textSummary });
+              liveMessages.push({
+                role: 'user',
+                content: [
+                  { type: 'text', text: 'Here is the screenshot you just captured. Describe what you see on the scope display.' },
+                  { type: 'image_url', image_url: { url: `data:${imageData.mimeType};base64,${imageData.base64}` } },
+                ],
+              });
+            } else {
+              // Capture-only — don't waste tokens sending image back
+              liveMessages.push({ role: 'tool', tool_call_id: toolId, content: 'Screenshot captured and displayed to user.' });
+            }
           } else {
             const resultStr = typeof result === 'string' ? result : JSON.stringify(result);
             const truncated = resultStr.length > 8000 ? resultStr.slice(0, 8000) + '\n...(truncated)' : resultStr;
@@ -7405,25 +7410,36 @@ async function runAnthropicToolLoop(
         });
 
         if (imageData) {
-          // Build multimodal tool_result with image block so Claude can see the screenshot
-          const textSummary = buildImageToolResultSummary(result);
-          console.log(`[MCP] Anthropic tool result: image block (${imageData.mimeType}, ${imageData.base64.length} base64 chars)`);
+          const wantsAnalysis = toolArgs.analyze === true;
+          console.log(`[MCP] Anthropic screenshot: ${imageData.base64.length} b64 chars, analyze=${wantsAnalysis}`);
+          // Always collect for UI update
           anthScreenshots.push({ base64: imageData.base64, mimeType: imageData.mimeType, capturedAt: new Date().toISOString() });
-          toolResultBlocks.push({
-            type: 'tool_result',
-            tool_use_id: toolId,
-            content: [
-              {
-                type: 'image',
-                source: {
-                  type: 'base64',
-                  media_type: imageData.mimeType,
-                  data: imageData.base64,
+          if (wantsAnalysis) {
+            // AI wants to analyze — send image block
+            const textSummary = buildImageToolResultSummary(result);
+            toolResultBlocks.push({
+              type: 'tool_result',
+              tool_use_id: toolId,
+              content: [
+                {
+                  type: 'image',
+                  source: {
+                    type: 'base64',
+                    media_type: imageData.mimeType,
+                    data: imageData.base64,
+                  },
                 },
-              },
-              { type: 'text', text: textSummary },
-            ],
-          });
+                { type: 'text', text: textSummary },
+              ],
+            });
+          } else {
+            // Capture-only — don't waste tokens sending image back
+            toolResultBlocks.push({
+              type: 'tool_result',
+              tool_use_id: toolId,
+              content: 'Screenshot captured and displayed to user.',
+            });
+          }
         } else {
           // Only stringify non-image results (avoids serializing large base64 blobs)
           const resultStr = typeof result === 'string' ? result : JSON.stringify(result);
@@ -7527,7 +7543,7 @@ function buildLiveSystemPrompt(req: McpChatRequest, sessionContext?: string): st
     '',
     '## Tools (4 only)',
     '- **send_scpi** — {commands:["CMD1","CMD2?"]} → [{command, response, ok, error}]',
-    '- **capture_screenshot** — Capture scope display as image you can see and analyze. Use your judgement on when to call it.',
+    '- **capture_screenshot** — Capture scope display. Default: capture only (updates user UI, no image returned to you). Pass analyze:true ONLY when you need to see the image yourself (error diagnosis, reading measurements).',
     '- **get_instrument_state** — *IDN?/*ESR?/ALLEV?',
     '- **tek_router** — action:"search" returns SCPI commands + knowledge base results in ONE call. Also: "exec", "search_exec", "list", "create".',
     '',
@@ -7542,13 +7558,12 @@ function buildLiveSystemPrompt(req: McpChatRequest, sessionContext?: string): st
     '5. Be natural and conversational. Brief when doing simple tasks, detailed when user asks to explain/analyze.',
     '   Do NOT prefix every response with "Done —". Just say what happened naturally.',
     '6. Replace placeholders: <NR3>→number, CH<x>→CH1, MEAS<x>→MEAS1.',
-    '7. capture_screenshot — ALWAYS take a screenshot in these situations:',
-    '   - ALWAYS after adding a measurement (MEASUrement:ADDMEAS) — capture to show the new measurement on screen',
-    '   - ALWAYS after adding or modifying a results table — capture to show the updated table',
-    '   - ALWAYS after send_scpi errors — capture to see the scope state and diagnose',
-    '   - After changing scale, offset, trigger, timebase — capture to verify the change',
-    '   - When user asks to analyze, inspect, or look at the display',
-    '   This is MANDATORY, not optional. You CAN see the image. Describe what you observe briefly.',
+    '7. capture_screenshot — ALWAYS capture after these (updates user UI):',
+    '   - After adding a measurement (ADDMEAS), results table, or loading a session',
+    '   - After changing scale, offset, trigger, timebase, or any visual setting',
+    '   - After send_scpi errors',
+    '   Default: just call capture_screenshot (no analyze). Image updates on user screen but is NOT sent back to you — saves tokens.',
+    '   Pass analyze:true ONLY when you need to read/diagnose the display (errors, verifying measurement values, user asks to look).',
     '8. AUTONOMOUS EXPLORATION: When user says "find a way to..." or gives a goal — YOU figure it out. Search, try commands, read errors, try different approaches. Keep going until you achieve the goal. Do NOT stop after one failure.',
     '',
     '## Instrument',
