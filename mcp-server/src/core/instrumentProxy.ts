@@ -311,17 +311,22 @@ export async function sendScpiProxy(
   }
   const run = await runExecutorAction(endpoint, 'send_scpi', { commands, timeout_ms: timeoutMs }, Math.max(45, Math.ceil((timeoutMs * Math.max(commands.length, 1)) / 1000) + 5));
   if (!run.ok) {
+    // Include per-command responses so AI can see which specific commands failed
+    const failPayload = run.resultData && typeof run.resultData === 'object'
+      ? run.resultData as Record<string, unknown>
+      : {};
     return {
       ok: false,
       data: {
         commandsSent: commands,
+        ...failPayload,
         stdout: run.stdout.trim(),
         stderr: run.stderr.trim(),
         error: run.error || 'Executor returned ok=false',
         combinedOutput: run.combinedOutput,
       },
       sourceMeta: [],
-      warnings: ['send_scpi failed — check executor output above'],
+      warnings: ['send_scpi failed — check responses array for per-command errors'],
     };
   }
   const directPayload =
