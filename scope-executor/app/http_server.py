@@ -196,9 +196,10 @@ class _Handler(BaseHTTPRequestHandler):
             return
 
         action = data.get("action")
+        action_label = str(action or "unknown")
         if data.get("protocol_version") != PROTOCOL_VERSION or action not in {"run_python", "capture_screenshot", "send_scpi", "disconnect"}:
             self._json_response(400, {"ok": False, "error": "Bad request"})
-            self._emit("POST", "/run", 400, "bad protocol")
+            self._emit("POST", "/run", 400, f"bad protocol action={action_label}")
             return
 
         srv = self.server_thread
@@ -210,7 +211,7 @@ class _Handler(BaseHTTPRequestHandler):
         # but NOT for run_python (which handles its own connection in generated code)
         if not scope_visa and action in {"send_scpi", "capture_screenshot", "disconnect"}:
             self._json_response(400, {"ok": False, "error": "Missing scope_visa"})
-            self._emit("POST", "/run", 400, "missing scope_visa")
+            self._emit("POST", "/run", 400, f"missing scope_visa action={action_label}")
             return
 
         code = ""
@@ -222,7 +223,7 @@ class _Handler(BaseHTTPRequestHandler):
             code = data.get("code")
             if not code or not isinstance(code, str):
                 self._json_response(400, {"ok": False, "error": "Missing or invalid code"})
-                self._emit("POST", "/run", 400, "missing code")
+                self._emit("POST", "/run", 400, "missing code action=run_python")
                 return
         elif action == "capture_screenshot":
             scope_type = data.get("scope_type") if isinstance(data.get("scope_type"), str) else "modern"
@@ -233,11 +234,11 @@ class _Handler(BaseHTTPRequestHandler):
             timeout_ms = int(data.get("timeout_ms", 5000) or 5000)
             if not isinstance(commands, list) or not commands or not all(isinstance(cmd, str) for cmd in commands):
                 self._json_response(400, {"ok": False, "error": "Missing or invalid commands"})
-                self._emit("POST", "/run", 400, "missing commands")
+                self._emit("POST", "/run", 400, f"missing commands action={action_label} payload_keys={','.join(sorted(data.keys()))}")
                 return
             if len(commands) > 50:
                 self._json_response(400, {"ok": False, "error": "Maximum 50 commands per request"})
-                self._emit("POST", "/run", 400, "too many commands")
+                self._emit("POST", "/run", 400, f"too many commands action={action_label} count={len(commands)}")
                 return
             timeout_sec = min(max(timeout_sec, 15), ui_timeout)
 
@@ -282,11 +283,32 @@ class _Handler(BaseHTTPRequestHandler):
             )
 
             if result.get("ok"):
-                self._emit("POST", "/run", 200, f"OK ({elapsed:.1f}s)")
+                if action == "send_scpi":
+                    cmd_count = len(commands or [])
+                    preview = "; ".join((commands or [])[:2])
+                    if cmd_count > 2:
+                        preview += f" ... (+{cmd_count - 2} more)"
+                    self._emit("POST", "/run", 200, f"OK ({elapsed:.1f}s) action=send_scpi visa={scope_visa} cmds={cmd_count} [{preview}]")
+                elif action == "capture_screenshot":
+                    size_bytes = None
+                    if isinstance(result.get("result_data"), dict):
+                        size_bytes = result["result_data"].get("sizeBytes")
+                    size_text = f" size={size_bytes}B" if isinstance(size_bytes, int) else ""
+                    self._emit("POST", "/run", 200, f"OK ({elapsed:.1f}s) action=capture_screenshot visa={scope_visa} scope={scope_type}{size_text}")
+                elif action == "disconnect":
+                    self._emit("POST", "/run", 200, f"OK ({elapsed:.1f}s) action=disconnect visa={scope_visa}")
+                else:
+                    self._emit("POST", "/run", 200, f"OK ({elapsed:.1f}s) action=run_python visa={scope_visa or '-'}")
             else:
                 err_msg = result.get("error") or "unknown error"
                 stderr_full = (result.get("stderr") or "").strip()
-                self._emit("POST", "/run", 200, f"ERROR: {err_msg}")
+                if action == "send_scpi":
+                    preview = "; ".join((commands or [])[:2])
+                    self._emit("POST", "/run", 200, f"ERROR: {err_msg} action=send_scpi visa={scope_visa} [{preview}]")
+                elif action == "capture_screenshot":
+                    self._emit("POST", "/run", 200, f"ERROR: {err_msg} action=capture_screenshot visa={scope_visa} scope={scope_type}")
+                else:
+                    self._emit("POST", "/run", 200, f"ERROR: {err_msg} action={action_label} visa={scope_visa or '-'}")
                 if stderr_full and srv:
                     for line in stderr_full.splitlines():
                         srv.script_line.emit("stderr", line)

@@ -1530,6 +1530,7 @@ function AppInner() {
   const [liveModeError, setLiveModeError] = useState<string | null>(null);
   const [liveModeCapturing, setLiveModeCapturing] = useState(false);
   const [liveModeAutoRefresh, setLiveModeAutoRefresh] = useState(false);
+  const [liveModeInitialCaptureDone, setLiveModeInitialCaptureDone] = useState(false);
   const [connectedInstrumentIdn, setConnectedInstrumentIdn] = useState<string | null>(null);
   const [executorScannedInstruments, setExecutorScannedInstruments] = useState<Array<{
     resource: string;
@@ -6402,6 +6403,7 @@ if __name__ == "__main__":
         action: 'capture_screenshot',
         scope_visa: visaResource,
         scope_type: scopeType,
+        liveMode: true,
         timeout_sec: 90,
       });
       const { res } = await postToExecutor(body, 95000);
@@ -6559,10 +6561,18 @@ if __name__ == "__main__":
   }, []);
 
   useEffect(() => {
+    if (currentView !== 'execute' || executionSource !== 'live') {
+      setLiveModeInitialCaptureDone(false);
+      return;
+    }
+  }, [currentView, executionSource]);
+
+  useEffect(() => {
     if (currentView !== 'execute' || executionSource !== 'live') return;
-    if (!executorEndpoint || liveModeCapturing || liveModeCapture) return;
+    if (!executorEndpoint || liveModeCapturing || liveModeCapture || liveModeInitialCaptureDone) return;
+    setLiveModeInitialCaptureDone(true);
     void captureLiveScopeScreenshot('initial');
-  }, [captureLiveScopeScreenshot, currentView, executionSource, executorEndpoint, liveModeCapture, liveModeCapturing]);
+  }, [captureLiveScopeScreenshot, currentView, executionSource, executorEndpoint, liveModeCapture, liveModeCapturing, liveModeInitialCaptureDone]);
 
   useEffect(() => {
     if (currentView !== 'execute' || executionSource !== 'live' || !liveModeAutoRefresh) return;

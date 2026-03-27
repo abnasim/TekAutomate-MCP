@@ -23,6 +23,7 @@ CYAN     = "#00D4FF"
 class LogPanel(ttk.Frame):
     def __init__(self, parent=None):
         super().__init__(parent)
+        self._verbose = False
         self._build()
 
     def _build(self):
@@ -31,6 +32,9 @@ class LogPanel(ttk.Frame):
         hdr.pack(fill=tk.X, pady=(0, 8))
 
         ttk.Label(hdr, text="Activity Log", font=("Segoe UI", 16, "bold")).pack(side=tk.LEFT)
+
+        self._verbose_btn = ttk.Button(hdr, text="Verbose off", command=self.toggle_verbose)
+        self._verbose_btn.pack(side=tk.RIGHT, padx=(0, 8))
 
         clear_btn = ttk.Button(hdr, text="Clear", command=self.clear)
         clear_btn.pack(side=tk.RIGHT)
@@ -75,6 +79,8 @@ class LogPanel(ttk.Frame):
 
     def log_raw(self, stream: str, line: str):
         """Stream a live stdout/stderr line from the running script."""
+        if not self._verbose:
+            return
         tag = "stdout" if stream == "stdout" else "stderr"
         prefix = "  > " if stream == "stdout" else "  ! "
         self._log.configure(state=tk.NORMAL)
@@ -91,3 +97,13 @@ class LogPanel(ttk.Frame):
         self._log.configure(state=tk.NORMAL)
         self._log.delete("1.0", tk.END)
         self._log.configure(state=tk.DISABLED)
+
+    def toggle_verbose(self):
+        self._verbose = not self._verbose
+        self._verbose_btn.configure(text="Verbose on" if self._verbose else "Verbose off")
+        self.log(
+            "Verbose logging enabled: stdout/stderr and detailed request info will be shown."
+            if self._verbose
+            else "Verbose logging disabled: showing summary request lines only.",
+            "dim",
+        )

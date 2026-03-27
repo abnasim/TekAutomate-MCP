@@ -46,6 +46,9 @@ _null.close()
 _session_lock = threading.Lock()
 _resource_manager = None
 _scope_sessions: dict[str, object] = {}
+_capture_locks: dict[str, threading.Lock] = {}
+_recent_capture_results: dict[str, tuple[float, dict]] = {}
+_recent_capture_errors: dict[str, tuple[float, str]] = {}
 
 
 def _emit(obj: dict):
@@ -62,12 +65,38 @@ def _resource_manager_instance():
     return _resource_manager
 
 
+def _reset_resource_manager():
+    global _resource_manager
+    with _session_lock:
+        for visa, session in list(_scope_sessions.items()):
+            try:
+                session.close()
+            except Exception:
+                pass
+            _scope_sessions.pop(visa, None)
+        if _resource_manager is not None:
+            try:
+                _resource_manager.close()
+            except Exception:
+                pass
+            _resource_manager = None
+
+
+def _capture_lock_for(visa: str) -> threading.Lock:
+    with _session_lock:
+        lock = _capture_locks.get(visa)
+        if lock is None:
+            lock = threading.Lock()
+            _capture_locks[visa] = lock
+        return lock
+
+
 def _get_scope_session(visa: str):
     with _session_lock:
         session = _scope_sessions.get(visa)
         if session is not None:
             try:
-                _ = session.session  # probe validity
+                _ = session.session
                 return session
             except Exception:
                 try:
@@ -76,7 +105,14 @@ def _get_scope_session(visa: str):
                     pass
                 _scope_sessions.pop(visa, None)
         rm = _resource_manager_instance()
-        session = rm.open_resource(visa)
+        try:
+            session = rm.open_resource(visa)
+        except Exception:
+            # The cached ResourceManager itself can go stale after another job
+            # closes underlying VISA state. Rebuild it once and retry.
+            _reset_resource_manager()
+            rm = _resource_manager_instance()
+            session = rm.open_resource(visa)
         _scope_sessions[visa] = session
         return session
 
@@ -114,42 +150,61 @@ def _handle_capture_screenshot(job: dict) -> dict:
     scope_type = job.get("scope_type") or "modern"
     if not isinstance(visa, str) or not visa:
         raise RuntimeError("capture_screenshot requires visa")
-    try:
-        scpi = _get_scope_session(visa)
-    except Exception:
-        # Session might be stale — force reconnect
-        _reset_scope_session(visa)
-        scpi = _get_scope_session(visa)
-    scpi.timeout = 30000
-    scpi.write_termination = "\n"
-    scpi.read_termination = None
 
-    if scope_type == "legacy":
-        scpi.write('HARDCOPY:PORT FILE')
-        scpi.write('HARDCOPY:FORMAT PNG')
-        scpi.write('HARDCOPY:FILENAME "C:/TekScope/Temp/screenshot.png"')
-        scpi.write('HARDCOPY START')
-        time.sleep(1.0)
-        scpi.write('FILESYSTEM:READFILE "C:/TekScope/Temp/screenshot.png"')
-        data = scpi.read_raw()
-        scpi.write('FILESYSTEM:DELETE "C:/TekScope/Temp/screenshot.png"')
-    else:
-        scpi.write('SAVE:IMAGE "C:/Temp/screenshot.png"')
-        time.sleep(1.0)
-        scpi.write('FILESYSTEM:READFILE "C:/Temp/screenshot.png"')
-        data = scpi.read_raw()
-        scpi.write('FILESYSTEM:DELETE "C:/Temp/screenshot.png"')
+    lock = _capture_lock_for(visa)
+    with lock:
+        now = time.time()
+        recent = _recent_capture_results.get(visa)
+        if recent and now - recent[0] < 0.75:
+            return recent[1]
+        recent_error = _recent_capture_errors.get(visa)
+        if recent_error and now - recent_error[0] < 1.5:
+            raise RuntimeError(recent_error[1])
 
-    import base64
+        try:
+            try:
+                scpi = _get_scope_session(visa)
+            except Exception:
+                _reset_scope_session(visa)
+                _reset_resource_manager()
+                scpi = _get_scope_session(visa)
 
-    return {
-        "ok": True,
-        "scopeType": scope_type,
-        "mimeType": "image/png",
-        "sizeBytes": len(data),
-        "capturedAt": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
-        "base64": base64.b64encode(data).decode("ascii"),
-    }
+            scpi.timeout = 30000
+            scpi.write_termination = "\n"
+            scpi.read_termination = None
+
+            if scope_type == "legacy":
+                scpi.write('HARDCOPY:PORT FILE')
+                scpi.write('HARDCOPY:FORMAT PNG')
+                scpi.write('HARDCOPY:FILENAME "C:/TekScope/Temp/screenshot.png"')
+                scpi.write('HARDCOPY START')
+                time.sleep(1.0)
+                scpi.write('FILESYSTEM:READFILE "C:/TekScope/Temp/screenshot.png"')
+                data = scpi.read_raw()
+                scpi.write('FILESYSTEM:DELETE "C:/TekScope/Temp/screenshot.png"')
+            else:
+                scpi.write('SAVE:IMAGE "C:/Temp/screenshot.png"')
+                time.sleep(1.0)
+                scpi.write('FILESYSTEM:READFILE "C:/Temp/screenshot.png"')
+                data = scpi.read_raw()
+                scpi.write('FILESYSTEM:DELETE "C:/Temp/screenshot.png"')
+
+            import base64
+
+            result = {
+                "ok": True,
+                "scopeType": scope_type,
+                "mimeType": "image/png",
+                "sizeBytes": len(data),
+                "capturedAt": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
+                "base64": base64.b64encode(data).decode("ascii"),
+            }
+            _recent_capture_results[visa] = (time.time(), result)
+            _recent_capture_errors.pop(visa, None)
+            return result
+        except Exception as exc:
+            _recent_capture_errors[visa] = (time.time(), str(exc))
+            raise
 
 
 def _handle_send_scpi(job: dict) -> dict:
@@ -180,11 +235,11 @@ def _handle_send_scpi(job: dict) -> dict:
             else:
                 scpi.write(cmd)
         except Exception as exc:
-            # Session might be stale — try reconnecting once
             if not session_reset:
                 session_reset = True
                 try:
                     _reset_scope_session(visa)
+                    _reset_resource_manager()
                     scpi = _get_scope_session(visa)
                     scpi.timeout = timeout_ms
                     scpi.write_termination = "\n"
@@ -293,7 +348,6 @@ def _run_job(job: dict):
 
     try:
         if action == "disconnect":
-            # Explicitly close session for a VISA resource
             if visa:
                 _reset_scope_session(visa)
             _emit({"id": job_id, "done": True, "ok": True, "exit_code": 0, "error": None, "result_data": {"disconnected": visa}})
@@ -307,7 +361,6 @@ def _run_job(job: dict):
         if action == "send_scpi":
             result = _handle_send_scpi(job)
             _emit({"id": job_id, "done": True, "ok": bool(result.get("ok", False)), "exit_code": 0, "error": None, "result_data": result})
-            # Non-live mode: disconnect after each request to free VXI/TCPIP ports
             if not keep_alive and visa:
                 _reset_scope_session(visa)
             return
@@ -323,9 +376,9 @@ def _run_job(job: dict):
                 "result_data": None,
             }
         )
-        # On error, always clean up the session to prevent stale connections
         if visa:
             _reset_scope_session(visa)
+            _reset_resource_manager()
 
 
 def main():

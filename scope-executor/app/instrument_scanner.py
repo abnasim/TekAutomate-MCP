@@ -97,6 +97,18 @@ class InstrumentScanThread(threading.Thread):
 
         resources = [r for r in all_resources if not r.upper().startswith("ASRL")]
 
+        # TekScopePC/local VISA endpoints may be directly reachable even when
+        # list_resources() returns nothing. Probe a few common fallbacks too.
+        fallback_resources = [
+            "TCPIP::127.0.0.1::INSTR",
+            "TCPIP::localhost::INSTR",
+            "TCPIP::127.0.0.1::4000::SOCKET",
+            "TCPIP::127.0.0.1::5025::SOCKET",
+        ]
+        for res in fallback_resources:
+            if res not in resources:
+                resources.append(res)
+
         # Deduplicate: same host+type seen via multiple network interfaces.
         seen: set[str] = set()
         unique: list[str] = []
