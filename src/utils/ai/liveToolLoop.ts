@@ -349,12 +349,22 @@ async function runOpenAiLoop(params: LiveToolLoopParams): Promise<LiveToolLoopRe
         const result = await executeMcpTool(toolName, toolArgs, instrumentEndpoint, flowContext);
         onToolResult?.(toolName, result);
         toolCallLog.push({ tool: toolName, args: toolArgs, result });
-        // Screenshots: don't send base64 to AI — just confirm it was captured
+        // Screenshots: send image to AI so it can see the scope display
         const resultObj = result && typeof result === 'object' ? result as Record<string, unknown> : null;
         const isScreenshot = resultObj && typeof resultObj.base64 === 'string';
         if (isScreenshot) {
-          const sizeKB = Math.round((resultObj.base64 as string).length * 0.75 / 1024);
-          messages.push({ role: 'tool', tool_call_id: toolId, content: `Screenshot captured (${sizeKB} KB). The live UI panel has been updated with the latest scope display.` });
+          const base64 = resultObj.base64 as string;
+          const mimeType = (resultObj.mimeType as string) || 'image/png';
+          // Tool result = text confirmation
+          messages.push({ role: 'tool', tool_call_id: toolId, content: 'Screenshot captured. See image below.' });
+          // User message with the actual image for OpenAI vision
+          messages.push({
+            role: 'user',
+            content: [
+              { type: 'text', text: 'Here is the current scope display. Describe what you see briefly.' },
+              { type: 'image_url', image_url: { url: `data:${mimeType};base64,${base64}` } },
+            ],
+          });
         } else {
           // Strip verbose fields to keep token count low
           let lean = result;
@@ -418,7 +428,7 @@ export function buildLiveSystemPrompt(instrument?: {
     '',
     '## Tools',
     '- **send_scpi** — {commands:["CMD1","CMD2?"]} → [{command, response, ok, error}]',
-    '- **capture_screenshot** — Capture display. ONLY call when you need to visually verify something or user asks to see the scope. Do NOT call after every command — send_scpi responses already tell you if commands succeeded.',
+    '- **capture_screenshot** — Capture scope display as image you can see and analyze. Use your judgement on when to call it.',
     '- **get_instrument_state** — *IDN?/*ESR?/ALLEV?',
     '- **smart_scpi_lookup** — Natural language SCPI search.',
     '- **search_scpi** — Keyword search.',
@@ -432,7 +442,7 @@ export function buildLiveSystemPrompt(instrument?: {
     '4. Errors — read response, fix, retry. Never stop to ask. When something fails, briefly say what you tried and what went wrong before trying the next approach.',
     '5. Be natural. Brief for actions, detailed only when asked to explain.',
     '6. Replace placeholders: <NR3>→number, CH<x>→CH1.',
-    '7. capture_screenshot ONLY when you need to see the display (verify layout, analyze waveform, user asks). NOT after every send_scpi — the response tells you if it worked.',
+    '7. Use your judgement on when to capture_screenshot. You can see the image.',
     '8. AUTONOMOUS EXPLORATION: When user says "find a way to..." or "figure out how to..." or gives a goal without a specific command — YOU figure it out. Search commands, try them, read errors, try different approaches. Keep going until you achieve the goal or exhaust options. Do NOT stop after one failed attempt.',
   ];
   if (instrument) {
