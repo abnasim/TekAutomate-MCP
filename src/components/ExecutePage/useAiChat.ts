@@ -909,7 +909,7 @@ export function useAiChat(params: {
         instrumentEndpoint: params.instrumentEndpoint
           ? {
               ...params.instrumentEndpoint,
-              liveMode: effectiveTekMode === 'live' || params.instrumentEndpoint.liveMode === true,
+              liveMode: params.instrumentEndpoint.liveMode === true,
               outputMode: params.instrumentOutputMode || 'verbose',
             }
           : undefined,
