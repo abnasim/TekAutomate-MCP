@@ -1,6 +1,6 @@
 import type { CommandRecord } from './commandIndex';
 import type { MicroTool } from './toolRegistry';
-import { suggestCommandGroups } from './commandGroups';
+import { suggestCommandGroups, GROUP_COMMANDS } from './commandGroups';
 
 export interface IntentResult {
   groups: string[];        // Canonical group names from commandGroups.json
@@ -41,6 +41,40 @@ const SUBJECT_GROUP_MAP: Array<{
   intent: string;
   subject: string;
 }> = [
+  // ── IEEE 488.2 common commands (MUST be first — short words like "clear" collide with other groups) ──
+  { pattern: /\b(reset|rst|\*rst)\b.*\b(scope|instrument|device|factory)\b/i, groups: ['Miscellaneous', 'Status and Error'], intent: 'misc', subject: 'reset' },
+  { pattern: /\b(scope|instrument|device)\b.*\b(reset|rst|\*rst)\b/i, groups: ['Miscellaneous', 'Status and Error'], intent: 'misc', subject: 'reset' },
+  { pattern: /\b(identify|identification)\b.*\b(scope|instrument|device)\b/i, groups: ['Miscellaneous', 'Status and Error'], intent: 'misc', subject: 'identify' },
+  { pattern: /\b(scope|instrument|device)\b.*\b(identify|identification)\b/i, groups: ['Miscellaneous', 'Status and Error'], intent: 'misc', subject: 'identify' },
+  { pattern: /\bclear\s*status\b/i, groups: ['Status and Error'], intent: 'status', subject: 'cls' },
+  { pattern: /\boperation\s*complete\b/i, groups: ['Status and Error', 'Miscellaneous'], intent: 'status', subject: 'opc' },
+  { pattern: /\bself\s*test\b/i, groups: ['Miscellaneous'], intent: 'misc', subject: 'tst' },
+  { pattern: /\bevent\s*status\s*register\b/i, groups: ['Status and Error'], intent: 'status', subject: 'esr' },
+
+  // ── Trigger source/channel patterns (before generic channel match) ──
+  { pattern: /\btrigger\b.*\bsource\b/i, groups: ['Trigger'], intent: 'trigger', subject: 'trigger_source' },
+  { pattern: /\bsource\b.*\btrigger\b/i, groups: ['Trigger'], intent: 'trigger', subject: 'trigger_source' },
+
+  // ── Power measurement (before generic measurement) ──
+  { pattern: /\bpower\s*measurement\b/i, groups: ['Power'], intent: 'power', subject: 'power' },
+
+  // ── Measurement statistics ──
+  { pattern: /\b(statistics|stats)\b/i, groups: ['Measurement'], intent: 'measurement', subject: 'statistics' },
+
+  // ── Probe attenuation (before generic channel and probe) ──
+  { pattern: /\bprobe\s*attenuation\b/i, groups: ['Vertical'], intent: 'vertical', subject: 'probe_atten' },
+  { pattern: /\bchannel\b.*\bprobe\b/i, groups: ['Vertical'], intent: 'vertical', subject: 'probe' },
+
+  // ── Recall session (before generic recall/save) ──
+  { pattern: /\brecall\s*session\b/i, groups: ['Save and Recall', 'File System'], intent: 'save', subject: 'recall_session' },
+
+  // ── Measurement source (before generic measurement) ──
+  { pattern: /\bmeasurement\s*source\b/i, groups: ['Measurement'], intent: 'measurement', subject: 'measurement_source' },
+  { pattern: /\bsource\b.*\bmeasurement\b/i, groups: ['Measurement'], intent: 'measurement', subject: 'measurement_source' },
+
+  // ── Sample rate (before generic acquisition) ──
+  { pattern: /\bsample\s*rate\b/i, groups: ['Acquisition', 'Horizontal'], intent: 'acquisition', subject: 'sample_rate' },
+
   // ── Bus protocols (most specific first) ──
   { pattern: /\bi2c\b/i, groups: ['Bus', 'Trigger'], intent: 'bus', subject: 'i2c' },
   { pattern: /\bspi\b/i, groups: ['Bus', 'Trigger'], intent: 'bus', subject: 'spi' },
@@ -129,6 +163,7 @@ const SUBJECT_GROUP_MAP: Array<{
   { pattern: /\b(ch\d|channel\s*\d)\b/i, groups: ['Vertical'], intent: 'vertical', subject: 'channel' },
   { pattern: /\b(probe|attenuation|atten)\b/i, groups: ['Vertical'], intent: 'vertical', subject: 'probe' },
   { pattern: /\b(bandwidth|bw)\b/i, groups: ['Vertical'], intent: 'vertical', subject: 'bandwidth' },
+  { pattern: /\bhorizontal\s*scale\b/i, groups: ['Horizontal'], intent: 'horizontal', subject: 'horizontal_scale' },
   { pattern: /\b(scale)\b(?!.*\b(time|horiz))/i, groups: ['Vertical', 'Horizontal'], intent: 'vertical', subject: 'scale' },
   { pattern: /\b(label|name\s*channel)\b/i, groups: ['Vertical'], intent: 'vertical', subject: 'label' },
   { pattern: /\b(deskew)\b/i, groups: ['Vertical'], intent: 'vertical', subject: 'deskew' },
@@ -353,8 +388,20 @@ export function filterCommandsByGroups(
 ): CommandRecord[] {
   if (!groups.length) return commands; // no filter = search all
   const groupSet = new Set(groups.map(g => g.toLowerCase()));
+
+  // Build a set of headers that commandGroups.json lists under the requested groups.
+  // This catches commands whose record.group differs from the curated group list
+  // (e.g. MEASUrement:MEAS<x>:SOURCE is in IMDA in the data but listed under Measurement in commandGroups.json).
+  const curatedHeaders = new Set<string>();
+  for (const g of groups) {
+    const cmds = GROUP_COMMANDS[g];
+    if (cmds) {
+      for (const h of cmds) curatedHeaders.add(h);
+    }
+  }
+
   return commands.filter(cmd =>
-    groupSet.has(cmd.group.toLowerCase())
+    groupSet.has(cmd.group.toLowerCase()) || curatedHeaders.has(cmd.header)
   );
 }
 
