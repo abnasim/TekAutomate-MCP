@@ -753,7 +753,14 @@ export function useAiChat(params: {
       // API key stays in browser, never passes through MCP server.
       // Uses anthropic-dangerous-direct-browser-access header for Anthropic CORS.
       if (effectiveTekMode === 'live') {
-        const liveTools = await fetchLiveTools();
+        const allTools = await fetchLiveTools();
+        // Only expose the tools AI needs — keeps token count low
+        const liveToolNames = new Set([
+          'send_scpi', 'capture_screenshot', 'get_instrument_state', 'get_visa_resources',
+          'smart_scpi_lookup', 'search_scpi', 'get_command_by_header',
+          'retrieve_rag_chunks', 'tek_router',
+        ]);
+        const liveTools = allTools.filter((t) => liveToolNames.has(t.name));
         const executorUrl = params.instrumentEndpoint?.executorUrl || '';
         const visaResource = params.instrumentEndpoint?.visaResource || '';
         const backend = params.instrumentEndpoint?.backend || 'pyvisa';
@@ -786,6 +793,27 @@ export function useAiChat(params: {
         }
         finalText = result.text || '';
         if (finalText) dispatch({ type: 'STREAM_CHUNK', chunk: finalText });
+
+        // Extract screenshot from tool calls and update live UI
+        if (params.onLiveScreenshot && result.toolCalls.length > 0) {
+          const screenshotCall = [...result.toolCalls].reverse().find(
+            (tc) => tc.tool === 'capture_screenshot' && tc.result && typeof tc.result === 'object'
+          );
+          if (screenshotCall) {
+            const r = screenshotCall.result as Record<string, unknown>;
+            const base64 = r.base64 as string | undefined;
+            const mimeType = (r.mimeType as string) || 'image/png';
+            if (base64 && base64.length > 100) {
+              params.onLiveScreenshot({
+                dataUrl: `data:${mimeType};base64,${base64}`,
+                mimeType,
+                sizeBytes: Math.round(base64.length * 0.75),
+                capturedAt: (r.capturedAt as string) || new Date().toISOString(),
+              });
+            }
+          }
+        }
+
         dispatch({ type: 'STREAM_DONE' });
         return;
       }
