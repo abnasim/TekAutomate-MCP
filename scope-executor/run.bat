@@ -8,23 +8,21 @@ echo   Tek Automate Executor - Launcher
 echo ============================================
 echo.
 
-:: ── If .venv exists, verify it is Python 3.10+ ─────────────────
+:: If .venv exists, verify it is Python 3.10+
 if exist ".venv\Scripts\python.exe" (
     ".venv\Scripts\python.exe" -c "import sys;exit(0 if sys.version_info>=(3,10) else 1)" >nul 2>&1 && (
         echo [OK] .venv found (Python 3.10+)
         goto :check_packages
     )
-    echo [WARN] .venv is broken or Python 2.x — rebuilding...
+    echo [WARN] .venv is broken or too old - rebuilding...
     rmdir /s /q .venv >nul 2>&1
 )
 
-:: ==================================================================
-:: .venv does not exist — create it.
+:: .venv does not exist - create it.
 :: Priority: bundled python311 first, then system Python as fallback.
 :: Everything runs inside .venv. System Python is never modified.
-:: ==================================================================
 
-:: ── Method 1: Bundled Python 3.11 (shipped with app — always correct)
+:: Method 1: Bundled Python 3.11
 if exist "python311\python.exe" (
     echo [OK] Using bundled Python 3.11
     echo [SETUP] Creating .venv...
@@ -35,10 +33,9 @@ if exist "python311\python.exe" (
     echo [WARN] Bundled virtualenv failed, trying system Python...
 )
 
-:: ── Method 2: System Python (fallback if python311 folder missing) ──
+:: Method 2: System Python fallback
 set "PY="
 
-:: py launcher (version-specific)
 where py >nul 2>&1 && (
     for /f "tokens=*" %%i in ('py -3.11 -c "import sys; print(sys.executable)" 2^>nul') do set "PY=%%i"
 )
@@ -54,7 +51,6 @@ where py >nul 2>&1 && (
 )
 if defined PY goto :create_venv_system
 
-:: Common install locations (known 3.x paths — checked before generic PATH)
 if exist "C:\Python311\python.exe" set "PY=C:\Python311\python.exe" & goto :create_venv_system
 if exist "C:\Python312\python.exe" set "PY=C:\Python312\python.exe" & goto :create_venv_system
 if exist "C:\Python310\python.exe" set "PY=C:\Python310\python.exe" & goto :create_venv_system
@@ -70,7 +66,6 @@ echo.
 pause
 exit /b 1
 
-:: ── Create .venv with system Python (has venv module) ────────────
 :create_venv_system
 echo [OK] System Python: %PY%
 echo [SETUP] Creating .venv...
@@ -85,7 +80,6 @@ echo [SETUP] Creating .venv...
 echo [OK] .venv created
 
 :check_packages
-:: ── Install packages into .venv if marker missing ────────────────
 if not exist ".venv\.packages_installed" (
     echo [SETUP] Installing packages into .venv...
     if exist "offline_wheels" (
@@ -107,11 +101,23 @@ if not exist ".venv\.packages_installed" (
 echo.
 
 :launch
-:: ── Launch (everything runs from .venv) ──────────────────────────
+if exist ".venv\Scripts\pythonw.exe" (
+    echo [OK] Launching executor from source (.venv)...
+    start "" ".venv\Scripts\pythonw.exe" executor.py
+    goto :eof
+)
+
+if exist ".venv\Scripts\python.exe" (
+    echo [OK] Launching executor from source (.venv)...
+    start "" ".venv\Scripts\python.exe" executor.py
+    goto :eof
+)
+
 if exist "dist\TekAutomateExecutor.exe" (
-    echo Starting Tek Automate Executor...
+    echo [WARN] .venv launcher missing, falling back to packaged EXE...
     start "" "dist\TekAutomateExecutor.exe"
 ) else (
-    echo [INFO] EXE not found, running from source...
-    ".venv\Scripts\python.exe" executor.py
+    echo [ERROR] No runnable executor found.
+    pause
+    exit /b 1
 )

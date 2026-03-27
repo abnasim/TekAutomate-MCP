@@ -7,6 +7,8 @@ import os
 import tkinter as tk
 from tkinter import ttk
 import threading
+import urllib.request
+import json
 
 from app.http_server import HTTPServerThread
 from app.instrument_scanner import InstrumentScanThread
@@ -25,6 +27,8 @@ class MainWindow:
         self._really_quit = False
         self._scan_thread: InstrumentScanThread | None = None
         self._server: HTTPServerThread | None = None
+        self._server_ready = False
+        self._startup_probe_attempts = 0
 
         self._build()
         self._init_tray()
@@ -75,6 +79,8 @@ class MainWindow:
     def _start_server(self):
         host = self.conn_panel.get_host()
         port = self.conn_panel.get_port()
+        self._server_ready = False
+        self.conn_panel.set_status("starting")
         self._server = HTTPServerThread(host, port)
         self._server.get_timeout = self.conn_panel.get_timeout
         self._server.server_started.connect(self._on_started)
@@ -84,14 +90,18 @@ class MainWindow:
         self._server.client_seen.connect(self.conn_panel.on_client_seen)
         self._server.script_line.connect(self._on_script_line)
         self._server.start()
+        self._startup_probe_attempts = 0
+        self.root.after(500, self._verify_server_started)
 
     def _on_started(self, host, port):
+        self._server_ready = True
         self._status_var.set(f"Server running on 0.0.0.0:{port}")
         self.conn_panel.set_status("ready")
         self.tray.set_status("ready", host, port)
         self.log_panel.log(f"Server started on {host}:{port}", "success")
 
     def _on_error(self, msg):
+        self._server_ready = False
         self._status_var.set(f"Server error: {msg}")
         self.conn_panel.set_status("error")
         self.tray.set_status("error")
@@ -106,6 +116,28 @@ class MainWindow:
 
     def _on_script_line(self, stream: str, line: str):
         self.log_panel.log_raw(stream, line)
+
+    def _verify_server_started(self):
+        if self._server_ready or self._really_quit or not self._server:
+            return
+        self._startup_probe_attempts += 1
+        host = self.conn_panel.get_host() or "127.0.0.1"
+        port = self.conn_panel.get_port()
+        url = f"http://127.0.0.1:{port}/health"
+        try:
+            with urllib.request.urlopen(url, timeout=1.5) as resp:
+                payload = json.loads(resp.read().decode("utf-8"))
+                if payload.get("status") == "ok":
+                    self._on_started(host, port)
+                    return
+        except Exception:
+            pass
+
+        if self._startup_probe_attempts >= 20:
+            if not self._server_ready:
+                self._on_error("Server did not become healthy within 10 seconds")
+            return
+        self.root.after(500, self._verify_server_started)
 
     def _run_scan(self):
         if self._scan_thread and self._scan_thread.is_alive():
