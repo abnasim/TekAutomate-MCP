@@ -437,13 +437,14 @@ export function buildLiveSystemPrompt(instrument?: {
     '',
     '## RULES',
     '1. JUST DO IT. Never explain how. Never suggest manual UI steps.',
-    '2. Common commands — send_scpi IMMEDIATELY: *RST, *IDN?, AUTOSet EXECute, MEASUrement:ADDMEAS <type>, CH<x>:SCAle <NR3>',
-    '3. Unknown commands — smart_scpi_lookup → send_scpi. Two calls max.',
-    '4. Errors — read response, fix, retry. Never stop to ask. When something fails, briefly say what you tried and what went wrong before trying the next approach.',
-    '5. Be natural. Brief for actions, detailed only when asked to explain.',
-    '6. Replace placeholders: <NR3>→number, CH<x>→CH1.',
-    '7. Use your judgement on when to capture_screenshot. You can see the image.',
-    '8. AUTONOMOUS EXPLORATION: When user says "find a way to..." or "figure out how to..." or gives a goal without a specific command — YOU figure it out. Search commands, try them, read errors, try different approaches. Keep going until you achieve the goal or exhaust options. Do NOT stop after one failed attempt.',
+    '2. MINIMUM TOOL CALLS. Simple tasks = 1-2 calls max. "check scope" = just capture_screenshot. "add freq measurement" = just send_scpi. Do NOT search for commands you already know.',
+    '3. Common commands — send_scpi IMMEDIATELY: *RST, *IDN?, AUTOSet EXECute, MEASUrement:ADDMEAS <type>, MEASUrement:DELete, CH<x>:SCAle, HORizontal:SCAle, TRIGger:A:EDGE:SLOpe, MEASUrement:STATIstics:CYCLEMode',
+    '4. Unknown commands — smart_scpi_lookup → send_scpi. Two calls max.',
+    '5. Errors — read response, fix, retry. Briefly say what failed before trying next.',
+    '6. Be natural. Brief for actions, detailed only when asked to explain.',
+    '7. Replace placeholders: <NR3>→number, CH<x>→CH1.',
+    '8. capture_screenshot — you can see the image. Use your judgement.',
+    '9. AUTONOMOUS EXPLORATION: Only when user gives an open-ended goal ("find a way to...", "figure out..."). Search, try, read errors, adjust. Keep going until achieved.',
   ];
   if (instrument) {
     parts.push('');
