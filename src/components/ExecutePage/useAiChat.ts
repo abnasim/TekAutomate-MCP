@@ -776,14 +776,14 @@ export function useAiChat(params: {
           model: state.model,
           systemPrompt,
           userMessage: effectiveMessage,
-          history: state.history.slice(-1).map((h) => ({
+          history: state.history.slice(-2).map((h) => ({
             role: h.role,
-            content: String(h.content || '').slice(0, 500),
+            content: String(h.content || '').slice(0, 1000),
           })),
           tools: liveTools,
           instrumentEndpoint: params.instrumentEndpoint ?? undefined,
           flowContext: { modelFamily, deviceDriver },
-          maxIterations: 8,
+          maxIterations: 12,
         });
 
         if (result.error) {
