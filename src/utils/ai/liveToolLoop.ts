@@ -166,7 +166,7 @@ async function runAnthropicLoop(params: LiveToolLoopParams): Promise<LiveToolLoo
       body: JSON.stringify({
         model,
         system: systemPrompt,
-        max_tokens: 4096,
+        max_tokens: 1024,
         messages,
         tools: anthropicTools,
       }),
@@ -313,6 +313,7 @@ async function runOpenAiLoop(params: LiveToolLoopParams): Promise<LiveToolLoopRe
         model,
         messages,
         tools: openAiTools,
+        max_completion_tokens: 1024,
       }),
     });
 

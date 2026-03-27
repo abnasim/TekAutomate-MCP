@@ -783,7 +783,7 @@ export function useAiChat(params: {
           tools: liveTools,
           instrumentEndpoint: params.instrumentEndpoint ?? undefined,
           flowContext: { modelFamily, deviceDriver },
-          maxIterations: 15,
+          maxIterations: 8,
         });
 
         if (result.error) {
