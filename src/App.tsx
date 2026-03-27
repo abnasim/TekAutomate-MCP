@@ -8802,7 +8802,7 @@ Keep under 120 words. No headings. Bullets only. Stay on this command. Do not de
                                               <div className="bg-gray-50 dark:bg-zinc-700/50 rounded p-2">
                                                     <div className="flex items-center gap-1.5 mb-1">
                                                       <IconComponent size={14} className="text-gray-600 dark:text-zinc-400 flex-shrink-0" />
-                                                      <div className="font-semibold text-xs whitespace-nowrap text-gray-900 dark:text-zinc-100">{node.alias || 'Device'}</div>
+                                                      <div className="font-semibold text-xs whitespace-nowrap text-gray-900 dark:text-zinc-100">{node.modelFamily || node.alias || 'Device'}</div>
                                                       <span className={`inline-block px-1.5 py-0.5 rounded text-[10px] font-medium whitespace-nowrap flex-shrink-0 ${
                                                         node.backend === 'tm_devices' ? 'bg-orange-100 dark:bg-orange-950/50 text-orange-700 dark:text-orange-200' :
                                                         node.backend === 'tekhsi' ? 'bg-green-100 dark:bg-green-950/50 text-green-700 dark:text-green-200' :
@@ -9244,7 +9244,7 @@ Keep under 120 words. No headings. Bullets only. Stay on this command. Do not de
                                           {/* Name, Backend Tag, and Type - All on one line */}
                                           <div className="flex items-center gap-1.5 mb-1">
                                             <IconComponent size={14} className="text-gray-600 dark:text-zinc-400 flex-shrink-0" />
-                                            <div className="font-semibold text-xs whitespace-nowrap text-gray-900 dark:text-zinc-100">{node.alias || 'Device'}</div>
+                                            <div className="font-semibold text-xs whitespace-nowrap text-gray-900 dark:text-zinc-100">{node.modelFamily || node.alias || 'Device'}</div>
                                             <span className={`inline-block px-1.5 py-0.5 rounded text-[10px] font-medium whitespace-nowrap flex-shrink-0 ${
                                               node.backend === 'tm_devices' ? 'bg-orange-100 dark:bg-orange-950/50 text-orange-700 dark:text-orange-200' :
                                               node.backend === 'tekhsi' ? 'bg-green-100 dark:bg-green-950/50 text-green-700 dark:text-green-200' :
