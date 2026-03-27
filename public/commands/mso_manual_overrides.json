@@ -1292,5 +1292,99 @@
       "set": "SV:SPAN <NR3>",
       "query": "SV:SPAN?"
     }
+  },
+  {
+    "command": "MEASUrement:MEAS<x>:TYPe",
+    "header": "MEASUrement:MEAS<x>:TYPe",
+    "commandType": "query",
+    "commandGroup": "Measurement",
+    "group": "Measurement",
+    "description": "Returns the measurement type for the specified measurement slot. Use to identify what type of measurement (FREQUENCY, PERIOD, IMDAPOWERQUALITY, IMDAEFFICIENCY, JITTERSUMMARY, etc.) is configured in each slot.",
+    "shortDescription": "Query measurement type for a given measurement slot",
+    "instruments": { "families": ["MSO2", "MSO4", "MSO5", "MSO6", "MSO7"], "models": [], "exclusions": [] },
+    "arguments": [{ "name": "meas_number", "type": "mnemonic", "required": true, "position": 0, "description": "Measurement slot number.", "validValues": { "type": "mnemonic_range", "pattern": "MEAS<x>", "examples": ["MEAS1", "MEAS2", "MEAS3"] } }],
+    "syntax": { "query": "MEASUrement:MEAS<x>:TYPe?" },
+    "relatedCommands": ["MEASUrement:ADDMEAS", "MEASUrement:LIST?", "MEASUrement:MEAS<x>:RESUlts:CURRentacq:MEAN?"]
+  },
+  {
+    "command": "MEASUrement:LIST?",
+    "header": "MEASUrement:LIST?",
+    "commandType": "query",
+    "commandGroup": "Measurement",
+    "group": "Measurement",
+    "description": "Returns a comma-separated list of all active measurement slots (e.g. MEAS1,MEAS2,MEAS3). Use this to discover which measurements exist before reading results or adding new ones.",
+    "shortDescription": "Query list of all active measurement slots",
+    "instruments": { "families": ["MSO2", "MSO4", "MSO5", "MSO6", "MSO7"], "models": [], "exclusions": [] },
+    "arguments": [],
+    "syntax": { "query": "MEASUrement:LIST?" },
+    "relatedCommands": ["MEASUrement:ADDMEAS", "MEASUrement:DELete", "MEASUrement:MEAS<x>:TYPe"]
+  },
+  {
+    "command": "MEASUrement:MEAS<x>:IMDA:MEAS:TYPe",
+    "header": "MEASUrement:MEAS<x>:IMDA:MEAS:TYPe",
+    "commandType": "both",
+    "commandGroup": "Inverter Motors and Drive Analysis",
+    "group": "Inverter Motors and Drive Analysis",
+    "description": "Sets or queries the IMDA measurement type. IMDA types include: IMDAPOWERQUALITY (3-phase power quality with phasor diagram), IMDAEFFICIENCY (motor efficiency), IMDAHARMONICS (harmonic analysis), IMDATORQUE (torque measurement), IMDASPEED (speed measurement), IMDASYSEFF (system efficiency), IMDAANGLE (angle), IMDADIRECTION (direction), IMDADQ0 (DQ0 transform), IMDAMECHPWR (mechanical power).",
+    "shortDescription": "Set or query IMDA measurement type (power quality, efficiency, harmonics, etc.)",
+    "instruments": { "families": ["MSO4", "MSO5", "MSO6", "MSO7"], "models": [], "exclusions": [] },
+    "arguments": [
+      { "name": "meas_number", "type": "mnemonic", "required": true, "position": 0, "description": "Measurement slot number.", "validValues": { "type": "mnemonic_range", "pattern": "MEAS<x>", "examples": ["MEAS1"] } },
+      { "name": "type", "type": "enum", "required": true, "position": 1, "description": "IMDA measurement type.", "validValues": { "type": "enum", "values": ["IMDAPOWERQUALITY", "IMDAEFFICIENCY", "IMDAHARMONICS", "IMDATORQUE", "IMDASPEED", "IMDASYSEFF", "IMDAANGLE", "IMDADIRECTION", "IMDADQ0", "IMDAMECHPWR"] } }
+    ],
+    "syntax": { "set": "MEASUrement:MEAS<x>:IMDA:MEAS:TYPe {IMDAPOWERQUALITY|IMDAEFFICIENCY|IMDAHARMONICS|IMDATORQUE|IMDASPEED|IMDASYSEFF}", "query": "MEASUrement:MEAS<x>:IMDA:MEAS:TYPe?" },
+    "relatedCommands": ["MEASUrement:ADDMEAS", "MEASUrement:MEAS<x>:RESUlts:CURRentacq:MEAN?"]
+  },
+  {
+    "command": "MEASUrement:MEAS<x>:RESUlts:CURRentacq:MEAN?",
+    "header": "MEASUrement:MEAS<x>:RESUlts:CURRentacq:MEAN?",
+    "commandType": "query",
+    "commandGroup": "Measurement",
+    "group": "Measurement",
+    "description": "Returns the mean value from the current acquisition for the specified measurement. Works for both standard measurements (FREQUENCY, PERIOD, etc.) and IMDA measurements. For IMDA Power Quality, this returns the summary mean value.",
+    "shortDescription": "Query mean result value for current acquisition",
+    "instruments": { "families": ["MSO2", "MSO4", "MSO5", "MSO6", "MSO7"], "models": [], "exclusions": [] },
+    "arguments": [{ "name": "meas_number", "type": "mnemonic", "required": true, "position": 0, "description": "Measurement slot number.", "validValues": { "type": "mnemonic_range", "pattern": "MEAS<x>", "examples": ["MEAS1", "MEAS2"] } }],
+    "syntax": { "query": "MEASUrement:MEAS<x>:RESUlts:CURRentacq:MEAN?" },
+    "relatedCommands": ["MEASUrement:MEAS<x>:RESUlts:CURRentacq:MAXimum?", "MEASUrement:MEAS<x>:RESUlts:CURRentacq:MINimum?", "MEASUrement:MEAS<x>:TYPe"]
+  },
+  {
+    "command": "MEASUrement:MEAS<x>:RESUlts:CURRentacq:MAXimum?",
+    "header": "MEASUrement:MEAS<x>:RESUlts:CURRentacq:MAXimum?",
+    "commandType": "query",
+    "commandGroup": "Measurement",
+    "group": "Measurement",
+    "description": "Returns the maximum value from the current acquisition for the specified measurement.",
+    "shortDescription": "Query maximum result value for current acquisition",
+    "instruments": { "families": ["MSO2", "MSO4", "MSO5", "MSO6", "MSO7"], "models": [], "exclusions": [] },
+    "arguments": [{ "name": "meas_number", "type": "mnemonic", "required": true, "position": 0, "description": "Measurement slot number.", "validValues": { "type": "mnemonic_range", "pattern": "MEAS<x>", "examples": ["MEAS1", "MEAS2"] } }],
+    "syntax": { "query": "MEASUrement:MEAS<x>:RESUlts:CURRentacq:MAXimum?" },
+    "relatedCommands": ["MEASUrement:MEAS<x>:RESUlts:CURRentacq:MEAN?", "MEASUrement:MEAS<x>:RESUlts:CURRentacq:MINimum?"]
+  },
+  {
+    "command": "MEASUrement:MEAS<x>:RESUlts:CURRentacq:MINimum?",
+    "header": "MEASUrement:MEAS<x>:RESUlts:CURRentacq:MINimum?",
+    "commandType": "query",
+    "commandGroup": "Measurement",
+    "group": "Measurement",
+    "description": "Returns the minimum value from the current acquisition for the specified measurement.",
+    "shortDescription": "Query minimum result value for current acquisition",
+    "instruments": { "families": ["MSO2", "MSO4", "MSO5", "MSO6", "MSO7"], "models": [], "exclusions": [] },
+    "arguments": [{ "name": "meas_number", "type": "mnemonic", "required": true, "position": 0, "description": "Measurement slot number.", "validValues": { "type": "mnemonic_range", "pattern": "MEAS<x>", "examples": ["MEAS1", "MEAS2"] } }],
+    "syntax": { "query": "MEASUrement:MEAS<x>:RESUlts:CURRentacq:MINimum?" },
+    "relatedCommands": ["MEASUrement:MEAS<x>:RESUlts:CURRentacq:MEAN?", "MEASUrement:MEAS<x>:RESUlts:CURRentacq:MAXimum?"]
+  },
+  {
+    "command": "MEASUrement:MEAS<x>:RESUlts:ALLAcqs:MEAN?",
+    "header": "MEASUrement:MEAS<x>:RESUlts:ALLAcqs:MEAN?",
+    "commandType": "query",
+    "commandGroup": "Measurement",
+    "group": "Measurement",
+    "description": "Returns the mean value across all acquisitions for the specified measurement.",
+    "shortDescription": "Query mean result value across all acquisitions",
+    "instruments": { "families": ["MSO2", "MSO4", "MSO5", "MSO6", "MSO7"], "models": [], "exclusions": [] },
+    "arguments": [{ "name": "meas_number", "type": "mnemonic", "required": true, "position": 0, "description": "Measurement slot number.", "validValues": { "type": "mnemonic_range", "pattern": "MEAS<x>", "examples": ["MEAS1", "MEAS2"] } }],
+    "syntax": { "query": "MEASUrement:MEAS<x>:RESUlts:ALLAcqs:MEAN?" },
+    "relatedCommands": ["MEASUrement:MEAS<x>:RESUlts:ALLAcqs:MAXimum?", "MEASUrement:MEAS<x>:RESUlts:CURRentacq:MEAN?"]
   }
 ]
