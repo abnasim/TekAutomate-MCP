@@ -13,9 +13,11 @@ interface LiveModePanelProps {
   isCapturing: boolean;
   error: string | null;
   autoRefresh: boolean;
+  refreshInterval: number;
   runLog?: string;
   onRefresh: () => void;
   onToggleAutoRefresh: () => void;
+  onChangeRefreshInterval: (seconds: number) => void;
 }
 
 function formatBytes(size: number): string {
@@ -40,9 +42,11 @@ export function LiveModePanel({
   isCapturing,
   error,
   autoRefresh,
+  refreshInterval,
   runLog,
   onRefresh,
   onToggleAutoRefresh,
+  onChangeRefreshInterval,
 }: LiveModePanelProps) {
   const [showLogs, setShowLogs] = useState(false);
   const logLines = (runLog || '').split(/\r?\n/).filter(Boolean);
@@ -54,17 +58,28 @@ export function LiveModePanel({
       <div className="flex items-center justify-between gap-3 border-b border-slate-200 px-4 py-2.5 dark:border-slate-800/50">
         <div className="text-sm font-semibold text-slate-900 dark:text-white">Live Mode</div>
         <div className="flex items-center gap-2">
-          <button
-            type="button"
-            onClick={onToggleAutoRefresh}
-            className={`rounded-lg border px-2.5 py-1 text-[11px] font-medium transition-colors ${
-              autoRefresh
-                ? 'border-emerald-300 bg-emerald-50 text-emerald-700 dark:border-emerald-800 dark:bg-emerald-950/40 dark:text-emerald-300'
-                : 'border-slate-300 bg-white text-slate-700 hover:bg-slate-50 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-200 dark:hover:bg-slate-800'
-            }`}
-          >
-            Auto {autoRefresh ? 'on' : 'off'}
-          </button>
+          <div className="flex items-center gap-1">
+            <button
+              type="button"
+              onClick={onToggleAutoRefresh}
+              className={`rounded-lg border px-2.5 py-1 text-[11px] font-medium transition-colors ${
+                autoRefresh
+                  ? 'border-emerald-300 bg-emerald-50 text-emerald-700 dark:border-emerald-800 dark:bg-emerald-950/40 dark:text-emerald-300'
+                  : 'border-slate-300 bg-white text-slate-700 hover:bg-slate-50 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-200 dark:hover:bg-slate-800'
+              }`}
+            >
+              Auto {autoRefresh ? 'on' : 'off'}
+            </button>
+            <select
+              value={refreshInterval}
+              onChange={(e) => onChangeRefreshInterval(Number(e.target.value))}
+              className="rounded-lg border border-slate-300 bg-white px-1.5 py-1 text-[11px] font-medium text-slate-700 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-200"
+            >
+              <option value={3}>3s</option>
+              <option value={5}>5s</option>
+              <option value={10}>10s</option>
+            </select>
+          </div>
           <button
             type="button"
             onClick={onRefresh}

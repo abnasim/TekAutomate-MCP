@@ -1530,7 +1530,9 @@ function AppInner() {
   const [liveModeError, setLiveModeError] = useState<string | null>(null);
   const [liveModeCapturing, setLiveModeCapturing] = useState(false);
   const [liveModeAutoRefresh, setLiveModeAutoRefresh] = useState(false);
+  const [liveModeRefreshInterval, setLiveModeRefreshInterval] = useState(5); // seconds: 3, 5, or 10
   const [liveModeInitialCaptureDone, setLiveModeInitialCaptureDone] = useState(false);
+  const liveModeConsecutiveFailures = React.useRef(0);
   const [connectedInstrumentIdn, setConnectedInstrumentIdn] = useState<string | null>(null);
   const [executorScannedInstruments, setExecutorScannedInstruments] = useState<Array<{
     resource: string;
@@ -6453,9 +6455,15 @@ if __name__ == "__main__":
       if (reason === 'manual') {
         setRunWindowLog((prev) => `${prev}${prev.trim() ? '\n' : ''}[LIVE] Screenshot captured successfully (${payload.scopeType || scopeType}).\n`);
       }
+      liveModeConsecutiveFailures.current = 0; // Reset on success
     } catch (err) {
       const message = err instanceof Error ? err.message : 'Failed to capture scope screenshot.';
       setLiveModeError(message);
+      liveModeConsecutiveFailures.current += 1;
+      if (liveModeConsecutiveFailures.current >= 5 && liveModeAutoRefresh) {
+        setLiveModeAutoRefresh(false);
+        setLiveModeError('Auto-refresh stopped: 5 consecutive failures. Check connection and re-enable.');
+      }
       if (reason === 'manual') {
         setRunWindowLog((prev) => `${prev}${prev.trim() ? '\n' : ''}[LIVE][Error] ${message}\n`);
       }
@@ -6466,6 +6474,7 @@ if __name__ == "__main__":
     activeInstrumentConfig,
     executorEndpoint,
     getVisaResourceString,
+    liveModeAutoRefresh,
     liveModeCapturing,
     postToExecutor,
   ]);
@@ -6576,11 +6585,25 @@ if __name__ == "__main__":
 
   useEffect(() => {
     if (currentView !== 'execute' || executionSource !== 'live' || !liveModeAutoRefresh) return;
-    const interval = window.setInterval(() => {
-      void captureLiveScopeScreenshot('auto');
-    }, 4000);
+    // Reset failure counter when auto-refresh is toggled on
+    liveModeConsecutiveFailures.current = 0;
+    const intervalMs = liveModeRefreshInterval * 1000;
+    const interval = window.setInterval(async () => {
+      if (liveModeConsecutiveFailures.current >= 5) {
+        // Stop polling after 5 consecutive failures
+        setLiveModeAutoRefresh(false);
+        setLiveModeError('Auto-refresh stopped: 5 consecutive failures. Check connection and re-enable.');
+        return;
+      }
+      try {
+        await captureLiveScopeScreenshot('auto');
+        liveModeConsecutiveFailures.current = 0; // Reset on success
+      } catch {
+        liveModeConsecutiveFailures.current += 1;
+      }
+    }, intervalMs);
     return () => window.clearInterval(interval);
-  }, [captureLiveScopeScreenshot, currentView, executionSource, liveModeAutoRefresh]);
+  }, [captureLiveScopeScreenshot, currentView, executionSource, liveModeAutoRefresh, liveModeRefreshInterval]);
 
   const getCurrentFlowStepsForAudit = useCallback((): Step[] => {
     if (executionSource === 'blockly') {
@@ -9637,12 +9660,17 @@ Keep under 120 words. No headings. Bullets only. Stay on this command. Do not de
                 isCapturing={liveModeCapturing}
                 error={liveModeError}
                 autoRefresh={liveModeAutoRefresh}
+                refreshInterval={liveModeRefreshInterval}
                 runLog={runWindowLog}
                 onRefresh={() => {
                   void captureLiveScopeScreenshot('manual');
                 }}
                 onToggleAutoRefresh={() => {
+                  liveModeConsecutiveFailures.current = 0;
                   setLiveModeAutoRefresh((prev) => !prev);
+                }}
+                onChangeRefreshInterval={(seconds) => {
+                  setLiveModeRefreshInterval(seconds);
                 }}
               />
             }
