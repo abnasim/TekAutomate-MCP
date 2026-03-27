@@ -257,19 +257,27 @@ const SUBJECT_GROUP_MAP: Array<{
   { pattern: /\b(afg|function\s*generator|arbitrary)\b/i, groups: ['AFG'], intent: 'afg', subject: 'afg' },
 
   // ── Status / Misc ──
-  // ── IEEE 488.2 common commands — always search Status and Error group ──
+  // ── IEEE 488.2 common commands ──
   { pattern: /\b(opc|\*opc|operation\s*complete)\b/i, groups: ['Status and Error', 'Miscellaneous'], intent: 'status', subject: 'opc' },
   { pattern: /\b(cls|\*cls|clear\s*status)\b/i, groups: ['Status and Error'], intent: 'status', subject: 'cls' },
   { pattern: /\b(ese|\*ese|event\s*status\s*enable)\b/i, groups: ['Status and Error'], intent: 'status', subject: 'ese' },
   { pattern: /\b(sre|\*sre|service\s*request)\b/i, groups: ['Status and Error'], intent: 'status', subject: 'sre' },
-  { pattern: /\b(wai|\*wai|wait)\b/i, groups: ['Status and Error'], intent: 'status', subject: 'wai' },
-  { pattern: /\b(status|esr|stb|allev|error\s*queue|event\s*queue)\b/i, groups: ['Status and Error'], intent: 'status', subject: 'status' },
+  { pattern: /\b(wai|\*wai)\b/i, groups: ['Status and Error'], intent: 'status', subject: 'wai' },
+  { pattern: /\b(opt|\*opt|options?\s*installed|what\s*options)\b/i, groups: ['Status and Error'], intent: 'status', subject: 'opt' },
+  { pattern: /\b(psc|\*psc|power\s*on\s*status)\b/i, groups: ['Status and Error'], intent: 'status', subject: 'psc' },
+  { pattern: /\b(pud|\*pud|protected\s*user\s*data)\b/i, groups: ['Status and Error'], intent: 'status', subject: 'pud' },
+  { pattern: /\b(trg|\*trg|device\s*trigger)\b/i, groups: ['Miscellaneous'], intent: 'misc', subject: 'trg' },
+  { pattern: /\b(tst|\*tst|self\s*test)\b/i, groups: ['Miscellaneous'], intent: 'misc', subject: 'tst' },
+  { pattern: /\b(lrn|\*lrn|learn\s*setup)\b/i, groups: ['Miscellaneous'], intent: 'misc', subject: 'lrn' },
+  { pattern: /\b(ddt|\*ddt|define\s*device\s*trigger)\b/i, groups: ['Miscellaneous'], intent: 'misc', subject: 'ddt' },
+  { pattern: /\b(status|esr|\*esr|stb|\*stb|allev|error\s*queue|event\s*queue)\b/i, groups: ['Status and Error'], intent: 'status', subject: 'status' },
   { pattern: /\b(autoset|preset)\b/i, groups: ['Miscellaneous'], intent: 'misc', subject: 'autoset' },
-  { pattern: /\b(factory\s*reset|reset|\*rst)\b/i, groups: ['Miscellaneous', 'Status and Error'], intent: 'misc', subject: 'reset' },
-  { pattern: /\b(idn|\*idn|identify|id)\b/i, groups: ['Miscellaneous', 'Status and Error'], intent: 'misc', subject: 'identify' },
+  { pattern: /\b(factory\s*reset|factory\s*default)\b/i, groups: ['Save and Recall', 'Miscellaneous'], intent: 'misc', subject: 'factory' },
+  { pattern: /\b(reset|\*rst)\b/i, groups: ['Miscellaneous', 'Status and Error'], intent: 'misc', subject: 'reset' },
+  { pattern: /\b(idn|\*idn|identify)\b/i, groups: ['Miscellaneous', 'Status and Error'], intent: 'misc', subject: 'identify' },
 
   // ── Calibration ──
-  { pattern: /\b(calibrat|spc|signal\s*path)\b/i, groups: ['Calibration'], intent: 'calibration', subject: 'calibration' },
+  { pattern: /\b(cal|\*cal|calibrat|spc|signal\s*path)\b/i, groups: ['Calibration'], intent: 'calibration', subject: 'calibration' },
 
   // ── Ethernet/Network ──
   { pattern: /\b(lxi|dhcp|dns|gateway|ip\s*address|remote\s*interface)\b/i, groups: ['Ethernet'], intent: 'network', subject: 'network' },
