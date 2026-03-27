@@ -324,6 +324,7 @@ class HTTPServerThread(threading.Thread):
         self._host = host
         self._port = port
         self._server: HTTPServer | None = None
+        self._prepare_error: str | None = None
         self.get_timeout = lambda: 30
 
         self.server_started = TkSignal()
@@ -333,10 +334,23 @@ class HTTPServerThread(threading.Thread):
         self.client_seen = TkSignal()
         self.script_line = TkSignal()
 
-    def run(self):
+    def prepare(self) -> bool:
+        if self._server is not None:
+            return True
         try:
             _Handler.server_thread = self
             self._server = _QuickHTTPServer(("0.0.0.0", self._port), _Handler)
+            self._prepare_error = None
+            return True
+        except Exception as exc:
+            self._prepare_error = str(exc)
+            self._server = None
+            return False
+
+    def run(self):
+        try:
+            if self._server is None and not self.prepare():
+                raise RuntimeError(self._prepare_error or "Failed to prepare HTTP server")
             self.server_started.emit(self._host, self._port)
             self.server_status_changed.emit("ready")
             self._server.serve_forever()

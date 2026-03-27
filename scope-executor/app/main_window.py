@@ -89,6 +89,9 @@ class MainWindow:
         self._server.request_logged.connect(self._on_request)
         self._server.client_seen.connect(self.conn_panel.on_client_seen)
         self._server.script_line.connect(self._on_script_line)
+        if not self._server.prepare():
+            self._on_error(self._server._prepare_error or "Failed to prepare server")
+            return
         self._server.start()
         self._startup_probe_attempts = 0
         self.root.after(500, self._verify_server_started)
