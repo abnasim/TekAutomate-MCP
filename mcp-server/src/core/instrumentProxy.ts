@@ -144,6 +144,7 @@ async function runExecutorAction(
         action,
         timeout_sec: timeoutSec,
         scope_visa: endpoint.visaResource,
+        liveMode: endpoint.liveMode === true,
         ...payload,
       }),
     });
