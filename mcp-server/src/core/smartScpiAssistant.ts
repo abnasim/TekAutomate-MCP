@@ -406,7 +406,12 @@ export class SmartScpiAssistant {
       const setCapable = catalogBoostedCommands.filter(cmd =>
         cmd.commandType === 'set' || cmd.commandType === 'both'
       );
-      const topCmd = setCapable[0] || catalogBoostedCommands[0];
+      // Prefer commands where the subject keyword matches the header (e.g. "scale" → CH<x>:SCAle)
+      const subjectWords = intent.subject.split(/[_\s]+/).filter((w: string) => w.length > 2);
+      const headerMatched = setCapable.filter((cmd: any) =>
+        subjectWords.some((w: string) => cmd.header.toLowerCase().includes(w.toLowerCase()))
+      );
+      const topCmd = headerMatched[0] || setCapable[0] || catalogBoostedCommands[0];
 
       return {
         commands: [topCmd],
