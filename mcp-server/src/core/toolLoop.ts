@@ -183,6 +183,60 @@ async function runSmartScpiAssistant(req: McpChatRequest) {
     // Detect if user wants a query vs set from their message
     const userWords = req.userMessage.toLowerCase().split(/\s+/);
     const userWantsQuery = /\b(query|read|get|check|what\s*is|show|display|current|value)\b/i.test(req.userMessage);
+
+    // Extract user-provided values and channel/bus numbers from the message
+    const channelMatch = req.userMessage.match(/\b(?:ch(?:annel)?\s*)(\d+)\b/i);
+    const busMatch = req.userMessage.match(/\b(?:bus\s*)(\d+)\b/i);
+    const measMatch = req.userMessage.match(/\b(?:meas(?:urement)?\s*)(\d+)\b/i);
+    const mathMatch = req.userMessage.match(/\b(?:math\s*)(\d+)\b/i);
+    const refMatch = req.userMessage.match(/\b(?:ref(?:erence)?\s*)(\d+)\b/i);
+    const searchMatch = req.userMessage.match(/\b(?:search\s*)(\d+)\b/i);
+    const defaultChannel = channelMatch?.[1] || '1';
+    const defaultBus = busMatch?.[1] || '1';
+    const defaultMeas = measMatch?.[1] || '1';
+    // Extract numeric value with optional unit (e.g. "2v", "500mv", "200mhz", "50")
+    // Strip out channel/bus/meas references first so "channel 1 scale to 2v" doesn't pick "1" as the value
+    const msgWithoutRefs = req.userMessage
+      .replace(/\b(?:ch(?:annel)?|bus|meas(?:urement)?|math|ref(?:erence)?|search)\s*\d+\b/gi, '')
+      .replace(/\b(?:ch|b|meas)\d+\b/gi, '');
+    const valueMatch = msgWithoutRefs.match(/\b(?:to\s+)?(\d+(?:\.\d+)?)\s*(mv|v|uv|us|ns|ms|s|hz|khz|mhz|ghz|%)?(?:\b|$)/i);
+
+    function resolvePlaceholders(command: string): string {
+      let resolved = command;
+      // Resolve template placeholders with user-provided or default values
+      resolved = resolved.replace(/CH<x>/gi, `CH${defaultChannel}`);
+      resolved = resolved.replace(/\{A\|B\}/gi, 'A');
+      resolved = resolved.replace(/\{A\|B\|B:RESET\}/gi, 'A');
+      resolved = resolved.replace(/B<x>/gi, `B${defaultBus}`);
+      resolved = resolved.replace(/MEAS<x>/gi, `MEAS${defaultMeas}`);
+      resolved = resolved.replace(/MATH<x>/gi, `MATH${mathMatch?.[1] || '1'}`);
+      resolved = resolved.replace(/REF<x>/gi, `REF${refMatch?.[1] || '1'}`);
+      resolved = resolved.replace(/SEARCH<x>/gi, `SEARCH${searchMatch?.[1] || '1'}`);
+      resolved = resolved.replace(/POWer<x>/gi, 'POWer1');
+      resolved = resolved.replace(/PLOT<x>/gi, 'PLOT1');
+      resolved = resolved.replace(/SOUrce<x>/gi, `SOUrce${channelMatch?.[1] || '1'}`);
+      resolved = resolved.replace(/D<x>/gi, 'D0');
+      resolved = resolved.replace(/<x>/gi, '1'); // catch-all for remaining <x>
+      return resolved;
+    }
+
+    function resolveValue(): string | null {
+      if (!valueMatch) return null;
+      const num = parseFloat(valueMatch[1]);
+      const unit = (valueMatch[2] || '').toLowerCase();
+      // Convert to base units for SCPI
+      const multipliers: Record<string, number> = {
+        'uv': 1e-6, 'mv': 1e-3, 'v': 1, 'kv': 1e3,
+        'ns': 1e-9, 'us': 1e-6, 'ms': 1e-3, 's': 1,
+        'hz': 1, 'khz': 1e3, 'mhz': 1e6, 'ghz': 1e9,
+        '%': 1,
+      };
+      if (unit && multipliers[unit] !== undefined) {
+        return String(num * multipliers[unit]);
+      }
+      return String(num);
+    }
+
     const actions = toolResult.data.map((cmd: any, idx: number) => {
       const isSetCapable = cmd.commandType === 'set' || cmd.commandType === 'both';
       const isQueryCapable = cmd.commandType === 'query' || cmd.commandType === 'both';
@@ -192,28 +246,44 @@ async function runSmartScpiAssistant(req: McpChatRequest) {
       let scpiCommand: string;
 
       if (useSet && cmd.syntax?.set) {
-        // Try to resolve enum values from the user's query
         let resolved = String(cmd.syntax.set).replace(/\n/g, ' ').replace(/\s+/g, ' ');
-        // Match {ENUM1|ENUM2|...} patterns (multiline-safe)
+        // Resolve placeholders in the header part
+        resolved = resolvePlaceholders(resolved);
+        // Match {ENUM1|ENUM2|...} patterns
         const enumMatch = resolved.match(/\{([^}]+)\}/);
         if (enumMatch) {
           const options = enumMatch[1].split('|').map((s: string) => s.trim()).filter(Boolean);
-          // Find the best matching enum value from user's words
-          const match = options.find((opt: string) =>
+          // Try direct word match first
+          let match = options.find((opt: string) =>
             userWords.some((w: string) => w.length >= 3 && (opt.toLowerCase() === w || opt.toLowerCase().includes(w)))
           );
+          // If no match but user mentioned a channel and options include CH<n>, pick that
+          if (!match && channelMatch) {
+            const chOpt = options.find((opt: string) => opt === `CH${defaultChannel}` || opt.toLowerCase() === `ch${defaultChannel}`);
+            if (chOpt) match = chOpt;
+          }
+          // If options include a "default first" like ON/OFF, RISe/FALL etc, pick the first one
           if (match) {
-            resolved = resolved.replace(enumMatch[0], `"${match}"`).trim();
+            resolved = resolved.replace(enumMatch[0], match).trim();
           } else {
             // No match — strip the enum for a cleaner command
             resolved = resolved.replace(/\s*\{[^}]+\}/, '').trim();
           }
         }
-        // Strip remaining placeholders like <NR3>, <x> etc
+        // Replace <NR3>/<NRf>/<NR1> with the user's value if available
+        const userValue = resolveValue();
+        if (userValue && /<NR[f13]>/i.test(resolved)) {
+          resolved = resolved.replace(/\s*<NR[f13]>/i, ` ${userValue}`).trim();
+        }
+        // Strip remaining angle-bracket placeholders
         resolved = resolved.replace(/\s*<[^>]+>/g, '').trim();
+        // If user provided a value but no placeholder was in the syntax, append it
+        if (userValue && !resolved.includes(userValue) && !/\d/.test(resolved.split(/\s+/).slice(-1)[0] || '')) {
+          resolved = `${resolved} ${userValue}`;
+        }
         scpiCommand = resolved;
       } else {
-        scpiCommand = cmd.syntax?.query || `${cmd.header}?`;
+        scpiCommand = resolvePlaceholders(cmd.syntax?.query || `${cmd.header}?`);
       }
 
       const stepType = useQuery ? 'query' : (useSet ? 'write' : 'query');
