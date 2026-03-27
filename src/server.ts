@@ -21,6 +21,9 @@ const __dirname = path.dirname(__filename);
 let lastAiDebug: Record<string, unknown> | null = null;
 const REQUEST_LOG_DIR = path.join(__dirname, 'logs', 'requests');
 const MAX_LOG_FILES = 500;
+let startupState: 'starting' | 'ready' | 'error' = 'starting';
+let startupError: string | null = null;
+let startupInitPromise: Promise<void> | null = null;
 
 function ensureLogDir() {
   fs.mkdirSync(REQUEST_LOG_DIR, { recursive: true });
@@ -205,6 +208,14 @@ function sendJson(res: http.ServerResponse, status: number, payload: unknown) {
   res.end(JSON.stringify(payload));
 }
 
+function getHealthPayload() {
+  return {
+    ok: startupState !== 'error',
+    status: startupState,
+    ...(startupError ? { startupError } : {}),
+  };
+}
+
 function sendSseStart(res: http.ServerResponse) {
   res.statusCode = 200;
   res.setHeader('Content-Type', 'text/event-stream');
@@ -244,61 +255,75 @@ function parseProviderError(status: number, raw: string): { code: string; messag
   return { code, message, hint };
 }
 
-export async function createServer(port = 8787): Promise<http.Server> {
-  // CRITICAL FIX: Initialize ALL indexes BEFORE creating HTTP server
-  // Previously: initialization happened inside request handlers (race condition)
-  const startInit = Date.now();
-  console.log('[SERVER] Initializing indexes before HTTP server starts...');
+async function warmStartup(): Promise<void> {
+  if (startupInitPromise) return startupInitPromise;
+  startupInitPromise = (async () => {
+    startupState = 'starting';
+    startupError = null;
+    const startInit = Date.now();
+    console.log('[SERVER] Initializing indexes in background...');
 
-  const results = await Promise.allSettled([
-    initCommandIndex(),
-    initTmDevicesIndex(),
-    initRagIndexes(),
-    initTemplateIndex(),
-    ...(providerSupplementsEnabled() ? [initProviderCatalog()] : []),
-  ]);
+    const results = await Promise.allSettled([
+      initCommandIndex(),
+      initTmDevicesIndex(),
+      initRagIndexes(),
+      initTemplateIndex(),
+      ...(providerSupplementsEnabled() ? [initProviderCatalog()] : []),
+    ]);
 
-  // Check for initialization failures
-  const failures = results
-    .map((r, i) => r.status === 'rejected' ? { index: i, error: r.reason } : null)
-    .filter((f): f is { index: number; error: unknown } => Boolean(f));
+    const failures = results
+      .map((r, i) => r.status === 'rejected' ? { index: i, error: r.reason } : null)
+      .filter((f): f is { index: number; error: unknown } => Boolean(f));
 
-  if (failures.length > 0) {
-    const names = ['CommandIndex', 'TmDevicesIndex', 'RagIndexes', 'TemplateIndex', 'ProviderCatalog'];
-    const failedNames = failures.map(f => names[f.index]).join(', ');
-    const error = new Error(`[CRITICAL] Initialization failed: ${failedNames}`);
-    console.error(error.message);
-    for (const failure of failures) {
-      console.error(`  ${names[failure.index]}: ${failure.error}`);
-    }
-    throw error;
-  }
-
-  console.log(`✅ All indexes initialized in ${Date.now() - startInit}ms`);
-
-  // Now bootstrap router if enabled
-  if (String(process.env.MCP_ROUTER_ENABLED || '').trim() === 'true') {
-    try {
-      const commandIndex = await getCommandIndex();
-      const ragIndexes = await getRagIndexes();
-      const templates = (await getTemplateIndex()).all().map((doc) => ({
-        id: doc.id,
-        name: doc.name,
-        description: doc.description,
-        backend: 'template',
-        deviceType: 'workflow',
-        tags: [],
-        steps: doc.steps,
-      }));
-      const report = await bootRouter({ commandIndex, ragIndexes, templates });
-      console.log(`[MCP:router] ${report.total} tools in ${report.durationMs}ms`);
-    } catch (error) {
-      console.error('[MCP:router] Boot failed:', error);
+    if (failures.length > 0) {
+      const names = ['CommandIndex', 'TmDevicesIndex', 'RagIndexes', 'TemplateIndex', 'ProviderCatalog'];
+      const failedNames = failures.map((f) => names[f.index]).join(', ');
+      const error = new Error(`[CRITICAL] Initialization failed: ${failedNames}`);
+      startupState = 'error';
+      startupError = error.message;
+      console.error(error.message);
+      for (const failure of failures) {
+        console.error(`  ${names[failure.index]}: ${failure.error}`);
+      }
       throw error;
     }
-  }
 
-  // NOW create the HTTP server (all indexes are ready)
+    console.log(`✅ All indexes initialized in ${Date.now() - startInit}ms`);
+
+    if (String(process.env.MCP_ROUTER_ENABLED || '').trim() === 'true') {
+      try {
+        const commandIndex = await getCommandIndex();
+        const ragIndexes = await getRagIndexes();
+        const templates = (await getTemplateIndex()).all().map((doc) => ({
+          id: doc.id,
+          name: doc.name,
+          description: doc.description,
+          backend: 'template',
+          deviceType: 'workflow',
+          tags: [],
+          steps: doc.steps,
+        }));
+        const report = await bootRouter({ commandIndex, ragIndexes, templates });
+        console.log(`[MCP:router] ${report.total} tools in ${report.durationMs}ms`);
+      } catch (error) {
+        startupState = 'error';
+        startupError = error instanceof Error ? error.message : String(error);
+        console.error('[MCP:router] Boot failed:', error);
+        throw error;
+      }
+    }
+
+    startupState = 'ready';
+  })().catch((error) => {
+    startupState = 'error';
+    startupError = error instanceof Error ? error.message : String(error);
+    throw error;
+  });
+
+  return startupInitPromise;
+}
+
+export async function createServer(port = 8787, host = '0.0.0.0'): Promise<http.Server> {
   const server = http.createServer(async (req, res) => {
     if (req.method === 'OPTIONS') {
       res.statusCode = 204;
@@ -310,7 +335,16 @@ export async function createServer(port = 8787): Promise<http.Server> {
     }
 
     if (req.method === 'GET' && req.url === '/health') {
-      sendJson(res, 200, { ok: true, status: 'ready' });
+      sendJson(res, 200, getHealthPayload());
+      return;
+    }
+
+    if (startupState !== 'ready') {
+      sendJson(res, startupState === 'starting' ? 503 : 500, {
+        ok: false,
+        error: startupState === 'starting' ? 'Server is still initializing.' : startupError || 'Server failed to initialize.',
+        status: startupState,
+      });
       return;
     }
 
@@ -799,7 +833,10 @@ export async function createServer(port = 8787): Promise<http.Server> {
   });
 
   await new Promise<void>((resolve) => {
-    server.listen(port, () => resolve());
+    server.listen(port, host, () => resolve());
+  });
+  void warmStartup().catch(() => {
+    // Startup failures are surfaced through /health and route guards.
   });
   return server;
 }
