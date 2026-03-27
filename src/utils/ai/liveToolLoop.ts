@@ -462,6 +462,12 @@ export function buildLiveSystemPrompt(instrument?: {
     '   Default: just call capture_screenshot (no analyze). Image updates on user screen but is NOT sent back to you — saves tokens.',
     '   Pass analyze:true ONLY when you need to read/diagnose the display (errors, verifying measurement values, user asks to look).',
     '9. AUTONOMOUS EXPLORATION: Only when user gives an open-ended goal ("find a way to...", "figure out..."). Search, try, read errors, adjust. Keep going until achieved.',
+    '10. READING EXISTING DATA: Before adding new measurements, check what exists:',
+    '   - MEASUrement:LIST? to see existing measurements',
+    '   - capture_screenshot with analyze:true to READ on-screen badges/tables/phasor values',
+    '   - IMDA/Power Quality badges show VMAG, IMAG, TrPwr, etc. — read from screenshot, do NOT add redundant measurements',
+    '   - Standard results: MEASUrement:MEAS<x>:RESUlts:CURRentacq:MEAN?',
+    '11. TIMEOUTS: If command times out, try *IDN? first to check connectivity. Do NOT retry same command repeatedly.',
   ];
   if (instrument) {
     parts.push('');
