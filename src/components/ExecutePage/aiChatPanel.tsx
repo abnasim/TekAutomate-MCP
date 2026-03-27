@@ -1150,6 +1150,52 @@ export function AiChatPanel({
     }
     setTestingKey(true);
     try {
+      // Live mode: test directly from browser (same path as actual live messages)
+      if (state.tekMode === 'live') {
+        if (state.provider === 'anthropic') {
+          const res = await fetch('https://api.anthropic.com/v1/messages', {
+            method: 'POST',
+            headers: {
+              'x-api-key': trimmedKey,
+              'anthropic-version': '2023-06-01',
+              'anthropic-dangerous-direct-browser-access': 'true',
+              'content-type': 'application/json',
+            },
+            body: JSON.stringify({
+              model: state.model || 'claude-sonnet-4-6',
+              max_tokens: 16,
+              messages: [{ role: 'user', content: 'ping' }],
+            }),
+          });
+          if (!res.ok) {
+            const raw = await res.text();
+            setTestKeyStatus(`Failed: Anthropic ${res.status} — ${raw.slice(0, 100)}`);
+            return;
+          }
+        } else {
+          const res = await fetch('https://api.openai.com/v1/responses', {
+            method: 'POST',
+            headers: {
+              'Authorization': `Bearer ${trimmedKey}`,
+              'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({
+              model: state.model || 'gpt-5.4',
+              input: 'ping',
+              max_output_tokens: 16,
+            }),
+          });
+          if (!res.ok) {
+            const raw = await res.text();
+            setTestKeyStatus(`Failed: OpenAI ${res.status} — ${raw.slice(0, 100)}`);
+            return;
+          }
+        }
+        setTestKeyStatus('Success: provider/key/model accepted.');
+        return;
+      }
+
+      // MCP/AI modes: test via MCP server
       const hosts = resolveMcpHostCandidates();
       const host = hosts[0];
       if (!host) {
