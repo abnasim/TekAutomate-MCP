@@ -1157,7 +1157,7 @@ export function AiChatPanel({
         return;
       }
       const baseHost = host.replace(/\/$/, '');
-      const shouldTestHostedRoute = state.provider === 'openai';
+      const shouldTestHostedRoute = false; // Always use simple key-test first
       const runLegacyChatTest = async () =>
         fetch(`${baseHost}/ai/chat`, {
           method: 'POST',
