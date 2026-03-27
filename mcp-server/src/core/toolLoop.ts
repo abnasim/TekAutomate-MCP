@@ -4065,8 +4065,12 @@ async function runChatConversation(
     const messages = [
       ...(Array.isArray(req.history)
         ? req.history
-            .slice(-8)
-            .map((h) => ({ role: h.role as 'user' | 'assistant', content: String(h.content || '').slice(0, 3000) }))
+            .slice(-6)
+            .map((h, i, arr) => ({
+              role: h.role as 'user' | 'assistant',
+              // Older turns get shorter — save tokens for the most recent context
+              content: String(h.content || '').slice(0, i < arr.length - 2 ? 1000 : 2000),
+            }))
         : []),
       { role: 'user' as const, content: userContent },
     ];
@@ -4138,6 +4142,16 @@ async function runChatConversation(
           },
         ]
       : [];
+    // Chain via previous_response_id when available — OpenAI stores the full
+    // conversation server-side so we can skip re-sending history, saving tokens.
+    const previousResponseId = resolveOpenAiResponseCursor(req);
+    const historyInput = previousResponseId
+      ? []
+      : (Array.isArray(req.history)
+          ? req.history
+              .slice(-6)
+              .map((h) => ({ role: h.role, content: String(h.content || '').slice(0, 2000) }))
+          : []);
     const requestPayload: Record<string, unknown> = {
       model: resolveHostedAssistantModel(req),
       input: [
@@ -4145,15 +4159,12 @@ async function runChatConversation(
           role: 'developer',
           content: `${CHAT_MODE_SYSTEM_PROMPT}\n\n${developerPrompt}`.trim(),
         },
-        ...(Array.isArray(req.history)
-          ? req.history
-              .slice(-8)
-              .map((h) => ({ role: h.role, content: String(h.content || '').slice(0, 3000) }))
-          : []),
+        ...historyInput,
         { role: 'user', content: userContent },
       ],
       store: true,
       stream: false,
+      ...(previousResponseId ? { previous_response_id: previousResponseId } : {}),
       ...(chatTools.length ? { tools: chatTools } : {}),
     };
     if (hostedModelSupportsTemperature(String(requestPayload.model || ''))) {
@@ -4218,8 +4229,12 @@ async function runChatConversation(
       { role: 'system', content: `${CHAT_MODE_SYSTEM_PROMPT}\n\n${developerPrompt}` },
       ...(Array.isArray(req.history)
         ? req.history
-            .slice(-8)
-            .map((h) => ({ role: h.role, content: String(h.content || '').slice(0, 3000) }))
+            .slice(-6)
+            .map((h, i, arr) => ({
+              role: h.role,
+              // Older turns get shorter — save tokens for the most recent context
+              content: String(h.content || '').slice(0, i < arr.length - 2 ? 1000 : 2000),
+            }))
         : []),
       { role: 'user', content: userContent },
     ],
