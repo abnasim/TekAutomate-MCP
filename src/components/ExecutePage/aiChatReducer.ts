@@ -72,22 +72,18 @@ export const initialAiChatState: AiChatState = {
   error: null,
 };
 
-function withSlidingWindow(history: ChatTurn[]): ChatTurn[] {
-  return history.slice(-12);
-}
-
 export function aiChatReducer(state: AiChatState, action: AiChatAction): AiChatState {
   switch (action.type) {
     case 'ADD_TURN':
       return {
         ...state,
-        history: withSlidingWindow([...state.history, action.turn]),
+        history: [...state.history, action.turn],
         error: null,
       };
     case 'STREAM_START':
       return {
         ...state,
-        history: withSlidingWindow([
+        history: [
           ...state.history,
           {
             role: 'assistant',
@@ -96,7 +92,7 @@ export function aiChatReducer(state: AiChatState, action: AiChatAction): AiChatS
             tekMode: action.tekMode,
             streaming: true,
           },
-        ]),
+        ],
         isLoading: true,
         error: null,
       };
@@ -111,7 +107,7 @@ export function aiChatReducer(state: AiChatState, action: AiChatAction): AiChatS
           break;
         }
       }
-      return { ...state, history: withSlidingWindow(history) };
+      return { ...state, history };
     }
     case 'STREAM_DONE': {
       const history = [...state.history];
@@ -132,7 +128,7 @@ export function aiChatReducer(state: AiChatState, action: AiChatAction): AiChatS
       }
       return {
         ...state,
-        history: withSlidingWindow(history),
+        history,
         isLoading: false,
         openaiThreadId:
           action.routedVia === 'assistant' && action.openaiThreadId

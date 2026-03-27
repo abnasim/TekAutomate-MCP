@@ -18,7 +18,7 @@ function loadInitialAiChatState(): AiChatState {
     const parsed = JSON.parse(raw) as Record<string, unknown>;
     const rawToolCallMode = parsed.toolCallMode;
     const parsedToolCallMode = rawToolCallMode === true || rawToolCallMode === 'true';
-    const parsedHistory = Array.isArray(parsed.history) ? (parsed.history as any[]).slice(-12) : [];
+    const parsedHistory = Array.isArray(parsed.history) ? (parsed.history as any[]) : [];
     const lastAssistantTurn = [...parsedHistory]
       .reverse()
       .find((turn) => turn && typeof turn === 'object' && turn.role === 'assistant') as
@@ -100,7 +100,7 @@ function useAiChatState() {
       window.localStorage.setItem(
         AI_CHAT_STATE_STORAGE,
         JSON.stringify({
-          history: state.history,
+          history: state.history.slice(-200),
           tekMode: state.tekMode,
           provider: state.provider,
           model: state.model,
