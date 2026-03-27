@@ -597,6 +597,10 @@ function inferConversationBuildFocus(history: Array<{ role: string; content?: st
 function buildPromptFromRecentChat(history: Array<{ role: string; content?: string }>, latestMessage: string): string {
   const focusHints = inferConversationBuildFocus(history);
   const brief = extractStructuredBuildBrief(history);
+
+  // Find the original user request (first user message in handoff history)
+  const originalRequest = history.find((t) => t.role === 'user')?.content || '';
+
   const recent = history
     .filter((turn) => turn.role === 'user' || turn.role === 'assistant')
     .slice(-4)
@@ -604,37 +608,15 @@ function buildPromptFromRecentChat(history: Array<{ role: string; content?: stri
     .filter(Boolean)
     .join('\n');
 
+  // Use the original user request as the primary build instruction
+  // The structured brief is secondary context
   return [
-    'Build a TekAutomate flow from the structured build brief below.',
-    'Treat the structured brief as the authoritative build input.',
-    'Use the chat transcript only as secondary evidence.',
-    'Do not introduce unrelated domains that are not present in the structured brief.',
+    originalRequest || latestMessage,
     '',
-    'Primary structured build brief:',
-    `- intent: ${brief.intent}`,
-    `- diagnostic domains: ${brief.diagnosticDomain.join(', ')}`,
+    'Build context:',
     `- channels: ${brief.channels.join(', ') || '(not specified)'}`,
-    `- protocols: ${brief.protocols.join(', ') || '(none specified)'}`,
-    `- signal type: ${brief.signalType || '(not specified)'}`,
-    `- data rate: ${brief.dataRate || '(not specified)'}`,
-    `- closure type: ${brief.closureType || '(not specified)'}`,
-    `- probing: ${brief.probing || '(not specified)'}`,
-    `- measurement goals: ${brief.measurementGoals.join(', ')}`,
-    `- artifact goals: ${brief.artifactGoals.join(', ') || '(none specified)'}`,
-    `- operating mode hints: ${brief.operatingModeHints.join(', ') || '(none specified)'}`,
-    `- unresolved questions: ${brief.unresolvedQuestions.join(', ') || '(none)'}`,
-    `- suggested checks: ${brief.suggestedChecks.join(', ') || '(none)'}`,
-    '',
-    'Build focus:',
+    `- measurement goals: ${brief.measurementGoals.join(', ') || '(from user request above)'}`,
     ...focusHints.map((hint) => `- ${hint}`),
-    '',
-    'Secondary evidence from chat:',
-    ...((brief.secondaryEvidence.length ? brief.secondaryEvidence : ['(none extracted)']).map((item) => `- ${item}`)),
-    '',
-    'Recent chat transcript (secondary only):',
-    recent || '(none)',
-    '',
-    `Latest request: ${latestMessage}`,
   ].join('\n');
 }
 
