@@ -1036,7 +1036,7 @@ function normalizeHeaderForMatch(command: string): string {
 }
 
 function isRouterEnabled(): boolean {
-  return String(process.env.MCP_ROUTER_ENABLED || '').trim() === 'true';
+  return String(process.env.MCP_ROUTER_DISABLED || '').trim() !== 'true';
 }
 
 function isRouterEnabledForRequest(req?: McpChatRequest): boolean {

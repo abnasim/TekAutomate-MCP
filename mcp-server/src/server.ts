@@ -276,8 +276,9 @@ export async function createServer(port = 8787): Promise<http.Server> {
 
   console.log(`✅ All indexes initialized in ${Date.now() - startInit}ms`);
 
-  // Now bootstrap router if enabled
-  if (String(process.env.MCP_ROUTER_ENABLED || '').trim() === 'true') {
+  // Bootstrap router — enabled by default, disable with MCP_ROUTER_DISABLED=true
+  const routerDisabled = String(process.env.MCP_ROUTER_DISABLED || '').trim() === 'true';
+  if (!routerDisabled) {
     try {
       const commandIndex = await getCommandIndex();
       const ragIndexes = await getRagIndexes();
@@ -314,7 +315,7 @@ export async function createServer(port = 8787): Promise<http.Server> {
       return;
     }
 
-    if (String(process.env.MCP_ROUTER_ENABLED || '').trim() === 'true' && req.method === 'GET' && req.url === '/ai/router/health') {
+    if (!routerDisabled && req.method === 'GET' && req.url === '/ai/router/health') {
       // FIX BUG-005: getRouterHealth() can return undefined, causing malformed JSON
       const health = getRouterHealth();
       if (!health) {
@@ -325,7 +326,7 @@ export async function createServer(port = 8787): Promise<http.Server> {
       return;
     }
 
-    if (String(process.env.MCP_ROUTER_ENABLED || '').trim() === 'true' && req.method === 'POST' && req.url === '/ai/router') {
+    if (!routerDisabled && req.method === 'POST' && req.url === '/ai/router') {
       try {
         const body = (await readJsonBody(req)) as Record<string, unknown>;
         const result = await createRouterHandler(body as any);
@@ -336,7 +337,7 @@ export async function createServer(port = 8787): Promise<http.Server> {
       return;
     }
 
-    if (String(process.env.MCP_ROUTER_ENABLED || '').trim() === 'true' && req.method === 'POST' && req.url === '/ai/router/reload-providers') {
+    if (!routerDisabled && req.method === 'POST' && req.url === '/ai/router/reload-providers') {
       try {
         const body = (await readJsonBody(req)) as { providersDir?: string };
         const result = await createReloadProvidersHandler(body);
