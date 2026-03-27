@@ -44,6 +44,7 @@ export interface ExecutePageProps {
   lastAuditReport?: ExecutionAuditReport | null;
   onClearRunLog?: () => void;
   onApplyAiActions?: (actions: AiAction[]) => Promise<{ applied: number; rerunStarted: boolean; changed: boolean }>;
+  onLiveScreenshot?: (screenshot: { dataUrl: string; mimeType: string; sizeBytes: number; capturedAt: string }) => void;
   blocklyContent: React.ReactNode;
   liveModeContent: React.ReactNode;
 }
@@ -84,6 +85,7 @@ function ExecutePageContent({
   lastAuditReport,
   onClearRunLog,
   onApplyAiActions,
+  onLiveScreenshot,
   blocklyContent,
   liveModeContent,
 }: ExecutePageProps) {
@@ -127,6 +129,7 @@ function ExecutePageContent({
           instrumentEndpoint={instrumentEndpoint}
           contextAttachments={chatContextAttachments}
           onApplyAiActions={onApplyAiActions}
+          onLiveScreenshot={onLiveScreenshot}
           onRun={onRun}
         />
 
