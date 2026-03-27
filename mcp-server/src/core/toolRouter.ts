@@ -25,6 +25,7 @@ export interface RouterRequest {
   toolTriggers?: string[];
   toolTags?: string[];
   toolCategory?: ToolCategory;
+  modelFamily?: string;
   toolSchema?: {
     type?: 'object';
     properties?: Record<string, { type: string; description: string; enum?: string[] }>;
@@ -211,7 +212,27 @@ async function handleSearch(req: RouterRequest, startedAt: number): Promise<Rout
   };
 
   const hits = await engine.searchCompound(req.query, opts);
-  const results = hits.map((hit) => serializeHit(hit, req.debug === true));
+
+  // Filter out results from wrong instrument families (e.g. DPOJET/RSA/AFG/AWG when on MSO)
+  const familyHint = (req.modelFamily || '').toUpperCase();
+  const isMso = /^MSO/.test(familyHint);
+  const filteredHits = familyHint
+    ? hits.filter((hit) => {
+        const toolId = (hit.tool.id || '').toLowerCase();
+        const toolName = (hit.tool.name || '').toLowerCase();
+        // Exclude DPOJET commands when not on DPO
+        if (!familyHint.includes('DPO') && (toolId.includes('dpojet') || toolName.startsWith('dpojet:'))) return false;
+        // Exclude RSA commands when not on RSA
+        if (!familyHint.includes('RSA') && toolId.includes('rsa_json')) return false;
+        // Exclude AFG commands when not on AFG
+        if (!familyHint.includes('AFG') && toolId.startsWith('scpi:afg')) return false;
+        // Exclude AWG commands when not on AWG
+        if (!familyHint.includes('AWG') && toolId.startsWith('scpi:awg')) return false;
+        return true;
+      })
+    : hits;
+
+  const results = filteredHits.map((hit) => serializeHit(hit, req.debug === true));
 
   // Enrich with RAG knowledge in the same response — zero extra latency for AI
   let knowledge: Array<{ corpus: string; title: string; body: string }> | undefined;

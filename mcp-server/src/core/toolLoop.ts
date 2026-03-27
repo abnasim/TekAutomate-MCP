@@ -5529,6 +5529,10 @@ async function executeHostedToolCall(
   }
 
   if (isRouterEnabledForRequest(undefined)) {
+    // Inject modelFamily into tek_router calls so results are filtered to the user's scope
+    if (name === 'tek_router' && req.flowContext?.modelFamily) {
+      args = { ...args, modelFamily: req.flowContext.modelFamily };
+    }
     const routerResult = await dispatchRouterTool(name, args);
     if (routerResult) return routerResult;
   }
