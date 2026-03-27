@@ -205,42 +205,69 @@ async function handleSearch(req: RouterRequest, startedAt: number): Promise<Rout
     };
   }
 
+  // Primary: use smart_scpi_lookup for SCPI command search (best intent + group logic)
+  let scpiCommands: Array<Record<string, unknown>> = [];
+  try {
+    const { smartScpiLookup } = await import('./smartScpiAssistant');
+    const scpiRes = await smartScpiLookup({ query: req.query, modelFamily: req.modelFamily });
+    if (scpiRes.ok && Array.isArray(scpiRes.data) && scpiRes.data.length > 0) {
+      scpiCommands = scpiRes.data.slice(0, req.limit ?? 5).map((cmd: any) => ({
+        id: cmd.commandId || cmd.header || '',
+        name: cmd.header || '',
+        description: cmd.shortDescription || cmd.description || '',
+        category: 'scpi',
+        score: 10,
+        matchStage: 'smart_scpi',
+        syntax: cmd.syntax,
+        arguments: cmd.arguments,
+        examples: cmd.examples || cmd.codeExamples,
+        group: cmd.group,
+        commandType: cmd.commandType,
+      }));
+    }
+  } catch { /* non-fatal */ }
+
+  // Secondary: router's own BM25/trigger search for shortcuts and templates
   const engine = getToolSearchEngine();
-  const opts: ToolSearchOptions = {
-    limit: req.limit ?? 5,
+  const routerHits = await engine.searchCompound(req.query, {
+    limit: 3,
     categories: req.categories,
-  };
-
-  const hits = await engine.searchCompound(req.query, opts);
-
-  // Filter out DPOJET results when not on DPO series (DPOJET is DPO-specific)
+  });
+  // Filter DPOJET
   const familyHint = (req.modelFamily || '').toUpperCase();
-  const filteredHits = hits.filter((hit) => {
+  const filteredRouterHits = routerHits.filter((hit) => {
     const toolId = (hit.tool.id || '').toLowerCase();
     if (!familyHint.includes('DPO') && toolId.includes('dpojet')) return false;
     return true;
   });
+  const routerResults = filteredRouterHits
+    .filter((hit) => hit.tool.category === 'shortcut' || hit.tool.category === 'template' || hit.tool.category === 'instrument')
+    .map((hit) => serializeHit(hit, req.debug === true));
 
-  const results = filteredHits.map((hit) => serializeHit(hit, req.debug === true));
+  // Combine: SCPI commands first, then shortcuts/templates
+  const results = [...scpiCommands, ...routerResults];
 
-  // Enrich with RAG knowledge in the same response — zero extra latency for AI
+  // RAG knowledge — only for queries that sound like questions, not SCPI commands
   let knowledge: Array<{ corpus: string; title: string; body: string }> | undefined;
-  try {
-    const { retrieveRagChunks } = await import('../tools/retrieveRagChunks');
-    const ragResults: Array<{ corpus: string; title: string; body: string }> = [];
-    for (const corpus of ['errors', 'app_logic'] as const) {
-      const res = await retrieveRagChunks({ corpus, query: req.query, topK: 1 });
-      if (res.ok && Array.isArray(res.data)) {
-        for (const chunk of res.data) {
-          const c = chunk as { title?: string; body?: string; corpus?: string };
-          if (c.body && c.body.length > 30) {
-            ragResults.push({ corpus, title: c.title || '', body: c.body.slice(0, 300) });
+  const isQuestion = /\b(why|how|what|explain|error|fail|timeout|issue|problem|debug)\b/i.test(req.query);
+  if (isQuestion) {
+    try {
+      const { retrieveRagChunks } = await import('../tools/retrieveRagChunks');
+      const ragResults: Array<{ corpus: string; title: string; body: string }> = [];
+      for (const corpus of ['errors', 'app_logic', 'scpi'] as const) {
+        const res = await retrieveRagChunks({ corpus, query: req.query, topK: 1 });
+        if (res.ok && Array.isArray(res.data)) {
+          for (const chunk of res.data) {
+            const c = chunk as { title?: string; body?: string };
+            if (c.body && c.body.length > 30) {
+              ragResults.push({ corpus, title: c.title || '', body: c.body.slice(0, 300) });
+            }
           }
         }
       }
-    }
-    if (ragResults.length > 0) knowledge = ragResults;
-  } catch { /* non-fatal */ }
+      if (ragResults.length > 0) knowledge = ragResults;
+    } catch { /* non-fatal */ }
+  }
 
   return {
     ok: true,
@@ -248,8 +275,8 @@ async function handleSearch(req: RouterRequest, startedAt: number): Promise<Rout
     results,
     knowledge,
     text: results.length
-      ? `Found ${results.length} tool(s) for "${req.query}". Top: ${results[0].name} (${results[0].id})`
-      : `No tools found for "${req.query}".`,
+      ? `Found ${results.length} result(s) for "${req.query}".`
+      : `No results for "${req.query}".`,
     durationMs: Date.now() - startedAt,
   };
 }
