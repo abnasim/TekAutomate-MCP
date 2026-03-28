@@ -825,12 +825,8 @@ export function useAiChat(params: {
       // ── AI Chat + Anthropic: browser-direct with MCP context ──
       // 1. Fetch SCPI + RAG context from MCP (tools/execute)
       // 2. Call Anthropic API directly from browser (no MCP proxy)
-      // IMPORTANT: Build requests ("add", "build it", "apply", "insert") must go through
-      // MCP path which has ACTIONS_JSON builder instructions. Browser-direct is chat-only.
-      const isBuildRequest = /\b(add|build|apply|insert|create|set up|configure|setup|enable)\b.*\b(command|step|flow|measurement|bus|trigger|channel)\b/i.test(text)
-        || /\b(build\s*it|add\s*(the|these|all)\s*(commands?|steps?))\b/i.test(text)
-        || chatBuildHandoff || autoBuildFollowUp;
-      if (effectiveTekMode === 'ai' && state.provider === 'anthropic' && !isBuildRequest) {
+      // Claude generates ACTIONS_JSON directly when user wants to build/add steps.
+      if (effectiveTekMode === 'ai' && state.provider === 'anthropic') {
         try {
           // Pre-load context from MCP tools (same as MCP path does server-side)
           let preContext = '';
@@ -909,14 +905,27 @@ export function useAiChat(params: {
             body: JSON.stringify({
               model: state.model,
               system: [
-                '# TekAutomate AI Chat',
+                '# TekAutomate AI Assistant',
                 `You are a senior Tektronix test automation engineer helping with a ${params.flowContext?.modelFamily || 'scope'} (${params.flowContext?.backend || 'pyvisa'}).`,
                 'Be conversational and concise. Use **bold** for emphasis and `code` for SCPI commands.',
                 'Use pre-loaded SCPI context below when available — it comes from a verified 9,300+ command database.',
-                'When user asks to add commands, build a flow, or set up something, tell them to say **"build it"** or **"add the commands"** — this will route to the flow builder that generates applyable steps.',
-                'Do not dump raw SCPI lists — the builder handles that. Focus on explaining, advising, and answering questions.',
+                '',
+                '## When user asks to ADD, BUILD, or CONFIGURE something:',
+                'Respond with 1-2 short sentences, then output ACTIONS_JSON with flow steps.',
+                'Format: `ACTIONS_JSON: {"summary":"...","findings":[],"suggestedFixes":[],"actions":[...]}`',
+                '',
+                'Each action: `{"type":"insert_step_after","targetStepId":null,"newStep":{"type":"write","label":"...","params":{"command":"SCPI_COMMAND"}}}`',
+                '',
+                'Valid step types: connect, disconnect, write, query, set_and_query, sleep, comment, save_screenshot, save_waveform, error_check, recall, group, tm_device_command.',
+                '- write: `{"type":"write","label":"...","params":{"command":"CH1:SCAle 1.0"}}`',
+                '- query: `{"type":"query","label":"...","params":{"command":"CH1:SCAle?","saveAs":"result_scale"}}`',
+                '- save_screenshot: `{"type":"save_screenshot","label":"...","params":{"filename":"capture.png","scopeType":"modern","method":"pc_transfer"}}`',
+                '- connect first, disconnect last. Use `label` for display text.',
+                '',
+                '## When user asks a QUESTION (what is, explain, how):',
+                'Answer conversationally. Do not output ACTIONS_JSON for questions.',
               ].join('\n'),
-              max_tokens: 4096,
+              max_tokens: 8192,
               messages: chatMessages,
             }),
           });
