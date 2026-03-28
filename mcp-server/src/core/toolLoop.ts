@@ -106,7 +106,7 @@ async function runDeterministicToolLoop(req: McpChatRequest, flowCommandIssues: 
     if (routeDecision.route === 'smart_scpi') {
       console.log('[DETERMINISTIC_TOOL_LOOP] Using Smart SCPI Assistant');
       const scpiResult = await runSmartScpiAssistant(req);
-      return await enrichWithRag(scpiResult, req.userMessage);
+      return await enrichWithRag(scpiResult, req.userMessage, req.flowContext?.modelFamily);
     }
 
     if (routeDecision.route === 'tm_devices') {
@@ -653,14 +653,43 @@ async function runFlowValidation(req: McpChatRequest) {
 }
 
 /**
+ * Map model family to allowed RAG source files.
+ * Filters out irrelevant instrument families (RSA, AWG, AFG, SMU, DPOJET, TEKEXP).
+ */
+const RAG_SOURCE_ALLOW: Record<string, RegExp> = {
+  mso_2_series: /mso_2_4_5_6_7|mso_manual/i,
+  mso_4_series: /mso_2_4_5_6_7|mso_manual/i,
+  mso_5_series: /mso_2_4_5_6_7|mso_manual/i,
+  mso_6_series: /mso_2_4_5_6_7|mso_manual/i,
+  mso_7_series: /mso_2_4_5_6_7|mso_manual/i,
+  dpo_5_series: /MSO_DPO_5k_7k|dpojet|legacy_scope/i,
+  dpo_7_series: /MSO_DPO_5k_7k|dpojet|legacy_scope/i,
+  tekscopepc:   /mso_2_4_5_6_7|MSO_DPO_5k_7k|mso_manual|legacy_scope/i,
+  tekscope_pc:  /mso_2_4_5_6_7|MSO_DPO_5k_7k|mso_manual|legacy_scope/i,
+};
+
+/**
  * Enrich a toolLoop result with RAG context snippets.
  * Searches the scpi corpus for the query and appends relevant knowledge.
+ * Filters out chunks from irrelevant instrument families.
  */
-async function enrichWithRag(result: any, query: string): Promise<any> {
+async function enrichWithRag(result: any, query: string, modelFamily?: string): Promise<any> {
   try {
     const { retrieveRagChunks } = await import('../tools/retrieveRagChunks');
-    const ragResult = await retrieveRagChunks({ corpus: 'scpi', query, topK: 3 });
-    const chunks = (ragResult.data || []) as Array<{title: string; body: string; source?: string}>;
+    const ragResult = await retrieveRagChunks({ corpus: 'scpi', query, topK: 8 });
+    let chunks = (ragResult.data || []) as Array<{title: string; body: string; source?: string}>;
+
+    // Filter to relevant source files for the user's model family
+    const familyKey = (modelFamily || '').toLowerCase().replace(/\s+/g, '_');
+    const allowPattern = RAG_SOURCE_ALLOW[familyKey];
+    if (allowPattern) {
+      chunks = chunks.filter(c => allowPattern.test(c.source || ''));
+    } else {
+      // Unknown family: at minimum exclude RSA, AWG, AFG, SMU (non-scope instruments)
+      chunks = chunks.filter(c => !/\b(rsa|awg|afg|smu)\b/i.test(c.source || ''));
+    }
+
+    chunks = chunks.slice(0, 3);
     if (chunks.length > 0) {
       const ragSection = chunks
         .map(c => `**${c.title}**\n${String(c.body || '').slice(0, 200)}`)
@@ -687,11 +716,23 @@ async function runSearchKnowledge(req: McpChatRequest) {
     const corpora = ['scpi', 'app_logic', 'errors', 'templates', 'pyvisa_tekhsi'] as const;
     const allResults: Array<{corpus: string; title: string; body: string; source?: string}> = [];
 
+    // Filter RAG by model family — exclude irrelevant instrument families
+    const familyKey = (req.flowContext?.modelFamily || '').toLowerCase().replace(/\s+/g, '_');
+    const allowPattern = RAG_SOURCE_ALLOW[familyKey];
+
     for (const corpus of corpora) {
       try {
-        const r = await retrieveRagChunks({ corpus, query, topK: 3 });
-        const chunks = (r.data || []) as Array<{corpus: string; title: string; body: string; source?: string}>;
-        for (const c of chunks) {
+        const r = await retrieveRagChunks({ corpus, query, topK: 6 });
+        let chunks = (r.data || []) as Array<{corpus: string; title: string; body: string; source?: string}>;
+        // Filter scpi corpus by family
+        if (corpus === 'scpi') {
+          if (allowPattern) {
+            chunks = chunks.filter(c => allowPattern.test(c.source || ''));
+          } else {
+            chunks = chunks.filter(c => !/\b(rsa|awg|afg|smu)\b/i.test(c.source || ''));
+          }
+        }
+        for (const c of chunks.slice(0, 3)) {
           allResults.push({ corpus, title: c.title, body: c.body, source: c.source });
         }
       } catch { /* skip failed corpus */ }
@@ -8564,7 +8605,7 @@ export async function runToolLoop(req: McpChatRequest): Promise<ToolLoopResult> 
       console.log('[MCP_ONLY] Router wants Smart SCPI Assistant - delegating to Smart SCPI');
       const scpiResult = await runSmartScpiAssistant(req);
       // Enrich with RAG context (non-fatal)
-      return await enrichWithRag(scpiResult, req.userMessage);
+      return await enrichWithRag(scpiResult, req.userMessage, req.flowContext?.modelFamily);
     } else if (routeDecision.forceToolCall) {
       console.log('[MCP_ONLY] Router wants tool calls - going to tool loop');
       // Continue to tool loop below
