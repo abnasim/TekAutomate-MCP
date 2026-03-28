@@ -1786,6 +1786,24 @@ export function AiChatPanel({
               value={input}
               onChange={(e) => setInput(e.target.value)}
               onFocus={() => setQuickActionsCollapsed(true)}
+              onPaste={(e) => {
+                const items = e.clipboardData?.items;
+                if (!items) return;
+                const imageFiles: File[] = [];
+                for (let i = 0; i < items.length; i++) {
+                  const item = items[i];
+                  if (item.kind === 'file' && item.type.startsWith('image/')) {
+                    const file = item.getAsFile();
+                    if (file) imageFiles.push(file);
+                  }
+                }
+                if (imageFiles.length > 0) {
+                  e.preventDefault();
+                  const dt = new DataTransfer();
+                  imageFiles.forEach((f) => dt.items.add(f));
+                  void handleAttachmentSelection(dt.files);
+                }
+              }}
               onKeyDown={(e) => {
                 if (e.key === 'Enter' && !e.shiftKey) {
                   e.preventDefault();

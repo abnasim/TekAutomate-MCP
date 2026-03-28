@@ -165,8 +165,14 @@ async function runSmartScpiAssistant(req: McpChatRequest) {
       throw new Error('smartScpiLookup function not found in module');
     }
     
+    // Include text attachments as additional context for the query
+    const attachmentCtx = buildAttachmentContext(req);
+    const queryWithContext = attachmentCtx
+      ? `${req.userMessage}\n\n${attachmentCtx}`
+      : req.userMessage;
+
     const toolResult = await smartScpiLookup({
-      query: req.userMessage,
+      query: queryWithContext,
       modelFamily: req.flowContext.modelFamily,
       context: `${req.flowContext.deviceType || 'SCOPE'} ${req.flowContext.backend || 'pyvisa'}`,
       mode: 'build'  // MCP-only mode should auto-select best match, not show conversational menus
@@ -8590,6 +8596,24 @@ export async function runToolLoop(req: McpChatRequest): Promise<ToolLoopResult> 
   // never call external model providers from here.
   if (mcpOnlyMode) {
     const mcpMsg = req.userMessage.toLowerCase().trim();
+
+    // Check for image-only messages in MCP mode — can't process images without AI
+    const hasImages = Array.isArray(req.attachments) && req.attachments.some(
+      (f: any) => String(f?.mimeType || '').startsWith('image/')
+    );
+    const hasTextAttachments = Array.isArray(req.attachments) && req.attachments.some(
+      (f: any) => String(f?.textExcerpt || '').trim().length > 0
+    );
+    if (hasImages && !hasTextAttachments && (!mcpMsg || mcpMsg === 'use attached files as context.')) {
+      return {
+        text: 'MCP mode cannot analyze images — it uses deterministic SCPI lookup without AI vision. Switch to **AI mode** to have the AI analyze your screenshot or image.\n\nIf your image contains SCPI commands or text, paste the text directly instead.',
+        assistantThreadId: undefined,
+        errors: [],
+        warnings: ['Image attachments require AI mode'],
+        metrics: { totalMs: Date.now() - startedAt, usedShortcut: false, iterations: 0, toolCalls: 0, toolMs: 0, modelMs: 0, promptChars: { system: 0, user: 0 } },
+        debug: { toolTrace: [], resolutionPath: 'deterministic:image_not_supported' }
+      };
+    }
 
     // Priority intents — check BEFORE smart_scpi delegation
     if (cleanRouter.isValidationIntent(mcpMsg)) {
