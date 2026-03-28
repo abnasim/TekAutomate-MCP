@@ -7,7 +7,7 @@ import { initTemplateIndex } from './core/templateIndex';
 import { runToolLoop } from './core/toolLoop';
 import { getToolDefinitions, runTool } from './tools/index';
 import type { McpChatRequest } from './core/schemas';
-import { bootRouter, createReloadProvidersHandler, createRouterHandler, getRouterHealth } from './core/routerIntegration';
+import { bootRouter, bootRouterMinimal, createReloadProvidersHandler, createRouterHandler, getRouterHealth } from './core/routerIntegration';
 import { getCommandIndex } from './core/commandIndex';
 import { getRagIndexes } from './core/ragIndex';
 import { getTemplateIndex } from './core/templateIndex';
@@ -300,21 +300,26 @@ async function warmStartup(): Promise<void> {
     console.log(`✅ All indexes initialized in ${Date.now() - startInit}ms`);
 
     const routerDisabled = String(process.env.MCP_ROUTER_DISABLED || '').trim() === 'true';
-    if (warmMode === 'full' && !routerDisabled) {
+    if (!routerDisabled) {
       try {
-        const commandIndex = await getCommandIndex();
-        const ragIndexes = await getRagIndexes();
-        const templates = (await getTemplateIndex()).all().map((doc) => ({
-          id: doc.id,
-          name: doc.name,
-          description: doc.description,
-          backend: 'template',
-          deviceType: 'workflow',
-          tags: [],
-          steps: doc.steps,
-        }));
-        const report = await bootRouter({ commandIndex, ragIndexes, templates });
-        console.log(`[MCP:router] ${report.total} tools in ${report.durationMs}ms`);
+        if (warmMode === 'full') {
+          const commandIndex = await getCommandIndex();
+          const ragIndexes = await getRagIndexes();
+          const templates = (await getTemplateIndex()).all().map((doc) => ({
+            id: doc.id,
+            name: doc.name,
+            description: doc.description,
+            backend: 'template',
+            deviceType: 'workflow',
+            tags: [],
+            steps: doc.steps,
+          }));
+          const report = await bootRouter({ commandIndex, ragIndexes, templates });
+          console.log(`[MCP:router] ${report.total} tools in ${report.durationMs}ms`);
+        } else {
+          const report = await bootRouterMinimal();
+          console.log(`[MCP:router] minimal ${report.total} tools in ${report.durationMs}ms`);
+        }
       } catch (error) {
         startupState = 'error';
         startupError = error instanceof Error ? error.message : String(error);
