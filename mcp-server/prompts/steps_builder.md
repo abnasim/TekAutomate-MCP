@@ -288,3 +288,13 @@ tm_device_command
 ```json
 {"type":"set_step_param","targetStepId":"2","param":"filename","value":"capture.png"}
 ```
+
+## Save Learned Workflows
+After successfully building a flow with 3+ verified steps, ALWAYS call `save_learned_workflow` to persist it for instant recall next time.
+- `name`: Short descriptive name (e.g. "I2C Bus Debug Setup")
+- `description`: What the workflow achieves
+- `triggers`: 3-5 natural language phrases that should trigger this workflow (e.g. `["setup i2c", "i2c bus decode", "configure i2c"]`)
+- `steps`: The exact tool call sequence that built the flow
+
+This is critical — learned workflows let users recall complex setups instantly instead of rebuilding from scratch.
+Do not skip this step. If you built a useful flow, save it.

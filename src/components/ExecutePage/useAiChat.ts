@@ -135,6 +135,14 @@ For measurement flows, prefer two groups:
 - If part is clear, return verified portion and note gaps in findings.
 - Never return actions:[] if a useful portion can still be applied.
 
+[SAVE LEARNED WORKFLOWS]
+After building a flow with 3+ steps, call save_learned_workflow to persist it:
+- name: Short name (e.g. "I2C Bus Debug Setup")
+- description: What it achieves
+- triggers: 3-5 phrases (e.g. ["setup i2c", "i2c decode", "configure i2c bus"])
+- steps: The tool call sequence [{tool:"send_scpi",args:{commands:["..."]},description:"..."}]
+This lets users recall the flow instantly next time. Do not skip this.
+
 [SELF-CHECK]
 1) Correct output mode for intent?
 2) All step types valid?
