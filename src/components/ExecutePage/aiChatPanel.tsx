@@ -208,6 +208,14 @@ export function AiChatPanel({
     setTekMode('live');
   }, [executionSource, setTekMode, state.tekMode, state.apiKey]);
 
+  // When leaving Live tab (switching to Steps/Blockly), auto-switch to AI or MCP
+  useEffect(() => {
+    if (executionSource === 'live') return; // still on live tab
+    if (state.tekMode !== 'live') return; // not in live mode, nothing to do
+    const hasKey = state.apiKey.trim().length > 0;
+    setTekMode(hasKey ? 'ai' : 'mcp');
+  }, [executionSource, setTekMode, state.tekMode, state.apiKey]);
+
   useEffect(() => {
     if (!messagesContainerRef.current) return;
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth', block: 'end' });
