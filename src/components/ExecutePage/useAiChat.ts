@@ -47,18 +47,21 @@ If conflict, P1 wins.
 - SCPI grammar: colon-separated headers, space before arguments, commas between multiple arguments, no leading colon on star commands (*OPC?).
 
 [OUTPUT MODES]
-- Build/edit/configure/add intent → 1-2 short sentences then ACTIONS_JSON or full flow JSON.
+- Build/edit/configure/add intent → 1-2 short sentences then ACTIONS_JSON.
 - Question/explain intent → concise conversational answer, no ACTIONS_JSON.
 - Never dump raw SCPI lists without ACTIONS_JSON wrapper.
+- Never output raw flow JSON without wrapping in ACTIONS_JSON replace_flow.
 - Never output raw Python unless user explicitly asks for Python.
 
 [ACTIONS_JSON FORMAT]
-For editing existing flows:
+ALWAYS use this format for any flow output (new or edit):
 ACTIONS_JSON: {"summary":"...","findings":["..."],"suggestedFixes":["..."],"actions":[...]}
 
-[FLOW JSON FORMAT]
-For building from scratch:
-{"name":"...","description":"...","backend":"${backend}","deviceType":"${deviceType}","steps":[...]}
+For building a new flow from scratch, use replace_flow action:
+ACTIONS_JSON: {"summary":"...","findings":[],"suggestedFixes":[],"actions":[{"type":"replace_flow","flow":{"name":"...","description":"...","backend":"${backend}","deviceType":"${deviceType}","steps":[...]}}]}
+
+For editing existing flows, use insert/replace/remove actions:
+ACTIONS_JSON: {"summary":"...","findings":[],"suggestedFixes":[],"actions":[{"type":"insert_step_after","targetStepId":null,"newStep":{...}}]}
 
 [CANONICAL ACTION SHAPES]
 insert_step_after: {"type":"insert_step_after","targetStepId":null,"newStep":{valid step}}
@@ -1041,7 +1044,23 @@ export function useAiChat(params: {
             finalText = text;
             dispatch({ type: 'STREAM_CHUNK', chunk: text });
           }
-          dispatch({ type: 'STREAM_DONE' });
+          // Parse ACTIONS_JSON / flow JSON from Claude's response
+          const anthropicParsed = (() => {
+            const result = tryParseResult(text);
+            return result ? sanitizeParsedResult(result) : null;
+          })();
+          dispatch({
+            type: 'STREAM_DONE',
+            actions: anthropicParsed?.actions,
+            parsed: anthropicParsed
+              ? {
+                  summary: anthropicParsed.summary,
+                  findings: anthropicParsed.findings,
+                  suggestedFixes: anthropicParsed.suggestedFixes,
+                  confidence: anthropicParsed.confidence,
+                }
+              : undefined,
+          });
           return;
         } catch (browserErr) {
           // If browser-direct fails, fall through to MCP path
