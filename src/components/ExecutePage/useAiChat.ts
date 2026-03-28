@@ -715,6 +715,10 @@ export function useAiChat(params: {
         hasPendingFlowSteps: pendingFlowSteps.length > 0,
       });
     const effectiveTekMode: TekMode = chatBuildHandoff || autoBuildFollowUp ? 'mcp' : state.tekMode;
+    // When building from AI chat with OpenAI provider + key, route via assistant
+    // even though effectiveTekMode is 'mcp' for output mode purposes
+    const buildHandoffViaAssistant = (chatBuildHandoff || autoBuildFollowUp)
+      && state.tekMode === 'ai' && state.provider === 'openai' && state.apiKey.trim().length > 0;
     const forceFreshBuild = effectiveTekMode === 'mcp' && shouldForceFreshBuild(text, state.tekMode);
     const handoffHistory = (chatBuildHandoff || autoBuildFollowUp)
       ? extractActiveBuildHandoffHistory(state.history as ChatTurn[])
@@ -917,7 +921,7 @@ export function useAiChat(params: {
       // MCP mode: deterministic planner, no API key needed
       // AI mode: server proxies AI call, chat interaction
       // Live mode: server proxies AI call with tool loop (send_scpi, screenshot, etc.)
-      const shouldRouteViaAssistant = state.tekMode === 'ai' && state.provider === 'openai' && effectiveTekMode !== 'mcp';
+      const shouldRouteViaAssistant = buildHandoffViaAssistant || (state.tekMode === 'ai' && state.provider === 'openai' && effectiveTekMode !== 'mcp');
       const reuseOpenAiThread = shouldReuseOpenAiThread({
         threadId: state.openaiThreadId,
         shouldRouteViaAssistant,
@@ -966,10 +970,10 @@ export function useAiChat(params: {
         outputMode: effectiveTekMode === 'ai'
           ? ('chat' as const)
           : params.executionSource === 'blockly' ? 'blockly_xml' : 'steps_json',
-        mode: effectiveTekMode === 'mcp' ? ('mcp_only' as const) : (undefined as any),
-        provider: effectiveTekMode === 'mcp' ? ('openai' as const) : (state.provider as any),
-        apiKey: effectiveTekMode === 'mcp' ? '__mcp_only__' : trimmedKey,
-        model: effectiveTekMode === 'mcp' ? 'gpt-5.4-mini' : state.model,
+        mode: (effectiveTekMode === 'mcp' && !buildHandoffViaAssistant) ? ('mcp_only' as const) : (undefined as any),
+        provider: (effectiveTekMode === 'mcp' && !buildHandoffViaAssistant) ? ('openai' as const) : (state.provider as any),
+        apiKey: (effectiveTekMode === 'mcp' && !buildHandoffViaAssistant) ? '__mcp_only__' : trimmedKey,
+        model: (effectiveTekMode === 'mcp' && !buildHandoffViaAssistant) ? 'gpt-5.4-mini' : state.model,
         toolCallMode: false,
         openaiAssistantId: shouldRouteViaAssistant
           ? state.openaiAssistantId.trim() || SERVER_DEFAULT_ASSISTANT_TOKEN
