@@ -215,7 +215,7 @@ function sendJson(res: http.ServerResponse, status: number, payload: unknown) {
 }
 
 function getHealthPayload() {
-  const warmStartMode = String(process.env.MCP_WARM_START_MODE || 'full').trim().toLowerCase() || 'full';
+  const warmStartMode = String(process.env.MCP_WARM_START_MODE || 'minimal').trim().toLowerCase() || 'minimal';
   return {
     ok: startupState !== 'error',
     status: startupState,
@@ -271,22 +271,27 @@ async function warmStartup(): Promise<void> {
     startupError = null;
 
     const startInit = Date.now();
-    console.log('[SERVER] Initializing indexes in background...');
+    const warmMode = String(process.env.MCP_WARM_START_MODE || 'minimal').trim().toLowerCase() || 'minimal';
+    console.log(`[SERVER] Initializing indexes in background (mode=${warmMode})...`);
 
-    const results = await Promise.allSettled([
-      initCommandIndex(),
-      initTmDevicesIndex(),
-      initRagIndexes(),
-      initTemplateIndex(),
-      ...(providerSupplementsEnabled() ? [initProviderCatalog()] : []),
-    ]);
+    const initTasks: Promise<unknown>[] = [initCommandIndex()];
+    const names = ['CommandIndex'];
+    if (warmMode === 'full') {
+      initTasks.push(initTmDevicesIndex(), initRagIndexes(), initTemplateIndex());
+      names.push('TmDevicesIndex', 'RagIndexes', 'TemplateIndex');
+      if (providerSupplementsEnabled()) {
+        initTasks.push(initProviderCatalog());
+        names.push('ProviderCatalog');
+      }
+    }
+
+    const results = await Promise.allSettled(initTasks);
 
     const failures = results
       .map((r, i) => r.status === 'rejected' ? { index: i, error: r.reason } : null)
       .filter((f): f is { index: number; error: unknown } => Boolean(f));
 
     if (failures.length > 0) {
-      const names = ['CommandIndex', 'TmDevicesIndex', 'RagIndexes', 'TemplateIndex', 'ProviderCatalog'];
       const failedNames = failures.map((f) => names[f.index]).join(', ');
       const error = new Error(`[CRITICAL] Initialization failed: ${failedNames}`);
       startupState = 'error';
@@ -301,7 +306,7 @@ async function warmStartup(): Promise<void> {
     console.log(`✅ All indexes initialized in ${Date.now() - startInit}ms`);
 
     const routerDisabled = String(process.env.MCP_ROUTER_DISABLED || '').trim() === 'true';
-    if (!routerDisabled) {
+    if (warmMode === 'full' && !routerDisabled) {
       try {
         const commandIndex = await getCommandIndex();
         const ragIndexes = await getRagIndexes();
