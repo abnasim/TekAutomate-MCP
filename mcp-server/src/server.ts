@@ -14,12 +14,6 @@ import { getTemplateIndex } from './core/templateIndex';
 import fs from 'fs';
 import path from 'path';
 import { fileURLToPath } from 'url';
-import { Server as McpProtocolServer } from '@modelcontextprotocol/sdk/server';
-import { StreamableHTTPServerTransport } from '@modelcontextprotocol/sdk/server/streamableHttp';
-import {
-  CallToolRequestSchema,
-  ListToolsRequestSchema,
-} from '@modelcontextprotocol/sdk/types';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -306,13 +300,43 @@ export async function createServer(port = 8787): Promise<http.Server> {
   }
 
   // ── MCP Protocol Server (Streamable HTTP for Claude Web / Desktop) ──
-  function createMcpProtocolServer(): McpProtocolServer {
-    const mcp = new McpProtocolServer(
+  // SDK is loaded lazily so the server still boots without @modelcontextprotocol/sdk installed.
+  let _mcpSdk: {
+    Server: any;
+    StreamableHTTPServerTransport: any;
+    CallToolRequestSchema: any;
+    ListToolsRequestSchema: any;
+  } | null = null;
+
+  async function getMcpSdk() {
+    if (_mcpSdk) return _mcpSdk;
+    try {
+      const [serverMod, transportMod, typesMod] = await Promise.all([
+        import('@modelcontextprotocol/sdk/server'),
+        import('@modelcontextprotocol/sdk/server/streamableHttp'),
+        import('@modelcontextprotocol/sdk/types'),
+      ]);
+      _mcpSdk = {
+        Server: serverMod.Server,
+        StreamableHTTPServerTransport: transportMod.StreamableHTTPServerTransport,
+        CallToolRequestSchema: typesMod.CallToolRequestSchema,
+        ListToolsRequestSchema: typesMod.ListToolsRequestSchema,
+      };
+      return _mcpSdk;
+    } catch {
+      return null;
+    }
+  }
+
+  async function createMcpProtocolServer() {
+    const sdk = await getMcpSdk();
+    if (!sdk) throw new Error('MCP SDK not installed. Run: npm install @modelcontextprotocol/sdk');
+    const mcp = new sdk.Server(
       { name: 'tekautomate', version: '3.2.0' },
       { capabilities: { tools: {} } },
     );
     const toolDefs = getToolDefinitions();
-    const mcpTools = toolDefs.map((def) => ({
+    const mcpTools = toolDefs.map((def: any) => ({
       name: def.name,
       description: def.description ?? def.name,
       inputSchema: {
@@ -323,8 +347,8 @@ export async function createServer(port = 8787): Promise<http.Server> {
           : {}),
       },
     }));
-    mcp.setRequestHandler(ListToolsRequestSchema, async () => ({ tools: mcpTools }));
-    mcp.setRequestHandler(CallToolRequestSchema, async (request) => {
+    mcp.setRequestHandler(sdk.ListToolsRequestSchema, async () => ({ tools: mcpTools }));
+    mcp.setRequestHandler(sdk.CallToolRequestSchema, async (request: any) => {
       const { name, arguments: args } = request.params;
       try {
         const result = await runTool(name, (args as Record<string, unknown>) ?? {});
@@ -338,8 +362,8 @@ export async function createServer(port = 8787): Promise<http.Server> {
     return mcp;
   }
 
-  // Per-session MCP transport map (stateless mode: one per request)
-  const mcpTransports = new Map<string, StreamableHTTPServerTransport>();
+  // Per-session MCP transport map
+  const mcpTransports = new Map<string, any>();
 
   // ── HTML Tools Page ───────────────────────────────────────────────
   function buildToolsHtml(): string {
@@ -572,6 +596,12 @@ function filterTools(q) {
 
       if (req.method === 'POST' || req.method === 'GET' || req.method === 'DELETE') {
         try {
+          const sdk = await getMcpSdk();
+          if (!sdk) {
+            sendJson(res, 501, { error: 'MCP protocol not available. Install @modelcontextprotocol/sdk to enable /mcp endpoint.' });
+            return;
+          }
+
           // Read body for POST
           let body: string | undefined;
           if (req.method === 'POST') {
@@ -591,10 +621,10 @@ function filterTools(q) {
             await transport.handleRequest(req, res, body ? JSON.parse(body) : undefined);
           } else if (req.method === 'POST') {
             // New session — create transport and MCP server
-            const transport = new StreamableHTTPServerTransport({
+            const transport = new sdk.StreamableHTTPServerTransport({
               sessionIdGenerator: () => `tek-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
             });
-            const mcpServer = createMcpProtocolServer();
+            const mcpServer = await createMcpProtocolServer();
             await mcpServer.connect(transport);
 
             // Store transport by session ID after first handle
