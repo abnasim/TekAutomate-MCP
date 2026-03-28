@@ -6663,7 +6663,7 @@ async function runOpenAiHostedResponse(
     `[MCP] OpenAI hosted responses: model ${hostedModel}${reasoningCfg?.effort ? ` reasoning=${String(reasoningCfg.effort)}` : ''}`
   );
   if (usesServerDefaultHostedPrompt(req) && canAttachHostedPrompt && !promptConfig?.id) {
-    throw new Error('OPENAI_PROMPT_ID is required for hosted server-default assistant mode. Set a real pmpt_... value in mcp-server/.env or send a prompt ID directly.');
+    console.warn('[MCP] OPENAI_PROMPT_ID not set — falling back to inline system prompt without hosted prompt attachment.');
   }
   if (usesServerDefaultHostedPrompt(req) && !canAttachHostedPrompt) {
     console.log(
