@@ -1348,7 +1348,6 @@ export function AiChatPanel({
             </button>
           </div>
           )}
-          {executionSource === 'live' && (
           {state.tekMode === 'live' && (
             <button
               type="button"
