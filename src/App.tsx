@@ -4,7 +4,7 @@ import {
   Upload, Folder, Zap, X, Undo2, Redo2, FileJson, Code2, ChevronDown, ChevronUp,
   RefreshCw, Star,
   Monitor, Cpu, Battery, Gauge, Activity, Radio, ArrowUp, ArrowDown, Edit, GraduationCap, Plus, BookOpen, HelpCircle,
-  Moon, Sun,
+  Moon, Sun, List, Puzzle, Library, LayoutTemplate,
   // Better step icons
   PlugZap, Unplug, Send, Timer, MessageSquare, HardDriveDownload, ShieldAlert, FolderOpen, Maximize2, Camera,
   FolderInput, Sparkles, Check, ClipboardPaste, MoreHorizontal
@@ -1083,7 +1083,7 @@ const HelpDropdownAcademyButtonWrapper: React.FC<{ onClose: () => void }> = ({ o
   return (
     <button 
       onClick={() => { openArticle(); onClose(); }}
-      className="w-full text-left px-3 py-2 text-xs hover:bg-gray-100 flex items-center gap-2"
+      className="w-full text-left px-3 py-2 text-xs hover:bg-gray-100 dark:hover:bg-gray-700 dark:text-gray-200 flex items-center gap-2"
     >
       <BookOpen size={14} />
       Academy
@@ -8089,31 +8089,35 @@ Keep under 120 words. No headings. Bullets only. Stay on this command. Do not de
             <button 
               data-tour="builder-button"
               onClick={() => setCurrentView('builder')} 
-              className={`h-7 lg:h-8 px-2 lg:px-3 py-1 lg:py-1.5 rounded text-[11px] lg:text-xs font-medium flex items-center justify-center whitespace-nowrap flex-shrink-0 ${currentView === 'builder' ? 'bg-blue-600 text-white' : 'bg-gray-100 dark:bg-gray-700 dark:text-gray-200'}`}
+              className={`h-7 lg:h-8 px-2 lg:px-3 py-1 lg:py-1.5 rounded text-[11px] lg:text-xs font-medium flex items-center justify-center gap-1 whitespace-nowrap flex-shrink-0 ${currentView === 'builder' ? 'bg-blue-600 text-white' : 'bg-gray-100 dark:bg-gray-700 dark:text-gray-200'}`}
             >
+              <List size={14} />
               Steps
             </button>
-            <button 
-              onClick={() => setCurrentView('flow-designer')} 
-              className={`h-7 lg:h-8 px-2 lg:px-3 py-1 lg:py-1.5 rounded text-[11px] lg:text-xs font-medium flex items-center justify-center whitespace-nowrap flex-shrink-0 ${currentView === 'flow-designer' ? 'bg-blue-600 text-white' : 'bg-gray-100 dark:bg-gray-700 dark:text-gray-200'}`}
+            <button
+              onClick={() => setCurrentView('flow-designer')}
+              className={`h-7 lg:h-8 px-2 lg:px-3 py-1 lg:py-1.5 rounded text-[11px] lg:text-xs font-medium flex items-center justify-center gap-1 whitespace-nowrap flex-shrink-0 ${currentView === 'flow-designer' ? 'bg-blue-600 text-white' : 'bg-gray-100 dark:bg-gray-700 dark:text-gray-200'}`}
             >
+              <Puzzle size={14} />
               Blockly
             </button>
-            <button 
+            <button
               data-tour="commands-button"
               onClick={() => {
                 triggerControls.triggerAnimation('search');
                 setCurrentView('library');
-              }} 
-              className={`h-7 lg:h-8 px-2 lg:px-3 py-1 lg:py-1.5 rounded text-[11px] lg:text-xs font-medium flex items-center justify-center whitespace-nowrap flex-shrink-0 ${currentView === 'library' ? 'bg-blue-600 text-white' : 'bg-gray-100 dark:bg-gray-700 dark:text-gray-200'}`}
+              }}
+              className={`h-7 lg:h-8 px-2 lg:px-3 py-1 lg:py-1.5 rounded text-[11px] lg:text-xs font-medium flex items-center justify-center gap-1 whitespace-nowrap flex-shrink-0 ${currentView === 'library' ? 'bg-blue-600 text-white' : 'bg-gray-100 dark:bg-gray-700 dark:text-gray-200'}`}
             >
+              <Library size={14} />
               Commands
             </button>
-            <button 
+            <button
               data-tour="templates-button"
-              onClick={() => setCurrentView('templates')} 
-              className={`h-7 lg:h-8 px-2 lg:px-3 py-1 lg:py-1.5 rounded text-[11px] lg:text-xs font-medium flex items-center justify-center whitespace-nowrap flex-shrink-0 ${currentView === 'templates' ? 'bg-blue-600 text-white' : 'bg-gray-100 dark:bg-gray-700 dark:text-gray-200'}`}
+              onClick={() => setCurrentView('templates')}
+              className={`h-7 lg:h-8 px-2 lg:px-3 py-1 lg:py-1.5 rounded text-[11px] lg:text-xs font-medium flex items-center justify-center gap-1 whitespace-nowrap flex-shrink-0 ${currentView === 'templates' ? 'bg-blue-600 text-white' : 'bg-gray-100 dark:bg-gray-700 dark:text-gray-200'}`}
             >
+              <LayoutTemplate size={14} />
               Templates
             </button>
             <button
@@ -8148,13 +8152,12 @@ Keep under 120 words. No headings. Bullets only. Stay on this command. Do not de
             )}
             <button
               onClick={() => setShowExecutorModal(true)}
-              className="h-8 min-w-[7rem] px-3 py-1.5 rounded text-xs font-medium flex items-center justify-center gap-1.5 flex-shrink-0 whitespace-nowrap bg-gray-100 dark:bg-gray-700 dark:text-gray-200 hover:bg-gray-200 dark:hover:bg-gray-600"
-              title="Executor connection (scope PC) – click to see or change"
+              className="h-7 lg:h-8 w-7 lg:w-8 rounded flex items-center justify-center flex-shrink-0 bg-gray-100 dark:bg-gray-700 dark:text-gray-200 hover:bg-gray-200 dark:hover:bg-gray-600"
+              title={executorEndpoint
+                ? `Executor: ${connectedInstrumentIdn || `${executorEndpoint.host}:${executorEndpoint.port}`}`
+                : 'Executor — click to connect'}
             >
-              <Camera size={16} className="flex-shrink-0" />
-              {executorEndpoint
-                ? connectedInstrumentIdn || `${executorEndpoint.host}:${executorEndpoint.port}`
-                : 'Executor'}
+              <Camera size={16} />
             </button>
             {currentView === 'builder' && !isHeaderNarrow && (
               <>
