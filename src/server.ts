@@ -430,6 +430,12 @@ header p{color:#94a3b8;margin-top:0.25rem}
 .setup-card h4{color:#60a5fa;margin-bottom:0.5rem;font-size:0.95rem}
 .setup-card pre{background:#0f172a;padding:0.75rem;border-radius:6px;font-size:0.75rem;overflow-wrap:anywhere;word-break:break-word;white-space:pre-wrap;color:#a5b4fc;border:1px solid #1e293b}
 .setup-card .label{font-size:0.7rem;color:#94a3b8;text-transform:uppercase;letter-spacing:0.05em;margin-bottom:0.25rem}
+.setup-card p{color:#cbd5e1;font-size:0.82rem;margin-bottom:0.65rem}
+.setup-card .muted{color:#94a3b8;font-size:0.78rem}
+.setup-card ol{margin:0.5rem 0 0.75rem 1rem;color:#cbd5e1;font-size:0.82rem}
+.setup-card li{margin:0.2rem 0}
+.setup-card a{color:#60a5fa;text-decoration:none}
+.setup-card a:hover{text-decoration:underline}
 .endpoints{display:grid;gap:0.5rem}
 .endpoint{background:#1e293b;border:1px solid #334155;border-radius:6px;padding:0.75rem 1rem;display:flex;gap:1rem;align-items:center}
 .endpoint .method{font-weight:700;font-size:0.75rem;padding:2px 8px;border-radius:4px;min-width:50px;text-align:center}
@@ -474,45 +480,67 @@ details pre{margin-top:0.5rem;font-size:0.75rem;background:#0f172a;padding:0.75r
   <div class="setup-grid">
     <div class="setup-card">
       <h4>Claude Web (claude.ai)</h4>
-      <div class="label">Add Custom Connector</div>
+      <div class="label">Remote / Hosted (HTTP)</div>
+      <p>Use the hosted MCP server directly. No local install is required.</p>
       <pre>Name: TekAutomate
-URL:  ${process.env.MCP_PUBLIC_URL || 'https://tekautomate-mcp-production.up.railway.app'}/mcp</pre>
+URL: ${process.env.MCP_PUBLIC_URL || 'https://tekautomate-mcp-production.up.railway.app'}/mcp</pre>
+      <p class="muted">Claude Web: Settings > Connectors > Add Custom Connector. Leave auth blank unless you add your own auth layer later.</p>
     </div>
     <div class="setup-card">
       <h4>Claude Desktop</h4>
+      <div class="label">Local / STDIO</div>
+      <p><code>cwd</code> must be a local folder path where you cloned the repo. It is not a URL.</p>
+      <ol>
+        <li>Clone <a href="https://github.com/abnasim/TekAutomate-MCP">TekAutomate-MCP</a></li>
+        <li>Run <code>npm install</code></li>
+        <li>Use the config below with your local clone path</li>
+      </ol>
       <div class="label">~/.claude/claude_desktop_config.json</div>
       <pre>{
   "mcpServers": {
     "tekautomate": {
       "command": "npx",
       "args": ["tsx", "mcp-server/src/stdio.ts"],
-      "cwd": "/path/to/TekAutomate"
+      "cwd": "C:\\Users\\YourName\\TekAutomate-MCP"
     }
   }
 }</pre>
     </div>
     <div class="setup-card">
       <h4>Claude Code (CLI)</h4>
+      <div class="label">Local / STDIO</div>
+      <p>Best when you want the MCP server to run from a local clone on your machine.</p>
       <div class="label">.mcp.json in project root</div>
       <pre>{
   "mcpServers": {
     "tekautomate": {
       "command": "npx",
       "args": ["tsx", "mcp-server/src/stdio.ts"],
-      "cwd": "/path/to/TekAutomate"
+      "cwd": "C:\\Users\\YourName\\TekAutomate-MCP"
     }
   }
 }</pre>
     </div>
     <div class="setup-card">
       <h4>VS Code / Cursor</h4>
+      <div class="label">Choose One Transport</div>
+      <p>Use local STDIO if you cloned the repo. Use HTTP only if your MCP client supports remote MCP URLs.</p>
       <div class="label">.vscode/mcp.json</div>
       <pre>{
   "servers": {
     "tekautomate": {
       "command": "npx",
       "args": ["tsx", "mcp-server/src/stdio.ts"],
-      "cwd": "/path/to/TekAutomate"
+      "cwd": "C:\\Users\\YourName\\TekAutomate-MCP"
+    }
+  }
+}</pre>
+      <p class="muted">Remote example if your client supports HTTP MCP:</p>
+      <pre>{
+  "servers": {
+    "tekautomate": {
+      "type": "http",
+      "url": "${process.env.MCP_PUBLIC_URL || 'https://tekautomate-mcp-production.up.railway.app'}/mcp"
     }
   }
 }</pre>
