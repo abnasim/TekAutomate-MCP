@@ -64,25 +64,16 @@ export class CleanRouter {
       return { isBrowse: true };
     }
 
-    // "browse <group> <filter>" pattern: "browse trigger edge"
-    const browseFilterMatch = normalized.match(/\b(browse|explore)\s+(\w+)\s+(\w+)/i);
-    if (browseFilterMatch) {
-      const g = browseFilterMatch[2].trim();
-      const f = browseFilterMatch[3].trim();
-      if (!/^(all|commands?|groups?|scpi)$/i.test(g)) {
-        return { isBrowse: true, group: g, filter: f };
+    // Extract everything after "browse " / "explore "
+    const afterBrowse = normalized.match(/\b(?:browse|explore)\s+(.+)$/i);
+    if (afterBrowse) {
+      const rest = afterBrowse[1].replace(/\s*(commands?|group)\s*$/i, '').trim();
+      if (!rest || /^(all|commands?|groups?|categories|scpi)$/i.test(rest)) {
+        return { isBrowse: true };
       }
-    }
-
-    // "browse <group>" or "browse <group> commands"
-    const browseGroupMatch = normalized.match(/\b(browse|explore)\s+(\w[\w\s]*?)(?:\s+(commands?|group))?\s*$/i);
-    if (browseGroupMatch) {
-      const groupCandidate = browseGroupMatch[2].trim();
-      // Don't match generic words as a group
-      if (!/^(all|commands?|groups?|categories|scpi)$/i.test(groupCandidate)) {
-        return { isBrowse: true, group: groupCandidate };
-      }
-      return { isBrowse: true };
+      // Return full phrase as group — browseScpiCommands will resolve it via fuzzy match
+      // and the tool handles filter separation if group doesn't match
+      return { isBrowse: true, group: rest };
     }
 
     return { isBrowse: false };

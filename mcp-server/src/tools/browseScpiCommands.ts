@@ -58,20 +58,42 @@ export async function browseScpiCommands(input: BrowseScpiInput): Promise<ToolRe
 
   // ── Level 2: List commands in a group ──
   if (group) {
-    const resolved = resolveCommandGroupName(group);
+    let resolved = resolveCommandGroupName(group);
     if (!resolved) {
-      // Try fuzzy match
+      // Try fuzzy match on full phrase (handles "Spectrum view", "Save and Recall", etc.)
       const lower = group.toLowerCase();
-      const fuzzy = GROUP_NAMES.find(g => g.toLowerCase().includes(lower));
-      if (!fuzzy) {
+      const fuzzy = GROUP_NAMES.find(g => g.toLowerCase() === lower)
+        || GROUP_NAMES.find(g => g.toLowerCase().includes(lower))
+        || GROUP_NAMES.find(g => lower.includes(g.toLowerCase()));
+      if (fuzzy) {
+        resolved = fuzzy;
+        // If the input is longer than the matched group, extract a filter
+        // e.g. "Trigger edge" → group=Trigger, filter=edge
+        const fuzzyLower = fuzzy.toLowerCase();
+        if (lower !== fuzzyLower && lower.startsWith(fuzzyLower)) {
+          const extractedFilter = lower.slice(fuzzyLower.length).trim();
+          if (extractedFilter && !filter) {
+            return browseScpiCommands({ ...input, group: fuzzy, filter: extractedFilter });
+          }
+        } else if (lower !== fuzzyLower && lower.includes(' ')) {
+          // Try splitting: first word as group, rest as filter
+          const words = group.split(/\s+/);
+          const firstWord = words[0];
+          const firstMatch = GROUP_NAMES.find(g => g.toLowerCase() === firstWord.toLowerCase())
+            || GROUP_NAMES.find(g => g.toLowerCase().includes(firstWord.toLowerCase()));
+          if (firstMatch && !filter) {
+            return browseScpiCommands({ ...input, group: firstMatch, filter: words.slice(1).join(' ').toLowerCase() });
+          }
+        }
+      }
+      if (!resolved) {
         return {
           ok: false,
           data: null,
           sourceMeta: [],
-          warnings: [`Unknown group "${group}". Call browse_scpi_commands without arguments to see available groups.`],
+          warnings: [`Unknown group "${group}". Type "browse commands" to see available groups.`],
         };
       }
-      return browseScpiCommands({ ...input, group: fuzzy });
     }
 
     const headers = GROUP_COMMANDS[resolved] || [];

@@ -585,7 +585,8 @@ async function runFlowValidation(req: McpChatRequest) {
         const hasRequiredArg = /<NR[f13]>|\{[^}]+\}|<QString>/.test(syntaxStr);
         if (hasRequiredArg && !argStr) {
           const argHint = syntaxStr.replace(/^[^\s]+\s*/, '').trim();
-          issues.push(`\`${command}\` — missing required argument: \`${argHint}\``);
+          const hint = argHint.length > 80 ? argHint.slice(0, 80) + '...' : argHint;
+          issues.push(`\`${command}\` — missing required argument: \`${hint}\``);
         }
       }
 
@@ -598,7 +599,10 @@ async function runFlowValidation(req: McpChatRequest) {
           if (validOptions.length > 0 && !validOptions.some(opt => opt === userVal || userVal.startsWith(opt))) {
             // Only flag if arg is clearly not a numeric value
             if (!/^[\d.eE+-]+$/.test(argStr)) {
-              issues.push(`\`${command}\` — invalid value \`${argStr}\`. Valid options: ${validOptions.join(', ')}`);
+              const optionsList = validOptions.length > 10
+                ? validOptions.slice(0, 10).join(', ') + ` ... (${validOptions.length} total)`
+                : validOptions.join(', ');
+              issues.push(`\`${command}\` — invalid value \`${argStr}\`. Valid: ${optionsList}`);
             }
           }
         }
@@ -689,12 +693,18 @@ async function enrichWithRag(result: any, query: string, modelFamily?: string): 
       chunks = chunks.filter(c => !/\b(rsa|awg|afg|smu)\b/i.test(c.source || ''));
     }
 
-    chunks = chunks.slice(0, 3);
+    // Only keep chunks whose title has words overlapping with the query
+    const queryWords = new Set(query.toLowerCase().split(/\s+/).filter(w => w.length > 2));
+    chunks = chunks.filter(c => {
+      const titleWords = (c.title || '').toLowerCase().split(/\s+/);
+      return titleWords.some((w: string) => queryWords.has(w));
+    }).slice(0, 2);
+
     if (chunks.length > 0) {
       const ragSection = chunks
-        .map(c => `**${c.title}**\n${String(c.body || '').slice(0, 200)}`)
-        .join('\n\n');
-      result.text += `\n\n---\n### Related Knowledge\n${ragSection}`;
+        .map(c => `**${c.title}** — ${String(c.body || '').replace(/\n/g, ' ').slice(0, 120)}`)
+        .join('\n');
+      result.text += `\n\n---\n${ragSection}`;
     }
   } catch { /* non-fatal */ }
   return result;
@@ -712,8 +722,18 @@ async function runSearchKnowledge(req: McpChatRequest) {
       .replace(/^\s*(knowledge|docs|rag)\s+(search|lookup|find)\s*/i, '')
       .trim() || req.userMessage;
 
-    // Search across multiple corpora
-    const corpora = ['scpi', 'app_logic', 'errors', 'templates', 'pyvisa_tekhsi'] as const;
+    // Pick relevant corpora based on query keywords
+    const qLower = query.toLowerCase();
+    const wantsErrors = /\b(error|bug|fix|issue|fail|timeout|crash|debug)\b/i.test(qLower);
+    const wantsArch = /\b(architect|workflow|blockly|steps|flow|schema|template|pattern)\b/i.test(qLower);
+    const wantsPyvisa = /\b(pyvisa|tekhsi|connect|visa|socket|grpc)\b/i.test(qLower);
+    const corpora: Array<'scpi' | 'errors' | 'app_logic' | 'templates' | 'pyvisa_tekhsi'> = ['scpi'];
+    if (wantsErrors) corpora.push('errors');
+    if (wantsArch) corpora.push('app_logic', 'templates');
+    if (wantsPyvisa) corpora.push('pyvisa_tekhsi');
+    // If nothing specific, add app_logic as secondary
+    if (corpora.length === 1) corpora.push('app_logic');
+
     const allResults: Array<{corpus: string; title: string; body: string; source?: string}> = [];
 
     // Filter RAG by model family — exclude irrelevant instrument families
@@ -722,9 +742,8 @@ async function runSearchKnowledge(req: McpChatRequest) {
 
     for (const corpus of corpora) {
       try {
-        const r = await retrieveRagChunks({ corpus, query, topK: 6 });
+        const r = await retrieveRagChunks({ corpus, query, topK: 4 });
         let chunks = (r.data || []) as Array<{corpus: string; title: string; body: string; source?: string}>;
-        // Filter scpi corpus by family
         if (corpus === 'scpi') {
           if (allowPattern) {
             chunks = chunks.filter(c => allowPattern.test(c.source || ''));
@@ -732,7 +751,7 @@ async function runSearchKnowledge(req: McpChatRequest) {
             chunks = chunks.filter(c => !/\b(rsa|awg|afg|smu)\b/i.test(c.source || ''));
           }
         }
-        for (const c of chunks.slice(0, 3)) {
+        for (const c of chunks.slice(0, 2)) {
           allResults.push({ corpus, title: c.title, body: c.body, source: c.source });
         }
       } catch { /* skip failed corpus */ }
@@ -740,7 +759,7 @@ async function runSearchKnowledge(req: McpChatRequest) {
 
     if (allResults.length === 0) {
       return {
-        text: `No knowledge base results for "${query}". Try different keywords.`,
+        text: `No results for "${query}". Try different keywords.`,
         assistantThreadId: undefined,
         errors: [],
         warnings: [],
@@ -749,22 +768,12 @@ async function runSearchKnowledge(req: McpChatRequest) {
       };
     }
 
-    // Group by corpus for display
-    const byCorpus: Record<string, typeof allResults> = {};
-    for (const r of allResults) {
-      if (!byCorpus[r.corpus]) byCorpus[r.corpus] = [];
-      byCorpus[r.corpus].push(r);
-    }
-
-    let response = `## Knowledge Base Results for "${query}"\n\n`;
-    for (const [corpus, chunks] of Object.entries(byCorpus)) {
-      const label = corpus === 'scpi' ? 'SCPI Commands' : corpus === 'app_logic' ? 'Architecture' : corpus === 'errors' ? 'Known Issues' : corpus === 'templates' ? 'Templates' : corpus === 'pyvisa_tekhsi' ? 'PyVISA/TekHSI' : corpus;
-      response += `### ${label}\n`;
-      for (const c of chunks.slice(0, 3)) {
-        response += `- **${c.title}**${c.source ? ' (' + c.source + ')' : ''}\n`;
-        response += `  ${String(c.body || '').replace(/\n/g, ' ').slice(0, 150)}\n`;
-      }
-      response += '\n';
+    // Compact output — no section headers, just tagged results
+    let response = `**Knowledge: "${query}"**\n\n`;
+    for (const c of allResults) {
+      const tag = c.corpus === 'scpi' ? 'SCPI' : c.corpus === 'app_logic' ? 'Docs' : c.corpus === 'errors' ? 'Issue' : c.corpus === 'templates' ? 'Template' : c.corpus;
+      const body = String(c.body || '').replace(/\n/g, ' ').slice(0, 120);
+      response += `[${tag}] **${c.title}** — ${body}\n\n`;
     }
 
     return {
@@ -816,55 +825,40 @@ async function runBrowseCommands(req: McpChatRequest, group?: string, filter?: s
     let response = '';
 
     if (data.level === 'group_list') {
-      response = `## SCPI Command Groups (${data.totalGroups})\n\n`;
+      // Compact 2-column format
+      response = `**${data.totalGroups} Command Groups** — type \`browse <name>\` to open\n\n`;
       for (const g of data.groups) {
-        response += `- **${g.name}** (${g.commandCount} commands) — ${g.description}\n`;
+        response += `\`${g.name}\` (${g.commandCount})\n`;
       }
-      response += `\nType **"browse \<group name\>"** to see commands in a group.`;
     } else if (data.level === 'group_commands') {
-      response = `## ${data.groupName} (${data.totalCommands} commands${data.filter ? `, filtered by "${data.filter}"` : ''})\n\n`;
-      response += `${data.description}\n\n`;
-      if (data.showing > 20) {
-        // Compact listing for large groups
-        for (const cmd of data.commands) {
-          response += `- \`${cmd.header}\` (${cmd.commandType}) — ${cmd.shortDescription.slice(0, 60)}\n`;
-        }
-      } else {
-        for (const cmd of data.commands) {
-          response += `- \`${cmd.header}\` (${cmd.commandType}) — ${cmd.shortDescription}\n`;
-        }
+      const filterNote = data.filter ? ` matching "${data.filter}"` : '';
+      response = `**${data.groupName}** — ${data.showing} of ${data.totalCommands} commands${filterNote}\n\n`;
+      for (const cmd of data.commands) {
+        const desc = (cmd.shortDescription || '').split('.')[0].slice(0, 55);
+        response += `\`${cmd.header}\` — ${desc}\n`;
       }
-      if (data.showing < data.totalCommands) {
-        response += `\n*Showing ${data.showing} of ${data.totalCommands}. Add a filter: **"browse ${data.groupName} \<keyword\>"***\n`;
+      if (data.showing < data.totalCommands && !data.filter) {
+        response += `\n*${data.totalCommands - data.showing} more — type \`browse ${data.groupName} <keyword>\` to filter*`;
       }
-      response += `\nType **"what is \<header\>"** to see full details for a command.`;
+      response += `\n\nType \`what is <header>\` for full details.`;
     } else if (data.level === 'command_detail') {
       const cmd = data.command;
-      response = `## ${cmd.header}\n\n`;
-      response += `**Description:** ${cmd.description || cmd.shortDescription || 'N/A'}\n\n`;
-      if (cmd.syntax?.set) response += `**Set:** \`${cmd.syntax.set}\`\n`;
-      if (cmd.syntax?.query) response += `**Query:** \`${cmd.syntax.query}\`\n`;
-      response += '\n';
+      response = `**${cmd.header}** (${cmd.commandType})\n`;
+      response += `${(cmd.shortDescription || cmd.description || '').slice(0, 120)}\n\n`;
+      if (cmd.syntax?.set) response += `Set: \`${cmd.syntax.set}\`\n`;
+      if (cmd.syntax?.query) response += `Query: \`${cmd.syntax.query}\`\n`;
       if (cmd.arguments && cmd.arguments.length > 0) {
-        response += `**Arguments:**\n`;
-        for (const arg of cmd.arguments) {
-          response += `- **${arg.name}** (${arg.type}${arg.required ? ', required' : ''}): ${arg.description || ''}`;
+        response += '\nArgs:\n';
+        for (const arg of cmd.arguments.slice(0, 4)) {
+          let line = `- **${arg.name}** (${arg.type}): ${(arg.description || '').slice(0, 60)}`;
           if (arg.validValues && typeof arg.validValues === 'object') {
             const vv = arg.validValues as Record<string, unknown>;
-            if (vv.min !== undefined || vv.max !== undefined) response += ` — Range: ${vv.min ?? '—'} to ${vv.max ?? '—'}`;
+            if (vv.min !== undefined) line += ` [${vv.min}–${vv.max ?? '?'}]`;
           }
-          response += '\n';
+          response += line + '\n';
         }
-        response += '\n';
+        if (cmd.arguments.length > 4) response += `- ... ${cmd.arguments.length - 4} more\n`;
       }
-      if (cmd.examples && cmd.examples.length > 0) {
-        response += `**Examples:**\n`;
-        for (const ex of cmd.examples) {
-          if (ex.scpi) response += `- \`${ex.scpi}\` — ${ex.description || ''}\n`;
-        }
-        response += '\n';
-      }
-      response += `**Group:** ${cmd.group || 'N/A'} | **Type:** ${cmd.commandType}`;
     }
 
     return {
