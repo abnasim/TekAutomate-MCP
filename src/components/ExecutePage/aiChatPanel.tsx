@@ -1150,8 +1150,11 @@ export function AiChatPanel({
     }
     setTestingKey(true);
     try {
-      // Live mode: test directly from browser (same path as actual live messages)
-      if (state.tekMode === 'live') {
+      // Browser-direct key test for providers that support it
+      // Anthropic: always browser-direct (Node.js may not reach api.anthropic.com)
+      // OpenAI in live mode: browser-direct (Chat Completions)
+      const useBrowserDirect = state.provider === 'anthropic' || state.tekMode === 'live';
+      if (useBrowserDirect) {
         if (state.provider === 'anthropic') {
           const res = await fetch('https://api.anthropic.com/v1/messages', {
             method: 'POST',
