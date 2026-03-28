@@ -13437,49 +13437,26 @@ scpi.write('FILESYSTEM:DELETE "C:/TekScope/Temp/screenshot.png"')`;
               </div>
             ) : (
               <>
-                <div className="flex-1 overflow-y-auto p-3">
-                  <div className={`grid gap-2 grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4`}>
+                <div className="flex-1 overflow-y-auto p-2">
+                  <div className={`grid gap-1.5 grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5`}>
                     {visibleLibraryCommands.map((cmd, idx) => (
                       <div
                         key={`${cmd.scpi}-${idx}`}
-                        className={`p-3 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-600 rounded-lg hover:border-blue-400 dark:hover:border-blue-500 hover:shadow-md transition cursor-pointer group ${
+                        className={`px-2 py-1.5 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-600 rounded hover:border-blue-400 dark:hover:border-blue-500 hover:shadow-sm transition cursor-pointer group ${
                           selectedLibraryCommand?.scpi === cmd.scpi ? 'border-blue-500 dark:border-blue-400 ring-2 ring-blue-200 dark:ring-blue-800' : ''
                         }`}
                         onClick={() => setSelectedLibraryCommand(cmd)}
+                        onDoubleClick={() => addCommandFromLibrary(cmd)}
+                        title={`${cmd.scpi}\n${cmd.description || ''}\nDouble-click to add`}
                       >
-                        <div className="flex flex-col h-full">
-                          <div className="flex-1 min-w-0">
-                            <div className="flex items-center gap-1 mb-1.5 flex-wrap">
-                              <span className="font-medium text-xs text-gray-900 dark:text-gray-100 truncate flex-1">{cmd.name}</span>
-                            </div>
-                            <div className="flex flex-wrap gap-1 mb-1.5">
-                              <span className={`text-[10px] px-1.5 py-0.5 rounded-full border font-medium flex-shrink-0 ${categoryColors[cmd.category] || 'bg-gray-100 dark:bg-gray-700 text-gray-700 dark:text-gray-300'}`}>
-                                {cmd.category}
-                              </span>
-                              {cmd.subcategory && (
-                                <span className="text-[10px] px-1.5 py-0.5 bg-blue-50 dark:bg-blue-900/40 text-blue-700 dark:text-blue-300 rounded border border-blue-200 dark:border-blue-700">
-                                  {cmd.subcategory}
-                                </span>
-                              )}
-                              {cmd.tekhsi && (
-                                <span className="text-[10px] px-1.5 py-0.5 bg-red-100 dark:bg-red-900/40 text-red-700 dark:text-red-300 rounded border border-red-300 dark:border-red-700">
-                                  <Zap size={8} className="inline" /> gRPC
-                                </span>
-                              )}
-                            </div>
-                            <div className="text-xs font-mono text-blue-600 dark:text-blue-400 bg-blue-50 dark:bg-blue-900/30 px-1.5 py-0.5 rounded border border-blue-100 dark:border-blue-800 truncate">
-                              {substituteParamIndicesInScpi(cmd.scpi, librarySelectedParamIndices)}
-                            </div>
-                          </div>
-                          <button
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              addCommandFromLibrary(cmd);
-                            }}
-                            className="mt-2 w-full px-2 py-1 bg-blue-600 text-white text-xs font-medium rounded hover:bg-blue-700 transition opacity-0 group-hover:opacity-100"
-                          >
-                            Add
-                          </button>
+                        <div className="flex items-center gap-1 mb-0.5">
+                          <span className="font-medium text-[11px] text-gray-900 dark:text-gray-100 truncate">{cmd.name}</span>
+                          <span className={`text-[9px] px-1 py-px rounded-full border font-medium flex-shrink-0 ${categoryColors[cmd.category] || 'bg-gray-100 dark:bg-gray-700 text-gray-700 dark:text-gray-300'}`}>
+                            {cmd.category}
+                          </span>
+                        </div>
+                        <div className="text-[11px] font-mono text-blue-600 dark:text-blue-400 truncate">
+                          {substituteParamIndicesInScpi(cmd.scpi, librarySelectedParamIndices)}
                         </div>
                       </div>
                     ))}
