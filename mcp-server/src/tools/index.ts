@@ -696,6 +696,10 @@ export function getToolDefinitions() {
             enum: ['shallow', 'deep'],
             description: 'shallow (default): ~30 common suffixes. deep: ~70 suffixes including channel expansions and RF traces.',
           },
+          timeoutMs: {
+            type: 'number',
+            description: 'Per-command timeout in ms (default 2000). Valid SCPI returns in <100ms, so 1000-2000 is plenty. Lower = faster tree walk.',
+          },
           executorUrl: { type: 'string' },
           visaResource: { type: 'string' },
           backend: { type: 'string' },

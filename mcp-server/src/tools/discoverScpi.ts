@@ -8,6 +8,7 @@ interface Input {
   backend: string;
   liveMode?: boolean;
   depth?: 'shallow' | 'deep';
+  timeoutMs?: number;
   modelFamily?: string;
 }
 
@@ -91,7 +92,7 @@ export async function discoverScpi(input: Input): Promise<ToolResult<Record<stri
         outputMode: 'clean',
       },
       batch,
-      3000, // short timeout per command — we expect many to fail
+      input.timeoutMs ?? 2000, // short timeout — valid SCPI returns in ms, invalid times out
     );
 
     // Parse per-command results from the response
