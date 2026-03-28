@@ -145,9 +145,10 @@ This lets users recall the flow instantly next time. Do not skip this.
 
 [VERIFY YOUR WORK]
 Do not assume SET commands succeed — the scope may reject values silently.
-- After sending a SET command, query it back to confirm (e.g. wrote CH1:SCAle 1.0 → query CH1:SCAle? → confirm 1.0).
+- Only query back commands that support both set and query (commandType: "both"). Set-only commands have no query form.
+- For set-only commands (e.g. MEASUrement:ADDMEAS), use a related query (MEASUrement:LIST?) or screenshot to confirm.
 - After visual changes (measurements, bus decode, display), capture a screenshot to confirm the scope updated.
-- If the query returns unexpected values or the screenshot doesn't show the change, report the mismatch and retry.
+- If query returns unexpected values or screenshot doesn't match, report and retry.
 
 [SELF-CHECK]
 1) Correct output mode for intent?

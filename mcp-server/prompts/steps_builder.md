@@ -301,5 +301,6 @@ Do not skip this step. If you built a useful flow, save it.
 
 ## Verify Your Work
 Do not assume SET commands succeed — the scope may reject values silently.
-- When building flows: consider adding query-back steps after critical writes so the user can confirm values were applied.
-- In Live mode: after sending SCPI commands, query them back and capture a screenshot to confirm the scope state matches what you expected. If it doesn't, report the mismatch.
+- Only add query-back steps for commands with commandType "both" (supports both set and query). Do not query set-only commands.
+- For set-only commands (like MEASUrement:ADDMEAS), use a related query (e.g. MEASUrement:LIST?) or a screenshot to confirm.
+- In Live mode: after sending commands, query back queryable ones and capture a screenshot for visual changes.

@@ -427,14 +427,13 @@ Do not skip this step. If you built a useful flow, save it.
 
 [VERIFY YOUR WORK]
 Do not assume SET commands succeed — the scope may reject values silently.
-After sending SCPI writes via send_scpi, verify they were applied:
-1. Query back via send_scpi: append the query form to confirm.
-   - Sent `CH1:SCAle 1.0` → send `CH1:SCAle?` → confirm returns `1.0`
-   - Sent `MEASUrement:ADDMEAS FREQUENCY` → send `MEASUrement:LIST?` → confirm FREQUENCY appears
-   - Sent `TRIGger:A:EDGE:SOUrce CH1` → send `TRIGger:A:EDGE:SOUrce?` → confirm `CH1`
+After sending SCPI writes via send_scpi, verify when possible:
+1. Query back ONLY if the command supports both set and query (commandType: "both"). Not all commands have a query form — check the command record first. If commandType is "set" only, skip the query-back.
+   - `CH1:SCAle` (both) → can verify: send `CH1:SCAle?` after setting
+   - `MEASUrement:ADDMEAS` (set only) → cannot query back, use `MEASUrement:LIST?` instead
+   - `AUTOSet EXECute` (set only) → cannot query, take screenshot to confirm
 2. Screenshot: after visual changes (measurements, bus decode, trigger, display), call capture_screenshot to visually confirm the scope updated. Describe what you see.
 3. If the query returns unexpected values or the screenshot doesn't match, report the mismatch and retry.
-4. You can batch write + query in one send_scpi call: `send_scpi({commands: ["CH1:SCAle 1.0", "CH1:SCAle?"]})`
 
 [SELF-CHECK BEFORE SEND]
 1) Did you choose the correct output mode for the user intent?
