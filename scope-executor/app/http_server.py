@@ -229,7 +229,7 @@ class _Handler(BaseHTTPRequestHandler):
             scope_type = data.get("scope_type") if isinstance(data.get("scope_type"), str) else "modern"
             if scope_type not in {"modern", "legacy"}:
                 scope_type = "modern"
-        else:
+        elif action == "send_scpi":
             commands = data.get("commands")
             timeout_ms = int(data.get("timeout_ms", 5000) or 5000)
             if not isinstance(commands, list) or not commands or not all(isinstance(cmd, str) for cmd in commands):
@@ -241,6 +241,7 @@ class _Handler(BaseHTTPRequestHandler):
                 self._emit("POST", "/run", 400, f"too many commands action={action_label} count={len(commands)}")
                 return
             timeout_sec = min(max(timeout_sec, 15), ui_timeout)
+        # disconnect: no commands needed, just scope_visa (already validated above)
 
         self._emit_status("busy")
         _sse_broadcast("status", json.dumps({"status": "running"}))
