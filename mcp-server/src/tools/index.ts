@@ -24,6 +24,7 @@ import { validateActionPayload } from './validateActionPayload';
 import { validateDeviceContext } from './validateDeviceContext';
 import { verifyScpiCommands } from './verifyScpiCommands';
 import { browseScpiCommands } from './browseScpiCommands';
+import { discoverScpi } from './discoverScpi';
 import { GROUP_NAMES, COMMAND_GROUPS } from '../core/commandGroups';
 import { TEK_ROUTER_TOOL_DEFINITION } from '../core/toolRouter';
 
@@ -94,6 +95,7 @@ export const TOOL_HANDLERS = {
   get_instrument_state: getInstrumentState,
   probe_command: probeCommand,
   send_scpi: sendScpi,
+  discover_scpi: discoverScpi,
   capture_screenshot: captureScreenshot,
   get_visa_resources: getVisaResources,
   get_environment: getEnvironment,
@@ -663,6 +665,51 @@ export function getToolDefinitions() {
           outputMode: { type: 'string', enum: ['clean', 'verbose'] },
         },
         required: [],
+        additionalProperties: false,
+      },
+    },
+    {
+      name: 'discover_scpi',
+      description:
+        'SCPI Command Tree Discovery — systematically probes a live instrument to find valid command paths.\n\n' +
+        'Two-pass adaptive approach:\n' +
+        '1. Depth-1: Probes base path + ~50 universal & context-aware suffixes (0.8s timeout)\n' +
+        '2. Depth-2: Auto-expands hits with semicolons (multi-channel responses) into :CH1-:CH8 sub-paths\n\n' +
+        'Context-aware: detects keywords in basePath (trigger, sv, ch, measurement, display, etc.) ' +
+        'and adds relevant suffixes automatically.\n\n' +
+        'Use when:\n' +
+        '- search_scpi / smart_scpi_lookup returns no results for a known feature\n' +
+        '- You suspect undocumented or mode-specific commands exist\n' +
+        '- You need to map the command tree under a subsystem\n\n' +
+        'Examples:\n' +
+        '- discover_scpi({basePath: "TRIGger:A:LEVel"}) → finds :CH1, :MAGnitude, :MAGnitude:CH1, etc.\n' +
+        '- discover_scpi({basePath: "SV:CH1"}) → finds Spectrum View sub-paths\n' +
+        '- discover_scpi({basePath: "CH<x>:SV"}) → expands CH1-CH4 and probes all\n\n' +
+        'Key insight: invalid SCPI queries timeout (no response), valid ones return in <200ms. ' +
+        'So timeout = invalid, response = valid.\n\n' +
+        'Requires liveMode=true. Read-only (only sends queries, never sets values). Max 100 probes.',
+      parameters: {
+        type: 'object',
+        properties: {
+          basePath: {
+            type: 'string',
+            description: 'Base SCPI path to explore. e.g. "TRIGger:A:LEVel", "SV:CH1", "CH<x>:BANdwidth". Use <x> for channel placeholders.',
+          },
+          timeoutMs: {
+            type: 'number',
+            description: 'Per-command timeout in ms (default 800, range 300-2000). Valid SCPI returns in 50-200ms, so 800ms is generous. Lower = faster.',
+          },
+          maxProbes: {
+            type: 'number',
+            description: 'Max total probes including depth-2 expansion (default 100, max 150). Prevents accidental long waits.',
+          },
+          executorUrl: { type: 'string' },
+          visaResource: { type: 'string' },
+          backend: { type: 'string' },
+          liveMode: { type: 'boolean' },
+          modelFamily: { type: 'string' },
+        },
+        required: ['basePath'],
         additionalProperties: false,
       },
     },
