@@ -1,5 +1,5 @@
-import React, { useMemo, useState } from 'react';
-import { Code, Terminal, Copy } from 'lucide-react';
+import React, { useMemo, useState, useCallback } from 'react';
+import { Code, Terminal, Copy, Pencil } from 'lucide-react';
 import { StepsListPreview } from './StepsListPreview';
 import type { StepPreview } from './StepsListPreview';
 import { PythonCodeEditor } from '../PythonCodeEditor';
@@ -93,6 +93,8 @@ function ExecutePageContent({
   const [rightPanelOpen, setRightPanelOpen] = useState(true);
   const [copied, setCopied] = useState(false);
   const [copiedLog, setCopiedLog] = useState(false);
+  const [editorOpen, setEditorOpen] = useState(false);
+  const [editorCode, setEditorCode] = useState('');
   // Intentionally unused in this compact layout; execution controls are handled elsewhere.
   void onRun;
   void onBack;
@@ -223,20 +225,29 @@ function ExecutePageContent({
               <div className="space-y-2">
                 <div className="flex items-center justify-between">
                   <span className="text-xs font-medium text-slate-400">Generated script</span>
-                  <button
-                    onClick={copyCode}
-                    className="flex items-center gap-1 text-xs text-purple-400 hover:text-purple-300"
-                  >
-                    <Copy size={14} />
-                    {copied ? 'Copied' : 'Copy'}
-                  </button>
+                  <div className="flex items-center gap-2">
+                    <button
+                      onClick={() => { setEditorCode(code || ''); setEditorOpen(true); }}
+                      className="flex items-center gap-1 text-xs text-purple-400 hover:text-purple-300"
+                    >
+                      <Pencil size={14} />
+                      Edit
+                    </button>
+                    <button
+                      onClick={copyCode}
+                      className="flex items-center gap-1 text-xs text-purple-400 hover:text-purple-300"
+                    >
+                      <Copy size={14} />
+                      {copied ? 'Copied' : 'Copy'}
+                    </button>
+                  </div>
                 </div>
-                <div className="rounded-lg border border-slate-800 overflow-hidden min-h-[200px]">
+                <div className="rounded-lg border border-slate-700 dark:border-slate-700 overflow-hidden min-h-[200px]">
                   <PythonCodeEditor
                     value={code || '# No code - add steps or build a Blockly flow, then run.'}
                     onChange={() => {}}
                     readOnly
-                    className="[&_.cm-editor]:bg-slate-950 [&_.cm-scroller]:min-h-[200px]"
+                    className="[&_.cm-editor]:!bg-slate-900 dark:[&_.cm-editor]:!bg-slate-950 [&_.cm-scroller]:min-h-[200px] [&_.cm-gutters]:!bg-slate-900 dark:[&_.cm-gutters]:!bg-slate-950 [&_.cm-gutters]:!border-slate-700"
                   />
                 </div>
               </div>
@@ -282,6 +293,58 @@ function ExecutePageContent({
         </>
         )}
       </div>
+
+      {/* Code editor modal */}
+      {editorOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm">
+          <div className="bg-white dark:bg-slate-900 rounded-xl shadow-2xl w-[90vw] max-w-[1000px] h-[80vh] flex flex-col border border-slate-200 dark:border-slate-700">
+            <div className="flex items-center justify-between px-6 py-4 border-b border-slate-200 dark:border-slate-700">
+              <div>
+                <h3 className="text-lg font-semibold text-slate-900 dark:text-white">Python Code Editor</h3>
+                <p className="text-xs text-slate-500 dark:text-slate-400">Edit the generated script</p>
+              </div>
+              <button
+                onClick={() => setEditorOpen(false)}
+                className="text-slate-400 hover:text-slate-600 dark:hover:text-white text-xl"
+              >
+                &times;
+              </button>
+            </div>
+            <div className="flex-1 min-h-0 overflow-hidden">
+              <PythonCodeEditor
+                value={editorCode}
+                onChange={setEditorCode}
+                className="h-full [&_.cm-editor]:!bg-white dark:[&_.cm-editor]:!bg-slate-950 [&_.cm-scroller]:h-full [&_.cm-gutters]:!bg-slate-50 dark:[&_.cm-gutters]:!bg-slate-900"
+              />
+            </div>
+            <div className="flex items-center justify-end gap-3 px-6 py-3 border-t border-slate-200 dark:border-slate-700">
+              <button
+                onClick={() => setEditorOpen(false)}
+                className="px-4 py-2 text-sm rounded-lg border border-slate-300 text-slate-700 hover:bg-slate-100 dark:border-slate-600 dark:text-slate-300 dark:hover:bg-slate-800"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={() => {
+                  navigator.clipboard.writeText(editorCode);
+                  setCopied(true);
+                  setTimeout(() => setCopied(false), 2000);
+                }}
+                className="px-4 py-2 text-sm rounded-lg border border-slate-300 text-slate-700 hover:bg-slate-100 dark:border-slate-600 dark:text-slate-300 dark:hover:bg-slate-800 flex items-center gap-1.5"
+              >
+                <Copy size={14} />
+                {copied ? 'Copied' : 'Copy'}
+              </button>
+              <button
+                onClick={() => setEditorOpen(false)}
+                className="px-4 py-2 text-sm rounded-lg bg-purple-600 text-white hover:bg-purple-500 font-medium"
+              >
+                Done
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
