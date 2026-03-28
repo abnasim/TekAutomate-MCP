@@ -24,6 +24,7 @@ import { validateActionPayload } from './validateActionPayload';
 import { validateDeviceContext } from './validateDeviceContext';
 import { verifyScpiCommands } from './verifyScpiCommands';
 import { browseScpiCommands } from './browseScpiCommands';
+import { discoverScpi } from './discoverScpi';
 import { GROUP_NAMES, COMMAND_GROUPS } from '../core/commandGroups';
 import { TEK_ROUTER_TOOL_DEFINITION } from '../core/toolRouter';
 
@@ -94,6 +95,7 @@ export const TOOL_HANDLERS = {
   get_instrument_state: getInstrumentState,
   probe_command: probeCommand,
   send_scpi: sendScpi,
+  discover_scpi: discoverScpi,
   capture_screenshot: captureScreenshot,
   get_visa_resources: getVisaResources,
   get_environment: getEnvironment,
@@ -663,6 +665,44 @@ export function getToolDefinitions() {
           outputMode: { type: 'string', enum: ['clean', 'verbose'] },
         },
         required: [],
+        additionalProperties: false,
+      },
+    },
+    {
+      name: 'discover_scpi',
+      description:
+        'Tree-walk a live instrument to discover valid SCPI command paths. ' +
+        'Given a base path like "TRIGger:A:LEVel" or "CH1:SV", systematically probes ' +
+        'common suffixes and returns which ones the instrument actually responds to.\n\n' +
+        'Use this when:\n' +
+        '- smart_scpi_lookup or search_scpi returns no results\n' +
+        '- You suspect undocumented commands exist\n' +
+        '- You need to find the exact path for a feature\n' +
+        '- The database is missing commands for a specific subsystem\n\n' +
+        'Examples:\n' +
+        '- discover_scpi({basePath: "TRIGger:A:LEVel"}) → finds TRIGger:A:LEVel:CH1, :MAGnitude, etc.\n' +
+        '- discover_scpi({basePath: "SV:CH1", depth: "deep"}) → finds all Spectrum View sub-paths\n' +
+        '- discover_scpi({basePath: "CH<x>:SV"}) → expands CH1-CH4 and probes all\n\n' +
+        'Requires liveMode=true (must be connected to a live instrument).',
+      parameters: {
+        type: 'object',
+        properties: {
+          basePath: {
+            type: 'string',
+            description: 'Base SCPI path to explore. e.g. "TRIGger:A:LEVel", "SV:CH1", "CH<x>:BANdwidth". Use <x> for channel placeholders.',
+          },
+          depth: {
+            type: 'string',
+            enum: ['shallow', 'deep'],
+            description: 'shallow (default): ~30 common suffixes. deep: ~70 suffixes including channel expansions and RF traces.',
+          },
+          executorUrl: { type: 'string' },
+          visaResource: { type: 'string' },
+          backend: { type: 'string' },
+          liveMode: { type: 'boolean' },
+          modelFamily: { type: 'string' },
+        },
+        required: ['basePath'],
         additionalProperties: false,
       },
     },
