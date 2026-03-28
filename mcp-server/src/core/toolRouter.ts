@@ -591,31 +591,59 @@ async function handleBuild(req: RouterRequest, startedAt: number): Promise<Route
 export const TEK_ROUTER_TOOL_DEFINITION = {
   name: 'tek_router',
   description:
-    'TekAutomate instrument automation router. Controls Tektronix oscilloscopes via SCPI commands.\n\n' +
-    '## How to use for instrument control:\n\n' +
-    '### Step 1: SEARCH for commands\n' +
-    'Use action:"search" with a natural language query. The router understands measurement types, ' +
-    'trigger types, bus protocols, and oscilloscope concepts.\n\n' +
-    'Good search queries (natural language works):\n' +
-    '- "add jitter measurement"\n' +
-    '- "configure i2c bus decode"\n' +
-    '- "setup edge trigger"\n' +
-    '- "save screenshot"\n' +
-    '- "measure rise time"\n' +
-    '- "show detailed results"\n' +
-    '- "set channel scale"\n' +
-    '- "sampling rate"\n\n' +
-    '### Step 2: EXEC the found command\n' +
-    'Use action:"exec" with the toolId from search results and appropriate args.\n' +
-    '- For SET commands: pass commandType:"set" and value:<the value>\n' +
-    '- For QUERY commands: pass commandType:"query"\n' +
-    '- For specific channels/sources: pass concreteHeader like "CH1:SCAle" instead of "CH<x>:SCAle"\n\n' +
-    '### Common multi-step workflows:\n' +
-    '- Add measurement: search "add measurement" → exec ADDMEAS with value, then set SOUrce\n' +
-    '- Set channel: search "channel scale" → exec with concreteHeader "CH1:SCAle" and value\n' +
-    '- Configure trigger: search "edge trigger" → exec TRIGger:A:LEVel with value\n' +
-    '- Bus decode: search "i2c bus" → exec BUS:TYPe, then configure pins\n\n' +
-    'Actions: "search", "exec", "search_exec", "build", "create", "update", "delete", "info", "list".',
+    'TekAutomate gateway — routes to 21,000+ internal tools for Tektronix instrument automation.\n' +
+    'This is the PRIMARY tool for all SCPI lookup, command building, validation, and knowledge retrieval.\n' +
+    'Behind this single tool: SCPI search, command materialization, verification, RAG knowledge,\n' +
+    'tm_devices lookup, template examples, known failure patterns, and workflow management.\n\n' +
+
+    '## Actions\n\n' +
+
+    '### search_exec (RECOMMENDED — one-shot search + execute)\n' +
+    'Finds the best matching internal tool and executes it in one call.\n' +
+    'Example: {action:"search_exec", query:"verify scpi commands", args:{commands:["CH1:SCAle 1.0"]}}\n' +
+    'Example: {action:"search_exec", query:"get command group Trigger"}\n' +
+    'Example: {action:"search_exec", query:"search scpi fastframe", args:{query:"FastFrame"}}\n' +
+    'Example: {action:"search_exec", query:"materialize scpi command", args:{header:"CH<x>:SCAle", value:"1.0", placeholderBindings:{"CH<x>":"CH1"}}}\n' +
+    'Example: {action:"search_exec", query:"retrieve rag chunks", args:{corpus:"scpi", query:"spectrum view trigger"}}\n' +
+    'Example: {action:"search_exec", query:"validate actions json", args:{actionsJson:{...}}}\n\n' +
+
+    '### search\n' +
+    'Find tools by natural language. Returns tool IDs, descriptions, and schemas.\n' +
+    'Example: {action:"search", query:"edge trigger setup"}\n' +
+    'Example: {action:"search", query:"known failures timeout"}\n\n' +
+
+    '### exec\n' +
+    'Execute a tool by its ID (from a previous search result).\n' +
+    'Example: {action:"exec", toolId:"scpi:TRIGger:{A|B}:EDGE:SOUrce", args:{commandType:"set", value:"CH1"}}\n\n' +
+
+    '### build\n' +
+    'Generate a complete SCPI workflow from a natural language description.\n' +
+    'Example: {action:"build", query:"set up jitter measurement on CH1"}\n\n' +
+
+    '### info\n' +
+    'Get full details about a tool by ID.\n' +
+    'Example: {action:"info", toolId:"scpi:CH<x>:SCAle"}\n\n' +
+
+    '### list\n' +
+    'List all registered tools with categories.\n\n' +
+
+    '### create / update / delete\n' +
+    'Manage runtime shortcut tools (learned workflows).\n' +
+    'Example: {action:"create", toolName:"Eye Jitter Setup", toolDescription:"...", toolTriggers:["eye jitter","jitter measurement"], toolCategory:"shortcut", toolSteps:[...]}\n\n' +
+
+    '## What the router handles internally (you do NOT need separate tools for these):\n' +
+    '- SCPI command search, browse, and lookup (search_scpi, browse_scpi, get_command_by_header, etc.)\n' +
+    '- Command materialization (materialize_scpi_command, finalize_scpi_commands)\n' +
+    '- Command verification (verify_scpi_commands)\n' +
+    '- Validation (validate_action_payload, validate_device_context)\n' +
+    '- Knowledge retrieval (retrieve_rag_chunks, search_known_failures, get_template_examples)\n' +
+    '- tm_devices lookup (search_tm_devices, materialize_tm_devices_call)\n' +
+    '- Policy and schema (get_policy, list_valid_step_types, get_block_schema)\n\n' +
+
+    '## Typical workflow:\n' +
+    '1. tek_router({action:"search_exec", query:"channel 1 scale", args:{commandType:"set", value:"1.0", concreteHeader:"CH1:SCAle"}})\n' +
+    '2. send_scpi({commands:["CH1:SCAle 1.0"]}) — to actually send to the instrument\n' +
+    '3. capture_screenshot() — to verify visually',
   parameters: {
     type: 'object',
     properties: {
