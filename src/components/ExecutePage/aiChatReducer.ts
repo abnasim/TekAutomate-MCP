@@ -11,6 +11,9 @@ export type AiInteractionMode = 'build' | 'chat' | 'live';
 export interface AiChatState {
   history: ChatTurn[];
   tekMode: TekMode;
+  /** Per-mode chat sessions — preserved across mode switches */
+  modeHistories: Record<TekMode, ChatTurn[]>;
+  modeThreadIds: Record<TekMode, string>;
   apiKey: string;
   openaiApiKey: string;
   anthropicApiKey: string;
@@ -59,6 +62,8 @@ const DEFAULT_MODEL_BY_PROVIDER: Record<AiProvider, string> = {
 export const initialAiChatState: AiChatState = {
   history: [],
   tekMode: 'mcp',
+  modeHistories: { mcp: [], ai: [], live: [] },
+  modeThreadIds: { mcp: '', ai: '', live: '' },
   apiKey: '',
   openaiApiKey: '',
   anthropicApiKey: '',
@@ -137,17 +142,30 @@ export function aiChatReducer(state: AiChatState, action: AiChatAction): AiChatS
       };
     }
 
-    // ── Mode switching ──
-    case 'SET_TEK_MODE':
+    // ── Mode switching — preserve per-mode chat sessions ──
+    case 'SET_TEK_MODE': {
+      // Save current mode's history before switching
+      const savedHistories = {
+        ...state.modeHistories,
+        [state.tekMode]: state.history,
+      };
+      const savedThreadIds = {
+        ...state.modeThreadIds,
+        [state.tekMode]: state.openaiThreadId,
+      };
       return {
         ...state,
         tekMode: action.tekMode,
-        history: [], // Clear history on mode switch
-        openaiThreadId: '',
+        modeHistories: savedHistories,
+        modeThreadIds: savedThreadIds,
+        // Restore target mode's history
+        history: savedHistories[action.tekMode] || [],
+        openaiThreadId: savedThreadIds[action.tekMode] || '',
         toolCallMode: action.tekMode === 'mcp' ? false : state.toolCallMode,
         error: null,
         isLoading: false,
       };
+    }
 
     // ── Key management ──
     case 'SET_KEY': {
@@ -238,6 +256,14 @@ export function aiChatReducer(state: AiChatState, action: AiChatAction): AiChatS
         ...state,
         history: [],
         openaiThreadId: '',
+        modeHistories: {
+          ...state.modeHistories,
+          [state.tekMode]: [],
+        },
+        modeThreadIds: {
+          ...state.modeThreadIds,
+          [state.tekMode]: '',
+        },
         error: null,
         isLoading: false,
       };
