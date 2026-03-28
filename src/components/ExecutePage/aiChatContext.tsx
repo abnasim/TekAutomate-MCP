@@ -58,10 +58,33 @@ function loadInitialAiChatState(): AiChatState {
       lastAssistantTurn?.routedVia === 'assistant' &&
       lastAssistantTurn?.streaming !== true;
 
+    // Restore per-mode histories
+    const savedModeHistories = parsed.modeHistories && typeof parsed.modeHistories === 'object'
+      ? parsed.modeHistories as Record<string, unknown[]>
+      : {};
+    const modeHistories = {
+      mcp: Array.isArray(savedModeHistories.mcp) ? savedModeHistories.mcp as any[] : [],
+      ai: Array.isArray(savedModeHistories.ai) ? savedModeHistories.ai as any[] : [],
+      live: Array.isArray(savedModeHistories.live) ? savedModeHistories.live as any[] : [],
+    };
+    // Put current history into the active mode slot
+    modeHistories[tekMode] = parsedHistory;
+
+    const savedModeThreadIds = parsed.modeThreadIds && typeof parsed.modeThreadIds === 'object'
+      ? parsed.modeThreadIds as Record<string, string>
+      : {};
+    const modeThreadIds = {
+      mcp: typeof savedModeThreadIds.mcp === 'string' ? savedModeThreadIds.mcp : '',
+      ai: typeof savedModeThreadIds.ai === 'string' ? savedModeThreadIds.ai : '',
+      live: typeof savedModeThreadIds.live === 'string' ? savedModeThreadIds.live : '',
+    };
+
     return {
       ...initialAiChatState,
       history: parsedHistory,
       tekMode,
+      modeHistories,
+      modeThreadIds,
       provider: activeProvider,
       model: typeof parsed.model === 'string' && parsed.model ? parsed.model : initialAiChatState.model,
       apiKey: activeKey,
@@ -97,11 +120,28 @@ function useAiChatState() {
         window.localStorage.removeItem('tekautomate.ai.byok.api_key.anthropic');
       }
       // Save general state (no apiKey — keys are in dedicated storage)
+      // Merge current history into modeHistories before saving
+      const historiesToSave = {
+        ...state.modeHistories,
+        [state.tekMode]: state.history,
+      };
+      const threadIdsToSave = {
+        ...state.modeThreadIds,
+        [state.tekMode]: state.openaiThreadId,
+      };
+      // Cap each mode's history to 100 turns to avoid bloating localStorage
+      const cappedHistories = {
+        mcp: (historiesToSave.mcp || []).slice(-100),
+        ai: (historiesToSave.ai || []).slice(-100),
+        live: (historiesToSave.live || []).slice(-100),
+      };
       window.localStorage.setItem(
         AI_CHAT_STATE_STORAGE,
         JSON.stringify({
-          history: state.history.slice(-200),
+          history: state.history.slice(-100),
           tekMode: state.tekMode,
+          modeHistories: cappedHistories,
+          modeThreadIds: threadIdsToSave,
           provider: state.provider,
           model: state.model,
           routingStrategy: state.routingStrategy,
