@@ -4886,5 +4886,23 @@
       "ip_conflict"
     ],
     "source": "AI_RAG/corpus/app_logic/app_logic_index.json"
+  },
+  {
+    "id": "spectrum_view_trigger_sources",
+    "corpus": "app_logic",
+    "title": "Undocumented Spectrum View Trigger Sources (MSO4/5/6/7)",
+    "body": "When Spectrum View is active on MSO4/5/6/7 series scopes, additional trigger source values are accepted by TRIGger:{A|B}:EDGE:SOUrce that are NOT listed in the official SCPI programmer manual.\n\nExtended trigger sources:\n- CH<x>_MAG — Magnitude vs Time trace (scope returns CH<x>_MAG_VS_TIME when queried)\n- CH<x>_FREQ — Frequency vs Time trace\n- CH<x>_PHASE — Phase vs Time trace\n\nPrerequisites:\n1. Enable Spectrum View: CH<x>:SV:STATE ON\n2. Enable the derived trace: SV:CH<x>:SELect:RF_MAGnitude ON\n3. Set trigger source: TRIGger:A:EDGE:SOUrce CH1_MAG\n\nExample workflow for triggering on Spectrum View Magnitude:\n  CH1:SV:STATE ON\n  SV:CH1:SELect:RF_MAGnitude ON\n  TRIGger:A:EDGE:SOUrce CH1_MAG\n  TRIGger:A:EDGE:LEVel -20.0\n\nNote: When querying back, the scope returns the expanded form CH1_MAG_VS_TIME, not CH1_MAG. Both are equivalent.\n\nDiscovered via real-world testing on MSO6B. These values are confirmed working but absent from the vendor SCPI documentation.",
+    "tags": [
+      "spectrum_view",
+      "trigger",
+      "undocumented",
+      "edge_trigger",
+      "RF_MAG",
+      "MSO6B",
+      "MSO5",
+      "MSO4",
+      "MSO7"
+    ],
+    "source": "real_world_discovery"
   }
 ]

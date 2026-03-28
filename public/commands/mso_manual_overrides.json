@@ -1386,5 +1386,96 @@
     "arguments": [{ "name": "meas_number", "type": "mnemonic", "required": true, "position": 0, "description": "Measurement slot number.", "validValues": { "type": "mnemonic_range", "pattern": "MEAS<x>", "examples": ["MEAS1", "MEAS2"] } }],
     "syntax": { "query": "MEASUrement:MEAS<x>:RESUlts:ALLAcqs:MEAN?" },
     "relatedCommands": ["MEASUrement:MEAS<x>:RESUlts:ALLAcqs:MAXimum?", "MEASUrement:MEAS<x>:RESUlts:CURRentacq:MEAN?"]
+  },
+  {
+    "command": "TRIGger:A:EDGE:SOUrce",
+    "header": "TRIGger:{A|B}:EDGE:SOUrce",
+    "mnemonics": ["TRIGger", "{A|B}", "EDGE", "SOUrce"],
+    "commandType": "both",
+    "group": "Trigger",
+    "description": "Sets or queries the source for an edge trigger. In addition to standard analog channels, digital channels, LINE, and AUXiliary, Spectrum View derived traces can also be used as trigger sources when Spectrum View is active. The scope accepts CH<x>_MAG (Magnitude vs. Time), CH<x>_FREQ (Frequency vs. Time), and CH<x>_PHASE (Phase vs. Time) as extended trigger source identifiers. When queried, CH<x>_MAG is returned as CH<x>_MAG_VS_TIME.",
+    "shortDescription": "Set or query edge trigger source (includes Spectrum View trace sources)",
+    "instruments": {
+      "families": ["MSO4", "MSO5", "MSO6", "MSO7"],
+      "models": [],
+      "exclusions": []
+    },
+    "arguments": [
+      {
+        "name": "trigger_instance", "type": "mnemonic", "required": true, "position": 0,
+        "description": "Trigger instance (A or B).",
+        "validValues": { "type": "enum", "values": ["A", "B"] }
+      },
+      {
+        "name": "source", "type": "enum_like", "required": true, "position": 1,
+        "description": "Trigger source. Standard sources: CH<x>, CH<x>_D<y>, LINE, AUXiliary. Spectrum View sources (when SV active): CH<x>_MAG (Magnitude vs Time, returned as CH<x>_MAG_VS_TIME), CH<x>_FREQ (Frequency vs Time), CH<x>_PHASE (Phase vs Time).",
+        "validValues": {
+          "type": "enum_like",
+          "values": ["CH1", "CH2", "CH3", "CH4", "CH5", "CH6", "CH7", "CH8", "CH1_D0", "CH1_D1", "LINE", "AUXiliary", "CH1_MAG", "CH2_MAG", "CH3_MAG", "CH4_MAG", "CH1_FREQ", "CH2_FREQ", "CH1_PHASE", "CH2_PHASE"],
+          "pattern": "CH<x> | CH<x>_D<y> | LINE | AUXiliary | CH<x>_MAG | CH<x>_FREQ | CH<x>_PHASE"
+        }
+      }
+    ],
+    "syntax": {
+      "set": "TRIGger:{A|B}:EDGE:SOUrce {CH<x>|CH<x>_D<y>|LINE|AUXiliary|CH<x>_MAG|CH<x>_FREQ|CH<x>_PHASE}",
+      "query": "TRIGger:{A|B}:EDGE:SOUrce?"
+    },
+    "examples": [
+      { "scpi": "TRIGger:A:EDGE:SOUrce CH1", "description": "Set edge trigger source to Channel 1." },
+      { "scpi": "TRIGger:A:EDGE:SOUrce CH1_MAG", "description": "Set edge trigger source to Channel 1 Spectrum View Magnitude vs Time trace. Scope returns CH1_MAG_VS_TIME when queried." },
+      { "scpi": "TRIGger:A:EDGE:SOUrce?", "description": "Query the current edge trigger source." }
+    ],
+    "relatedCommands": ["TRIGger:{A|B}:EDGE:SLOpe", "TRIGger:{A|B}:EDGE:LEVel", "SV:CH<x>:SELect:RF_MAGnitude", "CH<x>:SV:STATE"],
+    "commandGroup": "Trigger",
+    "subGroup": "Edge Trigger",
+    "notes": [
+      "UNDOCUMENTED: CH<x>_MAG, CH<x>_FREQ, CH<x>_PHASE trigger sources are accepted by MSO4/5/6/7 when Spectrum View is active but are not listed in the official SCPI programmer manual.",
+      "When queried, CH<x>_MAG is returned as CH<x>_MAG_VS_TIME by the scope firmware.",
+      "Requires SV:CH<x>:SELect:RF_MAGnitude ON (or equivalent) to be set first.",
+      "Discovered via real-world testing on MSO6B firmware."
+    ],
+    "manualReference": { "section": "Trigger", "subsection": "TRIGger:{A|B}:EDGE:SOUrce" }
+  },
+  {
+    "command": "SV:CH1:SELect:RF_MAGnitude",
+    "header": "SV:CH<x>:SELect:RF_MAGnitude",
+    "mnemonics": ["SV", "CH<x>", "SELect", "RF_MAGnitude"],
+    "commandType": "both",
+    "group": "Spectrum View",
+    "description": "Enables or disables the RF Magnitude vs Time trace for the specified channel's Spectrum View display. When ON, the Magnitude vs Time derived trace is visible and can be used as a trigger source (CH<x>_MAG).",
+    "shortDescription": "Enable/disable Spectrum View Magnitude vs Time trace",
+    "instruments": {
+      "families": ["MSO4", "MSO5", "MSO6", "MSO7"],
+      "models": [],
+      "exclusions": []
+    },
+    "arguments": [
+      {
+        "name": "channel", "type": "mnemonic", "required": true, "position": 0,
+        "description": "Analog channel selector.",
+        "validValues": { "type": "mnemonic_range", "pattern": "CH<x>", "examples": ["CH1", "CH2", "CH3", "CH4"] }
+      },
+      {
+        "name": "state", "type": "enum", "required": true, "position": 1,
+        "description": "ON or OFF (1 or 0).",
+        "validValues": { "type": "enum", "values": ["ON", "OFF", "1", "0"] }
+      }
+    ],
+    "syntax": {
+      "set": "SV:CH<x>:SELect:RF_MAGnitude {ON|OFF|1|0}",
+      "query": "SV:CH<x>:SELect:RF_MAGnitude?"
+    },
+    "examples": [
+      { "scpi": "SV:CH1:SELect:RF_MAGnitude ON", "description": "Enable Magnitude vs Time trace for Channel 1 Spectrum View." },
+      { "scpi": "SV:CH1:SELect:RF_MAGnitude?", "description": "Query if Magnitude vs Time trace is enabled for Channel 1." }
+    ],
+    "relatedCommands": ["CH<x>:SV:STATE", "CH<x>:SV:CENTERFrequency", "SV:SPAN", "TRIGger:{A|B}:EDGE:SOUrce"],
+    "commandGroup": "Spectrum View",
+    "subGroup": "RF Trace Selection",
+    "notes": [
+      "Must be ON before using CH<x>_MAG as a trigger source.",
+      "Part of the Spectrum View derived trace family alongside RF_FREQuency and RF_PHASe."
+    ],
+    "manualReference": { "section": "Spectrum View", "subsection": "SV:CH<x>:SELect:RF_MAGnitude" }
   }
 ]
