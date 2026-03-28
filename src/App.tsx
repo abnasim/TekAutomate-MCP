@@ -8150,15 +8150,6 @@ Keep under 120 words. No headings. Bullets only. Stay on this command. Do not de
                 )}
               </button>
             )}
-            <button
-              onClick={() => setShowExecutorModal(true)}
-              className="h-7 lg:h-8 w-7 lg:w-8 rounded flex items-center justify-center flex-shrink-0 bg-gray-100 dark:bg-gray-700 dark:text-gray-200 hover:bg-gray-200 dark:hover:bg-gray-600"
-              title={executorEndpoint
-                ? `Executor: ${connectedInstrumentIdn || `${executorEndpoint.host}:${executorEndpoint.port}`}`
-                : 'Executor — click to connect'}
-            >
-              <Camera size={16} />
-            </button>
             {currentView === 'builder' && !isHeaderNarrow && (
               <>
               <div 
@@ -8313,6 +8304,15 @@ Keep under 120 words. No headings. Bullets only. Stay on this command. Do not de
               </div>
               </>
             )}
+            <button
+              onClick={() => setShowExecutorModal(true)}
+              className="h-8 w-8 flex-shrink-0 rounded-lg flex items-center justify-center bg-gray-100 hover:bg-gray-200 dark:bg-gray-700 dark:hover:bg-gray-600 text-gray-600 dark:text-gray-300"
+              title={executorEndpoint
+                ? `Executor: ${connectedInstrumentIdn || `${executorEndpoint.host}:${executorEndpoint.port}`}`
+                : 'Executor — click to connect'}
+            >
+              <Camera size={16} />
+            </button>
             <button
               type="button"
               onClick={() => setIsDark((d) => !d)}
@@ -13438,24 +13438,24 @@ scpi.write('FILESYSTEM:DELETE "C:/TekScope/Temp/screenshot.png"')`;
             ) : (
               <>
                 <div className="flex-1 overflow-y-auto p-2">
-                  <div className={`grid gap-1.5 grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5`}>
+                  <div className={`grid gap-2 grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 2xl:grid-cols-5`}>
                     {visibleLibraryCommands.map((cmd, idx) => (
                       <div
                         key={`${cmd.scpi}-${idx}`}
-                        className={`px-2 py-1.5 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-600 rounded hover:border-blue-400 dark:hover:border-blue-500 hover:shadow-sm transition cursor-pointer group ${
+                        className={`px-2.5 py-2 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-600 rounded-lg hover:border-blue-400 dark:hover:border-blue-500 hover:shadow-sm transition cursor-pointer group ${
                           selectedLibraryCommand?.scpi === cmd.scpi ? 'border-blue-500 dark:border-blue-400 ring-2 ring-blue-200 dark:ring-blue-800' : ''
                         }`}
                         onClick={() => setSelectedLibraryCommand(cmd)}
                         onDoubleClick={() => addCommandFromLibrary(cmd)}
                         title={`${cmd.scpi}\n${cmd.description || ''}\nDouble-click to add`}
                       >
-                        <div className="flex items-center gap-1 mb-0.5">
-                          <span className="font-medium text-[11px] text-gray-900 dark:text-gray-100 truncate">{cmd.name}</span>
-                          <span className={`text-[9px] px-1 py-px rounded-full border font-medium flex-shrink-0 ${categoryColors[cmd.category] || 'bg-gray-100 dark:bg-gray-700 text-gray-700 dark:text-gray-300'}`}>
+                        <div className="flex items-center gap-1.5 mb-1">
+                          <span className="font-semibold text-xs text-gray-900 dark:text-gray-100 truncate">{cmd.name}</span>
+                          <span className={`text-[10px] px-1.5 py-px rounded-full border font-medium flex-shrink-0 ${categoryColors[cmd.category] || 'bg-gray-100 dark:bg-gray-700 text-gray-700 dark:text-gray-300'}`}>
                             {cmd.category}
                           </span>
                         </div>
-                        <div className="text-[11px] font-mono text-blue-600 dark:text-blue-400 truncate">
+                        <div className="text-xs font-mono text-blue-600 dark:text-blue-400 truncate">
                           {substituteParamIndicesInScpi(cmd.scpi, librarySelectedParamIndices)}
                         </div>
                       </div>
