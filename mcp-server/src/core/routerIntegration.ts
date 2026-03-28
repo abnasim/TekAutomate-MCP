@@ -113,10 +113,6 @@ export async function persistRuntimeShortcuts(): Promise<void> {
       tool.steps
     );
 
-    if (runtimeShortcuts.length === 0) {
-      return;
-    }
-
     const shortcutsData = runtimeShortcuts.map(tool => ({
       id: tool.id,
       name: tool.name,
