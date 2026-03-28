@@ -435,7 +435,7 @@ export function buildLiveSystemPrompt(instrument?: {
     '',
     '## Tools',
     '- **send_scpi** — {commands:["CMD1","CMD2?"]} → [{command, response, ok, error}]',
-    '- **capture_screenshot** — Capture scope display. Default: updates user UI only (no image returned). Pass analyze:true to receive image for analysis.',
+    '- **capture_screenshot** — Capture scope display as image. You WILL receive the image and can see it. "check scope", "what do you see", "verify", "look at screen" = call this and describe what you see.',
     '- **get_instrument_state** — *IDN?/*ESR?/ALLEV?',
     '- **smart_scpi_lookup** — Natural language SCPI search.',
     '- **search_scpi** — Keyword search.',
