@@ -868,12 +868,30 @@ export function useAiChat(params: {
             }
           }
 
+          // Build user content with image attachments for Anthropic vision
+          const pendingAttachments = options?.attachments || [];
+          const imageBlocks = pendingAttachments
+            .filter((a) => a.mimeType?.startsWith('image/') && a.dataUrl)
+            .slice(0, 4)
+            .map((a) => {
+              const match = String(a.dataUrl || '').match(/^data:([^;]+);base64,(.+)$/);
+              if (!match) return null;
+              return {
+                type: 'image' as const,
+                source: { type: 'base64' as const, media_type: match[1], data: match[2] },
+              };
+            })
+            .filter(Boolean);
+          const userContent = imageBlocks.length > 0
+            ? [{ type: 'text' as const, text: effectiveMessage + preContext }, ...imageBlocks]
+            : effectiveMessage + preContext;
+
           const chatMessages: Array<Record<string, unknown>> = [
-            ...state.history.slice(-4).map((h) => ({
+            ...state.history.slice(-6).map((h) => ({
               role: h.role as 'user' | 'assistant',
-              content: String(h.content || '').slice(0, 2000),
+              content: String(h.content || '').slice(0, 6000),
             })),
-            { role: 'user', content: effectiveMessage + preContext },
+            { role: 'user', content: userContent },
           ];
           const res = await fetch('https://api.anthropic.com/v1/messages', {
             method: 'POST',
@@ -893,7 +911,7 @@ export function useAiChat(params: {
                 'When user asks to build a flow, give a short outline and tell them to say "build it".',
                 'Do not dump raw JSON or full scripts unless asked.',
               ].join('\n'),
-              max_tokens: 2048,
+              max_tokens: 4096,
               messages: chatMessages,
             }),
           });
