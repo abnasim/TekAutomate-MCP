@@ -38,34 +38,42 @@ export class CleanRouter {
 
   /**
    * Detect if user wants to browse/explore commands interactively
-   * e.g. "browse commands", "browse trigger", "list groups", "explore measurement commands"
+   * e.g. "browse commands", "browse_scpi_commands", "browse trigger", "list groups", "explore measurement commands"
    */
   isBrowseIntent(msg: string): { isBrowse: boolean; group?: string; filter?: string } {
+    // Normalize underscores to spaces for matching
+    const normalized = msg.replace(/_/g, ' ');
+
+    // Exact tool name match (user typed "browse_scpi_commands" or "browse scpi commands")
+    if (/^\s*browse\s+scpi\s+commands?\s*$/i.test(normalized)) {
+      return { isBrowse: true };
+    }
+
     // Explicit browse/explore/list
-    const browseMatch = msg.match(/\b(browse|explore|list|show)\s+(all\s+)?(commands?|groups?|categories)/i);
+    const browseMatch = normalized.match(/\b(browse|explore|list|show)\s+(all\s+)?(commands?|groups?|categories)/i);
     if (browseMatch) {
       return { isBrowse: true };
     }
 
-    // "browse <group>" or "browse <group> <filter>"
-    const browseGroupMatch = msg.match(/\b(browse|explore)\s+(\w[\w\s]*?)(?:\s+(commands?|group))?\s*$/i);
-    if (browseGroupMatch) {
-      const groupCandidate = browseGroupMatch[2].trim();
-      // Don't match "browse commands" as a group
-      if (!/^(all|commands?|groups?|categories|scpi)$/i.test(groupCandidate)) {
-        return { isBrowse: true, group: groupCandidate };
-      }
-      return { isBrowse: true };
-    }
-
     // "browse <group> <filter>" pattern: "browse trigger edge"
-    const browseFilterMatch = msg.match(/\b(browse|explore)\s+(\w+)\s+(\w+)/i);
+    const browseFilterMatch = normalized.match(/\b(browse|explore)\s+(\w+)\s+(\w+)/i);
     if (browseFilterMatch) {
       const g = browseFilterMatch[2].trim();
       const f = browseFilterMatch[3].trim();
       if (!/^(all|commands?|groups?|scpi)$/i.test(g)) {
         return { isBrowse: true, group: g, filter: f };
       }
+    }
+
+    // "browse <group>" or "browse <group> commands"
+    const browseGroupMatch = normalized.match(/\b(browse|explore)\s+(\w[\w\s]*?)(?:\s+(commands?|group))?\s*$/i);
+    if (browseGroupMatch) {
+      const groupCandidate = browseGroupMatch[2].trim();
+      // Don't match generic words as a group
+      if (!/^(all|commands?|groups?|categories|scpi)$/i.test(groupCandidate)) {
+        return { isBrowse: true, group: groupCandidate };
+      }
+      return { isBrowse: true };
     }
 
     return { isBrowse: false };

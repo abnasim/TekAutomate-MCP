@@ -8437,6 +8437,23 @@ export async function runToolLoop(req: McpChatRequest): Promise<ToolLoopResult> 
   // MCP-only mode is deterministic/local by design:
   // never call external model providers from here.
   if (mcpOnlyMode) {
+    const mcpMsg = req.userMessage.toLowerCase().trim();
+
+    // Priority intents — check BEFORE smart_scpi delegation
+    if (cleanRouter.isValidationIntent(mcpMsg)) {
+      console.log('[MCP_ONLY] Validation intent detected');
+      return await runFlowValidation(req);
+    }
+    if (cleanRouter.isQuestionIntent(mcpMsg)) {
+      console.log('[MCP_ONLY] Question intent detected');
+      return await runQuestionLookup(req);
+    }
+    const browseIntent = cleanRouter.isBrowseIntent(mcpMsg);
+    if (browseIntent.isBrowse) {
+      console.log('[MCP_ONLY] Browse intent detected');
+      return await runBrowseCommands(req, browseIntent.group, browseIntent.filter);
+    }
+
     // Check if clean router wants to use Smart SCPI Assistant
     if (routeDecision.route === 'smart_scpi') {
       console.log('[MCP_ONLY] Router wants Smart SCPI Assistant - delegating to Smart SCPI');

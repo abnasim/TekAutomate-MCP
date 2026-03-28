@@ -120,7 +120,9 @@ export function getToolDefinitions() {
         '- "add jitter measurement with detailed results"\n\n' +
         'Returns: matching SCPI commands with full syntax, valid argument values, ' +
         'and Python/SCPI code examples. For broad queries, returns a conversational ' +
-        'menu to narrow down options.',
+        'menu to narrow down options.\n\n' +
+        'If this tool returns no results or the wrong commands, use browse_scpi_commands ' +
+        'to iteratively explore the command database by group and keyword.',
       parameters: {
         type: 'object',
         properties: {
