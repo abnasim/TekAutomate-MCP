@@ -90,6 +90,13 @@ async function runDeterministicToolLoop(req: McpChatRequest, flowCommandIssues: 
       return await runQuestionLookup(req);
     }
 
+    // Browse intent: "browse commands", "browse trigger", "browse trigger edge"
+    const browseIntent = cleanRouter.isBrowseIntent(msg);
+    if (browseIntent.isBrowse) {
+      console.log('[DETERMINISTIC_TOOL_LOOP] Browse intent detected');
+      return await runBrowseCommands(req, browseIntent.group, browseIntent.filter);
+    }
+
     // MCP-only mode: pure deterministic, no auto-RAG (user can call retrieve_rag_chunks explicitly)
     if (routeDecision.route === 'smart_scpi') {
       console.log('[DETERMINISTIC_TOOL_LOOP] Using Smart SCPI Assistant');
@@ -162,7 +169,39 @@ async function runSmartScpiAssistant(req: McpChatRequest) {
     if (!toolResult) {
       throw new Error('smartScpiLookup returned no result');
     }
-    
+
+    // Fallback: if smart lookup returned no results, show browse results directly
+    if ((!toolResult.data || toolResult.data.length === 0) && !toolResult.conversationalPrompt) {
+      console.log('[SMART_SCPI] No results — falling back to browse_scpi_commands');
+      const { browseScpiCommands } = await import('../tools/browseScpiCommands');
+      const browseResult = await browseScpiCommands({});
+      const groups = (browseResult.data as any)?.groups || [];
+      const groupList = groups.map((g: any) => `- **${g.name}** (${g.commandCount} commands) — ${g.description}`).join('\n');
+
+      return {
+        text: `I couldn't find a direct match for "${req.userMessage}".\n\n` +
+          `Try rephrasing, or browse by group:\n\n${groupList}\n\n` +
+          `Type **"browse \<group name\>"** to see commands in a group, e.g. **"browse Trigger"**.\n` +
+          `Type **"browse Trigger edge"** to filter within a group.`,
+        assistantThreadId: undefined,
+        errors: [],
+        warnings: ['No direct match — browse groups listed'],
+        metrics: {
+          totalMs: 0, usedShortcut: false, iterations: 1, toolCalls: 1, toolMs: 0, modelMs: 0,
+          promptChars: { system: 0, user: req.userMessage.length }
+        },
+        debug: {
+          toolTrace: [{
+            name: 'smart_scpi_lookup',
+            args: { query: req.userMessage },
+            startedAt: new Date().toISOString(),
+            resultSummary: { ok: true, count: 0 }
+          }],
+          resolutionPath: 'deterministic:smart_scpi_fallback_browse'
+        }
+      };
+    }
+
     // Handle conversational prompts - return the conversational response with commands
     if (toolResult.conversationalPrompt) {
       return {
@@ -603,6 +642,106 @@ async function runFlowValidation(req: McpChatRequest) {
       warnings: [],
       metrics: { totalMs: 0, usedShortcut: false, iterations: 0, toolCalls: 0, toolMs: 0, modelMs: 0, promptChars: { system: 0, user: 0 } },
       debug: { toolTrace: [], resolutionPath: 'deterministic:validate_error' }
+    };
+  }
+}
+
+/**
+ * Run browse_scpi_commands in MCP-only deterministic mode.
+ * Returns formatted results directly to the user.
+ */
+async function runBrowseCommands(req: McpChatRequest, group?: string, filter?: string) {
+  try {
+    const { browseScpiCommands } = await import('../tools/browseScpiCommands');
+    const result = await browseScpiCommands({
+      group,
+      filter,
+      modelFamily: req.flowContext?.modelFamily,
+    });
+
+    if (!result.ok) {
+      return {
+        text: `Browse error: ${(result.warnings || []).join(', ')}`,
+        assistantThreadId: undefined,
+        errors: [],
+        warnings: result.warnings || [],
+        metrics: { totalMs: 0, usedShortcut: false, iterations: 1, toolCalls: 1, toolMs: 0, modelMs: 0, promptChars: { system: 0, user: req.userMessage.length } },
+        debug: { toolTrace: [], resolutionPath: 'deterministic:browse_error' }
+      };
+    }
+
+    const data = result.data as any;
+    let response = '';
+
+    if (data.level === 'group_list') {
+      response = `## SCPI Command Groups (${data.totalGroups})\n\n`;
+      for (const g of data.groups) {
+        response += `- **${g.name}** (${g.commandCount} commands) — ${g.description}\n`;
+      }
+      response += `\nType **"browse \<group name\>"** to see commands in a group.`;
+    } else if (data.level === 'group_commands') {
+      response = `## ${data.groupName} (${data.totalCommands} commands${data.filter ? `, filtered by "${data.filter}"` : ''})\n\n`;
+      response += `${data.description}\n\n`;
+      if (data.showing > 20) {
+        // Compact listing for large groups
+        for (const cmd of data.commands) {
+          response += `- \`${cmd.header}\` (${cmd.commandType}) — ${cmd.shortDescription.slice(0, 60)}\n`;
+        }
+      } else {
+        for (const cmd of data.commands) {
+          response += `- \`${cmd.header}\` (${cmd.commandType}) — ${cmd.shortDescription}\n`;
+        }
+      }
+      if (data.showing < data.totalCommands) {
+        response += `\n*Showing ${data.showing} of ${data.totalCommands}. Add a filter: **"browse ${data.groupName} \<keyword\>"***\n`;
+      }
+      response += `\nType **"what is \<header\>"** to see full details for a command.`;
+    } else if (data.level === 'command_detail') {
+      const cmd = data.command;
+      response = `## ${cmd.header}\n\n`;
+      response += `**Description:** ${cmd.description || cmd.shortDescription || 'N/A'}\n\n`;
+      if (cmd.syntax?.set) response += `**Set:** \`${cmd.syntax.set}\`\n`;
+      if (cmd.syntax?.query) response += `**Query:** \`${cmd.syntax.query}\`\n`;
+      response += '\n';
+      if (cmd.arguments && cmd.arguments.length > 0) {
+        response += `**Arguments:**\n`;
+        for (const arg of cmd.arguments) {
+          response += `- **${arg.name}** (${arg.type}${arg.required ? ', required' : ''}): ${arg.description || ''}`;
+          if (arg.validValues && typeof arg.validValues === 'object') {
+            const vv = arg.validValues as Record<string, unknown>;
+            if (vv.min !== undefined || vv.max !== undefined) response += ` — Range: ${vv.min ?? '—'} to ${vv.max ?? '—'}`;
+          }
+          response += '\n';
+        }
+        response += '\n';
+      }
+      if (cmd.examples && cmd.examples.length > 0) {
+        response += `**Examples:**\n`;
+        for (const ex of cmd.examples) {
+          if (ex.scpi) response += `- \`${ex.scpi}\` — ${ex.description || ''}\n`;
+        }
+        response += '\n';
+      }
+      response += `**Group:** ${cmd.group || 'N/A'} | **Type:** ${cmd.commandType}`;
+    }
+
+    return {
+      text: response,
+      assistantThreadId: undefined,
+      errors: [],
+      warnings: [],
+      metrics: { totalMs: 0, usedShortcut: false, iterations: 1, toolCalls: 1, toolMs: 0, modelMs: 0, promptChars: { system: 0, user: req.userMessage.length } },
+      debug: { toolTrace: [{ name: 'browse_scpi_commands', args: { group, filter }, startedAt: new Date().toISOString(), resultSummary: { ok: true } }], resolutionPath: 'deterministic:browse' }
+    };
+  } catch (error) {
+    const errorMessage = error instanceof Error ? error.message : String(error);
+    return {
+      text: `Browse error: ${errorMessage}`,
+      assistantThreadId: undefined,
+      errors: [errorMessage],
+      warnings: [],
+      metrics: { totalMs: 0, usedShortcut: false, iterations: 0, toolCalls: 0, toolMs: 0, modelMs: 0, promptChars: { system: 0, user: 0 } },
+      debug: { toolTrace: [], resolutionPath: 'deterministic:browse_error' }
     };
   }
 }
