@@ -1677,8 +1677,32 @@ export function AiChatPanel({
                       className="bg-slate-50 dark:bg-white/5 border border-slate-200 dark:border-white/10 rounded-xl px-3 py-2"
                     >
                       <div className="min-w-0 space-y-1">
-                        <div className="text-xs text-slate-800 dark:text-white/85 font-semibold">
-                          {actionTitle(action)}
+                        <div className="flex items-center justify-between gap-2">
+                          <div className="text-xs text-slate-800 dark:text-white/85 font-semibold">
+                            {actionTitle(action)}
+                          </div>
+                          {!turn.appliedAt && !turn.noOpAt && (turn.actions?.length ?? 0) > 1 && (
+                            <button
+                              type="button"
+                              onClick={async (e) => {
+                                e.stopPropagation();
+                                clearApplyStatus();
+                                setApplyingTurnIndex(turnIndex);
+                                try {
+                                  const msg = await applyActionsFromTurn(turnIndex, action.id ? [action.id] : undefined);
+                                  showApplyStatus(msg);
+                                } catch (err) {
+                                  showApplyStatus(err instanceof Error ? err.message : 'Failed to apply.');
+                                } finally {
+                                  setApplyingTurnIndex(null);
+                                }
+                              }}
+                              disabled={applyingTurnIndex !== null}
+                              className="shrink-0 px-2 py-0.5 text-[10px] font-semibold rounded-md bg-violet-600/80 text-white hover:bg-violet-500 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
+                            >
+                              Apply
+                            </button>
+                          )}
                         </div>
                         {!!actionDetail(action, turnIndex) && (
                           <div className="text-[11px] text-slate-600 dark:text-white/60 break-words">
@@ -1723,6 +1747,8 @@ export function AiChatPanel({
                             turn.actions[0].action_type === 'replace_flow' &&
                             isIncrementalUserIntentAt(turnIndex))
                           ? 'Review replace-flow suggestion'
+                          : (turn.actions?.length ?? 0) > 1
+                          ? `Apply all ${turn.actions?.length} changes`
                           : applyButtonLabel(turn)}
                   </button>
                 </div>

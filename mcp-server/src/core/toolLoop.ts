@@ -4657,11 +4657,10 @@ async function runChatConversation(
     const messages = [
       ...(Array.isArray(req.history)
         ? req.history
-            .slice(-6)
+            .slice(-8)
             .map((h, i, arr) => ({
               role: h.role as 'user' | 'assistant',
-              // Older turns get shorter — save tokens for the most recent context
-              content: String(h.content || '').slice(0, i < arr.length - 2 ? 1000 : 2000),
+              content: String(h.content || '').slice(0, i < arr.length - 2 ? 3000 : 6000),
             }))
         : []),
       { role: 'user' as const, content: userContent },
@@ -4741,8 +4740,8 @@ async function runChatConversation(
       ? []
       : (Array.isArray(req.history)
           ? req.history
-              .slice(-6)
-              .map((h) => ({ role: h.role, content: String(h.content || '').slice(0, 2000) }))
+              .slice(-8)
+              .map((h) => ({ role: h.role, content: String(h.content || '').slice(0, 6000) }))
           : []);
     const requestPayload: Record<string, unknown> = {
       model: resolveHostedAssistantModel(req),
@@ -4821,11 +4820,10 @@ async function runChatConversation(
       { role: 'system', content: `${CHAT_MODE_SYSTEM_PROMPT}\n\n${developerPrompt}` },
       ...(Array.isArray(req.history)
         ? req.history
-            .slice(-6)
+            .slice(-8)
             .map((h, i, arr) => ({
               role: h.role,
-              // Older turns get shorter — save tokens for the most recent context
-              content: String(h.content || '').slice(0, i < arr.length - 2 ? 1000 : 2000),
+              content: String(h.content || '').slice(0, i < arr.length - 2 ? 3000 : 6000),
             }))
         : []),
       { role: 'user', content: userContent },
@@ -6594,10 +6592,10 @@ export function buildHostedOpenAiResponsesRequest(
     previousResponseId || !Array.isArray(req.history)
       ? []
       : req.history
-          .slice(-6)
+          .slice(-8)
           .map((h) => ({
             role: h.role,
-            content: String(h.content || '').slice(0, 2000),
+            content: String(h.content || '').slice(0, 6000),
           }))
           .filter((h) => h.content.trim().length > 0);
   const developerMessage = String(options.developerMessage || '').trim();
