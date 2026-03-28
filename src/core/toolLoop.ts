@@ -4729,7 +4729,7 @@ async function runChatConversation(
   if (useHostedAssistant) {
     const openAiBase = process.env.OPENAI_BASE_URL || 'https://api.openai.com';
     const hostedVectorStoreId = resolveHostedVectorStoreId();
-    const userContent = buildOpenAiUserContent(req, userPrompt);
+    const userContent = buildOpenAiResponsesContent(req, userPrompt);
     const chatTools: HostedToolDefinition[] = hostedVectorStoreId
       ? [
           {
@@ -6663,7 +6663,7 @@ async function runOpenAiHostedResponse(
     `[MCP] OpenAI hosted responses: model ${hostedModel}${reasoningCfg?.effort ? ` reasoning=${String(reasoningCfg.effort)}` : ''}`
   );
   if (usesServerDefaultHostedPrompt(req) && canAttachHostedPrompt && !promptConfig?.id) {
-    throw new Error('OPENAI_PROMPT_ID is required for hosted server-default assistant mode. Set a real pmpt_... value in mcp-server/.env or send a prompt ID directly.');
+    throw new Error('OPENAI_PROMPT_ID is missing. Add OPENAI_PROMPT_ID=pmpt_69ba258ea3e8819092c7b41dbb41fd580ac4f618c91da843 to mcp-server/.env (or set it in Railway environment variables).');
   }
   if (usesServerDefaultHostedPrompt(req) && !canAttachHostedPrompt) {
     console.log(
