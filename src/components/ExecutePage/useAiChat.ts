@@ -818,6 +818,51 @@ export function useAiChat(params: {
         return;
       }
 
+      // ── AI Chat + Anthropic: browser-direct (Node.js can't reach api.anthropic.com on some networks) ──
+      if (effectiveTekMode === 'ai' && state.provider === 'anthropic') {
+        try {
+          const chatMessages: Array<Record<string, unknown>> = [
+            ...state.history.slice(-4).map((h) => ({
+              role: h.role as 'user' | 'assistant',
+              content: String(h.content || '').slice(0, 2000),
+            })),
+            { role: 'user', content: effectiveMessage },
+          ];
+          const res = await fetch('https://api.anthropic.com/v1/messages', {
+            method: 'POST',
+            headers: {
+              'x-api-key': trimmedKey,
+              'anthropic-version': '2023-06-01',
+              'anthropic-dangerous-direct-browser-access': 'true',
+              'content-type': 'application/json',
+            },
+            body: JSON.stringify({
+              model: state.model,
+              system: 'You are a senior Tektronix test automation engineer inside TekAutomate. Help the user reason about instruments, measurements, debugging, SCPI commands, and practical lab decisions. Be conversational and concise. When user asks to build a flow, give a short outline and tell them to say "build it".',
+              max_tokens: 2048,
+              messages: chatMessages,
+            }),
+          });
+          if (!res.ok) {
+            const errText = await res.text();
+            throw new Error(`Anthropic ${res.status}: ${errText}`);
+          }
+          const json = await res.json() as { content: Array<Record<string, unknown>> };
+          const text = Array.isArray(json.content)
+            ? json.content.filter((c) => c.type === 'text').map((c) => String(c.text || '')).join('\n')
+            : '';
+          if (text) {
+            finalText = text;
+            dispatch({ type: 'STREAM_CHUNK', chunk: text });
+          }
+          dispatch({ type: 'STREAM_DONE' });
+          return;
+        } catch (browserErr) {
+          // If browser-direct fails, fall through to MCP path
+          console.warn('[AI Chat] Anthropic browser-direct failed, falling through to MCP:', browserErr);
+        }
+      }
+
       // ── MCP and AI Chat modes route through MCP server ──
       // MCP mode: deterministic planner, no API key needed
       // AI mode: server proxies AI call, chat interaction
