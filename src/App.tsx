@@ -4372,15 +4372,15 @@ ${waveformHelper}
           if (isTmDevicesCommand) {
             // High-level tm_devices API - output directly
             out += `${indent}${varName} = ${cmd}\n`;
-            out += `${indent}print(f"  ${varName}: {${varName}}")\n`;
+            out += `${indent}print(f"  → ${cmd.replace(/'/g, "\\'")}  =  {${varName}}")\n`;
           } else if (isTmDevice) {
             // tm_devices with SCPI command - use visa_resource
             out += `${indent}${varName} = devices['${deviceVar}'].visa_resource.query('${cmd}').strip()\n`;
-            out += `${indent}print(f"  ${cmd}: {${varName}}")\n`;
+            out += `${indent}print(f"  → ${cmd}  =  {${varName}}")\n`;
           } else {
             // PyVISA or VXI11
             out += `${indent}${varName} = devices['${deviceVar}'].query('${cmd}').strip()\n`;
-            out += `${indent}print(f"  ${cmd}: {${varName}}")\n`;
+            out += `${indent}print(f"  → ${cmd}  =  {${varName}}")\n`;
           }
         } else if (s.type === 'write') {
           const cmd = s.params.command || '';
@@ -4391,12 +4391,15 @@ ${waveformHelper}
           if (isTmDevicesCommand) {
             // High-level tm_devices API - output directly
             out += `${indent}${cmd}\n`;
+            out += `${indent}print(f"  → ${cmd.replace(/'/g, "\\'")}  [OK]")\n`;
           } else if (isTmDevice) {
             // tm_devices with SCPI command - use visa_resource
             out += `${indent}devices['${deviceVar}'].visa_resource.write('${cmd}')\n`;
+            out += `${indent}print(f"  → ${cmd}  [OK]")\n`;
           } else {
             // PyVISA or VXI11
             out += `${indent}devices['${deviceVar}'].write('${cmd}')\n`;
+            out += `${indent}print(f"  → ${cmd}  [OK]")\n`;
           }
         } else if (s.type === 'python' && s.params?.code) {
           const code = s.params.code.replace(/\r\n/g, '\n').replace(/\r/g, '\n');
