@@ -8131,7 +8131,7 @@ Keep under 120 words. No headings. Bullets only. Stay on this command. Do not de
               title="Run on scope (code + logs)"
             >
               <Play size={14} />
-              Execute
+              Run
             </button>
             {currentView === 'flow-designer' && (
               <button
@@ -8154,37 +8154,6 @@ Keep under 120 words. No headings. Bullets only. Stay on this command. Do not de
             )}
             {currentView === 'builder' && !isHeaderNarrow && (
               <>
-              <div 
-                className="relative flex-shrink-0"
-                onMouseEnter={() => setShowFlowDropdown(true)}
-                onMouseLeave={() => setShowFlowDropdown(false)}
-              >
-                <button className="h-8 min-w-[7rem] px-3 py-1.5 rounded text-xs font-medium bg-gray-100 dark:bg-gray-700 dark:text-gray-200 flex items-center justify-center gap-1.5 whitespace-nowrap" data-tour="flow-dropdown">
-                  <FileJson size={16} className="flex-shrink-0" />
-                  Flow
-                  <ChevronDown size={16} className="flex-shrink-0" />
-                </button>
-                {showFlowDropdown && (
-                  <div className="absolute top-full left-0 pt-1 bg-transparent z-50">
-                    <div className="bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-600 rounded shadow-lg min-w-[140px]">
-                      <label 
-                        className="block px-3 py-2 text-xs hover:bg-gray-100 dark:hover:bg-gray-700 cursor-pointer flex items-center gap-2 text-gray-900 dark:text-gray-200"
-                        htmlFor="importFlow"
-                      >
-                        <Upload size={14} />
-                        Import Flow
-                      </label>
-                      <button 
-                        onClick={exportFlowJson}
-                        className="w-full text-left px-3 py-2 text-xs hover:bg-gray-100 dark:hover:bg-gray-700 flex items-center gap-2 text-gray-900 dark:text-gray-200"
-                      >
-                        <FileJson size={14} />
-                        Export Flow
-                      </button>
-                    </div>
-                  </div>
-                )}
-              </div>
               <input id="importFlow" ref={fileInputRef} type="file" accept="application/json" className="hidden"
                 onChange={async (e) => {
                   const inputEl = e.currentTarget;
@@ -9915,7 +9884,23 @@ Keep under 120 words. No headings. Bullets only. Stay on this command. Do not de
                     title="Toggle expand/collapse for all groups"
                   >
                     <FolderOpen size={16} className="text-violet-600 dark:text-violet-400" />
-                    <span className="text-xs font-medium text-gray-700 dark:text-gray-300">Auto Group</span>
+                    <span className="text-xs font-medium text-gray-700 dark:text-gray-300">Fold All</span>
+                  </button>
+                  <label
+                    htmlFor="importFlow"
+                    className="px-2 py-1 hover:bg-gray-100 dark:hover:bg-gray-700 rounded flex items-center gap-1 cursor-pointer"
+                    title="Import flow from JSON file"
+                  >
+                    <Upload size={16} className="text-gray-500 dark:text-gray-400" />
+                    <span className="text-xs font-medium text-gray-700 dark:text-gray-300">Import</span>
+                  </label>
+                  <button
+                    onClick={exportFlowJson}
+                    className="px-2 py-1 hover:bg-gray-100 dark:hover:bg-gray-700 rounded flex items-center gap-1"
+                    title="Export flow as JSON file"
+                  >
+                    <Download size={16} className="text-gray-500 dark:text-gray-400" />
+                    <span className="text-xs font-medium text-gray-700 dark:text-gray-300">Export</span>
                   </button>
                   <button 
                     onClick={() => setShowConfig(!showConfig)} 
