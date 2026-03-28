@@ -3,12 +3,6 @@ import { resolve, dirname } from 'path';
 import { fileURLToPath } from 'url';
 
 import { createServer } from './server';
-import { initCommandIndex } from './core/commandIndex';
-import { initProviderCatalog, providerSupplementsEnabled } from './core/providerCatalog';
-import { initTmDevicesIndex } from './core/tmDevicesIndex';
-import { initRagIndexes } from './core/ragIndex';
-import { initTemplateIndex } from './core/templateIndex';
-import { bootRouter } from './core/routerIntegration';
 
 // Load .env from mcp-server directory
 const __dirname = dirname(fileURLToPath(import.meta.url));
@@ -29,31 +23,13 @@ async function main() {
   console.log('   ✅ Definitive routing logic (future-proof)');
   console.log('   ✅ Proper additions and changes handling');
   
-  const startedAt = Date.now();
-  const initTasks = [
-    initCommandIndex(),
-    initTmDevicesIndex(),
-    initRagIndexes(),
-    initTemplateIndex(),
-    ...(providerSupplementsEnabled() ? [initProviderCatalog()] : []),
-  ];
-
-  await Promise.all(initTasks);
-  console.log(`✅ All indexes initialized in ${Date.now() - startedAt}ms`);
-
-  if (String(process.env.MCP_ROUTER_DISABLED || '').trim() !== 'true') {
-    console.log('🔧 MCP Router enabled - initializing router tools...');
-    const routerStartedAt = Date.now();
-    await bootRouter();
-    console.log(`✅ Router initialized in ${Date.now() - routerStartedAt}ms`);
-  }
-
   const port = Number(process.env.MCP_PORT || process.env.PORT || 8787);
+  const host = String(process.env.HOST || '0.0.0.0').trim() || '0.0.0.0';
 
-  createServer(port)
+  createServer(port, host)
     .then(() => {
       // eslint-disable-next-line no-console
-      console.log(`MCP server listening on http://localhost:${port}`);
+      console.log(`MCP server listening on http://${host}:${port} (warming indexes in background if needed)`);
     })
     .catch((err) => {
       // eslint-disable-next-line no-console

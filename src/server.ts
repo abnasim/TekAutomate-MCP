@@ -21,6 +21,9 @@ const __dirname = path.dirname(__filename);
 let lastAiDebug: Record<string, unknown> | null = null;
 const REQUEST_LOG_DIR = path.join(__dirname, 'logs', 'requests');
 const MAX_LOG_FILES = 500;
+let startupState: 'starting' | 'ready' | 'error' = 'starting';
+let startupError: string | null = null;
+let startupInitPromise: Promise<void> | null = null;
 
 function ensureLogDir() {
   fs.mkdirSync(REQUEST_LOG_DIR, { recursive: true });
@@ -205,6 +208,16 @@ function sendJson(res: http.ServerResponse, status: number, payload: unknown) {
   res.end(JSON.stringify(payload));
 }
 
+function getHealthPayload() {
+  const warmStartMode = String(process.env.MCP_WARM_START_MODE || 'minimal').trim().toLowerCase() || 'minimal';
+  return {
+    ok: startupState !== 'error',
+    status: startupState,
+    warmStartMode,
+    ...(startupError ? { startupError } : {}),
+  };
+}
+
 function sendSseStart(res: http.ServerResponse) {
   res.statusCode = 200;
   res.setHeader('Content-Type', 'text/event-stream');
@@ -244,62 +257,80 @@ function parseProviderError(status: number, raw: string): { code: string; messag
   return { code, message, hint };
 }
 
-export async function createServer(port = 8787): Promise<http.Server> {
-  // CRITICAL FIX: Initialize ALL indexes BEFORE creating HTTP server
-  // Previously: initialization happened inside request handlers (race condition)
-  const startInit = Date.now();
-  console.log('[SERVER] Initializing indexes before HTTP server starts...');
+async function warmStartup(): Promise<void> {
+  if (startupInitPromise) return startupInitPromise;
+  startupInitPromise = (async () => {
+    startupState = 'starting';
+    startupError = null;
+    const startInit = Date.now();
+    const warmMode = String(process.env.MCP_WARM_START_MODE || 'minimal').trim().toLowerCase() || 'minimal';
+    console.log(`[SERVER] Initializing indexes in background (mode=${warmMode})...`);
 
-  const results = await Promise.allSettled([
-    initCommandIndex(),
-    initTmDevicesIndex(),
-    initRagIndexes(),
-    initTemplateIndex(),
-    ...(providerSupplementsEnabled() ? [initProviderCatalog()] : []),
-  ]);
-
-  // Check for initialization failures
-  const failures = results
-    .map((r, i) => r.status === 'rejected' ? { index: i, error: r.reason } : null)
-    .filter((f): f is { index: number; error: unknown } => Boolean(f));
-
-  if (failures.length > 0) {
-    const names = ['CommandIndex', 'TmDevicesIndex', 'RagIndexes', 'TemplateIndex', 'ProviderCatalog'];
-    const failedNames = failures.map(f => names[f.index]).join(', ');
-    const error = new Error(`[CRITICAL] Initialization failed: ${failedNames}`);
-    console.error(error.message);
-    for (const failure of failures) {
-      console.error(`  ${names[failure.index]}: ${failure.error}`);
+    const initTasks: Promise<unknown>[] = [initCommandIndex()];
+    const names = ['CommandIndex'];
+    if (warmMode === 'full') {
+      initTasks.push(initTmDevicesIndex(), initRagIndexes(), initTemplateIndex());
+      names.push('TmDevicesIndex', 'RagIndexes', 'TemplateIndex');
+      if (providerSupplementsEnabled()) {
+        initTasks.push(initProviderCatalog());
+        names.push('ProviderCatalog');
+      }
     }
-    throw error;
-  }
 
-  console.log(`✅ All indexes initialized in ${Date.now() - startInit}ms`);
+    const results = await Promise.allSettled(initTasks);
 
-  // Bootstrap router — enabled by default, disable with MCP_ROUTER_DISABLED=true
-  const routerDisabled = String(process.env.MCP_ROUTER_DISABLED || '').trim() === 'true';
-  if (!routerDisabled) {
-    try {
-      const commandIndex = await getCommandIndex();
-      const ragIndexes = await getRagIndexes();
-      const templates = (await getTemplateIndex()).all().map((doc) => ({
-        id: doc.id,
-        name: doc.name,
-        description: doc.description,
-        backend: 'template',
-        deviceType: 'workflow',
-        tags: [],
-        steps: doc.steps,
-      }));
-      const report = await bootRouter({ commandIndex, ragIndexes, templates });
-      console.log(`[MCP:router] ${report.total} tools in ${report.durationMs}ms`);
-    } catch (error) {
-      console.error('[MCP:router] Boot failed:', error);
+    const failures = results
+      .map((r, i) => r.status === 'rejected' ? { index: i, error: r.reason } : null)
+      .filter((f): f is { index: number; error: unknown } => Boolean(f));
+
+    if (failures.length > 0) {
+      const failedNames = failures.map((f) => names[f.index]).join(', ');
+      const error = new Error(`[CRITICAL] Initialization failed: ${failedNames}`);
+      startupState = 'error';
+      startupError = error.message;
+      console.error(error.message);
+      for (const failure of failures) {
+        console.error(`  ${names[failure.index]}: ${failure.error}`);
+      }
       throw error;
     }
-  }
 
-  // NOW create the HTTP server (all indexes are ready)
+    console.log(`✅ All indexes initialized in ${Date.now() - startInit}ms`);
+
+    if (warmMode === 'full' && String(process.env.MCP_ROUTER_ENABLED || '').trim() === 'true') {
+      try {
+        const commandIndex = await getCommandIndex();
+        const ragIndexes = await getRagIndexes();
+        const templates = (await getTemplateIndex()).all().map((doc) => ({
+          id: doc.id,
+          name: doc.name,
+          description: doc.description,
+          backend: 'template',
+          deviceType: 'workflow',
+          tags: [],
+          steps: doc.steps,
+        }));
+        const report = await bootRouter({ commandIndex, ragIndexes, templates });
+        console.log(`[MCP:router] ${report.total} tools in ${report.durationMs}ms`);
+      } catch (error) {
+        startupState = 'error';
+        startupError = error instanceof Error ? error.message : String(error);
+        console.error('[MCP:router] Boot failed:', error);
+        throw error;
+      }
+    }
+
+    startupState = 'ready';
+  })().catch((error) => {
+    startupState = 'error';
+    startupError = error instanceof Error ? error.message : String(error);
+    throw error;
+  });
+
+  return startupInitPromise;
+}
+
+export async function createServer(port = 8787, host = '0.0.0.0'): Promise<http.Server> {
   const server = http.createServer(async (req, res) => {
     if (req.method === 'OPTIONS') {
       res.statusCode = 204;
@@ -311,11 +342,20 @@ export async function createServer(port = 8787): Promise<http.Server> {
     }
 
     if (req.method === 'GET' && req.url === '/health') {
-      sendJson(res, 200, { ok: true, status: 'ready' });
+      sendJson(res, 200, getHealthPayload());
       return;
     }
 
-    if (!routerDisabled && req.method === 'GET' && req.url === '/ai/router/health') {
+    if (startupState !== 'ready') {
+      sendJson(res, startupState === 'starting' ? 503 : 500, {
+        ok: false,
+        error: startupState === 'starting' ? 'Server is still initializing.' : startupError || 'Server failed to initialize.',
+        status: startupState,
+      });
+      return;
+    }
+
+    if (String(process.env.MCP_ROUTER_ENABLED || '').trim() === 'true' && req.method === 'GET' && req.url === '/ai/router/health') {
       // FIX BUG-005: getRouterHealth() can return undefined, causing malformed JSON
       const health = getRouterHealth();
       if (!health) {
@@ -326,7 +366,7 @@ export async function createServer(port = 8787): Promise<http.Server> {
       return;
     }
 
-    if (!routerDisabled && req.method === 'POST' && req.url === '/ai/router') {
+    if (String(process.env.MCP_ROUTER_ENABLED || '').trim() === 'true' && req.method === 'POST' && req.url === '/ai/router') {
       try {
         const body = (await readJsonBody(req)) as Record<string, unknown>;
         const result = await createRouterHandler(body as any);
@@ -337,7 +377,7 @@ export async function createServer(port = 8787): Promise<http.Server> {
       return;
     }
 
-    if (!routerDisabled && req.method === 'POST' && req.url === '/ai/router/reload-providers') {
+    if (String(process.env.MCP_ROUTER_ENABLED || '').trim() === 'true' && req.method === 'POST' && req.url === '/ai/router/reload-providers') {
       try {
         const body = (await readJsonBody(req)) as { providersDir?: string };
         const result = await createReloadProvidersHandler(body);
@@ -800,7 +840,10 @@ export async function createServer(port = 8787): Promise<http.Server> {
   });
 
   await new Promise<void>((resolve) => {
-    server.listen(port, () => resolve());
+    server.listen(port, host, () => resolve());
+  });
+  void warmStartup().catch(() => {
+    // Startup failures are surfaced through /health and route guards.
   });
   return server;
 }
