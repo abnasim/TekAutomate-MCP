@@ -14185,51 +14185,73 @@ scpi.write('FILESYSTEM:DELETE "C:/TekScope/Temp/screenshot.png"')`;
               <button onClick={() => setShowMcpModal(false)} className="p-1.5 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-lg"><X size={18} className="text-gray-500" /></button>
             </div>
             <div className="p-6">
-              <p className="text-sm text-gray-600 dark:text-gray-400 mb-6">
-                All {commandLibrary.length.toLocaleString()}+ SCPI commands and 29 tools are available via the MCP protocol.
+              <p className="text-sm text-gray-600 dark:text-gray-400 mb-5">
+                All {commandLibrary.length.toLocaleString()}+ SCPI commands and 29 tools available via MCP. Choose <strong>Remote</strong> (no install) or <strong>Local</strong> (requires repo cloned + Node.js).
               </p>
-            <h2 className="text-lg font-bold text-gray-900 dark:text-gray-100 mb-4">MCP Server Setup</h2>
-            <p className="text-sm text-gray-600 dark:text-gray-400 mb-6">
-              Connect TekAutomate tools to your AI assistant. All {commandLibrary.length.toLocaleString()}+ SCPI commands and {29} tools are available via the MCP protocol.
-            </p>
 
-            {/* Setup Cards */}
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-6">
-              {/* Claude Web */}
-              <div className="bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg p-4">
-                <div className="flex items-center gap-2 mb-3">
-                  <span className="text-lg">🌐</span>
-                  <h3 className="font-semibold text-sm text-gray-900 dark:text-gray-100">Claude Web (claude.ai)</h3>
+            {/* ── Remote / Hosted (no install) ─────────────────── */}
+            <div className="mb-6">
+              <div className="flex items-center gap-2 mb-3">
+                <span className="text-[10px] font-bold px-2 py-0.5 bg-blue-100 dark:bg-blue-900/50 text-blue-700 dark:text-blue-300 rounded">REMOTE</span>
+                <h3 className="font-semibold text-sm text-gray-900 dark:text-gray-100">Hosted Server — no local install needed</h3>
+              </div>
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                {/* Claude Web */}
+                <div className="bg-gray-50 dark:bg-gray-700/30 border border-gray-200 dark:border-gray-600 rounded-lg p-4">
+                  <h4 className="font-semibold text-xs text-gray-900 dark:text-gray-100 mb-1">Claude Web (claude.ai)</h4>
+                  <p className="text-[10px] text-gray-500 dark:text-gray-400 mb-2">Settings &gt; Connectors &gt; Add Custom Connector</p>
+                  <div className="space-y-2">
+                    <div>
+                      <label className="text-[10px] font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wide">Name</label>
+                      <div className="flex items-center gap-1 mt-0.5">
+                        <code className="flex-1 text-xs bg-gray-100 dark:bg-gray-700 px-2 py-1.5 rounded border border-gray-200 dark:border-gray-600 text-gray-900 dark:text-gray-100">TekAutomate</code>
+                        <button onClick={() => navigator.clipboard.writeText('TekAutomate')} className="p-1 hover:bg-gray-100 dark:hover:bg-gray-700 rounded" title="Copy"><ClipboardPaste size={12} className="text-gray-400" /></button>
+                      </div>
+                    </div>
+                    <div>
+                      <label className="text-[10px] font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wide">Remote MCP Server URL</label>
+                      <div className="flex items-center gap-1 mt-0.5">
+                        <code className="flex-1 text-xs bg-gray-100 dark:bg-gray-700 px-2 py-1.5 rounded border border-gray-200 dark:border-gray-600 text-blue-600 dark:text-blue-400 break-all">https://tekautomate-mcp-production.up.railway.app/mcp</code>
+                        <button onClick={() => navigator.clipboard.writeText('https://tekautomate-mcp-production.up.railway.app/mcp')} className="p-1 hover:bg-gray-100 dark:hover:bg-gray-700 rounded flex-shrink-0" title="Copy"><ClipboardPaste size={12} className="text-gray-400" /></button>
+                      </div>
+                    </div>
+                    <p className="text-[10px] text-gray-400 dark:text-gray-500">No OAuth — leave Advanced settings blank</p>
+                  </div>
                 </div>
-                <p className="text-xs text-gray-500 dark:text-gray-400 mb-2">Settings &gt; Connectors &gt; Add Custom Connector</p>
-                <div className="space-y-2">
-                  <div>
-                    <label className="text-[10px] font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wide">Name</label>
-                    <div className="flex items-center gap-1 mt-0.5">
-                      <code className="flex-1 text-xs bg-gray-100 dark:bg-gray-700 px-2 py-1.5 rounded border border-gray-200 dark:border-gray-600 text-gray-900 dark:text-gray-100">TekAutomate</code>
-                      <button onClick={() => navigator.clipboard.writeText('TekAutomate')} className="p-1 hover:bg-gray-100 dark:hover:bg-gray-700 rounded" title="Copy"><ClipboardPaste size={12} className="text-gray-400" /></button>
-                    </div>
+                {/* Claude Desktop / Code / VS Code / Cursor — Remote HTTP */}
+                <div className="bg-gray-50 dark:bg-gray-700/30 border border-gray-200 dark:border-gray-600 rounded-lg p-4">
+                  <h4 className="font-semibold text-xs text-gray-900 dark:text-gray-100 mb-1">Claude Desktop / Code / VS Code / Cursor</h4>
+                  <p className="text-[10px] text-gray-500 dark:text-gray-400 mb-2">Use Streamable HTTP — no local files needed</p>
+                  <div className="relative">
+                    <pre className="text-[11px] bg-gray-900 text-green-400 p-3 rounded-lg overflow-x-auto leading-relaxed">{`{
+  "mcpServers": {
+    "tekautomate": {
+      "type": "http",
+      "url": "https://tekautomate-mcp-production.up.railway.app/mcp"
+    }
+  }
+}`}</pre>
+                    <button onClick={() => navigator.clipboard.writeText(`{\n  "mcpServers": {\n    "tekautomate": {\n      "type": "http",\n      "url": "https://tekautomate-mcp-production.up.railway.app/mcp"\n    }\n  }\n}`)} className="absolute top-2 right-2 p-1 bg-gray-800 hover:bg-gray-700 rounded" title="Copy"><ClipboardPaste size={12} className="text-gray-400" /></button>
                   </div>
-                  <div>
-                    <label className="text-[10px] font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wide">Remote MCP Server URL</label>
-                    <div className="flex items-center gap-1 mt-0.5">
-                      <code className="flex-1 text-xs bg-gray-100 dark:bg-gray-700 px-2 py-1.5 rounded border border-gray-200 dark:border-gray-600 text-blue-600 dark:text-blue-400 break-all">https://tekautomate-mcp-production.up.railway.app/mcp</code>
-                      <button onClick={() => navigator.clipboard.writeText('https://tekautomate-mcp-production.up.railway.app/mcp')} className="p-1 hover:bg-gray-100 dark:hover:bg-gray-700 rounded flex-shrink-0" title="Copy"><ClipboardPaste size={12} className="text-gray-400" /></button>
-                    </div>
-                  </div>
-                  <p className="text-[10px] text-gray-400 dark:text-gray-500">No OAuth needed — leave Advanced settings blank</p>
+                  <p className="text-[10px] text-gray-400 dark:text-gray-500 mt-2">Config file: <code className="text-[10px]">~/.claude/claude_desktop_config.json</code> (Desktop), <code className="text-[10px]">.mcp.json</code> (Code), <code className="text-[10px]">.vscode/mcp.json</code> (VS Code/Cursor)</p>
                 </div>
               </div>
+            </div>
 
-              {/* Claude Desktop */}
-              <div className="bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg p-4">
-                <div className="flex items-center gap-2 mb-3">
-                  <span className="text-lg">🖥️</span>
-                  <h3 className="font-semibold text-sm text-gray-900 dark:text-gray-100">Claude Desktop</h3>
-                </div>
-                <p className="text-xs text-gray-500 dark:text-gray-400 mb-2">~/.claude/claude_desktop_config.json</p>
-                <div className="relative">
-                  <pre className="text-[11px] bg-gray-900 text-green-400 p-3 rounded-lg overflow-x-auto leading-relaxed">{`{
+            {/* ── Local (STDIO) ────────────────────────────────── */}
+            <div className="mb-6">
+              <div className="flex items-center gap-2 mb-3">
+                <span className="text-[10px] font-bold px-2 py-0.5 bg-green-100 dark:bg-green-900/50 text-green-700 dark:text-green-300 rounded">LOCAL</span>
+                <h3 className="font-semibold text-sm text-gray-900 dark:text-gray-100">Run from cloned repo (STDIO)</h3>
+              </div>
+              <p className="text-[11px] text-gray-500 dark:text-gray-400 mb-3">Requires the TekAutomate repo cloned locally + Node.js installed. Replace <code className="text-[10px] bg-gray-200 dark:bg-gray-600 px-1 rounded">/path/to/TekAutomate</code> with your actual folder path.</p>
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                {/* Claude Desktop — local */}
+                <div className="bg-gray-50 dark:bg-gray-700/30 border border-gray-200 dark:border-gray-600 rounded-lg p-4">
+                  <h4 className="font-semibold text-xs text-gray-900 dark:text-gray-100 mb-1">Claude Desktop</h4>
+                  <p className="text-[10px] text-gray-500 dark:text-gray-400 mb-2">~/.claude/claude_desktop_config.json</p>
+                  <div className="relative">
+                    <pre className="text-[11px] bg-gray-900 text-green-400 p-3 rounded-lg overflow-x-auto leading-relaxed">{`{
   "mcpServers": {
     "tekautomate": {
       "command": "npx",
@@ -14238,19 +14260,15 @@ scpi.write('FILESYSTEM:DELETE "C:/TekScope/Temp/screenshot.png"')`;
     }
   }
 }`}</pre>
-                  <button onClick={() => navigator.clipboard.writeText(`{\n  "mcpServers": {\n    "tekautomate": {\n      "command": "npx",\n      "args": ["tsx", "mcp-server/src/stdio.ts"],\n      "cwd": "/path/to/TekAutomate"\n    }\n  }\n}`)} className="absolute top-2 right-2 p-1 bg-gray-800 hover:bg-gray-700 rounded" title="Copy"><ClipboardPaste size={12} className="text-gray-400" /></button>
+                    <button onClick={() => navigator.clipboard.writeText(`{\n  "mcpServers": {\n    "tekautomate": {\n      "command": "npx",\n      "args": ["tsx", "mcp-server/src/stdio.ts"],\n      "cwd": "/path/to/TekAutomate"\n    }\n  }\n}`)} className="absolute top-2 right-2 p-1 bg-gray-800 hover:bg-gray-700 rounded" title="Copy"><ClipboardPaste size={12} className="text-gray-400" /></button>
+                  </div>
                 </div>
-              </div>
-
-              {/* Claude Code CLI */}
-              <div className="bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg p-4">
-                <div className="flex items-center gap-2 mb-3">
-                  <span className="text-lg">⌨️</span>
-                  <h3 className="font-semibold text-sm text-gray-900 dark:text-gray-100">Claude Code (CLI)</h3>
-                </div>
-                <p className="text-xs text-gray-500 dark:text-gray-400 mb-2">.mcp.json in project root</p>
-                <div className="relative">
-                  <pre className="text-[11px] bg-gray-900 text-green-400 p-3 rounded-lg overflow-x-auto leading-relaxed">{`{
+                {/* Claude Code — local */}
+                <div className="bg-gray-50 dark:bg-gray-700/30 border border-gray-200 dark:border-gray-600 rounded-lg p-4">
+                  <h4 className="font-semibold text-xs text-gray-900 dark:text-gray-100 mb-1">Claude Code (CLI)</h4>
+                  <p className="text-[10px] text-gray-500 dark:text-gray-400 mb-2">.mcp.json in project root</p>
+                  <div className="relative">
+                    <pre className="text-[11px] bg-gray-900 text-green-400 p-3 rounded-lg overflow-x-auto leading-relaxed">{`{
   "mcpServers": {
     "tekautomate": {
       "command": "npx",
@@ -14259,19 +14277,15 @@ scpi.write('FILESYSTEM:DELETE "C:/TekScope/Temp/screenshot.png"')`;
     }
   }
 }`}</pre>
-                  <button onClick={() => navigator.clipboard.writeText(`{\n  "mcpServers": {\n    "tekautomate": {\n      "command": "npx",\n      "args": ["tsx", "mcp-server/src/stdio.ts"],\n      "cwd": "/path/to/TekAutomate"\n    }\n  }\n}`)} className="absolute top-2 right-2 p-1 bg-gray-800 hover:bg-gray-700 rounded" title="Copy"><ClipboardPaste size={12} className="text-gray-400" /></button>
+                    <button onClick={() => navigator.clipboard.writeText(`{\n  "mcpServers": {\n    "tekautomate": {\n      "command": "npx",\n      "args": ["tsx", "mcp-server/src/stdio.ts"],\n      "cwd": "/path/to/TekAutomate"\n    }\n  }\n}`)} className="absolute top-2 right-2 p-1 bg-gray-800 hover:bg-gray-700 rounded" title="Copy"><ClipboardPaste size={12} className="text-gray-400" /></button>
+                  </div>
                 </div>
-              </div>
-
-              {/* VS Code / Cursor */}
-              <div className="bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg p-4">
-                <div className="flex items-center gap-2 mb-3">
-                  <span className="text-lg">📝</span>
-                  <h3 className="font-semibold text-sm text-gray-900 dark:text-gray-100">VS Code / Cursor</h3>
-                </div>
-                <p className="text-xs text-gray-500 dark:text-gray-400 mb-2">.vscode/mcp.json</p>
-                <div className="relative">
-                  <pre className="text-[11px] bg-gray-900 text-green-400 p-3 rounded-lg overflow-x-auto leading-relaxed">{`{
+                {/* VS Code / Cursor — local */}
+                <div className="bg-gray-50 dark:bg-gray-700/30 border border-gray-200 dark:border-gray-600 rounded-lg p-4 md:col-span-2">
+                  <h4 className="font-semibold text-xs text-gray-900 dark:text-gray-100 mb-1">VS Code / Cursor</h4>
+                  <p className="text-[10px] text-gray-500 dark:text-gray-400 mb-2">.vscode/mcp.json</p>
+                  <div className="relative">
+                    <pre className="text-[11px] bg-gray-900 text-green-400 p-3 rounded-lg overflow-x-auto leading-relaxed">{`{
   "servers": {
     "tekautomate": {
       "command": "npx",
@@ -14280,34 +14294,36 @@ scpi.write('FILESYSTEM:DELETE "C:/TekScope/Temp/screenshot.png"')`;
     }
   }
 }`}</pre>
-                  <button onClick={() => navigator.clipboard.writeText(`{\n  "servers": {\n    "tekautomate": {\n      "command": "npx",\n      "args": ["tsx", "mcp-server/src/stdio.ts"],\n      "cwd": "/path/to/TekAutomate"\n    }\n  }\n}`)} className="absolute top-2 right-2 p-1 bg-gray-800 hover:bg-gray-700 rounded" title="Copy"><ClipboardPaste size={12} className="text-gray-400" /></button>
+                    <button onClick={() => navigator.clipboard.writeText(`{\n  "servers": {\n    "tekautomate": {\n      "command": "npx",\n      "args": ["tsx", "mcp-server/src/stdio.ts"],\n      "cwd": "/path/to/TekAutomate"\n    }\n  }\n}`)} className="absolute top-2 right-2 p-1 bg-gray-800 hover:bg-gray-700 rounded" title="Copy"><ClipboardPaste size={12} className="text-gray-400" /></button>
+                  </div>
                 </div>
               </div>
             </div>
 
-            {/* Transport Options */}
-            <div className="bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg p-4 mb-6">
-              <h3 className="font-semibold text-sm text-gray-900 dark:text-gray-100 mb-3">Transport Options</h3>
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-                <div className="bg-gray-50 dark:bg-gray-700/50 rounded-lg p-3">
-                  <div className="flex items-center gap-2 mb-1">
-                    <span className="text-[10px] font-bold px-2 py-0.5 bg-green-100 dark:bg-green-900/50 text-green-700 dark:text-green-300 rounded">STDIO</span>
-                    <span className="text-xs font-medium text-gray-900 dark:text-gray-100">Local mode</span>
-                  </div>
-                  <p className="text-[11px] text-gray-500 dark:text-gray-400">Runs locally via <code className="text-[10px] bg-gray-200 dark:bg-gray-600 px-1 rounded">npx tsx mcp-server/src/stdio.ts</code>. Best for Claude Desktop, Claude Code, VS Code, Cursor. Requires Node.js + the repo cloned.</p>
-                </div>
-                <div className="bg-gray-50 dark:bg-gray-700/50 rounded-lg p-3">
-                  <div className="flex items-center gap-2 mb-1">
-                    <span className="text-[10px] font-bold px-2 py-0.5 bg-blue-100 dark:bg-blue-900/50 text-blue-700 dark:text-blue-300 rounded">HTTP</span>
-                    <span className="text-xs font-medium text-gray-900 dark:text-gray-100">Remote / Hosted</span>
-                  </div>
-                  <p className="text-[11px] text-gray-500 dark:text-gray-400">Connect to <code className="text-[10px] bg-gray-200 dark:bg-gray-600 px-1 rounded break-all">https://tekautomate-mcp-production.up.railway.app/mcp</code>. Best for Claude Web. No local install needed.</p>
+            {/* ── If running MCP server locally on localhost ──── */}
+            <div className="mb-6">
+              <div className="flex items-center gap-2 mb-3">
+                <span className="text-[10px] font-bold px-2 py-0.5 bg-yellow-100 dark:bg-yellow-900/50 text-yellow-700 dark:text-yellow-300 rounded">LOCAL HTTP</span>
+                <h3 className="font-semibold text-sm text-gray-900 dark:text-gray-100">If running the HTTP server locally (localhost:8787)</h3>
+              </div>
+              <div className="bg-gray-50 dark:bg-gray-700/30 border border-gray-200 dark:border-gray-600 rounded-lg p-4">
+                <p className="text-[11px] text-gray-500 dark:text-gray-400 mb-2">When you have the MCP server running locally via <code className="text-[10px] bg-gray-200 dark:bg-gray-600 px-1 rounded">npm start</code>, use this URL instead of the hosted one:</p>
+                <div className="relative">
+                  <pre className="text-[11px] bg-gray-900 text-green-400 p-3 rounded-lg overflow-x-auto leading-relaxed">{`{
+  "mcpServers": {
+    "tekautomate": {
+      "type": "http",
+      "url": "http://localhost:8787/mcp"
+    }
+  }
+}`}</pre>
+                  <button onClick={() => navigator.clipboard.writeText(`{\n  "mcpServers": {\n    "tekautomate": {\n      "type": "http",\n      "url": "http://localhost:8787/mcp"\n    }\n  }\n}`)} className="absolute top-2 right-2 p-1 bg-gray-800 hover:bg-gray-700 rounded" title="Copy"><ClipboardPaste size={12} className="text-gray-400" /></button>
                 </div>
               </div>
             </div>
 
             {/* API Endpoints */}
-            <div className="bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg p-4 mb-6">
+            <div className="bg-gray-50 dark:bg-gray-700/30 border border-gray-200 dark:border-gray-600 rounded-lg p-4 mb-6">
               <h3 className="font-semibold text-sm text-gray-900 dark:text-gray-100 mb-3">API Endpoints</h3>
               <div className="space-y-1.5">
                 {[
@@ -14329,7 +14345,7 @@ scpi.write('FILESYSTEM:DELETE "C:/TekScope/Temp/screenshot.png"')`;
             </div>
 
             {/* Available Tools */}
-            <div className="bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg p-4">
+            <div className="bg-gray-50 dark:bg-gray-700/30 border border-gray-200 dark:border-gray-600 rounded-lg p-4">
               <h3 className="font-semibold text-sm text-gray-900 dark:text-gray-100 mb-3">Available Tools (29)</h3>
               <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
                 {[

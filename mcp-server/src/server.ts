@@ -427,30 +427,45 @@ details pre{margin-top:0.5rem;font-size:0.75rem;background:#0f172a;padding:0.75r
 </div>
 
 <div class="section">
-  <h2>Connect as MCP Server</h2>
+  <h2>Remote — No Install Needed</h2>
+  <p style="color:#94a3b8;font-size:0.85rem;margin-bottom:1rem">Connect via Streamable HTTP. No local files or Node.js required.</p>
   <div class="setup-grid">
     <div class="setup-card">
       <h4>Claude Web (claude.ai)</h4>
-      <div class="label">Add Custom Connector</div>
+      <div class="label">Settings &gt; Connectors &gt; Add Custom Connector</div>
       <pre>Name: TekAutomate
-URL:  ${process.env.MCP_PUBLIC_URL || 'https://tekautomate-mcp-production.up.railway.app'}/mcp</pre>
+URL:  ${process.env.MCP_PUBLIC_URL || 'https://tekautomate-mcp-production.up.railway.app'}/mcp
+
+No OAuth — leave Advanced settings blank</pre>
     </div>
     <div class="setup-card">
-      <h4>Claude Desktop</h4>
-      <div class="label">~/.claude/claude_desktop_config.json</div>
+      <h4>Claude Desktop / Code / VS Code / Cursor</h4>
+      <div class="label">Use type: "http" — config file varies by client</div>
       <pre>{
   "mcpServers": {
     "tekautomate": {
-      "command": "npx",
-      "args": ["tsx", "mcp-server/src/stdio.ts"],
-      "cwd": "/path/to/TekAutomate"
+      "type": "http",
+      "url": "${process.env.MCP_PUBLIC_URL || 'https://tekautomate-mcp-production.up.railway.app'}/mcp"
     }
   }
-}</pre>
+}
+
+Config file locations:
+  Desktop:       ~/.claude/claude_desktop_config.json
+  Claude Code:   .mcp.json (project root)
+  VS Code:       .vscode/mcp.json
+  Cursor:        .cursor/mcp.json</pre>
     </div>
+  </div>
+</div>
+
+<div class="section">
+  <h2>Local — Run from Cloned Repo (STDIO)</h2>
+  <p style="color:#94a3b8;font-size:0.85rem;margin-bottom:1rem">Requires the TekAutomate repo cloned locally + Node.js. Replace <code>/path/to/TekAutomate</code> with your actual folder path.</p>
+  <div class="setup-grid">
     <div class="setup-card">
-      <h4>Claude Code (CLI)</h4>
-      <div class="label">.mcp.json in project root</div>
+      <h4>Claude Desktop / Claude Code</h4>
+      <div class="label">~/.claude/claude_desktop_config.json or .mcp.json</div>
       <pre>{
   "mcpServers": {
     "tekautomate": {
@@ -470,6 +485,25 @@ URL:  ${process.env.MCP_PUBLIC_URL || 'https://tekautomate-mcp-production.up.rai
       "command": "npx",
       "args": ["tsx", "mcp-server/src/stdio.ts"],
       "cwd": "/path/to/TekAutomate"
+    }
+  }
+}</pre>
+    </div>
+  </div>
+</div>
+
+<div class="section">
+  <h2>Local HTTP Server (localhost:8787)</h2>
+  <p style="color:#94a3b8;font-size:0.85rem;margin-bottom:1rem">If you have the MCP server running locally via <code>npm start</code>, use this URL instead of the hosted one.</p>
+  <div class="setup-grid">
+    <div class="setup-card">
+      <h4>Any MCP Client</h4>
+      <div class="label">Same config as Remote, but with localhost URL</div>
+      <pre>{
+  "mcpServers": {
+    "tekautomate": {
+      "type": "http",
+      "url": "http://localhost:8787/mcp"
     }
   }
 }</pre>
