@@ -37,6 +37,15 @@ export class CleanRouter {
   }
 
   /**
+   * Detect if user wants to search the knowledge base / RAG
+   * e.g. "search knowledge base", "search docs", "search rag for X"
+   */
+  isKnowledgeSearchIntent(msg: string): boolean {
+    return /\b(search|find|look\s*up)\s+(knowledge|docs|documentation|rag|manual|help)\b/i.test(msg)
+      || /\b(knowledge|docs|rag)\s+(search|lookup|find)\b/i.test(msg);
+  }
+
+  /**
    * Detect if user wants to browse/explore commands interactively
    * e.g. "browse commands", "browse_scpi_commands", "browse trigger", "list groups", "explore measurement commands"
    */

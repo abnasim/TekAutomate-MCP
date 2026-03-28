@@ -97,10 +97,16 @@ async function runDeterministicToolLoop(req: McpChatRequest, flowCommandIssues: 
       return await runBrowseCommands(req, browseIntent.group, browseIntent.filter);
     }
 
-    // MCP-only mode: pure deterministic, no auto-RAG (user can call retrieve_rag_chunks explicitly)
+    if (cleanRouter.isKnowledgeSearchIntent(msg)) {
+      console.log('[DETERMINISTIC_TOOL_LOOP] Knowledge search intent detected');
+      return await runSearchKnowledge(req);
+    }
+
+    // Smart SCPI + RAG enrichment
     if (routeDecision.route === 'smart_scpi') {
       console.log('[DETERMINISTIC_TOOL_LOOP] Using Smart SCPI Assistant');
-      return await runSmartScpiAssistant(req);
+      const scpiResult = await runSmartScpiAssistant(req);
+      return await enrichWithRag(scpiResult, req.userMessage);
     }
 
     if (routeDecision.route === 'tm_devices') {
@@ -642,6 +648,101 @@ async function runFlowValidation(req: McpChatRequest) {
       warnings: [],
       metrics: { totalMs: 0, usedShortcut: false, iterations: 0, toolCalls: 0, toolMs: 0, modelMs: 0, promptChars: { system: 0, user: 0 } },
       debug: { toolTrace: [], resolutionPath: 'deterministic:validate_error' }
+    };
+  }
+}
+
+/**
+ * Enrich a toolLoop result with RAG context snippets.
+ * Searches the scpi corpus for the query and appends relevant knowledge.
+ */
+async function enrichWithRag(result: any, query: string): Promise<any> {
+  try {
+    const { retrieveRagChunks } = await import('../tools/retrieveRagChunks');
+    const ragResult = await retrieveRagChunks({ corpus: 'scpi', query, topK: 3 });
+    const chunks = (ragResult.data || []) as Array<{title: string; body: string; source?: string}>;
+    if (chunks.length > 0) {
+      const ragSection = chunks
+        .map(c => `**${c.title}**\n${String(c.body || '').slice(0, 200)}`)
+        .join('\n\n');
+      result.text += `\n\n---\n### Related Knowledge\n${ragSection}`;
+    }
+  } catch { /* non-fatal */ }
+  return result;
+}
+
+/**
+ * Run knowledge base search — search RAG chunks directly
+ */
+async function runSearchKnowledge(req: McpChatRequest) {
+  try {
+    const { retrieveRagChunks } = await import('../tools/retrieveRagChunks');
+    // Strip "search knowledge/docs/rag" prefix to get the actual query
+    const query = req.userMessage
+      .replace(/^\s*(search|find|look\s*up)\s+(knowledge|docs|documentation|rag|manual|help)\s*(base|for)?\s*/i, '')
+      .replace(/^\s*(knowledge|docs|rag)\s+(search|lookup|find)\s*/i, '')
+      .trim() || req.userMessage;
+
+    // Search across multiple corpora
+    const corpora = ['scpi', 'app_logic', 'errors', 'templates', 'pyvisa_tekhsi'] as const;
+    const allResults: Array<{corpus: string; title: string; body: string; source?: string}> = [];
+
+    for (const corpus of corpora) {
+      try {
+        const r = await retrieveRagChunks({ corpus, query, topK: 3 });
+        const chunks = (r.data || []) as Array<{corpus: string; title: string; body: string; source?: string}>;
+        for (const c of chunks) {
+          allResults.push({ corpus, title: c.title, body: c.body, source: c.source });
+        }
+      } catch { /* skip failed corpus */ }
+    }
+
+    if (allResults.length === 0) {
+      return {
+        text: `No knowledge base results for "${query}". Try different keywords.`,
+        assistantThreadId: undefined,
+        errors: [],
+        warnings: [],
+        metrics: { totalMs: 0, usedShortcut: false, iterations: 1, toolCalls: 1, toolMs: 0, modelMs: 0, promptChars: { system: 0, user: req.userMessage.length } },
+        debug: { toolTrace: [], resolutionPath: 'deterministic:knowledge_empty' }
+      };
+    }
+
+    // Group by corpus for display
+    const byCorpus: Record<string, typeof allResults> = {};
+    for (const r of allResults) {
+      if (!byCorpus[r.corpus]) byCorpus[r.corpus] = [];
+      byCorpus[r.corpus].push(r);
+    }
+
+    let response = `## Knowledge Base Results for "${query}"\n\n`;
+    for (const [corpus, chunks] of Object.entries(byCorpus)) {
+      const label = corpus === 'scpi' ? 'SCPI Commands' : corpus === 'app_logic' ? 'Architecture' : corpus === 'errors' ? 'Known Issues' : corpus === 'templates' ? 'Templates' : corpus === 'pyvisa_tekhsi' ? 'PyVISA/TekHSI' : corpus;
+      response += `### ${label}\n`;
+      for (const c of chunks.slice(0, 3)) {
+        response += `- **${c.title}**${c.source ? ' (' + c.source + ')' : ''}\n`;
+        response += `  ${String(c.body || '').replace(/\n/g, ' ').slice(0, 150)}\n`;
+      }
+      response += '\n';
+    }
+
+    return {
+      text: response,
+      assistantThreadId: undefined,
+      errors: [],
+      warnings: [],
+      metrics: { totalMs: 0, usedShortcut: false, iterations: 1, toolCalls: 1, toolMs: 0, modelMs: 0, promptChars: { system: 0, user: req.userMessage.length } },
+      debug: { toolTrace: [{ name: 'retrieve_rag_chunks', args: { query }, startedAt: new Date().toISOString(), resultSummary: { ok: true, count: allResults.length } }], resolutionPath: 'deterministic:knowledge_search' }
+    };
+  } catch (error) {
+    const errorMessage = error instanceof Error ? error.message : String(error);
+    return {
+      text: `Knowledge search error: ${errorMessage}`,
+      assistantThreadId: undefined,
+      errors: [errorMessage],
+      warnings: [],
+      metrics: { totalMs: 0, usedShortcut: false, iterations: 0, toolCalls: 0, toolMs: 0, modelMs: 0, promptChars: { system: 0, user: 0 } },
+      debug: { toolTrace: [], resolutionPath: 'deterministic:knowledge_error' }
     };
   }
 }
@@ -8453,11 +8554,17 @@ export async function runToolLoop(req: McpChatRequest): Promise<ToolLoopResult> 
       console.log('[MCP_ONLY] Browse intent detected');
       return await runBrowseCommands(req, browseIntent.group, browseIntent.filter);
     }
+    if (cleanRouter.isKnowledgeSearchIntent(mcpMsg)) {
+      console.log('[MCP_ONLY] Knowledge search intent detected');
+      return await runSearchKnowledge(req);
+    }
 
     // Check if clean router wants to use Smart SCPI Assistant
     if (routeDecision.route === 'smart_scpi') {
       console.log('[MCP_ONLY] Router wants Smart SCPI Assistant - delegating to Smart SCPI');
-      return await runSmartScpiAssistant(req);
+      const scpiResult = await runSmartScpiAssistant(req);
+      // Enrich with RAG context (non-fatal)
+      return await enrichWithRag(scpiResult, req.userMessage);
     } else if (routeDecision.forceToolCall) {
       console.log('[MCP_ONLY] Router wants tool calls - going to tool loop');
       // Continue to tool loop below
