@@ -1,7 +1,7 @@
 import { useMemo, useState, useEffect, useRef } from 'react';
 import type { AiAction, AiActionParseResult } from '../../utils/aiActions';
 import { canMaterializeAiAction, parseAiActionResponse } from '../../utils/aiActions';
-import { streamMcpChat, disconnectLiveSession, type McpChatAttachment } from '../../utils/ai/mcpClient';
+import { streamMcpChat, disconnectLiveSession, resolveMcpHost, type McpChatAttachment } from '../../utils/ai/mcpClient';
 import { runLiveToolLoop, fetchLiveTools, buildLiveSystemPrompt } from '../../utils/ai/liveToolLoop';
 import type { ChatTurn, PredefinedAction, RagCorpus } from '../../utils/ai/types';
 import type { StepPreview } from './StepsListPreview';
@@ -818,15 +818,58 @@ export function useAiChat(params: {
         return;
       }
 
-      // ── AI Chat + Anthropic: browser-direct (Node.js can't reach api.anthropic.com on some networks) ──
+      // ── AI Chat + Anthropic: browser-direct with MCP context ──
+      // 1. Fetch SCPI + RAG context from MCP (tools/execute)
+      // 2. Call Anthropic API directly from browser (no MCP proxy)
       if (effectiveTekMode === 'ai' && state.provider === 'anthropic') {
         try {
+          // Pre-load context from MCP tools (same as MCP path does server-side)
+          let preContext = '';
+          const hasHistory = state.history.length > 0;
+          if (!hasHistory) {
+            const contextParts: string[] = [];
+            try {
+              const mcpTools = await fetchLiveTools();
+              if (mcpTools.length > 0) {
+                // Use tek_router for SCPI + knowledge in one call
+                const routerRes = await fetch(`${resolveMcpHost().replace(/\/$/, '')}/tools/execute`, {
+                  method: 'POST',
+                  headers: { 'Content-Type': 'application/json' },
+                  body: JSON.stringify({
+                    tool: 'tek_router',
+                    args: { action: 'search', query: effectiveMessage, modelFamily: params.flowContext?.modelFamily, limit: 3 },
+                  }),
+                });
+                if (routerRes.ok) {
+                  const routerJson = await routerRes.json() as { ok: boolean; result: Record<string, unknown> };
+                  if (routerJson.ok) {
+                    const results = (routerJson.result as any)?.results || [];
+                    const knowledge = (routerJson.result as any)?.knowledge || [];
+                    if (results.length > 0) {
+                      contextParts.push('Relevant SCPI commands:\n' + results.slice(0, 3).map((r: any) =>
+                        `${r.name}: ${JSON.stringify(r.syntax || {}).slice(0, 100)}`
+                      ).join('\n'));
+                    }
+                    if (knowledge.length > 0) {
+                      contextParts.push('Knowledge:\n' + knowledge.slice(0, 2).map((k: any) =>
+                        `${k.title}: ${(k.body || '').slice(0, 200)}`
+                      ).join('\n'));
+                    }
+                  }
+                }
+              }
+            } catch { /* non-fatal */ }
+            if (contextParts.length > 0) {
+              preContext = '\n\n---\nContext from TekAutomate:\n' + contextParts.join('\n\n');
+            }
+          }
+
           const chatMessages: Array<Record<string, unknown>> = [
             ...state.history.slice(-4).map((h) => ({
               role: h.role as 'user' | 'assistant',
               content: String(h.content || '').slice(0, 2000),
             })),
-            { role: 'user', content: effectiveMessage },
+            { role: 'user', content: effectiveMessage + preContext },
           ];
           const res = await fetch('https://api.anthropic.com/v1/messages', {
             method: 'POST',
@@ -838,7 +881,14 @@ export function useAiChat(params: {
             },
             body: JSON.stringify({
               model: state.model,
-              system: 'You are a senior Tektronix test automation engineer inside TekAutomate. Help the user reason about instruments, measurements, debugging, SCPI commands, and practical lab decisions. Be conversational and concise. When user asks to build a flow, give a short outline and tell them to say "build it".',
+              system: [
+                '# TekAutomate AI Chat',
+                'You are a senior Tektronix test automation engineer. Help with instruments, measurements, debugging, SCPI, and lab decisions.',
+                'Be conversational and concise. Use **bold** for emphasis and `code` for SCPI commands.',
+                'Use pre-loaded SCPI context below when available — it comes from a verified 9,300+ command database.',
+                'When user asks to build a flow, give a short outline and tell them to say "build it".',
+                'Do not dump raw JSON or full scripts unless asked.',
+              ].join('\n'),
               max_tokens: 2048,
               messages: chatMessages,
             }),
