@@ -1275,7 +1275,7 @@ function AppInner() {
   const [_draggingFlowNode, _setDraggingFlowNode] = useState<string | null>(null);
   const [draggedStep, setDraggedStep] = useState<string | null>(null);
   const [dragOverGroup, setDragOverGroup] = useState<string | null>(null);
-  const [currentView, setCurrentView] = useState<'builder' | 'library' | 'templates' | 'flow-designer' | 'execute'>('builder');
+  const [currentView, setCurrentView] = useState<'builder' | 'library' | 'templates' | 'flow-designer' | 'execute' | 'mcp'>('builder');
   const [executionSource, setExecutionSource] = useState<'steps' | 'blockly' | 'live'>('steps');
   const blocklyBuilderRef = useRef<BlocklyBuilderHandle>(null);
   const navScrollRef = useRef<HTMLDivElement>(null);
@@ -8132,6 +8132,13 @@ Keep under 120 words. No headings. Bullets only. Stay on this command. Do not de
               <Play size={14} />
               Execute
             </button>
+            <button
+              onClick={() => setCurrentView('mcp')}
+              className={`h-7 lg:h-8 px-2 lg:px-3 py-1 lg:py-1.5 rounded text-[11px] lg:text-xs font-medium flex items-center justify-center gap-1 whitespace-nowrap flex-shrink-0 ${currentView === 'mcp' ? 'bg-blue-600 text-white' : 'bg-gray-100 dark:bg-gray-700 dark:text-gray-200'}`}
+            >
+              <Cpu size={14} />
+              MCP
+            </button>
             {currentView === 'flow-designer' && (
               <button
                 onClick={() => setShowBlocklyExportRunModal(true)}
@@ -14163,6 +14170,211 @@ scpi.write('FILESYSTEM:DELETE "C:/TekScope/Temp/screenshot.png"')`;
           </div>
         </div>
         </>
+      )}
+
+      {/* MCP Setup & API Reference Page */}
+      {currentView === 'mcp' && (
+        <div className="flex-1 p-4 overflow-y-auto bg-gray-50 dark:bg-gray-900">
+          <div className="max-w-4xl mx-auto">
+            <h2 className="text-lg font-bold text-gray-900 dark:text-gray-100 mb-4">MCP Server Setup</h2>
+            <p className="text-sm text-gray-600 dark:text-gray-400 mb-6">
+              Connect TekAutomate tools to your AI assistant. All {commandLibrary.length.toLocaleString()}+ SCPI commands and {29} tools are available via the MCP protocol.
+            </p>
+
+            {/* Setup Cards */}
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-6">
+              {/* Claude Web */}
+              <div className="bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg p-4">
+                <div className="flex items-center gap-2 mb-3">
+                  <span className="text-lg">🌐</span>
+                  <h3 className="font-semibold text-sm text-gray-900 dark:text-gray-100">Claude Web (claude.ai)</h3>
+                </div>
+                <p className="text-xs text-gray-500 dark:text-gray-400 mb-2">Settings &gt; Connectors &gt; Add Custom Connector</p>
+                <div className="space-y-2">
+                  <div>
+                    <label className="text-[10px] font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wide">Name</label>
+                    <div className="flex items-center gap-1 mt-0.5">
+                      <code className="flex-1 text-xs bg-gray-100 dark:bg-gray-700 px-2 py-1.5 rounded border border-gray-200 dark:border-gray-600 text-gray-900 dark:text-gray-100">TekAutomate</code>
+                      <button onClick={() => navigator.clipboard.writeText('TekAutomate')} className="p-1 hover:bg-gray-100 dark:hover:bg-gray-700 rounded" title="Copy"><ClipboardPaste size={12} className="text-gray-400" /></button>
+                    </div>
+                  </div>
+                  <div>
+                    <label className="text-[10px] font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wide">Remote MCP Server URL</label>
+                    <div className="flex items-center gap-1 mt-0.5">
+                      <code className="flex-1 text-xs bg-gray-100 dark:bg-gray-700 px-2 py-1.5 rounded border border-gray-200 dark:border-gray-600 text-blue-600 dark:text-blue-400 break-all">https://tekautomate-mcp-production.up.railway.app/mcp</code>
+                      <button onClick={() => navigator.clipboard.writeText('https://tekautomate-mcp-production.up.railway.app/mcp')} className="p-1 hover:bg-gray-100 dark:hover:bg-gray-700 rounded flex-shrink-0" title="Copy"><ClipboardPaste size={12} className="text-gray-400" /></button>
+                    </div>
+                  </div>
+                  <p className="text-[10px] text-gray-400 dark:text-gray-500">No OAuth needed — leave Advanced settings blank</p>
+                </div>
+              </div>
+
+              {/* Claude Desktop */}
+              <div className="bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg p-4">
+                <div className="flex items-center gap-2 mb-3">
+                  <span className="text-lg">🖥️</span>
+                  <h3 className="font-semibold text-sm text-gray-900 dark:text-gray-100">Claude Desktop</h3>
+                </div>
+                <p className="text-xs text-gray-500 dark:text-gray-400 mb-2">~/.claude/claude_desktop_config.json</p>
+                <div className="relative">
+                  <pre className="text-[11px] bg-gray-900 text-green-400 p-3 rounded-lg overflow-x-auto leading-relaxed">{`{
+  "mcpServers": {
+    "tekautomate": {
+      "command": "npx",
+      "args": ["tsx", "mcp-server/src/stdio.ts"],
+      "cwd": "/path/to/TekAutomate"
+    }
+  }
+}`}</pre>
+                  <button onClick={() => navigator.clipboard.writeText(`{\n  "mcpServers": {\n    "tekautomate": {\n      "command": "npx",\n      "args": ["tsx", "mcp-server/src/stdio.ts"],\n      "cwd": "/path/to/TekAutomate"\n    }\n  }\n}`)} className="absolute top-2 right-2 p-1 bg-gray-800 hover:bg-gray-700 rounded" title="Copy"><ClipboardPaste size={12} className="text-gray-400" /></button>
+                </div>
+              </div>
+
+              {/* Claude Code CLI */}
+              <div className="bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg p-4">
+                <div className="flex items-center gap-2 mb-3">
+                  <span className="text-lg">⌨️</span>
+                  <h3 className="font-semibold text-sm text-gray-900 dark:text-gray-100">Claude Code (CLI)</h3>
+                </div>
+                <p className="text-xs text-gray-500 dark:text-gray-400 mb-2">.mcp.json in project root</p>
+                <div className="relative">
+                  <pre className="text-[11px] bg-gray-900 text-green-400 p-3 rounded-lg overflow-x-auto leading-relaxed">{`{
+  "mcpServers": {
+    "tekautomate": {
+      "command": "npx",
+      "args": ["tsx", "mcp-server/src/stdio.ts"],
+      "cwd": "/path/to/TekAutomate"
+    }
+  }
+}`}</pre>
+                  <button onClick={() => navigator.clipboard.writeText(`{\n  "mcpServers": {\n    "tekautomate": {\n      "command": "npx",\n      "args": ["tsx", "mcp-server/src/stdio.ts"],\n      "cwd": "/path/to/TekAutomate"\n    }\n  }\n}`)} className="absolute top-2 right-2 p-1 bg-gray-800 hover:bg-gray-700 rounded" title="Copy"><ClipboardPaste size={12} className="text-gray-400" /></button>
+                </div>
+              </div>
+
+              {/* VS Code / Cursor */}
+              <div className="bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg p-4">
+                <div className="flex items-center gap-2 mb-3">
+                  <span className="text-lg">📝</span>
+                  <h3 className="font-semibold text-sm text-gray-900 dark:text-gray-100">VS Code / Cursor</h3>
+                </div>
+                <p className="text-xs text-gray-500 dark:text-gray-400 mb-2">.vscode/mcp.json</p>
+                <div className="relative">
+                  <pre className="text-[11px] bg-gray-900 text-green-400 p-3 rounded-lg overflow-x-auto leading-relaxed">{`{
+  "servers": {
+    "tekautomate": {
+      "command": "npx",
+      "args": ["tsx", "mcp-server/src/stdio.ts"],
+      "cwd": "/path/to/TekAutomate"
+    }
+  }
+}`}</pre>
+                  <button onClick={() => navigator.clipboard.writeText(`{\n  "servers": {\n    "tekautomate": {\n      "command": "npx",\n      "args": ["tsx", "mcp-server/src/stdio.ts"],\n      "cwd": "/path/to/TekAutomate"\n    }\n  }\n}`)} className="absolute top-2 right-2 p-1 bg-gray-800 hover:bg-gray-700 rounded" title="Copy"><ClipboardPaste size={12} className="text-gray-400" /></button>
+                </div>
+              </div>
+            </div>
+
+            {/* Transport Options */}
+            <div className="bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg p-4 mb-6">
+              <h3 className="font-semibold text-sm text-gray-900 dark:text-gray-100 mb-3">Transport Options</h3>
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                <div className="bg-gray-50 dark:bg-gray-700/50 rounded-lg p-3">
+                  <div className="flex items-center gap-2 mb-1">
+                    <span className="text-[10px] font-bold px-2 py-0.5 bg-green-100 dark:bg-green-900/50 text-green-700 dark:text-green-300 rounded">STDIO</span>
+                    <span className="text-xs font-medium text-gray-900 dark:text-gray-100">Local mode</span>
+                  </div>
+                  <p className="text-[11px] text-gray-500 dark:text-gray-400">Runs locally via <code className="text-[10px] bg-gray-200 dark:bg-gray-600 px-1 rounded">npx tsx mcp-server/src/stdio.ts</code>. Best for Claude Desktop, Claude Code, VS Code, Cursor. Requires Node.js + the repo cloned.</p>
+                </div>
+                <div className="bg-gray-50 dark:bg-gray-700/50 rounded-lg p-3">
+                  <div className="flex items-center gap-2 mb-1">
+                    <span className="text-[10px] font-bold px-2 py-0.5 bg-blue-100 dark:bg-blue-900/50 text-blue-700 dark:text-blue-300 rounded">HTTP</span>
+                    <span className="text-xs font-medium text-gray-900 dark:text-gray-100">Remote / Hosted</span>
+                  </div>
+                  <p className="text-[11px] text-gray-500 dark:text-gray-400">Connect to <code className="text-[10px] bg-gray-200 dark:bg-gray-600 px-1 rounded break-all">https://tekautomate-mcp-production.up.railway.app/mcp</code>. Best for Claude Web. No local install needed.</p>
+                </div>
+              </div>
+            </div>
+
+            {/* API Endpoints */}
+            <div className="bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg p-4 mb-6">
+              <h3 className="font-semibold text-sm text-gray-900 dark:text-gray-100 mb-3">API Endpoints</h3>
+              <div className="space-y-1.5">
+                {[
+                  { method: 'GET', path: '/', desc: 'Tools & API reference page (HTML)' },
+                  { method: 'GET', path: '/health', desc: 'Health check' },
+                  { method: 'POST', path: '/mcp', desc: 'MCP Streamable HTTP transport' },
+                  { method: 'GET', path: '/tools/list', desc: 'List all tool definitions (JSON)' },
+                  { method: 'POST', path: '/tools/execute', desc: 'Execute a tool: {tool, args}' },
+                  { method: 'POST', path: '/ai/chat', desc: 'Main AI orchestration endpoint' },
+                  { method: 'POST', path: '/ai/router', desc: 'Router-based tool dispatch' },
+                ].map((ep, i) => (
+                  <div key={i} className="flex items-center gap-2 text-xs">
+                    <span className={`font-bold px-1.5 py-0.5 rounded text-[10px] min-w-[40px] text-center ${ep.method === 'GET' ? 'bg-green-100 dark:bg-green-900/50 text-green-700 dark:text-green-300' : 'bg-blue-100 dark:bg-blue-900/50 text-blue-700 dark:text-blue-300'}`}>{ep.method}</span>
+                    <code className="text-gray-900 dark:text-gray-100 font-medium">{ep.path}</code>
+                    <span className="text-gray-400 dark:text-gray-500 ml-auto">{ep.desc}</span>
+                  </div>
+                ))}
+              </div>
+            </div>
+
+            {/* Available Tools */}
+            <div className="bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg p-4">
+              <h3 className="font-semibold text-sm text-gray-900 dark:text-gray-100 mb-3">Available Tools (29)</h3>
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
+                {[
+                  { name: 'smart_scpi_lookup', cat: 'Search', desc: 'Natural language SCPI finder' },
+                  { name: 'search_scpi', cat: 'Search', desc: 'Keyword SCPI search' },
+                  { name: 'browse_scpi_commands', cat: 'Search', desc: 'Interactive 3-level drill-down' },
+                  { name: 'get_command_by_header', cat: 'Lookup', desc: 'Exact header lookup' },
+                  { name: 'get_commands_by_header_batch', cat: 'Lookup', desc: 'Batch header lookup' },
+                  { name: 'get_command_group', cat: 'Lookup', desc: 'Feature-area commands' },
+                  { name: 'list_command_groups', cat: 'Lookup', desc: 'List all groups' },
+                  { name: 'search_tm_devices', cat: 'Search', desc: 'tm_devices library search' },
+                  { name: 'retrieve_rag_chunks', cat: 'Search', desc: 'RAG knowledge retrieval' },
+                  { name: 'search_known_failures', cat: 'Search', desc: 'Known failure patterns' },
+                  { name: 'get_template_examples', cat: 'Search', desc: 'Workflow templates' },
+                  { name: 'materialize_scpi_command', cat: 'Build', desc: 'Build concrete SCPI string' },
+                  { name: 'materialize_scpi_commands', cat: 'Build', desc: 'Batch SCPI build' },
+                  { name: 'finalize_scpi_commands', cat: 'Build', desc: 'Build + verify in one call' },
+                  { name: 'materialize_tm_devices_call', cat: 'Build', desc: 'Build tm_devices Python call' },
+                  { name: 'verify_scpi_commands', cat: 'Validate', desc: 'Verify command syntax' },
+                  { name: 'validate_action_payload', cat: 'Validate', desc: 'Validate ACTIONS_JSON' },
+                  { name: 'validate_device_context', cat: 'Validate', desc: 'Device context check' },
+                  { name: 'send_scpi', cat: 'Live', desc: 'Send SCPI to instrument' },
+                  { name: 'probe_command', cat: 'Live', desc: 'Test single command' },
+                  { name: 'get_instrument_state', cat: 'Live', desc: 'Read instrument state' },
+                  { name: 'capture_screenshot', cat: 'Live', desc: 'Scope screenshot' },
+                  { name: 'get_visa_resources', cat: 'Live', desc: 'List VISA instruments' },
+                  { name: 'get_environment', cat: 'Live', desc: 'Runtime environment' },
+                  { name: 'get_policy', cat: 'Utility', desc: 'Load policy pack' },
+                  { name: 'list_valid_step_types', cat: 'Utility', desc: 'Valid step types' },
+                  { name: 'get_block_schema', cat: 'Utility', desc: 'Block definitions' },
+                  { name: 'save_learned_workflow', cat: 'Utility', desc: 'Save reusable workflow' },
+                  { name: 'tek_router', cat: 'Utility', desc: 'Router dispatch' },
+                ].map((tool, i) => {
+                  const catColors: Record<string, string> = {
+                    Search: 'bg-purple-100 dark:bg-purple-900/50 text-purple-700 dark:text-purple-300',
+                    Lookup: 'bg-blue-100 dark:bg-blue-900/50 text-blue-700 dark:text-blue-300',
+                    Build: 'bg-green-100 dark:bg-green-900/50 text-green-700 dark:text-green-300',
+                    Validate: 'bg-yellow-100 dark:bg-yellow-900/50 text-yellow-700 dark:text-yellow-300',
+                    Live: 'bg-red-100 dark:bg-red-900/50 text-red-700 dark:text-red-300',
+                    Utility: 'bg-gray-100 dark:bg-gray-700 text-gray-600 dark:text-gray-300',
+                  };
+                  return (
+                    <div key={i} className="flex items-center gap-2 py-1 px-2 rounded hover:bg-gray-50 dark:hover:bg-gray-700/50">
+                      <span className={`text-[9px] font-bold px-1.5 py-0.5 rounded min-w-[52px] text-center ${catColors[tool.cat] || catColors.Utility}`}>{tool.cat}</span>
+                      <code className="text-xs text-gray-900 dark:text-gray-100 font-medium">{tool.name}</code>
+                      <span className="text-[11px] text-gray-400 dark:text-gray-500 ml-auto truncate max-w-[180px]">{tool.desc}</span>
+                    </div>
+                  );
+                })}
+              </div>
+              <p className="text-[11px] text-gray-400 dark:text-gray-500 mt-3">
+                Full tool docs with parameters: visit <a href="https://tekautomate-mcp-production.up.railway.app/" target="_blank" rel="noopener noreferrer" className="text-blue-500 hover:underline">tekautomate-mcp-production.up.railway.app</a>
+              </p>
+            </div>
+
+          </div>
+        </div>
       )}
 
       {/* Blockly Builder Page */}

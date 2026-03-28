@@ -56,6 +56,75 @@ This installs both the main app dependencies and the bundled `mcp-server` depend
 
 ---
 
+## MCP Server Integration
+
+TekAutomate exposes 29 AI tools (SCPI lookup, command building, live instrument control) via the [Model Context Protocol](https://modelcontextprotocol.io). Connect it to any MCP-compatible client:
+
+### Claude Web (claude.ai)
+
+Settings > Connectors > Add Custom Connector:
+- **Name:** `TekAutomate`
+- **URL:** `https://tekautomate-mcp-production.up.railway.app/mcp`
+
+### Claude Desktop
+
+Add to `~/.claude/claude_desktop_config.json`:
+
+```json
+{
+  "mcpServers": {
+    "tekautomate": {
+      "command": "npx",
+      "args": ["tsx", "mcp-server/src/stdio.ts"],
+      "cwd": "/path/to/TekAutomate"
+    }
+  }
+}
+```
+
+### Claude Code (CLI)
+
+Add `.mcp.json` to your project root:
+
+```json
+{
+  "mcpServers": {
+    "tekautomate": {
+      "command": "npx",
+      "args": ["tsx", "mcp-server/src/stdio.ts"],
+      "cwd": "/path/to/TekAutomate"
+    }
+  }
+}
+```
+
+### VS Code / Cursor
+
+Add `.vscode/mcp.json`:
+
+```json
+{
+  "servers": {
+    "tekautomate": {
+      "command": "npx",
+      "args": ["tsx", "mcp-server/src/stdio.ts"],
+      "cwd": "/path/to/TekAutomate"
+    }
+  }
+}
+```
+
+### Transports
+
+| Transport | Use For | URL / Command |
+|-----------|---------|---------------|
+| **Streamable HTTP** | Claude Web, remote clients | `https://tekautomate-mcp-production.up.railway.app/mcp` |
+| **Stdio** | Claude Desktop, Claude Code, VS Code, Cursor | `npx tsx mcp-server/src/stdio.ts` |
+
+Visit `https://tekautomate-mcp-production.up.railway.app` for the full tools & API reference page.
+
+---
+
 ## Examples
 
 Sample workflows are included in the `examples/` folder.
