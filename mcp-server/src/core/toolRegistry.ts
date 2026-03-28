@@ -5,6 +5,7 @@ export type ToolCategory =
   | 'scpi_lookup'
   | 'scpi_materialize'
   | 'scpi_verify'
+  | 'scpi_override'
   | 'shortcut'
   | 'template'
   | 'planner'
