@@ -1425,6 +1425,7 @@ function AppInner() {
   const libraryScrollSentinelRef = useRef<HTMLDivElement>(null);
   const [librarySearchDebounced, setLibrarySearchDebounced] = useState('');
   const [selectedLibraryCommand, setSelectedLibraryCommand] = useState<CommandLibraryItem | null>(null);
+  const [libraryViewMode, setLibraryViewMode] = useState<'cards' | 'compact' | 'list'>('cards');
   const [showLibraryDetailModal, setShowLibraryDetailModal] = useState(false);
   const [showPythonEditorModal, setShowPythonEditorModal] = useState(false);
   const librarySearchTimeoutRef = useRef<NodeJS.Timeout | null>(null);
@@ -13373,6 +13374,17 @@ scpi.write('FILESYSTEM:DELETE "C:/TekScope/Temp/screenshot.png"')`;
                   </select>
                   <ChevronDown size={12} className="absolute right-2 top-1/2 -translate-y-1/2 text-blue-600 dark:text-blue-400 pointer-events-none" />
                 </div>
+                <div className="flex items-center border border-gray-300 dark:border-gray-600 rounded-lg overflow-hidden">
+                  {(['cards', 'compact', 'list'] as const).map((mode) => (
+                    <button
+                      key={mode}
+                      onClick={() => setLibraryViewMode(mode)}
+                      className={`px-2 py-1 text-[10px] font-medium ${libraryViewMode === mode ? 'bg-blue-600 text-white' : 'bg-white dark:bg-gray-800 text-gray-600 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700'}`}
+                    >
+                      {mode === 'cards' ? '▦' : mode === 'compact' ? '▤' : '☰'}
+                    </button>
+                  ))}
+                </div>
                 {lazyLoading && (
                   <div className="flex items-center gap-2 text-xs text-blue-600 dark:text-blue-400">
                     <div className="animate-spin h-3 w-3 border-2 border-blue-600 border-t-transparent rounded-full"></div>
@@ -13437,27 +13449,68 @@ scpi.write('FILESYSTEM:DELETE "C:/TekScope/Temp/screenshot.png"')`;
               </div>
             ) : (
               <>
-                <div className="flex-1 overflow-y-auto p-2">
-                  <div className={`grid gap-2 grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 2xl:grid-cols-5`}>
-                    {visibleLibraryCommands.map((cmd, idx) => (
+                <div className="flex-1 overflow-y-auto p-3">
+                  <div className={
+                    libraryViewMode === 'list'
+                      ? 'flex flex-col gap-0.5'
+                      : libraryViewMode === 'compact'
+                        ? 'grid gap-1.5 grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5'
+                        : 'grid gap-3 grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4'
+                  }>
+                    {visibleLibraryCommands.map((cmd, idx) => libraryViewMode === 'list' ? (
                       <div
                         key={`${cmd.scpi}-${idx}`}
-                        className={`px-2.5 py-2 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-600 rounded-lg hover:border-blue-400 dark:hover:border-blue-500 hover:shadow-sm transition cursor-pointer group ${
+                        className={`flex items-center gap-3 px-3 py-1.5 hover:bg-gray-50 dark:hover:bg-gray-800 rounded cursor-pointer ${
+                          selectedLibraryCommand?.scpi === cmd.scpi ? 'bg-blue-50 dark:bg-blue-900/30' : ''
+                        }`}
+                        onClick={() => setSelectedLibraryCommand(cmd)}
+                        onDoubleClick={() => addCommandFromLibrary(cmd)}
+                      >
+                        <span className="font-medium text-xs text-gray-900 dark:text-gray-100 w-32 truncate flex-shrink-0">{cmd.name}</span>
+                        <span className={`text-[9px] px-1 py-px rounded-full border font-medium flex-shrink-0 ${categoryColors[cmd.category] || 'bg-gray-100 dark:bg-gray-700 text-gray-700 dark:text-gray-300'}`}>{cmd.category}</span>
+                        <span className="text-xs font-mono text-blue-600 dark:text-blue-400 truncate flex-1">{substituteParamIndicesInScpi(cmd.scpi, librarySelectedParamIndices)}</span>
+                      </div>
+                    ) : libraryViewMode === 'compact' ? (
+                      <div
+                        key={`${cmd.scpi}-${idx}`}
+                        className={`px-2 py-1.5 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-600 rounded hover:border-blue-400 dark:hover:border-blue-500 transition cursor-pointer ${
                           selectedLibraryCommand?.scpi === cmd.scpi ? 'border-blue-500 dark:border-blue-400 ring-2 ring-blue-200 dark:ring-blue-800' : ''
                         }`}
                         onClick={() => setSelectedLibraryCommand(cmd)}
                         onDoubleClick={() => addCommandFromLibrary(cmd)}
-                        title={`${cmd.scpi}\n${cmd.description || ''}\nDouble-click to add`}
+                        title={`${cmd.scpi}\n${cmd.description || ''}`}
                       >
-                        <div className="flex items-center gap-1.5 mb-1">
-                          <span className="font-semibold text-xs text-gray-900 dark:text-gray-100 truncate">{cmd.name}</span>
-                          <span className={`text-[10px] px-1.5 py-px rounded-full border font-medium flex-shrink-0 ${categoryColors[cmd.category] || 'bg-gray-100 dark:bg-gray-700 text-gray-700 dark:text-gray-300'}`}>
-                            {cmd.category}
-                          </span>
+                        <div className="flex items-center gap-1 mb-0.5">
+                          <span className="font-medium text-[11px] text-gray-900 dark:text-gray-100 truncate">{cmd.name}</span>
+                          <span className={`text-[9px] px-1 py-px rounded-full border font-medium flex-shrink-0 ${categoryColors[cmd.category] || 'bg-gray-100 dark:bg-gray-700 text-gray-700 dark:text-gray-300'}`}>{cmd.category}</span>
                         </div>
-                        <div className="text-xs font-mono text-blue-600 dark:text-blue-400 truncate">
+                        <div className="text-[11px] font-mono text-blue-600 dark:text-blue-400 truncate">{substituteParamIndicesInScpi(cmd.scpi, librarySelectedParamIndices)}</div>
+                      </div>
+                    ) : (
+                      <div
+                        key={`${cmd.scpi}-${idx}`}
+                        className={`p-3 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-600 rounded-lg hover:border-blue-400 dark:hover:border-blue-500 hover:shadow-md transition cursor-pointer group ${
+                          selectedLibraryCommand?.scpi === cmd.scpi ? 'border-blue-500 dark:border-blue-400 ring-2 ring-blue-200 dark:ring-blue-800' : ''
+                        }`}
+                        onClick={() => setSelectedLibraryCommand(cmd)}
+                        onDoubleClick={() => addCommandFromLibrary(cmd)}
+                        title="Double-click to add to flow"
+                      >
+                        <div className="flex items-center gap-2 mb-1.5">
+                          <span className="font-semibold text-sm text-gray-900 dark:text-gray-100 truncate">{cmd.name}</span>
+                        </div>
+                        <div className="flex flex-wrap gap-1 mb-2">
+                          <span className={`text-[10px] px-1.5 py-0.5 rounded-full border font-medium flex-shrink-0 ${categoryColors[cmd.category] || 'bg-gray-100 dark:bg-gray-700 text-gray-700 dark:text-gray-300'}`}>{cmd.category}</span>
+                          {cmd.subcategory && (
+                            <span className="text-[10px] px-1.5 py-0.5 bg-blue-50 dark:bg-blue-900/40 text-blue-700 dark:text-blue-300 rounded border border-blue-200 dark:border-blue-700">{cmd.subcategory}</span>
+                          )}
+                        </div>
+                        <div className="text-xs font-mono text-blue-600 dark:text-blue-400 bg-blue-50 dark:bg-blue-900/30 px-2 py-1 rounded border border-blue-100 dark:border-blue-800 truncate">
                           {substituteParamIndicesInScpi(cmd.scpi, librarySelectedParamIndices)}
                         </div>
+                        {cmd.description && (
+                          <p className="mt-1.5 text-[11px] text-gray-500 dark:text-gray-400 line-clamp-2">{cmd.description}</p>
+                        )}
                       </div>
                     ))}
                     
