@@ -360,15 +360,21 @@ export async function createServer(port = 8787, host = '0.0.0.0'): Promise<http.
           : {}),
       },
     }));
-    mcp.setRequestHandler(ListToolsRequestSchema, async () => ({ tools: mcpTools }));
+    mcp.setRequestHandler(ListToolsRequestSchema, async () => {
+      console.log(`[MCP] list_tools count=${mcpTools.length}`);
+      return { tools: mcpTools };
+    });
     mcp.setRequestHandler(CallToolRequestSchema, async (request) => {
       const { name, arguments: args } = request.params;
+      console.log(`[MCP] call_tool name=${name}`);
       try {
         const result = await runTool(name, (args as Record<string, unknown>) ?? {});
         const text = typeof result === 'string' ? result : JSON.stringify(result, null, 2);
+        console.log(`[MCP] call_tool_ok name=${name}`);
         return { content: [{ type: 'text' as const, text }] };
       } catch (err) {
         const msg = err instanceof Error ? err.message : String(err);
+        console.error(`[MCP] call_tool_error name=${name}: ${msg}`);
         return { content: [{ type: 'text' as const, text: `Error: ${msg}` }], isError: true };
       }
     });
@@ -422,7 +428,7 @@ header p{color:#94a3b8;margin-top:0.25rem}
 .setup-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(320px,1fr));gap:1rem;margin-bottom:1.5rem}
 .setup-card{background:#1e293b;border:1px solid #334155;border-radius:8px;padding:1.25rem}
 .setup-card h4{color:#60a5fa;margin-bottom:0.5rem;font-size:0.95rem}
-.setup-card pre{background:#0f172a;padding:0.75rem;border-radius:6px;font-size:0.75rem;overflow-x:auto;color:#a5b4fc;border:1px solid #1e293b}
+.setup-card pre{background:#0f172a;padding:0.75rem;border-radius:6px;font-size:0.75rem;overflow-wrap:anywhere;word-break:break-word;white-space:pre-wrap;color:#a5b4fc;border:1px solid #1e293b}
 .setup-card .label{font-size:0.7rem;color:#94a3b8;text-transform:uppercase;letter-spacing:0.05em;margin-bottom:0.25rem}
 .endpoints{display:grid;gap:0.5rem}
 .endpoint{background:#1e293b;border:1px solid #334155;border-radius:6px;padding:0.75rem 1rem;display:flex;gap:1rem;align-items:center}
@@ -441,7 +447,7 @@ header p{color:#94a3b8;margin-top:0.25rem}
 .no-params{color:#64748b;font-size:0.8rem;font-style:italic}
 details{margin-top:0.75rem}
 summary{cursor:pointer;color:#60a5fa;font-size:0.8rem}
-details pre{margin-top:0.5rem;font-size:0.75rem;background:#0f172a;padding:0.75rem;border-radius:6px;color:#a5b4fc;border:1px solid #334155;overflow-x:auto}
+details pre{margin-top:0.5rem;font-size:0.75rem;background:#0f172a;padding:0.75rem;border-radius:6px;color:#a5b4fc;border:1px solid #334155;overflow-wrap:anywhere;word-break:break-word;white-space:pre-wrap}
 .stats{display:flex;gap:1.5rem;margin:1rem 0}
 .stat{background:#1e293b;border:1px solid #334155;border-radius:8px;padding:0.75rem 1.25rem;text-align:center}
 .stat .num{font-size:1.5rem;font-weight:700;color:#60a5fa}
@@ -587,6 +593,7 @@ function filterTools(q) {
           }
 
           const sessionId = req.headers['mcp-session-id'] as string | undefined;
+          console.log(`[MCP] transport method=${req.method} session=${sessionId || 'new'}`);
 
           if (sessionId && mcpTransports.has(sessionId)) {
             // Existing session
@@ -735,6 +742,7 @@ function filterTools(q) {
           sendJson(res, 400, { ok: false, error: 'Missing tool name' });
           return;
         }
+        console.log(`[MCP] execute_tool name=${toolName}`);
         // Inject instrument endpoint for live tools
         let args = body.args || {};
         const liveTools = ['get_instrument_state', 'probe_command', 'send_scpi', 'capture_screenshot', 'get_visa_resources', 'get_environment'];
@@ -751,8 +759,10 @@ function filterTools(q) {
           };
         }
         const result = await runTool(toolName, args);
+        console.log(`[MCP] execute_tool_ok name=${toolName}`);
         sendJson(res, 200, { ok: true, tool: toolName, result });
       } catch (err) {
+        console.error(`[MCP] execute_tool_error: ${err instanceof Error ? err.message : 'Tool execution error'}`);
         sendJson(res, 500, { ok: false, error: err instanceof Error ? err.message : 'Tool execution error' });
       }
       return;
