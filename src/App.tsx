@@ -1200,6 +1200,7 @@ function AppInner() {
   const [showWelcomeWizard, setShowWelcomeWizard] = useState(false);
   const [runTour, setRunTour] = useState(false);
   const [showAboutModal, setShowAboutModal] = useState(false);
+  const [showMcpModal, setShowMcpModal] = useState(false);
   const [showSCPIHelp, setShowSCPIHelp] = useState(false);
   const [showTmDevicesHelp, setShowTmDevicesHelp] = useState(false);
   const [tmDevicesHelpInfo, setTmDevicesHelpInfo] = useState<{ code: string; path: string; method: string; model: string } | null>(null);
@@ -1275,7 +1276,7 @@ function AppInner() {
   const [_draggingFlowNode, _setDraggingFlowNode] = useState<string | null>(null);
   const [draggedStep, setDraggedStep] = useState<string | null>(null);
   const [dragOverGroup, setDragOverGroup] = useState<string | null>(null);
-  const [currentView, setCurrentView] = useState<'builder' | 'library' | 'templates' | 'flow-designer' | 'execute' | 'mcp'>('builder');
+  const [currentView, setCurrentView] = useState<'builder' | 'library' | 'templates' | 'flow-designer' | 'execute'>('builder');
   const [executionSource, setExecutionSource] = useState<'steps' | 'blockly' | 'live'>('steps');
   const blocklyBuilderRef = useRef<BlocklyBuilderHandle>(null);
   const navScrollRef = useRef<HTMLDivElement>(null);
@@ -8132,13 +8133,6 @@ Keep under 120 words. No headings. Bullets only. Stay on this command. Do not de
               <Play size={14} />
               Execute
             </button>
-            <button
-              onClick={() => setCurrentView('mcp')}
-              className={`h-7 lg:h-8 px-2 lg:px-3 py-1 lg:py-1.5 rounded text-[11px] lg:text-xs font-medium flex items-center justify-center gap-1 whitespace-nowrap flex-shrink-0 ${currentView === 'mcp' ? 'bg-blue-600 text-white' : 'bg-gray-100 dark:bg-gray-700 dark:text-gray-200'}`}
-            >
-              <Cpu size={14} />
-              MCP
-            </button>
             {currentView === 'flow-designer' && (
               <button
                 onClick={() => setShowBlocklyExportRunModal(true)}
@@ -8299,7 +8293,14 @@ Keep under 120 words. No headings. Bullets only. Stay on this command. Do not de
                         <Monitor size={14} />
                         {showMascot ? 'Hide' : 'Show'} Mascot
                       </button>
-                      <button 
+                      <button
+                        onClick={() => { setShowMcpModal(true); setShowHelpDropdown(false); }}
+                        className="w-full text-left px-3 py-2 text-xs hover:bg-gray-100 dark:hover:bg-gray-700 flex items-center gap-2 text-gray-900 dark:text-gray-200"
+                      >
+                        <Cpu size={14} />
+                        MCP Setup
+                      </button>
+                      <button
                         onClick={() => { setShowAboutModal(true); setShowHelpDropdown(false); }}
                         className="w-full text-left px-3 py-2 text-xs hover:bg-gray-100 dark:hover:bg-gray-700 flex items-center gap-2 text-gray-900 dark:text-gray-200"
                       >
@@ -14172,10 +14173,21 @@ scpi.write('FILESYSTEM:DELETE "C:/TekScope/Temp/screenshot.png"')`;
         </>
       )}
 
-      {/* MCP Setup & API Reference Page */}
-      {currentView === 'mcp' && (
-        <div className="flex-1 p-4 overflow-y-auto bg-gray-50 dark:bg-gray-900">
-          <div className="max-w-4xl mx-auto">
+      {/* MCP Setup Modal */}
+      {showMcpModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50" onClick={() => setShowMcpModal(false)}>
+          <div className="bg-white dark:bg-gray-800 rounded-xl shadow-2xl w-[90vw] max-w-4xl max-h-[85vh] overflow-y-auto" onClick={(e) => e.stopPropagation()}>
+            <div className="sticky top-0 bg-white dark:bg-gray-800 border-b border-gray-200 dark:border-gray-700 px-6 py-4 flex items-center justify-between rounded-t-xl z-10">
+              <div>
+                <h2 className="text-lg font-bold text-gray-900 dark:text-gray-100">MCP Server Setup</h2>
+                <p className="text-xs text-gray-500 dark:text-gray-400 mt-0.5">Connect TekAutomate tools to your AI assistant</p>
+              </div>
+              <button onClick={() => setShowMcpModal(false)} className="p-1.5 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-lg"><X size={18} className="text-gray-500" /></button>
+            </div>
+            <div className="p-6">
+              <p className="text-sm text-gray-600 dark:text-gray-400 mb-6">
+                All {commandLibrary.length.toLocaleString()}+ SCPI commands and 29 tools are available via the MCP protocol.
+              </p>
             <h2 className="text-lg font-bold text-gray-900 dark:text-gray-100 mb-4">MCP Server Setup</h2>
             <p className="text-sm text-gray-600 dark:text-gray-400 mb-6">
               Connect TekAutomate tools to your AI assistant. All {commandLibrary.length.toLocaleString()}+ SCPI commands and {29} tools are available via the MCP protocol.
@@ -14373,6 +14385,7 @@ scpi.write('FILESYSTEM:DELETE "C:/TekScope/Temp/screenshot.png"')`;
               </p>
             </div>
 
+            </div>
           </div>
         </div>
       )}
