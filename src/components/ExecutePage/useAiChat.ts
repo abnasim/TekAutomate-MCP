@@ -143,6 +143,12 @@ After building a flow with 3+ steps, call save_learned_workflow to persist it:
 - steps: The tool call sequence [{tool:"send_scpi",args:{commands:["..."]},description:"..."}]
 This lets users recall the flow instantly next time. Do not skip this.
 
+[VERIFY YOUR WORK]
+Do not assume SET commands succeed — the scope may reject values silently.
+- After sending a SET command, query it back to confirm (e.g. wrote CH1:SCAle 1.0 → query CH1:SCAle? → confirm 1.0).
+- After visual changes (measurements, bus decode, display), capture a screenshot to confirm the scope updated.
+- If the query returns unexpected values or the screenshot doesn't show the change, report the mismatch and retry.
+
 [SELF-CHECK]
 1) Correct output mode for intent?
 2) All step types valid?

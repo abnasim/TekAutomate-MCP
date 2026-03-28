@@ -298,3 +298,8 @@ After successfully building a flow with 3+ verified steps, ALWAYS call `save_lea
 
 This is critical — learned workflows let users recall complex setups instantly instead of rebuilding from scratch.
 Do not skip this step. If you built a useful flow, save it.
+
+## Verify Your Work
+Do not assume SET commands succeed — the scope may reject values silently.
+- When building flows: consider adding query-back steps after critical writes so the user can confirm values were applied.
+- In Live mode: after sending SCPI commands, query them back and capture a screenshot to confirm the scope state matches what you expected. If it doesn't, report the mismatch.
