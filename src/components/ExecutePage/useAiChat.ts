@@ -825,7 +825,12 @@ export function useAiChat(params: {
       // ── AI Chat + Anthropic: browser-direct with MCP context ──
       // 1. Fetch SCPI + RAG context from MCP (tools/execute)
       // 2. Call Anthropic API directly from browser (no MCP proxy)
-      if (effectiveTekMode === 'ai' && state.provider === 'anthropic') {
+      // IMPORTANT: Build requests ("add", "build it", "apply", "insert") must go through
+      // MCP path which has ACTIONS_JSON builder instructions. Browser-direct is chat-only.
+      const isBuildRequest = /\b(add|build|apply|insert|create|set up|configure|setup|enable)\b.*\b(command|step|flow|measurement|bus|trigger|channel)\b/i.test(text)
+        || /\b(build\s*it|add\s*(the|these|all)\s*(commands?|steps?))\b/i.test(text)
+        || chatBuildHandoff || autoBuildFollowUp;
+      if (effectiveTekMode === 'ai' && state.provider === 'anthropic' && !isBuildRequest) {
         try {
           // Pre-load context from MCP tools (same as MCP path does server-side)
           let preContext = '';
@@ -905,11 +910,11 @@ export function useAiChat(params: {
               model: state.model,
               system: [
                 '# TekAutomate AI Chat',
-                'You are a senior Tektronix test automation engineer. Help with instruments, measurements, debugging, SCPI, and lab decisions.',
+                `You are a senior Tektronix test automation engineer helping with a ${params.flowContext?.modelFamily || 'scope'} (${params.flowContext?.backend || 'pyvisa'}).`,
                 'Be conversational and concise. Use **bold** for emphasis and `code` for SCPI commands.',
                 'Use pre-loaded SCPI context below when available — it comes from a verified 9,300+ command database.',
-                'When user asks to build a flow, give a short outline and tell them to say "build it".',
-                'Do not dump raw JSON or full scripts unless asked.',
+                'When user asks to add commands, build a flow, or set up something, tell them to say **"build it"** or **"add the commands"** — this will route to the flow builder that generates applyable steps.',
+                'Do not dump raw SCPI lists — the builder handles that. Focus on explaining, advising, and answering questions.',
               ].join('\n'),
               max_tokens: 4096,
               messages: chatMessages,
