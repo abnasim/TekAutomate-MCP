@@ -1,4 +1,4 @@
-import http from 'http';
+﻿import http from 'http';
 import { initCommandIndex } from './core/commandIndex';
 import { initProviderCatalog, providerSupplementsEnabled } from './core/providerCatalog';
 import { initTmDevicesIndex } from './core/tmDevicesIndex';
@@ -7,7 +7,7 @@ import { initTemplateIndex } from './core/templateIndex';
 import { runToolLoop } from './core/toolLoop';
 import { getToolDefinitions, runTool } from './tools/index';
 import type { McpChatRequest } from './core/schemas';
-import { bootRouter, createReloadProvidersHandler, createRouterHandler, getRouterHealth } from './core/routerIntegration';
+import { bootRouter, bootRouterMinimal, createReloadProvidersHandler, createRouterHandler, getRouterHealth } from './core/routerIntegration';
 import { getCommandIndex } from './core/commandIndex';
 import { getRagIndexes } from './core/ragIndex';
 import { getTemplateIndex } from './core/templateIndex';
@@ -263,24 +263,24 @@ async function warmStartup(): Promise<void> {
     startupError = null;
 
     const startInit = Date.now();
-    console.log('[SERVER] Initializing all indexes...');
+    const warmMode = String(process.env.MCP_WARM_START_MODE || 'minimal').trim().toLowerCase() || 'minimal';
+    console.log(`[SERVER] Initializing indexes in background (mode=${warmMode})...`);
 
-    const initTasks: Promise<unknown>[] = [
-      initCommandIndex(),
-      initTmDevicesIndex(),
-      initRagIndexes(),
-      initTemplateIndex(),
-    ];
-    const names = ['CommandIndex', 'TmDevicesIndex', 'RagIndexes', 'TemplateIndex'];
-    if (providerSupplementsEnabled()) {
-      initTasks.push(initProviderCatalog());
-      names.push('ProviderCatalog');
+    const initTasks: Promise<unknown>[] = [initCommandIndex()];
+    const names = ['CommandIndex'];
+    if (warmMode === 'full') {
+      initTasks.push(initTmDevicesIndex(), initRagIndexes(), initTemplateIndex());
+      names.push('TmDevicesIndex', 'RagIndexes', 'TemplateIndex');
+      if (providerSupplementsEnabled()) {
+        initTasks.push(initProviderCatalog());
+        names.push('ProviderCatalog');
+      }
     }
 
     const results = await Promise.allSettled(initTasks);
 
     const failures = results
-      .map((r, i) => r.status === 'rejected' ? { index: i, error: r.reason } : null)
+      .map((r, i) => (r.status === 'rejected' ? { index: i, error: r.reason } : null))
       .filter((f): f is { index: number; error: unknown } => Boolean(f));
 
     if (failures.length > 0) {
@@ -295,23 +295,28 @@ async function warmStartup(): Promise<void> {
       throw error;
     }
 
-    console.log(`✅ All indexes initialized in ${Date.now() - startInit}ms`);
+    console.log(`[SERVER] Background startup initialized ${names.join(', ')} in ${Date.now() - startInit}ms`);
 
     const routerDisabled = String(process.env.MCP_ROUTER_DISABLED || '').trim() === 'true';
     if (!routerDisabled) {
       try {
-        const commandIndex = await getCommandIndex();
-        const ragIndexes = await getRagIndexes();
-        const templates = (await getTemplateIndex()).all().map((doc) => ({
-          id: doc.id,
-          name: doc.name,
-          description: doc.description,
-          backend: 'template',
-          deviceType: 'workflow',
-          tags: [],
-          steps: doc.steps,
-        }));
-        const report = await bootRouter({ commandIndex, ragIndexes, templates });
+        const report =
+          warmMode === 'full'
+            ? await (async () => {
+                const commandIndex = await getCommandIndex();
+                const ragIndexes = await getRagIndexes();
+                const templates = (await getTemplateIndex()).all().map((doc) => ({
+                  id: doc.id,
+                  name: doc.name,
+                  description: doc.description,
+                  backend: 'template',
+                  deviceType: 'workflow',
+                  tags: [],
+                  steps: doc.steps,
+                }));
+                return bootRouter({ commandIndex, ragIndexes, templates });
+              })()
+            : await bootRouterMinimal();
         console.log(`[MCP:router] ${report.total} tools in ${report.durationMs}ms`);
       } catch (error) {
         startupState = 'error';
@@ -360,7 +365,7 @@ export async function createServer(port = 8787, host = '0.0.0.0'): Promise<http.
     }
   }
 
-  // ── MCP Protocol Server (Streamable HTTP for Claude Web / Desktop) ──
+  // â”€â”€ MCP Protocol Server (Streamable HTTP for Claude Web / Desktop) â”€â”€
   async function createMcpProtocolServer() {
     const sdk = await getMcpSdk();
     if (!sdk) throw new Error('MCP SDK not installed. Run: npm install @modelcontextprotocol/sdk');
@@ -410,7 +415,7 @@ export async function createServer(port = 8787, host = '0.0.0.0'): Promise<http.
   // Per-session MCP transport map (stateless mode: one per request)
   const mcpTransports = new Map<string, any>();
 
-  // ── HTML Tools Page ───────────────────────────────────────────────
+  // â”€â”€ HTML Tools Page â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   function buildToolsHtml(): string {
     const toolDefs = getToolDefinitions();
     const toolCards = toolDefs.map((def) => {
@@ -577,7 +582,7 @@ URL: ${process.env.MCP_PUBLIC_URL || 'https://tekautomate-mcp-production.up.rail
 <div class="section">
   <h2>API Endpoints</h2>
   <div class="endpoints">
-    <div class="endpoint"><span class="method get">GET</span><code>/</code><span class="ep-desc">This page — tools &amp; API reference</span></div>
+    <div class="endpoint"><span class="method get">GET</span><code>/</code><span class="ep-desc">This page â€” tools &amp; API reference</span></div>
     <div class="endpoint"><span class="method get">GET</span><code>/health</code><span class="ep-desc">Health check</span></div>
     <div class="endpoint"><span class="method post">POST</span><code>/mcp</code><span class="ep-desc">MCP Streamable HTTP transport (for Claude Web, Desktop)</span></div>
     <div class="endpoint"><span class="method get">GET</span><code>/tools/list</code><span class="ep-desc">List all tool definitions as JSON</span></div>
@@ -618,7 +623,7 @@ function filterTools(q) {
       return;
     }
 
-    // ── GET / — Tools & API reference page ────────────────────────
+    // â”€â”€ GET / â€” Tools & API reference page â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
     if (req.method === 'GET' && (req.url === '/' || req.url === '/index.html')) {
       res.statusCode = 200;
       res.setHeader('Content-Type', 'text/html; charset=utf-8');
@@ -627,7 +632,7 @@ function filterTools(q) {
       return;
     }
 
-    // ── /mcp — MCP Streamable HTTP transport ──────────────────────
+    // â”€â”€ /mcp â€” MCP Streamable HTTP transport â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
     if (req.url === '/mcp' || req.url?.startsWith('/mcp?')) {
       res.setHeader('Access-Control-Allow-Origin', '*');
       res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Accept, Mcp-Session-Id');
@@ -660,7 +665,7 @@ function filterTools(q) {
             const transport = mcpTransports.get(sessionId)!;
             await transport.handleRequest(req, res, body ? JSON.parse(body) : undefined);
           } else if (req.method === 'POST') {
-            // New session — create transport and MCP server
+            // New session â€” create transport and MCP server
             const transport = new sdk.StreamableHTTPServerTransport({
               sessionIdGenerator: () => `tek-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
             });
@@ -744,7 +749,7 @@ function filterTools(q) {
       return;
     }
 
-    // ── Tool endpoints: browser calls these directly, AI proxy not needed ──
+    // â”€â”€ Tool endpoints: browser calls these directly, AI proxy not needed â”€â”€
 
     if (req.method === 'GET' && req.url === '/tools/list') {
       const tools = getToolDefinitions();
@@ -752,7 +757,7 @@ function filterTools(q) {
       return;
     }
 
-    // Disconnect live VISA session — call before switching away from live mode
+    // Disconnect live VISA session â€” call before switching away from live mode
     if (req.method === 'POST' && req.url === '/tools/disconnect') {
       try {
         const body = (await readJsonBody(req)) as {
@@ -856,7 +861,7 @@ function filterTools(q) {
         if (vectorStoreId) {
           requestBody.tools = [{ type: 'file_search', vector_store_ids: [vectorStoreId] }];
         }
-        // Use server key — owns the vector store. User's apiKey is for authentication
+        // Use server key â€” owns the vector store. User's apiKey is for authentication
         // to this service only; OpenAI is billed to the server account.
         const openaiRes = await fetch('https://api.openai.com/v1/responses', {
           method: 'POST',
@@ -897,7 +902,7 @@ function filterTools(q) {
           const { value, done } = await reader.read();
           if (done) break;
           const chunk = decoder.decode(value, { stream: true });
-          // Write raw SSE chunks through — client parser handles them
+          // Write raw SSE chunks through â€” client parser handles them
           res.write(chunk);
         }
         res.end();
@@ -1201,3 +1206,5 @@ function filterTools(q) {
   });
   return server;
 }
+
+
