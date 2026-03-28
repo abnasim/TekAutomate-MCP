@@ -236,19 +236,17 @@ Blockly.Blocks['tm_devices_write'] = {
     this.setPreviousStatement(true, null);
     this.setNextStatement(true, null);
     this.setColour(TM_DEVICES_COLOR);
-    this.setTooltip(
-      'Write a value using tm_devices command tree.\n' +
-      'Right-click to browse tm_devices commands.\n' +
-      'Path examples:\n' +
-      '  ch[1].scale → scope.commands.ch[1].scale.write(value)\n' +
-      '  horizontal.scale → scope.commands.horizontal.scale.write(value)\n' +
-      '  measurement.addmeas → scope.commands.measurement.addmeas.write(value)\n' +
-      '  measurement.meas[1].source → scope.commands.measurement.meas[1].source.write(value)\n' +
-      '  trigger.a.type → scope.commands.trigger.a.type.write(value)\n' +
-      '  acquire.state → scope.commands.acquire.state.write(value)\n' +
-      '  display.waveview1.ch[1].state → scope.commands.display.waveview1.ch[1].state.write(value)\n' +
-      'Value: Use quotes for strings (e.g., "EDGE"), numbers without quotes (e.g., 0.1)'
-    );
+    this.setTooltip(function(this: Blockly.Block) {
+      const path = this.getFieldValue('PATH') || '';
+      const value = this.getFieldValue('VALUE') || '';
+      if (path) {
+        const fullPath = `scope.commands.${path}.write(${value || 'value'})`;
+        return `tm_devices Write: ${path}\n` +
+          `Full call: ${fullPath}\n` +
+          `Right-click to browse commands.`;
+      }
+      return 'tm_devices Write — set Path and Value.\nRight-click to browse commands.';
+    }.bind(this));
     this.setHelpUrl('');
     
     // Add context menu to browse tm_devices commands
@@ -296,17 +294,17 @@ Blockly.Blocks['tm_devices_query'] = {
     this.setPreviousStatement(true, null);
     this.setNextStatement(true, null);
     this.setColour(TM_DEVICES_COLOR);
-    this.setTooltip(
-      'Query a value using tm_devices command tree.\n' +
-      'Right-click to browse tm_devices commands.\n' +
-      'Path examples:\n' +
-      '  ch[1].scale → scope.commands.ch[1].scale.query()\n' +
-      '  horizontal.scale → scope.commands.horizontal.scale.query()\n' +
-      '  measurement.meas[1].results.currentacq.mean → scope.commands.measurement.meas[1].results.currentacq.mean.query()\n' +
-      '  trigger.a.type → scope.commands.trigger.a.type.query()\n' +
-      '  acquire.state → scope.commands.acquire.state.query()\n' +
-      'Result is stored in the specified variable.'
-    );
+    this.setTooltip(function(this: Blockly.Block) {
+      const path = this.getFieldValue('PATH') || '';
+      const variable = this.getFieldValue('VARIABLE') || 'result';
+      if (path) {
+        const fullPath = `${variable} = scope.commands.${path}.query()`;
+        return `tm_devices Query: ${path}\n` +
+          `Full call: ${fullPath}\n` +
+          `Right-click to browse commands.`;
+      }
+      return 'tm_devices Query — set Path and variable name.\nRight-click to browse commands.';
+    }.bind(this));
     this.setHelpUrl('');
     
     // Add context menu to browse tm_devices commands
