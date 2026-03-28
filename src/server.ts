@@ -7,7 +7,7 @@ import { initTemplateIndex } from './core/templateIndex';
 import { runToolLoop } from './core/toolLoop';
 import { getToolDefinitions, runTool } from './tools/index';
 import type { McpChatRequest } from './core/schemas';
-import { bootRouter, bootRouterMinimal, createReloadProvidersHandler, createRouterHandler, getRouterHealth } from './core/routerIntegration';
+import { bootRouter, createReloadProvidersHandler, createRouterHandler, getRouterHealth } from './core/routerIntegration';
 import { getCommandIndex } from './core/commandIndex';
 import { getRagIndexes } from './core/ragIndex';
 import { getTemplateIndex } from './core/templateIndex';
@@ -209,11 +209,9 @@ function sendJson(res: http.ServerResponse, status: number, payload: unknown) {
 }
 
 function getHealthPayload() {
-  const warmStartMode = String(process.env.MCP_WARM_START_MODE || 'minimal').trim().toLowerCase() || 'minimal';
   return {
     ok: startupState !== 'error',
     status: startupState,
-    warmStartMode,
     ...(startupError ? { startupError } : {}),
   };
 }
@@ -265,18 +263,18 @@ async function warmStartup(): Promise<void> {
     startupError = null;
 
     const startInit = Date.now();
-    const warmMode = String(process.env.MCP_WARM_START_MODE || 'minimal').trim().toLowerCase() || 'minimal';
-    console.log(`[SERVER] Initializing indexes in background (mode=${warmMode})...`);
+    console.log('[SERVER] Initializing all indexes...');
 
-    const initTasks: Promise<unknown>[] = [initCommandIndex()];
-    const names = ['CommandIndex'];
-    if (warmMode === 'full') {
-      initTasks.push(initTmDevicesIndex(), initRagIndexes(), initTemplateIndex());
-      names.push('TmDevicesIndex', 'RagIndexes', 'TemplateIndex');
-      if (providerSupplementsEnabled()) {
-        initTasks.push(initProviderCatalog());
-        names.push('ProviderCatalog');
-      }
+    const initTasks: Promise<unknown>[] = [
+      initCommandIndex(),
+      initTmDevicesIndex(),
+      initRagIndexes(),
+      initTemplateIndex(),
+    ];
+    const names = ['CommandIndex', 'TmDevicesIndex', 'RagIndexes', 'TemplateIndex'];
+    if (providerSupplementsEnabled()) {
+      initTasks.push(initProviderCatalog());
+      names.push('ProviderCatalog');
     }
 
     const results = await Promise.allSettled(initTasks);
@@ -302,24 +300,19 @@ async function warmStartup(): Promise<void> {
     const routerDisabled = String(process.env.MCP_ROUTER_DISABLED || '').trim() === 'true';
     if (!routerDisabled) {
       try {
-        if (warmMode === 'full') {
-          const commandIndex = await getCommandIndex();
-          const ragIndexes = await getRagIndexes();
-          const templates = (await getTemplateIndex()).all().map((doc) => ({
-            id: doc.id,
-            name: doc.name,
-            description: doc.description,
-            backend: 'template',
-            deviceType: 'workflow',
-            tags: [],
-            steps: doc.steps,
-          }));
-          const report = await bootRouter({ commandIndex, ragIndexes, templates });
-          console.log(`[MCP:router] ${report.total} tools in ${report.durationMs}ms`);
-        } else {
-          const report = await bootRouterMinimal();
-          console.log(`[MCP:router] minimal ${report.total} tools in ${report.durationMs}ms`);
-        }
+        const commandIndex = await getCommandIndex();
+        const ragIndexes = await getRagIndexes();
+        const templates = (await getTemplateIndex()).all().map((doc) => ({
+          id: doc.id,
+          name: doc.name,
+          description: doc.description,
+          backend: 'template',
+          deviceType: 'workflow',
+          tags: [],
+          steps: doc.steps,
+        }));
+        const report = await bootRouter({ commandIndex, ragIndexes, templates });
+        console.log(`[MCP:router] ${report.total} tools in ${report.durationMs}ms`);
       } catch (error) {
         startupState = 'error';
         startupError = error instanceof Error ? error.message : String(error);
@@ -375,23 +368,29 @@ export async function createServer(port = 8787, host = '0.0.0.0'): Promise<http.
       { name: 'tekautomate', version: '3.2.0' },
       { capabilities: { tools: {} } },
     );
-    const toolDefs = getToolDefinitions();
-    const mcpTools = toolDefs.map((def) => ({
-      name: def.name,
-      description: def.description ?? def.name,
-      inputSchema: {
-        type: 'object' as const,
-        properties: (def.parameters as any)?.properties ?? {},
-        ...((def.parameters as any)?.required?.length
-          ? { required: (def.parameters as any).required }
-          : {}),
-      },
-    }));
     mcp.setRequestHandler(sdk.ListToolsRequestSchema, async () => {
-      console.log(`[MCP] list_tools count=${mcpTools.length}`);
+      if (startupInitPromise) {
+        try { await startupInitPromise; } catch { /* degrade gracefully */ }
+      }
+      const toolDefs = getToolDefinitions();
+      const mcpTools = toolDefs.map((def) => ({
+        name: def.name,
+        description: def.description ?? def.name,
+        inputSchema: {
+          type: 'object' as const,
+          properties: (def.parameters as any)?.properties ?? {},
+          ...((def.parameters as any)?.required?.length
+            ? { required: (def.parameters as any).required }
+            : {}),
+        },
+      }));
+      console.log(`[MCP] list_tools count=${mcpTools.length} startup=${startupState}`);
       return { tools: mcpTools };
     });
     mcp.setRequestHandler(sdk.CallToolRequestSchema, async (request: any) => {
+      if (startupInitPromise) {
+        try { await startupInitPromise; } catch { /* degrade gracefully */ }
+      }
       const { name, arguments: args } = request.params;
       console.log(`[MCP] call_tool name=${name}`);
       try {
