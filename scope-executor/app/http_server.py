@@ -265,6 +265,19 @@ class _Handler(BaseHTTPRequestHandler):
                 result = run_executor_action("capture_screenshot", {"scope_type": scope_type, "keep_alive": keep_alive}, timeout_sec, scope_visa, on_line=_on_line)
             else:
                 result = run_executor_action("send_scpi", {"commands": commands, "timeout_ms": timeout_ms, "keep_alive": keep_alive}, timeout_sec, scope_visa, on_line=_on_line)
+                # Broadcast per-command results for verbose logging
+                scpi_responses = result.get("responses") or result.get("result_data", {}).get("responses") or []
+                for item in scpi_responses:
+                    cmd = item.get("command", "")
+                    resp = item.get("response", "")
+                    ok = item.get("ok", True)
+                    ms = item.get("timeMs", 0)
+                    if cmd.strip().endswith("?"):
+                        line = f"  → {cmd}  =  {resp}  ({ms}ms)"
+                    else:
+                        status = "OK" if ok else f"ERR: {item.get('error', '?')}"
+                        line = f"  → {cmd}  [{status}]  ({ms}ms)"
+                    _on_line("stdout", line)
 
             elapsed = time.time() - t0
             response_body = {
@@ -286,10 +299,7 @@ class _Handler(BaseHTTPRequestHandler):
             if result.get("ok"):
                 if action == "send_scpi":
                     cmd_count = len(commands or [])
-                    preview = "; ".join((commands or [])[:2])
-                    if cmd_count > 2:
-                        preview += f" ... (+{cmd_count - 2} more)"
-                    self._emit("POST", "/run", 200, f"OK ({elapsed:.1f}s) action=send_scpi visa={scope_visa} cmds={cmd_count} [{preview}]")
+                    self._emit("POST", "/run", 200, f"OK ({elapsed:.1f}s) action=send_scpi visa={scope_visa} cmds={cmd_count}")
                 elif action == "capture_screenshot":
                     size_bytes = None
                     if isinstance(result.get("result_data"), dict):
