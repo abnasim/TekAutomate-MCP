@@ -14552,7 +14552,7 @@ scpi.write('FILESYSTEM:DELETE "C:/TekScope/Temp/screenshot.png"')`;
                 <>
                   <button
                     type="button"
-                    className="w-full px-4 py-2.5 text-sm font-medium border border-gray-300 dark:border-gray-600 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-700 flex items-center justify-center gap-2"
+                    className="w-full px-4 py-2.5 text-sm font-medium text-gray-700 dark:text-gray-200 border border-gray-300 dark:border-gray-600 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-700 flex items-center justify-center gap-2"
                     onClick={() => { setShowExecutorModal(false); setShowQRScanner(true); }}
                   >
                     <Camera size={16} />
@@ -14577,7 +14577,7 @@ scpi.write('FILESYSTEM:DELETE "C:/TekScope/Temp/screenshot.png"')`;
                 </button>
               )}
             </div>
-            <button type="button" className="mt-4 w-full py-2 text-sm text-gray-500 hover:text-gray-700 dark:hover:text-gray-400" onClick={() => setShowExecutorModal(false)}>Close</button>
+            <button type="button" className="mt-4 w-full py-2 text-sm text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-300" onClick={() => setShowExecutorModal(false)}>Close</button>
           </div>
         </div>
       )}
@@ -15135,77 +15135,54 @@ Instructions:
       {/* About Modal */}
       {showAboutModal && (
         <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-50" onClick={() => setShowAboutModal(false)}>
-          <div className="bg-white rounded-xl w-full max-w-2xl p-8 shadow-2xl" onClick={(e) => e.stopPropagation()}>
-            <div className="flex items-center justify-between mb-6">
+          <div className="bg-white dark:bg-gray-900 rounded-xl w-full max-w-2xl p-6 shadow-2xl" onClick={(e) => e.stopPropagation()}>
+            <div className="flex items-center justify-between mb-4">
               <div className="flex items-center gap-3">
-                <div className="w-12 h-12 bg-blue-600 rounded-lg flex items-center justify-center">
-                  <Zap className="h-7 w-7 text-white" />
+                <div className="w-10 h-10 bg-blue-600 rounded-lg flex items-center justify-center">
+                  <Zap className="h-6 w-6 text-white" />
                 </div>
                 <div>
-                  <h2 className="text-2xl font-bold text-gray-900">TekAutomate</h2>
-                  <p className="text-sm text-gray-500">Version 2.0.0</p>
+                  <h2 className="text-xl font-bold text-gray-900 dark:text-gray-100">TekAutomate</h2>
+                  <p className="text-xs text-gray-500 dark:text-gray-400">Version 2.0.0</p>
                 </div>
               </div>
-              <button onClick={() => setShowAboutModal(false)} className="p-2 hover:bg-gray-100 rounded-lg">
-                <X size={20} />
+              <button onClick={() => setShowAboutModal(false)} className="p-1.5 hover:bg-gray-100 dark:hover:bg-gray-800 rounded-lg text-gray-500 dark:text-gray-400">
+                <X size={18} />
               </button>
             </div>
 
-            <div className="space-y-4 text-gray-700">
-              {/* Beta Disclaimer */}
-              <div className="bg-amber-50 border border-amber-200 rounded-lg p-3">
-                <p className="text-sm text-amber-800">
+            <div className="space-y-3 text-gray-700 dark:text-gray-300">
+              <div className="bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800 rounded-lg p-2.5">
+                <p className="text-xs text-amber-800 dark:text-amber-200">
                   <strong>Beta Release:</strong> This software is for testing purposes only. All generated outputs should be reviewed and verified before use in production environments.
                 </p>
               </div>
 
-              <div>
-                <h3 className="font-semibold text-lg mb-2">About</h3>
-                <p className="text-sm leading-relaxed">
-                  TekAutomate is a visual programming tool for automating Tektronix test equipment. 
-                  Build test sequences with a drag-and-drop interface and generate Python code for your automation workflow.
-                </p>
-              </div>
+              <p className="text-sm leading-relaxed text-gray-600 dark:text-gray-400">
+                Visual programming tool for automating Tektronix test equipment. Build test sequences with drag-and-drop, generate Python code, and run on instruments via PyVISA, tm_devices, VXI-11, or TekHSI.
+              </p>
 
               <div>
-                <h3 className="font-semibold text-lg mb-2">Features</h3>
-                <ul className="text-sm space-y-1 list-disc list-inside">
-                  <li>Visual workflow builder with drag-and-drop interface</li>
-                  <li>Multiple instrument backends (PyVISA, tm_devices, VXI-11, TekHSI)</li>
-                  <li>Comprehensive SCPI command library</li>
-                  <li>Python code generation</li>
-                  <li>Template system for common test scenarios</li>
-                </ul>
-              </div>
-
-              <div>
-                <h3 className="font-semibold text-lg mb-2">Author</h3>
-                <p className="text-sm">Ab Nasim (ab.nasim@tek.com)</p>
-              </div>
-
-              <div>
-                <h3 className="font-semibold text-lg mb-2">License</h3>
-                <div className="bg-gray-50 dark:bg-zinc-800 border border-gray-200 dark:border-zinc-700 rounded-lg p-3 max-h-40 overflow-y-auto">
-                  <p className="text-[11px] leading-relaxed text-gray-600 dark:text-zinc-400 font-medium mb-2">TEKTRONIX SAMPLE SOURCE CODE LICENSE AGREEMENT</p>
-                  <p className="text-[11px] leading-relaxed text-gray-600 dark:text-zinc-400">
+                <h3 className="font-semibold text-sm mb-1.5 text-gray-900 dark:text-gray-100">License</h3>
+                <div className="bg-gray-50 dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg p-3">
+                  <p className="text-[11px] leading-relaxed text-gray-600 dark:text-gray-400 font-semibold mb-1.5">TEKTRONIX SAMPLE SOURCE CODE LICENSE AGREEMENT</p>
+                  <p className="text-[11px] leading-relaxed text-gray-600 dark:text-gray-400">
                     Source code written by Tektronix, Inc. or its affiliates (&ldquo;Tektronix&rdquo;) that is designated as a &ldquo;sample,&rdquo; &ldquo;example,&rdquo; &ldquo;sample code,&rdquo; or any similar designation will be considered &ldquo;Sample Source Code.&rdquo; Tektronix grants you a license to download, reproduce, display, distribute, modify, and create derivative works of Tektronix Sample Source Code, only for use in or with Tektronix products. You may not remove or alter any copyright notices or trademarks.
                   </p>
-                  <p className="text-[11px] leading-relaxed text-gray-600 dark:text-zinc-400 mt-2">
+                  <p className="text-[11px] leading-relaxed text-gray-600 dark:text-gray-400 mt-1.5">
                     SAMPLE SOURCE CODE IS PROVIDED &ldquo;AS-IS,&rdquo; WITHOUT ANY EXPRESS OR IMPLIED WARRANTIES OF ANY KIND, INCLUDING BUT NOT LIMITED TO THE IMPLIED WARRANTIES OF MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE, AND NON-INFRINGEMENT OF INTELLECTUAL PROPERTY. IN NO EVENT SHALL TEKTRONIX, ITS AFFILIATES, OFFICERS, EMPLOYEES, DIRECTORS, AGENTS, SUPPLIERS, OR OTHER THIRD PARTIES BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL, PUNITIVE, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES ARISING IN ANY WAY OUT OF THE USE OF THIS SAMPLE SOURCE CODE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
                   </p>
                 </div>
               </div>
 
-              <div className="pt-4 border-t">
-                <p className="text-xs text-gray-500 dark:text-zinc-400 text-center">
-                  &copy; 2026 Tektronix, Inc. All rights reserved.
-                </p>
-              </div>
+              <p className="text-[10px] text-gray-400 dark:text-gray-500 text-center pt-1">
+                &copy; 2026 Tektronix, Inc. All rights reserved.
+              </p>
             </div>
 
-            <div className="flex justify-end gap-3 mt-6">
-              <button 
-                className="px-4 py-2 text-sm bg-blue-600 text-white rounded-lg hover:bg-blue-700"
+            <div className="flex justify-end mt-4">
+              <button
+                className="px-4 py-1.5 text-sm bg-blue-600 text-white rounded-lg hover:bg-blue-700"
                 onClick={() => setShowAboutModal(false)}
               >
                 Close
