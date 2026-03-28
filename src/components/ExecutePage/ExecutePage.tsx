@@ -90,6 +90,7 @@ function ExecutePageContent({
   liveModeContent,
 }: ExecutePageProps) {
   const [rightTab, setRightTab] = useState<'code' | 'logs'>('logs');
+  const [rightPanelOpen, setRightPanelOpen] = useState(true);
   const [copied, setCopied] = useState(false);
   const [copiedLog, setCopiedLog] = useState(false);
   // Intentionally unused in this compact layout; execution controls are handled elsewhere.
@@ -177,9 +178,22 @@ function ExecutePageContent({
           </div>
         </main>
 
-        {/* Right panel: hidden in live mode, shows Code/Logs otherwise */}
+        {/* Right panel: hidden in live mode, collapsible Code/Logs otherwise */}
         {executionSource !== 'live' && (
-        <aside className="w-[30rem] min-w-[24rem] max-w-[40vw] flex-shrink-0 flex flex-col border-l border-slate-200 bg-slate-100/85 dark:border-slate-800/50 dark:bg-slate-900/50">
+        <>
+          {/* Collapse/expand toggle — always visible as a vertical bar */}
+          <button
+            type="button"
+            onClick={() => setRightPanelOpen(!rightPanelOpen)}
+            className="flex-shrink-0 w-5 flex items-center justify-center border-l border-slate-200 bg-slate-100 hover:bg-slate-200 dark:border-slate-800/50 dark:bg-slate-900/50 dark:hover:bg-slate-800/80 cursor-col-resize transition-colors group"
+            title={rightPanelOpen ? 'Hide Code/Logs panel' : 'Show Code/Logs panel'}
+          >
+            <span className="text-slate-400 dark:text-slate-500 group-hover:text-slate-600 dark:group-hover:text-slate-300 text-xs select-none">
+              {rightPanelOpen ? '›' : '‹'}
+            </span>
+          </button>
+          {rightPanelOpen && (
+          <aside className="w-[30rem] min-w-[24rem] max-w-[40vw] flex-shrink-0 flex flex-col border-l border-slate-200 bg-slate-100/85 dark:border-slate-800/50 dark:bg-slate-900/50">
           <div className="flex border-b border-slate-200 dark:border-slate-800/50">
             <button
               onClick={() => setRightTab('code')}
@@ -263,7 +277,9 @@ function ExecutePageContent({
               </div>
             </div>
           )}
-        </aside>
+          </aside>
+          )}
+        </>
         )}
       </div>
     </div>
