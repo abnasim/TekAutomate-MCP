@@ -155,8 +155,8 @@ function buildTemplateHandler(
 }
 
 export function buildManagedTool(req: RouterRequest, existing?: MicroTool): MicroTool {
-  const id = String(req.toolId || existing?.id || '').trim();
   const name = String(req.toolName || existing?.name || '').trim();
+  const id = String(req.toolId || existing?.id || (name ? `shortcut:${name.toLowerCase().replace(/[^a-z0-9]+/g, '_').slice(0, 40)}_${Date.now()}` : '')).trim();
   const description = String(req.toolDescription || existing?.description || '').trim();
   const category = (req.toolCategory || existing?.category || 'template') as ToolCategory;
   const schema = {
