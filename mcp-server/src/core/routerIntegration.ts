@@ -28,6 +28,7 @@ const BUILTIN_SHORTCUT_IDS = new Set([
 let hydrationReport: HydrationReport | null = null;
 let providersDir: string | null = null;
 let loadedProviderToolIds: string[] = [];
+let persistenceTimerStarted = false;
 
 function isRouterEnabled(): boolean {
   // Enable router by default, allow explicit disable
@@ -57,6 +58,32 @@ async function persistUsageStats(statsPath: string): Promise<void> {
   } catch (err) {
     console.error('[MCP:router] Failed to persist usage stats:', err);
   }
+}
+
+async function loadPersistedUsageStats(
+  statsPath: string,
+  sources: HydrationSources & { usageStats?: Array<{ id: string; usageCount: number; lastUsedAt: number; successCount?: number; failureCount?: number }> }
+): Promise<void> {
+  try {
+    const raw = await fs.readFile(statsPath, 'utf8');
+    const stats = JSON.parse(raw);
+    if (Array.isArray(stats)) {
+      sources.usageStats = stats;
+      console.log(`[MCP:router] Loaded ${stats.length} persisted usage stats`);
+    }
+  } catch {
+    // No persisted stats yet.
+  }
+}
+
+function ensurePersistenceLoop(statsPath: string): void {
+  if (persistenceTimerStarted) return;
+  persistenceTimerStarted = true;
+  const timer = setInterval(() => {
+    persistUsageStats(statsPath);
+    if (_shortcutsDirty) persistRuntimeShortcuts();
+  }, 5 * 60 * 1000);
+  timer.unref?.();
 }
 
 async function prepareSemanticIndex(): Promise<void> {
@@ -170,16 +197,7 @@ export async function bootRouter(
   sources: HydrationSources & { providersDir?: string } = {}
 ): Promise<HydrationReport> {
   const statsPath = path.resolve(process.cwd(), DATA_DIR, USAGE_STATS_FILE);
-  try {
-    const raw = await fs.readFile(statsPath, 'utf8');
-    const stats = JSON.parse(raw);
-    if (Array.isArray(stats)) {
-      sources.usageStats = stats;
-      console.log(`[MCP:router] Loaded ${stats.length} persisted usage stats`);
-    }
-  } catch {
-    // No persisted stats yet.
-  }
+  await loadPersistedUsageStats(statsPath, sources);
 
   const commandIndex = sources.commandIndex || (await getCommandIndex());
   const ragIndexes = sources.ragIndexes || (await getRagIndexes());
@@ -201,11 +219,28 @@ export async function bootRouter(
   // Load runtime shortcuts after all tools are loaded
   await loadRuntimeShortcuts();
 
-  const timer = setInterval(() => {
-    persistUsageStats(statsPath);
-    if (_shortcutsDirty) persistRuntimeShortcuts(); // Only save when changes exist
-  }, 5 * 60 * 1000);
-  timer.unref?.();
+  ensurePersistenceLoop(statsPath);
+  return hydrationReport;
+}
+
+export async function bootRouterMinimal(
+  sources: { providersDir?: string } = {}
+): Promise<HydrationReport> {
+  const statsPath = path.resolve(process.cwd(), DATA_DIR, USAGE_STATS_FILE);
+  const hydrationSources: HydrationSources & { providersDir?: string } = {};
+  await loadPersistedUsageStats(statsPath, hydrationSources);
+
+  hydrationReport = await hydrateAllTools({
+    usageStats: hydrationSources.usageStats,
+    templates: [],
+  });
+
+  providersDir = resolveProvidersDir(sources.providersDir);
+  await reloadProviderTools();
+  await prepareSemanticIndex();
+  await loadRuntimeShortcuts();
+
+  ensurePersistenceLoop(statsPath);
   return hydrationReport;
 }
 

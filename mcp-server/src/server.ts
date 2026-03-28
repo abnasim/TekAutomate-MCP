@@ -7,7 +7,7 @@ import { initTemplateIndex } from './core/templateIndex';
 import { runToolLoop } from './core/toolLoop';
 import { getToolDefinitions, runTool } from './tools/index';
 import type { McpChatRequest } from './core/schemas';
-import { bootRouter, createReloadProvidersHandler, createRouterHandler, getRouterHealth } from './core/routerIntegration';
+import { bootRouter, bootRouterMinimal, createReloadProvidersHandler, createRouterHandler, getRouterHealth } from './core/routerIntegration';
 import { getCommandIndex } from './core/commandIndex';
 import { getRagIndexes } from './core/ragIndex';
 import { getTemplateIndex } from './core/templateIndex';
@@ -278,21 +278,27 @@ export async function createServer(port = 8787): Promise<http.Server> {
 
   // Bootstrap router — enabled by default, disable with MCP_ROUTER_DISABLED=true
   const routerDisabled = String(process.env.MCP_ROUTER_DISABLED || '').trim() === 'true';
+  const warmMode = String(process.env.MCP_WARM_START_MODE || 'full').trim().toLowerCase() || 'full';
   if (!routerDisabled) {
     try {
-      const commandIndex = await getCommandIndex();
-      const ragIndexes = await getRagIndexes();
-      const templates = (await getTemplateIndex()).all().map((doc) => ({
-        id: doc.id,
-        name: doc.name,
-        description: doc.description,
-        backend: 'template',
-        deviceType: 'workflow',
-        tags: [],
-        steps: doc.steps,
-      }));
-      const report = await bootRouter({ commandIndex, ragIndexes, templates });
-      console.log(`[MCP:router] ${report.total} tools in ${report.durationMs}ms`);
+      if (warmMode === 'minimal') {
+        const report = await bootRouterMinimal();
+        console.log(`[MCP:router] minimal ${report.total} tools in ${report.durationMs}ms`);
+      } else {
+        const commandIndex = await getCommandIndex();
+        const ragIndexes = await getRagIndexes();
+        const templates = (await getTemplateIndex()).all().map((doc) => ({
+          id: doc.id,
+          name: doc.name,
+          description: doc.description,
+          backend: 'template',
+          deviceType: 'workflow',
+          tags: [],
+          steps: doc.steps,
+        }));
+        const report = await bootRouter({ commandIndex, ragIndexes, templates });
+        console.log(`[MCP:router] ${report.total} tools in ${report.durationMs}ms`);
+      }
     } catch (error) {
       console.error('[MCP:router] Boot failed:', error);
       throw error;
