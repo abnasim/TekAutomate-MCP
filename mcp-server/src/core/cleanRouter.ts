@@ -23,6 +23,20 @@ export class CleanRouter {
   }
 
   /**
+   * Detect if user is asking a question (what is, explain, describe)
+   */
+  isQuestionIntent(msg: string): boolean {
+    return /^\s*(what\s+is|what\s+are|what\s+does|explain|describe|tell\s+me\s+about|how\s+does|how\s+do\s+i|how\s+to)\b/i.test(msg);
+  }
+
+  /**
+   * Detect if user wants flow validation (check/validate/review flow)
+   */
+  isValidationIntent(msg: string): boolean {
+    return /\b(validate|verify|check|review)\s+(my\s+)?(flow|commands?|steps?|sequence)\b/i.test(msg);
+  }
+
+  /**
    * Make clean routing decision without edge cases
    */
   makeRouteDecision(req: McpChatRequest): RouteDecision {
@@ -30,7 +44,7 @@ export class CleanRouter {
     const outputMode = req.outputMode;
     const isMcpOnly = this.isMcpOnlyMode(req);
     const interactionMode = req.interactionMode;
-    
+
     console.log(`[CLEAN_ROUTER] Routing decision for: "${msg}"`);
     console.log(`[CLEAN_ROUTER] Mode: ${outputMode}, MCP-only: ${isMcpOnly}`);
 
@@ -39,6 +53,16 @@ export class CleanRouter {
         route: 'smart_scpi',
         confidence: 0.98,
         reasoning: 'Live mode keeps conversational responses while routing through MCP tools',
+        forceToolCall: true
+      };
+    }
+
+    // 0a. Validation intent (check/validate flow) → route to smart_scpi with validation flag
+    if (this.isValidationIntent(msg)) {
+      return {
+        route: 'smart_scpi',
+        confidence: 0.95,
+        reasoning: 'Validation intent detected — routing to SCPI validation',
         forceToolCall: true
       };
     }

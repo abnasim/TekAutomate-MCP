@@ -76,6 +76,19 @@ async function runDeterministicToolLoop(req: McpChatRequest, flowCommandIssues: 
 
   try {
     const routeDecision = cleanRouter.makeRouteDecision(req);
+    const msg = req.userMessage.toLowerCase().trim();
+
+    // Validation intent: "check my flow", "validate flow", "review flow"
+    if (cleanRouter.isValidationIntent(msg)) {
+      console.log('[DETERMINISTIC_TOOL_LOOP] Validation intent detected');
+      return await runFlowValidation(req);
+    }
+
+    // Question intent: "what is X", "explain X", "describe X"
+    if (cleanRouter.isQuestionIntent(msg)) {
+      console.log('[DETERMINISTIC_TOOL_LOOP] Question intent detected');
+      return await runQuestionLookup(req);
+    }
 
     // MCP-only mode: pure deterministic, no auto-RAG (user can call retrieve_rag_chunks explicitly)
     if (routeDecision.route === 'smart_scpi') {
@@ -237,6 +250,13 @@ async function runSmartScpiAssistant(req: McpChatRequest) {
       return String(num);
     }
 
+    // Try to resolve ADDMEAS measurement type from user query
+    let addmeasValue: string | null = null;
+    try {
+      const { resolveAddmeasValue } = await import('./measurementCatalog');
+      addmeasValue = resolveAddmeasValue(req.userMessage);
+    } catch { /* ignore */ }
+
     const actions = toolResult.data.map((cmd: any, idx: number) => {
       const isSetCapable = cmd.commandType === 'set' || cmd.commandType === 'both';
       const isQueryCapable = cmd.commandType === 'query' || cmd.commandType === 'both';
@@ -249,6 +269,10 @@ async function runSmartScpiAssistant(req: McpChatRequest) {
         let resolved = String(cmd.syntax.set).replace(/\n/g, ' ').replace(/\s+/g, ' ');
         // Resolve placeholders in the header part
         resolved = resolvePlaceholders(resolved);
+        // Special handling for ADDMEAS: resolve <QString> to measurement enum value
+        if (/ADDMEAS/i.test(resolved) && addmeasValue && /<QString>/i.test(resolved)) {
+          resolved = resolved.replace(/<QString>/i, addmeasValue);
+        }
         // Match {ENUM1|ENUM2|...} patterns
         const enumMatch = resolved.match(/\{([^}]+)\}/);
         if (enumMatch) {
@@ -275,8 +299,8 @@ async function runSmartScpiAssistant(req: McpChatRequest) {
         if (userValue && /<NR[f13]>/i.test(resolved)) {
           resolved = resolved.replace(/\s*<NR[f13]>/i, ` ${userValue}`).trim();
         }
-        // Strip remaining angle-bracket placeholders
-        resolved = resolved.replace(/\s*<[^>]+>/g, '').trim();
+        // Keep remaining angle-bracket placeholders as hints (e.g. <QString>, <NR3>)
+        // so users know what argument to fill in, instead of stripping them silently
         // If user provided a value but no placeholder was in the syntax, append it
         if (userValue && !resolved.includes(userValue) && !/\d/.test(resolved.split(/\s+/).slice(-1)[0] || '')) {
           resolved = `${resolved} ${userValue}`;
@@ -356,6 +380,229 @@ async function runSmartScpiAssistant(req: McpChatRequest) {
         toolTrace: [],
         resolutionPath: 'deterministic:smart_scpi_error'
       }
+    };
+  }
+}
+
+/**
+ * Run question lookup — return full command entry, not build steps
+ */
+async function runQuestionLookup(req: McpChatRequest) {
+  try {
+    let smartScpiLookup: any;
+    try {
+      const module = await import('./smartScpiAssistant');
+      smartScpiLookup = module.smartScpiLookup;
+    } catch (importError) {
+      throw new Error(`Failed to load SmartScpiAssistant: ${
+        importError instanceof Error ? importError.message : String(importError)
+      }`);
+    }
+
+    // Strip question prefixes to get the actual subject
+    const subject = req.userMessage
+      .replace(/^\s*(what\s+is|what\s+are|what\s+does|explain|describe|tell\s+me\s+about|how\s+does|how\s+do\s+i|how\s+to)\s+/i, '')
+      .trim();
+
+    const toolResult = await smartScpiLookup({
+      query: subject,
+      modelFamily: req.flowContext.modelFamily,
+      context: `${req.flowContext.deviceType || 'SCOPE'} ${req.flowContext.backend || 'pyvisa'}`,
+      mode: 'chat'
+    });
+
+    if (!toolResult || !toolResult.data || toolResult.data.length === 0) {
+      return {
+        text: `I couldn't find any SCPI commands matching "${subject}". Try being more specific about the measurement, channel, or instrument feature.`,
+        assistantThreadId: undefined,
+        errors: [],
+        warnings: [],
+        metrics: { totalMs: 0, usedShortcut: false, iterations: 1, toolCalls: 1, toolMs: 0, modelMs: 0, promptChars: { system: 0, user: req.userMessage.length } },
+        debug: { toolTrace: [], resolutionPath: 'deterministic:question_no_results' }
+      };
+    }
+
+    // Format the full command entry for the user
+    const cmd = toolResult.data[0];
+    let response = `## ${cmd.header}\n\n`;
+    response += `**Description:** ${cmd.description || cmd.shortDescription || 'No description available'}\n\n`;
+    if (cmd.syntax?.set) response += `**Set syntax:** \`${cmd.syntax.set}\`\n\n`;
+    if (cmd.syntax?.query) response += `**Query syntax:** \`${cmd.syntax.query}\`\n\n`;
+    if (cmd.arguments && cmd.arguments.length > 0) {
+      response += `**Arguments:**\n`;
+      for (const arg of cmd.arguments) {
+        response += `- **${arg.name}** (${arg.type}${arg.required ? ', required' : ''}): ${arg.description || ''}`;
+        if (arg.validValues && typeof arg.validValues === 'object') {
+          const vv = arg.validValues as Record<string, unknown>;
+          if (vv.min !== undefined || vv.max !== undefined) {
+            response += ` — Range: ${vv.min ?? '—'} to ${vv.max ?? '—'}`;
+          }
+          if (arg.options && Array.isArray(arg.options)) {
+            response += ` — Values: ${arg.options.map((o: any) => o.value || o).join(', ')}`;
+          }
+        }
+        response += '\n';
+      }
+      response += '\n';
+    }
+    if (cmd.codeExamples && cmd.codeExamples.length > 0) {
+      response += `**Examples:**\n`;
+      for (const ex of cmd.codeExamples) {
+        if (ex.scpi?.code) response += `- \`${ex.scpi.code}\` — ${ex.description || ''}\n`;
+      }
+      response += '\n';
+    }
+    if (cmd.relatedCommands && cmd.relatedCommands.length > 0) {
+      response += `**Related commands:** ${cmd.relatedCommands.slice(0, 5).join(', ')}\n\n`;
+    }
+    response += `**Group:** ${cmd.group || 'N/A'} | **Families:** ${(cmd.families || []).join(', ') || 'All'}`;
+
+    return {
+      text: response,
+      commands: toolResult.data,
+      assistantThreadId: undefined,
+      errors: [],
+      warnings: [],
+      metrics: { totalMs: 0, usedShortcut: false, iterations: 1, toolCalls: 1, toolMs: 0, modelMs: 0, promptChars: { system: 0, user: req.userMessage.length } },
+      debug: { toolTrace: [{ name: 'smart_scpi_lookup', args: { query: subject }, startedAt: new Date().toISOString(), resultSummary: { ok: true, count: toolResult.data.length } }], resolutionPath: 'deterministic:question_lookup' }
+    };
+  } catch (error) {
+    const errorMessage = error instanceof Error ? error.message : String(error);
+    return {
+      text: `Question lookup error: ${errorMessage}`,
+      assistantThreadId: undefined,
+      errors: [errorMessage],
+      warnings: [],
+      metrics: { totalMs: 0, usedShortcut: false, iterations: 0, toolCalls: 0, toolMs: 0, modelMs: 0, promptChars: { system: 0, user: 0 } },
+      debug: { toolTrace: [], resolutionPath: 'deterministic:question_error' }
+    };
+  }
+}
+
+/**
+ * Run flow validation — full command validation including arguments and syntax
+ */
+async function runFlowValidation(req: McpChatRequest) {
+  try {
+    const { verifyScpiCommands } = await import('../tools/verifyScpiCommands');
+    const index = await getCommandIndex();
+
+    // Extract commands from the flow steps
+    const steps = req.flowContext?.steps || [];
+    const commands: string[] = steps
+      .filter((s: any) => s.params?.command && typeof s.params.command === 'string')
+      .map((s: any) => String(s.params.command).trim())
+      .filter(Boolean);
+
+    if (commands.length === 0) {
+      return {
+        text: 'No SCPI commands found in the current flow to validate. Add some commands first.',
+        assistantThreadId: undefined,
+        errors: [],
+        warnings: ['No commands in flow'],
+        metrics: { totalMs: 0, usedShortcut: false, iterations: 1, toolCalls: 0, toolMs: 0, modelMs: 0, promptChars: { system: 0, user: req.userMessage.length } },
+        debug: { toolTrace: [], resolutionPath: 'deterministic:validate_empty' }
+      };
+    }
+
+    // Run header verification
+    const headerResult = await verifyScpiCommands({
+      commands,
+      modelFamily: req.flowContext?.modelFamily,
+      requireExactSyntax: true,
+    });
+
+    // Deep validation: check each command for missing args, invalid values, set/query mismatch
+    const issues: string[] = [];
+    for (const command of commands) {
+      const parts = command.trim().split(/\s+/);
+      const header = parts[0];
+      const argStr = parts.slice(1).join(' ').trim();
+      const isQuery = header.endsWith('?');
+
+      const entry = index.getByHeader(header.replace(/\?$/, ''), req.flowContext?.modelFamily)
+        || index.getByHeader(header, req.flowContext?.modelFamily)
+        || index.getByHeaderPrefix(header.replace(/\?$/, ''), req.flowContext?.modelFamily);
+
+      if (!entry) continue; // already caught by header verification
+
+      // Check set vs query form mismatch
+      if (isQuery && !entry.syntax?.query) {
+        issues.push(`\`${command}\` — query form used but command only supports SET`);
+      }
+      if (!isQuery && argStr && !entry.syntax?.set) {
+        issues.push(`\`${command}\` — set form used but command only supports QUERY`);
+      }
+
+      // Check if set command is missing required argument
+      if (!isQuery && entry.syntax?.set) {
+        const syntaxStr = entry.syntax.set;
+        const hasRequiredArg = /<NR[f13]>|\{[^}]+\}|<QString>/.test(syntaxStr);
+        if (hasRequiredArg && !argStr) {
+          const argHint = syntaxStr.replace(/^[^\s]+\s*/, '').trim();
+          issues.push(`\`${command}\` — missing required argument: \`${argHint}\``);
+        }
+      }
+
+      // Check if argument value matches valid enum values
+      if (!isQuery && argStr && entry.syntax?.set) {
+        const enumMatch = entry.syntax.set.match(/\{([^}]+)\}/);
+        if (enumMatch) {
+          const validOptions = enumMatch[1].split('|').map(s => s.trim().toUpperCase());
+          const userVal = argStr.toUpperCase().trim();
+          if (validOptions.length > 0 && !validOptions.some(opt => opt === userVal || userVal.startsWith(opt))) {
+            // Only flag if arg is clearly not a numeric value
+            if (!/^[\d.eE+-]+$/.test(argStr)) {
+              issues.push(`\`${command}\` — invalid value \`${argStr}\`. Valid options: ${validOptions.join(', ')}`);
+            }
+          }
+        }
+      }
+    }
+
+    // Build response
+    const headerResults = (headerResult.data || []) as Array<{ command: string; verified: boolean; reason?: string }>;
+    const unverified = headerResults.filter(r => !r.verified);
+
+    let response = `## Flow Validation Results\n\n`;
+    response += `**Commands checked:** ${commands.length}\n\n`;
+
+    if (unverified.length === 0 && issues.length === 0) {
+      response += `All ${commands.length} commands passed validation.\n`;
+    } else {
+      if (unverified.length > 0) {
+        response += `### Unrecognized Commands\n`;
+        for (const r of unverified) {
+          response += `- \`${r.command}\` — ${r.reason || 'not found in command database'}\n`;
+        }
+        response += '\n';
+      }
+      if (issues.length > 0) {
+        response += `### Argument / Syntax Issues\n`;
+        for (const issue of issues) {
+          response += `- ${issue}\n`;
+        }
+        response += '\n';
+      }
+    }
+
+    return {
+      text: response,
+      assistantThreadId: undefined,
+      errors: [],
+      warnings: headerResult.warnings || [],
+      metrics: { totalMs: 0, usedShortcut: false, iterations: 1, toolCalls: 1, toolMs: 0, modelMs: 0, promptChars: { system: 0, user: req.userMessage.length } },
+      debug: { toolTrace: [{ name: 'verify_scpi_commands', args: { commands }, startedAt: new Date().toISOString(), resultSummary: { ok: true, count: commands.length } }], resolutionPath: 'deterministic:validate_flow' }
+    };
+  } catch (error) {
+    const errorMessage = error instanceof Error ? error.message : String(error);
+    return {
+      text: `Flow validation error: ${errorMessage}`,
+      assistantThreadId: undefined,
+      errors: [errorMessage],
+      warnings: [],
+      metrics: { totalMs: 0, usedShortcut: false, iterations: 0, toolCalls: 0, toolMs: 0, modelMs: 0, promptChars: { system: 0, user: 0 } },
+      debug: { toolTrace: [], resolutionPath: 'deterministic:validate_error' }
     };
   }
 }

@@ -249,6 +249,32 @@ export const MEASUREMENT_CATALOG: MeasurementCatalogEntry[] = [
     ['standard hold measurement']
   ),
   entry(
+    'standard.eye.eye_height',
+    'Standard',
+    'Eye Diagram Measurements',
+    'Eye Height',
+    ['eye height', 'eyeheight', 'eye diagram height'],
+    'single_source',
+    STANDARD_ADD_HEADERS,
+    [],
+    STANDARD_RESULT_HEADERS,
+    ['EYEHIGH'],
+    ['standard eye height measurement', 'measurement addmeas eyehigh', 'add eye height']
+  ),
+  entry(
+    'standard.eye.eye_width',
+    'Standard',
+    'Eye Diagram Measurements',
+    'Eye Width',
+    ['eye width', 'eyewidth', 'eye diagram width'],
+    'single_source',
+    STANDARD_ADD_HEADERS,
+    [],
+    STANDARD_RESULT_HEADERS,
+    ['WIDTHBER', 'EYEWIDTH'],
+    ['standard eye width measurement', 'measurement addmeas eyewidth', 'add eye width']
+  ),
+  entry(
     'jitter.summary',
     'Jitter',
     'Jitter Measurements',
@@ -705,6 +731,87 @@ export const MEASUREMENT_CATALOG: MeasurementCatalogEntry[] = [
     ['wbg dpt tf']
   ),
 ];
+
+/**
+ * Dictionary mapping user-friendly measurement names to ADDMEAS enum values.
+ * Used to resolve "add eye height" → MEASUrement:ADDMEAS EYEHIGH
+ */
+export const ADDMEAS_DICTIONARY: Record<string, string> = {
+  // Eye diagram
+  'eye height': 'EYEHIGH',
+  'eyeheight': 'EYEHIGH',
+  'eye width': 'WIDTHBER',
+  'eyewidth': 'WIDTHBER',
+  // Jitter
+  'jitter': 'TIE',
+  'tie': 'TIE',
+  'time interval error': 'TIE',
+  'random jitter': 'RJ',
+  'rj': 'RJ',
+  'deterministic jitter': 'DJ',
+  'dj': 'DJ',
+  'periodic jitter': 'PJ',
+  'pj': 'PJ',
+  'total jitter': 'TJ',
+  'tj': 'TJ',
+  // Time
+  'rise time': 'RISETIME',
+  'risetime': 'RISETIME',
+  'fall time': 'FALLTIME',
+  'falltime': 'FALLTIME',
+  'period': 'PERIOD',
+  'frequency': 'FREQUENCY',
+  'freq': 'FREQUENCY',
+  'duty cycle': 'PDUTY',
+  'positive duty': 'PDUTY',
+  'negative duty': 'NDUTY',
+  'positive width': 'PWIDTH',
+  'negative width': 'NWIDTH',
+  'burst width': 'BURST',
+  'delay': 'DELAY',
+  'phase': 'PHASE',
+  'setup time': 'SETUP',
+  'hold time': 'HOLD',
+  // Amplitude
+  'amplitude': 'AMPLITUDE',
+  'maximum': 'MAXIMUM',
+  'max': 'MAXIMUM',
+  'minimum': 'MINIMUM',
+  'min': 'MINIMUM',
+  'peak to peak': 'PK2PK',
+  'pk2pk': 'PK2PK',
+  'peak-to-peak': 'PK2PK',
+  'pkpk': 'PK2PK',
+  'mean': 'MEAN',
+  'average': 'MEAN',
+  'rms': 'RMS',
+  'high': 'HIGH',
+  'low': 'LOW',
+  'overshoot': 'POVERSHOOT',
+  'positive overshoot': 'POVERSHOOT',
+  'negative overshoot': 'NOVERSHOOT',
+  'undershoot': 'NOVERSHOOT',
+  'preshoot': 'PRESHOOT',
+  'area': 'ACRMS',
+  'snr': 'SNR',
+  'signal to noise': 'SNR',
+  'thd': 'THDF',
+};
+
+/**
+ * Resolve a user query to an ADDMEAS enum value using the dictionary.
+ * Returns null if no match found.
+ */
+export function resolveAddmeasValue(query: string): string | null {
+  const q = query.toLowerCase().trim();
+  // Try exact match first
+  if (ADDMEAS_DICTIONARY[q]) return ADDMEAS_DICTIONARY[q];
+  // Try matching substrings
+  for (const [key, value] of Object.entries(ADDMEAS_DICTIONARY)) {
+    if (q.includes(key)) return value;
+  }
+  return null;
+}
 
 function normalizeQuery(value: string): string {
   return String(value || '')
