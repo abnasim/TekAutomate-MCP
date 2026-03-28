@@ -1320,6 +1320,7 @@ export function AiChatPanel({
             </span>
           </button>
           )}
+          {executionSource !== 'live' && (
           <div className="hidden sm:flex items-center rounded-full border border-slate-200 dark:border-white/10 bg-white/80 dark:bg-white/5 p-0.5">
             <button
               type="button"
@@ -1345,21 +1346,9 @@ export function AiChatPanel({
             >
               AI
             </button>
-            {executionSource === 'live' && (
-              <button
-                type="button"
-                onClick={() => { if (!state.apiKey.trim()) { showApplyStatus('Set an API key first.'); } else setTekMode('live'); }}
-                className={`px-2.5 py-1 rounded-full text-[10px] font-semibold transition-colors ${
-                  state.tekMode === 'live'
-                    ? 'bg-emerald-500/15 text-emerald-700 dark:text-emerald-200'
-                    : 'text-slate-500 dark:text-white/55 hover:text-slate-800 dark:hover:text-white/85'
-                }`}
-                title="Switch to live conversation mode with tools and screenshots."
-              >
-                Live
-              </button>
-            )}
           </div>
+          )}
+          {executionSource === 'live' && (
           {state.tekMode === 'live' && (
             <button
               type="button"
