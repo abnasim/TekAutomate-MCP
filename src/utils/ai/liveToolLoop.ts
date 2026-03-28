@@ -219,36 +219,31 @@ async function runAnthropicLoop(params: LiveToolLoopParams): Promise<LiveToolLoo
 
         // Check if result contains image data for multimodal
         const resultObj = result && typeof result === 'object' ? result as Record<string, unknown> : null;
-        const imageData = resultObj?.data && typeof resultObj.data === 'object'
+        // Check both top-level (executor direct) and nested in data (MCP tool result)
+        const topLevel = resultObj && typeof resultObj.base64 === 'string' ? resultObj : null;
+        const nested = resultObj?.data && typeof resultObj.data === 'object'
           ? (resultObj.data as Record<string, unknown>)
           : null;
+        const imageData = topLevel || (nested && typeof nested.base64 === 'string' ? nested : null);
         const hasImage = imageData && typeof imageData.base64 === 'string' && typeof imageData.mimeType === 'string';
 
         if (hasImage) {
-          const wantsAnalysis = toolArgs.analyze === true;
-          if (wantsAnalysis) {
-            toolResults.push({
-              type: 'tool_result',
-              tool_use_id: toolId,
-              content: [
-                {
-                  type: 'image',
-                  source: {
-                    type: 'base64',
-                    media_type: imageData.mimeType,
-                    data: imageData.base64,
-                  },
+          // Always send the image to Claude so it can see and analyze the scope display
+          toolResults.push({
+            type: 'tool_result',
+            tool_use_id: toolId,
+            content: [
+              {
+                type: 'image',
+                source: {
+                  type: 'base64',
+                  media_type: imageData.mimeType,
+                  data: imageData.base64,
                 },
-                { type: 'text', text: 'Screenshot captured. Analyze the display.' },
-              ],
-            });
-          } else {
-            toolResults.push({
-              type: 'tool_result',
-              tool_use_id: toolId,
-              content: 'Screenshot captured and displayed to user.',
-            });
-          }
+              },
+              { type: 'text', text: 'Screenshot captured. Describe what you see on the scope.' },
+            ],
+          });
         } else {
           // Strip verbose fields the AI doesn't need — keep token count low
           let lean = result;
