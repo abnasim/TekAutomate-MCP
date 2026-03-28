@@ -162,7 +162,41 @@ async function runSmartScpiAssistant(req: McpChatRequest) {
     if (!toolResult) {
       throw new Error('smartScpiLookup returned no result');
     }
-    
+
+    // Fallback: if smart lookup returned no results, suggest iterative browsing
+    if ((!toolResult.data || toolResult.data.length === 0) && !toolResult.conversationalPrompt) {
+      console.log('[SMART_SCPI] No results — suggesting browse_scpi_commands fallback');
+      // Import and run browse to list groups as a starting point
+      const { browseScpiCommands } = await import('../tools/browseScpiCommands');
+      const browseResult = await browseScpiCommands({});
+      const groups = (browseResult.data as any)?.groups || [];
+      const groupList = groups.map((g: any) => `- **${g.name}** (${g.commandCount} commands): ${g.description}`).join('\n');
+
+      return {
+        text: `I couldn't find a direct match for "${req.userMessage}" in the SCPI database.\n\n` +
+          `You can browse commands by group using the **browse_scpi_commands** tool, or try rephrasing your query.\n\n` +
+          `**Available command groups:**\n${groupList}\n\n` +
+          `Try: \`browse_scpi_commands({group: "GroupName"})\` to explore, ` +
+          `or \`browse_scpi_commands({group: "GroupName", filter: "keyword"})\` to narrow down.`,
+        assistantThreadId: undefined,
+        errors: [],
+        warnings: ['No direct match found — browse_scpi_commands available for iterative exploration'],
+        metrics: {
+          totalMs: 0, usedShortcut: false, iterations: 1, toolCalls: 1, toolMs: 0, modelMs: 0,
+          promptChars: { system: 0, user: req.userMessage.length }
+        },
+        debug: {
+          toolTrace: [{
+            name: 'smart_scpi_lookup',
+            args: { query: req.userMessage },
+            startedAt: new Date().toISOString(),
+            resultSummary: { ok: true, count: 0 }
+          }],
+          resolutionPath: 'deterministic:smart_scpi_fallback_browse'
+        }
+      };
+    }
+
     // Handle conversational prompts - return the conversational response with commands
     if (toolResult.conversationalPrompt) {
       return {
