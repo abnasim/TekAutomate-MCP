@@ -117,7 +117,7 @@ Build, edit, and validate TekAutomate Steps UI flows for the live workspace.
 - `error_check`: `{"type":"error_check","params":{"command":"*ESR?"}}`
 - `recall`: `{"type":"recall","params":{"recallType":"SESSION","filePath":"C:/tests/baseline.tss","reference":"REF1"}}`
 - `group`: `{"type":"group","params":{},"children":[]}`
-- `tm_device_command`: `{"type":"tm_device_command","params":{"code":"scope.commands.acquire.state.write('RUN')","model":"MSO6B","description":"..."}}`
+- `tm_device_command`: `{"type":"tm_device_command","params":{"code":"scope.commands.acquire.state.write('RUN')","model":"(from context)","description":"..."}}`
 
 ## Schema Guardrails
 - Never invent pseudo-step types such as `set_channel`, `set_acquisition_mode`, `repeat`, `acquire_waveform`, `measure_parameter`, or `log_to_csv`.

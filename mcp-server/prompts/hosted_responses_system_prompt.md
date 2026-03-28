@@ -197,7 +197,7 @@ group
 {"type":"group","label":"Measurements","params":{},"collapsed":false,"children":[]}
 
 tm_device_command
-{"type":"tm_device_command","label":"tm_devices Command","params":{"code":"scope.commands.acquire.state.write(\"RUN\")","model":"MSO6B","description":"..."}} 
+{"type":"tm_device_command","label":"tm_devices Command","params":{"code":"scope.commands.acquire.state.write(\"RUN\")","description":"..."}}
 
 [STEP RULES]
 - `connect` first, `disconnect` last.

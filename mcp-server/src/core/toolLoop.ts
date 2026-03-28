@@ -5053,6 +5053,7 @@ function splitDataUrl(dataUrl: string): { mimeType: string; base64: string } | n
 function buildOpenAiUserContent(req: McpChatRequest, userPrompt: string): Array<Record<string, unknown>> | string {
   const images = getImageAttachments(req);
   if (!images.length) return userPrompt;
+  // Chat Completions API format
   return [
     { type: 'text', text: userPrompt },
     ...images.map((image) => ({
@@ -5060,6 +5061,23 @@ function buildOpenAiUserContent(req: McpChatRequest, userPrompt: string): Array<
       image_url: {
         url: image.dataUrl,
       },
+    })),
+  ];
+}
+
+/**
+ * Build user content for OpenAI Responses API (hosted assistant).
+ * Uses input_text/input_image types instead of text/image_url.
+ */
+function buildOpenAiResponsesContent(req: McpChatRequest, userPrompt: string): Array<Record<string, unknown>> | string {
+  const images = getImageAttachments(req);
+  if (!images.length) return userPrompt;
+  // Responses API format
+  return [
+    { type: 'input_text', text: userPrompt },
+    ...images.map((image) => ({
+      type: 'input_image',
+      image_url: image.dataUrl,
     })),
   ];
 }
@@ -6583,7 +6601,7 @@ export function buildHostedOpenAiResponsesRequest(
           }))
           .filter((h) => h.content.trim().length > 0);
   const developerMessage = String(options.developerMessage || '').trim();
-  const userContent = buildOpenAiUserContent(req, assistantPrompt);
+  const userContent = buildOpenAiResponsesContent(req, assistantPrompt);
   const initialInput = options.inputOverride || [
     ...(developerMessage
       ? [{ role: 'developer', content: developerMessage }]
@@ -8917,7 +8935,7 @@ export async function runToolLoop(req: McpChatRequest): Promise<ToolLoopResult> 
     };
   }
 
-  const maxToolRounds = forceToolCallMode ? 8 : (isHostedStructuredBuildRequest(req) ? 4 : 3);
+  const maxToolRounds = forceToolCallMode ? 12 : (isHostedStructuredBuildRequest(req) ? 8 : 6);
   const isAnthropicProvider = req.provider === 'anthropic';
 
   // Provider dispatch — readable if/else instead of deep ternary
