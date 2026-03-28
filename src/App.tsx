@@ -13278,8 +13278,8 @@ scpi.write('FILESYSTEM:DELETE "C:/TekScope/Temp/screenshot.png"')`;
                   <input
                     type="text"
                     placeholder={commandSearchMode === 'builder'
-                      ? 'Builder mode: type SCPI path tokens (e.g. CH SELECT, REF LEVEL)'
-                      : 'Search mode: broad command/name/description search'}
+                      ? 'Type SCPI path tokens (e.g. CH SELECT, REF LEVEL)'
+                      : 'Search commands...'}
                     value={searchQuery}
                     onChange={(e) => setSearchQuery(e.target.value)}
                     className="w-full pl-9 pr-20 py-2 text-sm border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 bg-white dark:bg-gray-700 dark:text-gray-100 placeholder-gray-500 dark:placeholder-gray-400"
@@ -13393,15 +13393,6 @@ scpi.write('FILESYSTEM:DELETE "C:/TekScope/Temp/screenshot.png"')`;
                 )}
               </div>
               
-              {!searchQuery && (
-                <p className="mt-1.5 px-1 text-xs text-gray-500 dark:text-gray-400">
-                  {commandSearchMode === 'builder' ? (
-                    <>Builder mode: use SCPI path tokens like <strong>CH SELECT</strong>, <strong>REF LEVEL</strong>, <strong>MATH AUTOSCALE</strong>. Switch to Search mode for broad fuzzy lookup.</>
-                  ) : (
-                    <>Search mode: broad command/name/description matching. Switch to Builder mode for strict SCPI path navigation.</>
-                  )}
-                </p>
-              )}
               {/* SCPI Parameter Selector - appears automatically when typing parameterized commands */}
               {commandSearchMode === 'builder' && (
                 <div className="px-3">
