@@ -6663,7 +6663,7 @@ async function runOpenAiHostedResponse(
     `[MCP] OpenAI hosted responses: model ${hostedModel}${reasoningCfg?.effort ? ` reasoning=${String(reasoningCfg.effort)}` : ''}`
   );
   if (usesServerDefaultHostedPrompt(req) && canAttachHostedPrompt && !promptConfig?.id) {
-    console.warn('[MCP] OPENAI_PROMPT_ID not set — falling back to inline system prompt without hosted prompt attachment.');
+    throw new Error('OPENAI_PROMPT_ID is missing. Add OPENAI_PROMPT_ID=pmpt_69ba258ea3e8819092c7b41dbb41fd580ac4f618c91da843 to mcp-server/.env (or set it in Railway environment variables).');
   }
   if (usesServerDefaultHostedPrompt(req) && !canAttachHostedPrompt) {
     console.log(
