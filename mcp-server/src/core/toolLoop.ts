@@ -4729,7 +4729,7 @@ async function runChatConversation(
   if (useHostedAssistant) {
     const openAiBase = process.env.OPENAI_BASE_URL || 'https://api.openai.com';
     const hostedVectorStoreId = resolveHostedVectorStoreId();
-    const userContent = buildOpenAiUserContent(req, userPrompt);
+    const userContent = buildOpenAiResponsesContent(req, userPrompt);
     const chatTools: HostedToolDefinition[] = hostedVectorStoreId
       ? [
           {
