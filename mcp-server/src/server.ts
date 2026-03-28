@@ -14,12 +14,12 @@ import { getTemplateIndex } from './core/templateIndex';
 import fs from 'fs';
 import path from 'path';
 import { fileURLToPath } from 'url';
-import { Server as McpProtocolServer } from '@modelcontextprotocol/sdk/server/index.js';
-import { StreamableHTTPServerTransport } from '@modelcontextprotocol/sdk/server/streamableHttp.js';
+import { Server as McpProtocolServer } from '@modelcontextprotocol/sdk/server';
+import { StreamableHTTPServerTransport } from '@modelcontextprotocol/sdk/server/streamableHttp';
 import {
   CallToolRequestSchema,
   ListToolsRequestSchema,
-} from '@modelcontextprotocol/sdk/types.js';
+} from '@modelcontextprotocol/sdk/types';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
