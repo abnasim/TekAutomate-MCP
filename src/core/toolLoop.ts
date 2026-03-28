@@ -76,11 +76,37 @@ async function runDeterministicToolLoop(req: McpChatRequest, flowCommandIssues: 
 
   try {
     const routeDecision = cleanRouter.makeRouteDecision(req);
+    const msg = req.userMessage.toLowerCase().trim();
 
-    // MCP-only mode: pure deterministic, no auto-RAG (user can call retrieve_rag_chunks explicitly)
+    // Validation intent: "check my flow", "validate flow", "review flow"
+    if (cleanRouter.isValidationIntent(msg)) {
+      console.log('[DETERMINISTIC_TOOL_LOOP] Validation intent detected');
+      return await runFlowValidation(req);
+    }
+
+    // Question intent: "what is X", "explain X", "describe X"
+    if (cleanRouter.isQuestionIntent(msg)) {
+      console.log('[DETERMINISTIC_TOOL_LOOP] Question intent detected');
+      return await runQuestionLookup(req);
+    }
+
+    // Browse intent: "browse commands", "browse trigger", "browse trigger edge"
+    const browseIntent = cleanRouter.isBrowseIntent(msg);
+    if (browseIntent.isBrowse) {
+      console.log('[DETERMINISTIC_TOOL_LOOP] Browse intent detected');
+      return await runBrowseCommands(req, browseIntent.group, browseIntent.filter);
+    }
+
+    if (cleanRouter.isKnowledgeSearchIntent(msg)) {
+      console.log('[DETERMINISTIC_TOOL_LOOP] Knowledge search intent detected');
+      return await runSearchKnowledge(req);
+    }
+
+    // Smart SCPI + RAG enrichment
     if (routeDecision.route === 'smart_scpi') {
       console.log('[DETERMINISTIC_TOOL_LOOP] Using Smart SCPI Assistant');
-      return await runSmartScpiAssistant(req);
+      const scpiResult = await runSmartScpiAssistant(req);
+      return await enrichWithRag(scpiResult, req.userMessage, req.flowContext?.modelFamily);
     }
 
     if (routeDecision.route === 'tm_devices') {
@@ -139,8 +165,14 @@ async function runSmartScpiAssistant(req: McpChatRequest) {
       throw new Error('smartScpiLookup function not found in module');
     }
     
+    // Include text attachments as additional context for the query
+    const attachmentCtx = buildAttachmentContext(req);
+    const queryWithContext = attachmentCtx
+      ? `${req.userMessage}\n\n${attachmentCtx}`
+      : req.userMessage;
+
     const toolResult = await smartScpiLookup({
-      query: req.userMessage,
+      query: queryWithContext,
       modelFamily: req.flowContext.modelFamily,
       context: `${req.flowContext.deviceType || 'SCOPE'} ${req.flowContext.backend || 'pyvisa'}`,
       mode: 'build'  // MCP-only mode should auto-select best match, not show conversational menus
@@ -149,7 +181,39 @@ async function runSmartScpiAssistant(req: McpChatRequest) {
     if (!toolResult) {
       throw new Error('smartScpiLookup returned no result');
     }
-    
+
+    // Fallback: if smart lookup returned no results, show browse results directly
+    if ((!toolResult.data || toolResult.data.length === 0) && !toolResult.conversationalPrompt) {
+      console.log('[SMART_SCPI] No results — falling back to browse_scpi_commands');
+      const { browseScpiCommands } = await import('../tools/browseScpiCommands');
+      const browseResult = await browseScpiCommands({});
+      const groups = (browseResult.data as any)?.groups || [];
+      const groupList = groups.map((g: any) => `- **${g.name}** (${g.commandCount} commands) — ${g.description}`).join('\n');
+
+      return {
+        text: `I couldn't find a direct match for "${req.userMessage}".\n\n` +
+          `Try rephrasing, or browse by group:\n\n${groupList}\n\n` +
+          `Type **"browse \<group name\>"** to see commands in a group, e.g. **"browse Trigger"**.\n` +
+          `Type **"browse Trigger edge"** to filter within a group.`,
+        assistantThreadId: undefined,
+        errors: [],
+        warnings: ['No direct match — browse groups listed'],
+        metrics: {
+          totalMs: 0, usedShortcut: false, iterations: 1, toolCalls: 1, toolMs: 0, modelMs: 0,
+          promptChars: { system: 0, user: req.userMessage.length }
+        },
+        debug: {
+          toolTrace: [{
+            name: 'smart_scpi_lookup',
+            args: { query: req.userMessage },
+            startedAt: new Date().toISOString(),
+            resultSummary: { ok: true, count: 0 }
+          }],
+          resolutionPath: 'deterministic:smart_scpi_fallback_browse'
+        }
+      };
+    }
+
     // Handle conversational prompts - return the conversational response with commands
     if (toolResult.conversationalPrompt) {
       return {
@@ -237,6 +301,13 @@ async function runSmartScpiAssistant(req: McpChatRequest) {
       return String(num);
     }
 
+    // Try to resolve ADDMEAS measurement type from user query
+    let addmeasValue: string | null = null;
+    try {
+      const { resolveAddmeasValue } = await import('./measurementCatalog');
+      addmeasValue = resolveAddmeasValue(req.userMessage);
+    } catch { /* ignore */ }
+
     const actions = toolResult.data.map((cmd: any, idx: number) => {
       const isSetCapable = cmd.commandType === 'set' || cmd.commandType === 'both';
       const isQueryCapable = cmd.commandType === 'query' || cmd.commandType === 'both';
@@ -249,6 +320,10 @@ async function runSmartScpiAssistant(req: McpChatRequest) {
         let resolved = String(cmd.syntax.set).replace(/\n/g, ' ').replace(/\s+/g, ' ');
         // Resolve placeholders in the header part
         resolved = resolvePlaceholders(resolved);
+        // Special handling for ADDMEAS: resolve <QString> to measurement enum value
+        if (/ADDMEAS/i.test(resolved) && addmeasValue && /<QString>/i.test(resolved)) {
+          resolved = resolved.replace(/<QString>/i, addmeasValue);
+        }
         // Match {ENUM1|ENUM2|...} patterns
         const enumMatch = resolved.match(/\{([^}]+)\}/);
         if (enumMatch) {
@@ -275,8 +350,8 @@ async function runSmartScpiAssistant(req: McpChatRequest) {
         if (userValue && /<NR[f13]>/i.test(resolved)) {
           resolved = resolved.replace(/\s*<NR[f13]>/i, ` ${userValue}`).trim();
         }
-        // Strip remaining angle-bracket placeholders
-        resolved = resolved.replace(/\s*<[^>]+>/g, '').trim();
+        // Keep remaining angle-bracket placeholders as hints (e.g. <QString>, <NR3>)
+        // so users know what argument to fill in, instead of stripping them silently
         // If user provided a value but no placeholder was in the syntax, append it
         if (userValue && !resolved.includes(userValue) && !/\d/.test(resolved.split(/\s+/).slice(-1)[0] || '')) {
           resolved = `${resolved} ${userValue}`;
@@ -356,6 +431,459 @@ async function runSmartScpiAssistant(req: McpChatRequest) {
         toolTrace: [],
         resolutionPath: 'deterministic:smart_scpi_error'
       }
+    };
+  }
+}
+
+/**
+ * Run question lookup — return full command entry, not build steps
+ */
+async function runQuestionLookup(req: McpChatRequest) {
+  try {
+    let smartScpiLookup: any;
+    try {
+      const module = await import('./smartScpiAssistant');
+      smartScpiLookup = module.smartScpiLookup;
+    } catch (importError) {
+      throw new Error(`Failed to load SmartScpiAssistant: ${
+        importError instanceof Error ? importError.message : String(importError)
+      }`);
+    }
+
+    // Strip question prefixes to get the actual subject
+    const subject = req.userMessage
+      .replace(/^\s*(what\s+is|what\s+are|what\s+does|explain|describe|tell\s+me\s+about|how\s+does|how\s+do\s+i|how\s+to)\s+/i, '')
+      .trim();
+
+    const toolResult = await smartScpiLookup({
+      query: subject,
+      modelFamily: req.flowContext.modelFamily,
+      context: `${req.flowContext.deviceType || 'SCOPE'} ${req.flowContext.backend || 'pyvisa'}`,
+      mode: 'chat'
+    });
+
+    if (!toolResult || !toolResult.data || toolResult.data.length === 0) {
+      return {
+        text: `I couldn't find any SCPI commands matching "${subject}". Try being more specific about the measurement, channel, or instrument feature.`,
+        assistantThreadId: undefined,
+        errors: [],
+        warnings: [],
+        metrics: { totalMs: 0, usedShortcut: false, iterations: 1, toolCalls: 1, toolMs: 0, modelMs: 0, promptChars: { system: 0, user: req.userMessage.length } },
+        debug: { toolTrace: [], resolutionPath: 'deterministic:question_no_results' }
+      };
+    }
+
+    // Format the full command entry for the user
+    const cmd = toolResult.data[0];
+    let response = `## ${cmd.header}\n\n`;
+    response += `**Description:** ${cmd.description || cmd.shortDescription || 'No description available'}\n\n`;
+    if (cmd.syntax?.set) response += `**Set syntax:** \`${cmd.syntax.set}\`\n\n`;
+    if (cmd.syntax?.query) response += `**Query syntax:** \`${cmd.syntax.query}\`\n\n`;
+    if (cmd.arguments && cmd.arguments.length > 0) {
+      response += `**Arguments:**\n`;
+      for (const arg of cmd.arguments) {
+        response += `- **${arg.name}** (${arg.type}${arg.required ? ', required' : ''}): ${arg.description || ''}`;
+        if (arg.validValues && typeof arg.validValues === 'object') {
+          const vv = arg.validValues as Record<string, unknown>;
+          if (vv.min !== undefined || vv.max !== undefined) {
+            response += ` — Range: ${vv.min ?? '—'} to ${vv.max ?? '—'}`;
+          }
+          if (arg.options && Array.isArray(arg.options)) {
+            response += ` — Values: ${arg.options.map((o: any) => o.value || o).join(', ')}`;
+          }
+        }
+        response += '\n';
+      }
+      response += '\n';
+    }
+    if (cmd.codeExamples && cmd.codeExamples.length > 0) {
+      response += `**Examples:**\n`;
+      for (const ex of cmd.codeExamples) {
+        if (ex.scpi?.code) response += `- \`${ex.scpi.code}\` — ${ex.description || ''}\n`;
+      }
+      response += '\n';
+    }
+    if (cmd.relatedCommands && cmd.relatedCommands.length > 0) {
+      response += `**Related commands:** ${cmd.relatedCommands.slice(0, 5).join(', ')}\n\n`;
+    }
+    response += `**Group:** ${cmd.group || 'N/A'} | **Families:** ${(cmd.families || []).join(', ') || 'All'}`;
+
+    return {
+      text: response,
+      commands: toolResult.data,
+      assistantThreadId: undefined,
+      errors: [],
+      warnings: [],
+      metrics: { totalMs: 0, usedShortcut: false, iterations: 1, toolCalls: 1, toolMs: 0, modelMs: 0, promptChars: { system: 0, user: req.userMessage.length } },
+      debug: { toolTrace: [{ name: 'smart_scpi_lookup', args: { query: subject }, startedAt: new Date().toISOString(), resultSummary: { ok: true, count: toolResult.data.length } }], resolutionPath: 'deterministic:question_lookup' }
+    };
+  } catch (error) {
+    const errorMessage = error instanceof Error ? error.message : String(error);
+    return {
+      text: `Question lookup error: ${errorMessage}`,
+      assistantThreadId: undefined,
+      errors: [errorMessage],
+      warnings: [],
+      metrics: { totalMs: 0, usedShortcut: false, iterations: 0, toolCalls: 0, toolMs: 0, modelMs: 0, promptChars: { system: 0, user: 0 } },
+      debug: { toolTrace: [], resolutionPath: 'deterministic:question_error' }
+    };
+  }
+}
+
+/**
+ * Run flow validation — full command validation including arguments and syntax
+ */
+async function runFlowValidation(req: McpChatRequest) {
+  try {
+    const { verifyScpiCommands } = await import('../tools/verifyScpiCommands');
+    const index = await getCommandIndex();
+
+    // Extract commands from the flow steps
+    const steps = req.flowContext?.steps || [];
+    const commands: string[] = steps
+      .filter((s: any) => s.params?.command && typeof s.params.command === 'string')
+      .map((s: any) => String(s.params.command).trim())
+      .filter(Boolean);
+
+    if (commands.length === 0) {
+      return {
+        text: 'No SCPI commands found in the current flow to validate. Add some commands first.',
+        assistantThreadId: undefined,
+        errors: [],
+        warnings: ['No commands in flow'],
+        metrics: { totalMs: 0, usedShortcut: false, iterations: 1, toolCalls: 0, toolMs: 0, modelMs: 0, promptChars: { system: 0, user: req.userMessage.length } },
+        debug: { toolTrace: [], resolutionPath: 'deterministic:validate_empty' }
+      };
+    }
+
+    // Run header verification
+    const headerResult = await verifyScpiCommands({
+      commands,
+      modelFamily: req.flowContext?.modelFamily,
+      requireExactSyntax: true,
+    });
+
+    // Deep validation: check each command for missing args, invalid values, set/query mismatch
+    const issues: string[] = [];
+    for (const command of commands) {
+      const parts = command.trim().split(/\s+/);
+      const header = parts[0];
+      const argStr = parts.slice(1).join(' ').trim();
+      const isQuery = header.endsWith('?');
+
+      const entry = index.getByHeader(header.replace(/\?$/, ''), req.flowContext?.modelFamily)
+        || index.getByHeader(header, req.flowContext?.modelFamily)
+        || index.getByHeaderPrefix(header.replace(/\?$/, ''), req.flowContext?.modelFamily);
+
+      if (!entry) continue; // already caught by header verification
+
+      // Check set vs query form mismatch
+      if (isQuery && !entry.syntax?.query) {
+        issues.push(`\`${command}\` — query form used but command only supports SET`);
+      }
+      if (!isQuery && argStr && !entry.syntax?.set) {
+        issues.push(`\`${command}\` — set form used but command only supports QUERY`);
+      }
+
+      // Check if set command is missing required argument
+      if (!isQuery && entry.syntax?.set) {
+        const syntaxStr = entry.syntax.set;
+        const hasRequiredArg = /<NR[f13]>|\{[^}]+\}|<QString>/.test(syntaxStr);
+        if (hasRequiredArg && !argStr) {
+          const argHint = syntaxStr.replace(/^[^\s]+\s*/, '').trim();
+          const hint = argHint.length > 80 ? argHint.slice(0, 80) + '...' : argHint;
+          issues.push(`\`${command}\` — missing required argument: \`${hint}\``);
+        }
+      }
+
+      // Check if argument value matches valid enum values
+      if (!isQuery && argStr && entry.syntax?.set) {
+        const enumMatch = entry.syntax.set.match(/\{([^}]+)\}/);
+        if (enumMatch) {
+          const validOptions = enumMatch[1].split('|').map(s => s.trim().toUpperCase());
+          const userVal = argStr.toUpperCase().trim();
+          if (validOptions.length > 0 && !validOptions.some(opt => opt === userVal || userVal.startsWith(opt))) {
+            // Only flag if arg is clearly not a numeric value
+            if (!/^[\d.eE+-]+$/.test(argStr)) {
+              const optionsList = validOptions.length > 10
+                ? validOptions.slice(0, 10).join(', ') + ` ... (${validOptions.length} total)`
+                : validOptions.join(', ');
+              issues.push(`\`${command}\` — invalid value \`${argStr}\`. Valid: ${optionsList}`);
+            }
+          }
+        }
+      }
+    }
+
+    // Build response
+    const headerResults = (headerResult.data || []) as Array<{ command: string; verified: boolean; reason?: string }>;
+    const unverified = headerResults.filter(r => !r.verified);
+
+    let response = `## Flow Validation Results\n\n`;
+    response += `**Commands checked:** ${commands.length}\n\n`;
+
+    if (unverified.length === 0 && issues.length === 0) {
+      response += `All ${commands.length} commands passed validation.\n`;
+    } else {
+      if (unverified.length > 0) {
+        response += `### Unrecognized Commands\n`;
+        for (const r of unverified) {
+          response += `- \`${r.command}\` — ${r.reason || 'not found in command database'}\n`;
+        }
+        response += '\n';
+      }
+      if (issues.length > 0) {
+        response += `### Argument / Syntax Issues\n`;
+        for (const issue of issues) {
+          response += `- ${issue}\n`;
+        }
+        response += '\n';
+      }
+    }
+
+    return {
+      text: response,
+      assistantThreadId: undefined,
+      errors: [],
+      warnings: headerResult.warnings || [],
+      metrics: { totalMs: 0, usedShortcut: false, iterations: 1, toolCalls: 1, toolMs: 0, modelMs: 0, promptChars: { system: 0, user: req.userMessage.length } },
+      debug: { toolTrace: [{ name: 'verify_scpi_commands', args: { commands }, startedAt: new Date().toISOString(), resultSummary: { ok: true, count: commands.length } }], resolutionPath: 'deterministic:validate_flow' }
+    };
+  } catch (error) {
+    const errorMessage = error instanceof Error ? error.message : String(error);
+    return {
+      text: `Flow validation error: ${errorMessage}`,
+      assistantThreadId: undefined,
+      errors: [errorMessage],
+      warnings: [],
+      metrics: { totalMs: 0, usedShortcut: false, iterations: 0, toolCalls: 0, toolMs: 0, modelMs: 0, promptChars: { system: 0, user: 0 } },
+      debug: { toolTrace: [], resolutionPath: 'deterministic:validate_error' }
+    };
+  }
+}
+
+/**
+ * Map model family to allowed RAG source files.
+ * Filters out irrelevant instrument families (RSA, AWG, AFG, SMU, DPOJET, TEKEXP).
+ */
+const RAG_SOURCE_ALLOW: Record<string, RegExp> = {
+  mso_2_series: /mso_2_4_5_6_7|mso_manual/i,
+  mso_4_series: /mso_2_4_5_6_7|mso_manual/i,
+  mso_5_series: /mso_2_4_5_6_7|mso_manual/i,
+  mso_6_series: /mso_2_4_5_6_7|mso_manual/i,
+  mso_7_series: /mso_2_4_5_6_7|mso_manual/i,
+  dpo_5_series: /MSO_DPO_5k_7k|dpojet|legacy_scope/i,
+  dpo_7_series: /MSO_DPO_5k_7k|dpojet|legacy_scope/i,
+  tekscopepc:   /mso_2_4_5_6_7|MSO_DPO_5k_7k|mso_manual|legacy_scope/i,
+  tekscope_pc:  /mso_2_4_5_6_7|MSO_DPO_5k_7k|mso_manual|legacy_scope/i,
+};
+
+/**
+ * Enrich a toolLoop result with RAG context snippets.
+ * Searches the scpi corpus for the query and appends relevant knowledge.
+ * Filters out chunks from irrelevant instrument families.
+ */
+async function enrichWithRag(result: any, query: string, modelFamily?: string): Promise<any> {
+  try {
+    const { retrieveRagChunks } = await import('../tools/retrieveRagChunks');
+    const ragResult = await retrieveRagChunks({ corpus: 'scpi', query, topK: 8 });
+    let chunks = (ragResult.data || []) as Array<{title: string; body: string; source?: string}>;
+
+    // Filter to relevant source files for the user's model family
+    const familyKey = (modelFamily || '').toLowerCase().replace(/\s+/g, '_');
+    const allowPattern = RAG_SOURCE_ALLOW[familyKey];
+    if (allowPattern) {
+      chunks = chunks.filter(c => allowPattern.test(c.source || ''));
+    } else {
+      // Unknown family: at minimum exclude RSA, AWG, AFG, SMU (non-scope instruments)
+      chunks = chunks.filter(c => !/\b(rsa|awg|afg|smu)\b/i.test(c.source || ''));
+    }
+
+    // Only keep chunks whose title has words overlapping with the query
+    const queryWords = new Set(query.toLowerCase().split(/\s+/).filter(w => w.length > 2));
+    chunks = chunks.filter(c => {
+      const titleWords = (c.title || '').toLowerCase().split(/\s+/);
+      return titleWords.some((w: string) => queryWords.has(w));
+    }).slice(0, 2);
+
+    if (chunks.length > 0) {
+      const ragSection = chunks
+        .map(c => `**${c.title}** — ${String(c.body || '').replace(/\n/g, ' ').slice(0, 120)}`)
+        .join('\n');
+      result.text += `\n\n---\n${ragSection}`;
+    }
+  } catch { /* non-fatal */ }
+  return result;
+}
+
+/**
+ * Run knowledge base search — search RAG chunks directly
+ */
+async function runSearchKnowledge(req: McpChatRequest) {
+  try {
+    const { retrieveRagChunks } = await import('../tools/retrieveRagChunks');
+    // Strip "search knowledge/docs/rag" prefix to get the actual query
+    const query = req.userMessage
+      .replace(/^\s*(search|find|look\s*up)\s+(knowledge|docs|documentation|rag|manual|help)\s*(base|for)?\s*/i, '')
+      .replace(/^\s*(knowledge|docs|rag)\s+(search|lookup|find)\s*/i, '')
+      .trim() || req.userMessage;
+
+    // Pick relevant corpora based on query keywords
+    const qLower = query.toLowerCase();
+    const wantsErrors = /\b(error|bug|fix|issue|fail|timeout|crash|debug)\b/i.test(qLower);
+    const wantsArch = /\b(architect|workflow|blockly|steps|flow|schema|template|pattern)\b/i.test(qLower);
+    const wantsPyvisa = /\b(pyvisa|tekhsi|connect|visa|socket|grpc)\b/i.test(qLower);
+    const corpora: Array<'scpi' | 'errors' | 'app_logic' | 'templates' | 'pyvisa_tekhsi'> = ['scpi'];
+    if (wantsErrors) corpora.push('errors');
+    if (wantsArch) corpora.push('app_logic', 'templates');
+    if (wantsPyvisa) corpora.push('pyvisa_tekhsi');
+    // If nothing specific, add app_logic as secondary
+    if (corpora.length === 1) corpora.push('app_logic');
+
+    const allResults: Array<{corpus: string; title: string; body: string; source?: string}> = [];
+
+    // Filter RAG by model family — exclude irrelevant instrument families
+    const familyKey = (req.flowContext?.modelFamily || '').toLowerCase().replace(/\s+/g, '_');
+    const allowPattern = RAG_SOURCE_ALLOW[familyKey];
+
+    for (const corpus of corpora) {
+      try {
+        const r = await retrieveRagChunks({ corpus, query, topK: 4 });
+        let chunks = (r.data || []) as Array<{corpus: string; title: string; body: string; source?: string}>;
+        if (corpus === 'scpi') {
+          if (allowPattern) {
+            chunks = chunks.filter(c => allowPattern.test(c.source || ''));
+          } else {
+            chunks = chunks.filter(c => !/\b(rsa|awg|afg|smu)\b/i.test(c.source || ''));
+          }
+        }
+        for (const c of chunks.slice(0, 2)) {
+          allResults.push({ corpus, title: c.title, body: c.body, source: c.source });
+        }
+      } catch { /* skip failed corpus */ }
+    }
+
+    if (allResults.length === 0) {
+      return {
+        text: `No results for "${query}". Try different keywords.`,
+        assistantThreadId: undefined,
+        errors: [],
+        warnings: [],
+        metrics: { totalMs: 0, usedShortcut: false, iterations: 1, toolCalls: 1, toolMs: 0, modelMs: 0, promptChars: { system: 0, user: req.userMessage.length } },
+        debug: { toolTrace: [], resolutionPath: 'deterministic:knowledge_empty' }
+      };
+    }
+
+    // Compact output — no section headers, just tagged results
+    let response = `**Knowledge: "${query}"**\n\n`;
+    for (const c of allResults) {
+      const tag = c.corpus === 'scpi' ? 'SCPI' : c.corpus === 'app_logic' ? 'Docs' : c.corpus === 'errors' ? 'Issue' : c.corpus === 'templates' ? 'Template' : c.corpus;
+      const body = String(c.body || '').replace(/\n/g, ' ').slice(0, 120);
+      response += `[${tag}] **${c.title}** — ${body}\n\n`;
+    }
+
+    return {
+      text: response,
+      assistantThreadId: undefined,
+      errors: [],
+      warnings: [],
+      metrics: { totalMs: 0, usedShortcut: false, iterations: 1, toolCalls: 1, toolMs: 0, modelMs: 0, promptChars: { system: 0, user: req.userMessage.length } },
+      debug: { toolTrace: [{ name: 'retrieve_rag_chunks', args: { query }, startedAt: new Date().toISOString(), resultSummary: { ok: true, count: allResults.length } }], resolutionPath: 'deterministic:knowledge_search' }
+    };
+  } catch (error) {
+    const errorMessage = error instanceof Error ? error.message : String(error);
+    return {
+      text: `Knowledge search error: ${errorMessage}`,
+      assistantThreadId: undefined,
+      errors: [errorMessage],
+      warnings: [],
+      metrics: { totalMs: 0, usedShortcut: false, iterations: 0, toolCalls: 0, toolMs: 0, modelMs: 0, promptChars: { system: 0, user: 0 } },
+      debug: { toolTrace: [], resolutionPath: 'deterministic:knowledge_error' }
+    };
+  }
+}
+
+/**
+ * Run browse_scpi_commands in MCP-only deterministic mode.
+ * Returns formatted results directly to the user.
+ */
+async function runBrowseCommands(req: McpChatRequest, group?: string, filter?: string) {
+  try {
+    const { browseScpiCommands } = await import('../tools/browseScpiCommands');
+    const result = await browseScpiCommands({
+      group,
+      filter,
+      modelFamily: req.flowContext?.modelFamily,
+    });
+
+    if (!result.ok) {
+      return {
+        text: `Browse error: ${(result.warnings || []).join(', ')}`,
+        assistantThreadId: undefined,
+        errors: [],
+        warnings: result.warnings || [],
+        metrics: { totalMs: 0, usedShortcut: false, iterations: 1, toolCalls: 1, toolMs: 0, modelMs: 0, promptChars: { system: 0, user: req.userMessage.length } },
+        debug: { toolTrace: [], resolutionPath: 'deterministic:browse_error' }
+      };
+    }
+
+    const data = result.data as any;
+    let response = '';
+
+    if (data.level === 'group_list') {
+      // Compact 2-column format
+      response = `**${data.totalGroups} Command Groups** — type \`browse <name>\` to open\n\n`;
+      for (const g of data.groups) {
+        response += `\`${g.name}\` (${g.commandCount})\n`;
+      }
+    } else if (data.level === 'group_commands') {
+      const filterNote = data.filter ? ` matching "${data.filter}"` : '';
+      response = `**${data.groupName}** — ${data.showing} of ${data.totalCommands} commands${filterNote}\n\n`;
+      for (const cmd of data.commands) {
+        const desc = (cmd.shortDescription || '').split('.')[0].slice(0, 55);
+        response += `\`${cmd.header}\` — ${desc}\n`;
+      }
+      if (data.showing < data.totalCommands && !data.filter) {
+        response += `\n*${data.totalCommands - data.showing} more — type \`browse ${data.groupName} <keyword>\` to filter*`;
+      }
+      response += `\n\nType \`what is <header>\` for full details.`;
+    } else if (data.level === 'command_detail') {
+      const cmd = data.command;
+      response = `**${cmd.header}** (${cmd.commandType})\n`;
+      response += `${(cmd.shortDescription || cmd.description || '').slice(0, 120)}\n\n`;
+      if (cmd.syntax?.set) response += `Set: \`${cmd.syntax.set}\`\n`;
+      if (cmd.syntax?.query) response += `Query: \`${cmd.syntax.query}\`\n`;
+      if (cmd.arguments && cmd.arguments.length > 0) {
+        response += '\nArgs:\n';
+        for (const arg of cmd.arguments.slice(0, 4)) {
+          let line = `- **${arg.name}** (${arg.type}): ${(arg.description || '').slice(0, 60)}`;
+          if (arg.validValues && typeof arg.validValues === 'object') {
+            const vv = arg.validValues as Record<string, unknown>;
+            if (vv.min !== undefined) line += ` [${vv.min}–${vv.max ?? '?'}]`;
+          }
+          response += line + '\n';
+        }
+        if (cmd.arguments.length > 4) response += `- ... ${cmd.arguments.length - 4} more\n`;
+      }
+    }
+
+    return {
+      text: response,
+      assistantThreadId: undefined,
+      errors: [],
+      warnings: [],
+      metrics: { totalMs: 0, usedShortcut: false, iterations: 1, toolCalls: 1, toolMs: 0, modelMs: 0, promptChars: { system: 0, user: req.userMessage.length } },
+      debug: { toolTrace: [{ name: 'browse_scpi_commands', args: { group, filter }, startedAt: new Date().toISOString(), resultSummary: { ok: true } }], resolutionPath: 'deterministic:browse' }
+    };
+  } catch (error) {
+    const errorMessage = error instanceof Error ? error.message : String(error);
+    return {
+      text: `Browse error: ${errorMessage}`,
+      assistantThreadId: undefined,
+      errors: [errorMessage],
+      warnings: [],
+      metrics: { totalMs: 0, usedShortcut: false, iterations: 0, toolCalls: 0, toolMs: 0, modelMs: 0, promptChars: { system: 0, user: 0 } },
+      debug: { toolTrace: [], resolutionPath: 'deterministic:browse_error' }
     };
   }
 }
@@ -1036,7 +1564,7 @@ function normalizeHeaderForMatch(command: string): string {
 }
 
 function isRouterEnabled(): boolean {
-  return String(process.env.MCP_ROUTER_ENABLED || '').trim() === 'true';
+  return String(process.env.MCP_ROUTER_DISABLED || '').trim() !== 'true';
 }
 
 function isRouterEnabledForRequest(req?: McpChatRequest): boolean {
@@ -4135,11 +4663,10 @@ async function runChatConversation(
     const messages = [
       ...(Array.isArray(req.history)
         ? req.history
-            .slice(-6)
+            .slice(-8)
             .map((h, i, arr) => ({
               role: h.role as 'user' | 'assistant',
-              // Older turns get shorter — save tokens for the most recent context
-              content: String(h.content || '').slice(0, i < arr.length - 2 ? 1000 : 2000),
+              content: String(h.content || '').slice(0, i < arr.length - 2 ? 3000 : 6000),
             }))
         : []),
       { role: 'user' as const, content: userContent },
@@ -4219,8 +4746,8 @@ async function runChatConversation(
       ? []
       : (Array.isArray(req.history)
           ? req.history
-              .slice(-6)
-              .map((h) => ({ role: h.role, content: String(h.content || '').slice(0, 2000) }))
+              .slice(-8)
+              .map((h) => ({ role: h.role, content: String(h.content || '').slice(0, 6000) }))
           : []);
     const requestPayload: Record<string, unknown> = {
       model: resolveHostedAssistantModel(req),
@@ -4299,11 +4826,10 @@ async function runChatConversation(
       { role: 'system', content: `${CHAT_MODE_SYSTEM_PROMPT}\n\n${developerPrompt}` },
       ...(Array.isArray(req.history)
         ? req.history
-            .slice(-6)
+            .slice(-8)
             .map((h, i, arr) => ({
               role: h.role,
-              // Older turns get shorter — save tokens for the most recent context
-              content: String(h.content || '').slice(0, i < arr.length - 2 ? 1000 : 2000),
+              content: String(h.content || '').slice(0, i < arr.length - 2 ? 3000 : 6000),
             }))
         : []),
       { role: 'user', content: userContent },
@@ -4531,6 +5057,7 @@ function splitDataUrl(dataUrl: string): { mimeType: string; base64: string } | n
 function buildOpenAiUserContent(req: McpChatRequest, userPrompt: string): Array<Record<string, unknown>> | string {
   const images = getImageAttachments(req);
   if (!images.length) return userPrompt;
+  // Chat Completions API format
   return [
     { type: 'text', text: userPrompt },
     ...images.map((image) => ({
@@ -4538,6 +5065,23 @@ function buildOpenAiUserContent(req: McpChatRequest, userPrompt: string): Array<
       image_url: {
         url: image.dataUrl,
       },
+    })),
+  ];
+}
+
+/**
+ * Build user content for OpenAI Responses API (hosted assistant).
+ * Uses input_text/input_image types instead of text/image_url.
+ */
+function buildOpenAiResponsesContent(req: McpChatRequest, userPrompt: string): Array<Record<string, unknown>> | string {
+  const images = getImageAttachments(req);
+  if (!images.length) return userPrompt;
+  // Responses API format
+  return [
+    { type: 'input_text', text: userPrompt },
+    ...images.map((image) => ({
+      type: 'input_image',
+      image_url: image.dataUrl,
     })),
   ];
 }
@@ -6054,14 +6598,14 @@ export function buildHostedOpenAiResponsesRequest(
     previousResponseId || !Array.isArray(req.history)
       ? []
       : req.history
-          .slice(-6)
+          .slice(-8)
           .map((h) => ({
             role: h.role,
-            content: String(h.content || '').slice(0, 2000),
+            content: String(h.content || '').slice(0, 6000),
           }))
           .filter((h) => h.content.trim().length > 0);
   const developerMessage = String(options.developerMessage || '').trim();
-  const userContent = buildOpenAiUserContent(req, assistantPrompt);
+  const userContent = buildOpenAiResponsesContent(req, assistantPrompt);
   const initialInput = options.inputOverride || [
     ...(developerMessage
       ? [{ role: 'developer', content: developerMessage }]
@@ -7015,23 +7559,28 @@ async function runOpenAiToolLoop(
           totalLiveToolMs += Date.now() - toolStart;
           totalLiveToolCalls += 1;
 
-          // Handle screenshot results: extract image for OpenAI vision, don't stringify base64
+          // Handle screenshot results: extract image for UI, only send to AI if analyze=true
           const imageData = extractImageFromToolResult(result);
           if (imageData) {
-            const textSummary = buildImageToolResultSummary(result);
-            console.log(`[MCP] OpenAI live tool result for ${toolName}: screenshot (${imageData.mimeType}, ${imageData.base64.length} b64 chars)`);
-            // Collect for UI update
+            const wantsAnalysis = toolArgs.analyze === true;
+            console.log(`[MCP] OpenAI live screenshot: ${imageData.base64.length} b64 chars, analyze=${wantsAnalysis}`);
+            // Always collect for UI update
             liveScreenshots.push({ base64: imageData.base64, mimeType: imageData.mimeType, capturedAt: new Date().toISOString() });
-            // OpenAI can't receive images in tool results — send text summary as tool result
-            liveMessages.push({ role: 'tool', tool_call_id: toolId, content: textSummary });
-            // Then inject the image as a user message so OpenAI vision can see it
-            liveMessages.push({
-              role: 'user',
-              content: [
-                { type: 'text', text: 'Here is the screenshot you just captured. Describe what you see on the scope display.' },
-                { type: 'image_url', image_url: { url: `data:${imageData.mimeType};base64,${imageData.base64}` } },
-              ],
-            });
+            if (wantsAnalysis) {
+              // AI wants to see the image — inject it
+              const textSummary = buildImageToolResultSummary(result);
+              liveMessages.push({ role: 'tool', tool_call_id: toolId, content: textSummary });
+              liveMessages.push({
+                role: 'user',
+                content: [
+                  { type: 'text', text: 'Here is the screenshot you just captured. Describe what you see on the scope display.' },
+                  { type: 'image_url', image_url: { url: `data:${imageData.mimeType};base64,${imageData.base64}` } },
+                ],
+              });
+            } else {
+              // Capture-only — don't waste tokens sending image back
+              liveMessages.push({ role: 'tool', tool_call_id: toolId, content: 'Screenshot captured and displayed to user.' });
+            }
           } else {
             const resultStr = typeof result === 'string' ? result : JSON.stringify(result);
             const truncated = resultStr.length > 8000 ? resultStr.slice(0, 8000) + '\n...(truncated)' : resultStr;
@@ -7405,25 +7954,36 @@ async function runAnthropicToolLoop(
         });
 
         if (imageData) {
-          // Build multimodal tool_result with image block so Claude can see the screenshot
-          const textSummary = buildImageToolResultSummary(result);
-          console.log(`[MCP] Anthropic tool result: image block (${imageData.mimeType}, ${imageData.base64.length} base64 chars)`);
+          const wantsAnalysis = toolArgs.analyze === true;
+          console.log(`[MCP] Anthropic screenshot: ${imageData.base64.length} b64 chars, analyze=${wantsAnalysis}`);
+          // Always collect for UI update
           anthScreenshots.push({ base64: imageData.base64, mimeType: imageData.mimeType, capturedAt: new Date().toISOString() });
-          toolResultBlocks.push({
-            type: 'tool_result',
-            tool_use_id: toolId,
-            content: [
-              {
-                type: 'image',
-                source: {
-                  type: 'base64',
-                  media_type: imageData.mimeType,
-                  data: imageData.base64,
+          if (wantsAnalysis) {
+            // AI wants to analyze — send image block
+            const textSummary = buildImageToolResultSummary(result);
+            toolResultBlocks.push({
+              type: 'tool_result',
+              tool_use_id: toolId,
+              content: [
+                {
+                  type: 'image',
+                  source: {
+                    type: 'base64',
+                    media_type: imageData.mimeType,
+                    data: imageData.base64,
+                  },
                 },
-              },
-              { type: 'text', text: textSummary },
-            ],
-          });
+                { type: 'text', text: textSummary },
+              ],
+            });
+          } else {
+            // Capture-only — don't waste tokens sending image back
+            toolResultBlocks.push({
+              type: 'tool_result',
+              tool_use_id: toolId,
+              content: 'Screenshot captured and displayed to user.',
+            });
+          }
         } else {
           // Only stringify non-image results (avoids serializing large base64 blobs)
           const resultStr = typeof result === 'string' ? result : JSON.stringify(result);
@@ -7527,7 +8087,7 @@ function buildLiveSystemPrompt(req: McpChatRequest, sessionContext?: string): st
     '',
     '## Tools (4 only)',
     '- **send_scpi** — {commands:["CMD1","CMD2?"]} → [{command, response, ok, error}]',
-    '- **capture_screenshot** — Capture scope display as image you can see and analyze. Use your judgement on when to call it.',
+    '- **capture_screenshot** — Capture scope display. Default: capture only (updates user UI, no image returned to you). Pass analyze:true ONLY when you need to see the image yourself (error diagnosis, reading measurements).',
     '- **get_instrument_state** — *IDN?/*ESR?/ALLEV?',
     '- **tek_router** — action:"search" returns SCPI commands + knowledge base results in ONE call. Also: "exec", "search_exec", "list", "create".',
     '',
@@ -7542,8 +8102,22 @@ function buildLiveSystemPrompt(req: McpChatRequest, sessionContext?: string): st
     '5. Be natural and conversational. Brief when doing simple tasks, detailed when user asks to explain/analyze.',
     '   Do NOT prefix every response with "Done —". Just say what happened naturally.',
     '6. Replace placeholders: <NR3>→number, CH<x>→CH1, MEAS<x>→MEAS1.',
-    '7. Use your judgement on when to capture_screenshot. You can see the image.',
+    '7. capture_screenshot — ALWAYS capture after these (updates user UI):',
+    '   - After adding a measurement (ADDMEAS), results table, or loading a session',
+    '   - After changing scale, offset, trigger, timebase, or any visual setting',
+    '   - After send_scpi errors',
+    '   Default: just call capture_screenshot (no analyze). Image updates on user screen but is NOT sent back to you — saves tokens.',
+    '   Pass analyze:true ONLY when you need to read/diagnose the display (errors, verifying measurement values, user asks to look).',
     '8. AUTONOMOUS EXPLORATION: When user says "find a way to..." or gives a goal — YOU figure it out. Search, try commands, read errors, try different approaches. Keep going until you achieve the goal. Do NOT stop after one failure.',
+    '9. READING EXISTING DATA: Before adding new measurements, ALWAYS check what already exists:',
+    '   - Use MEASUrement:LIST? to see existing measurements',
+    '   - Use capture_screenshot with analyze:true to READ values visible on screen (badges, tables, phasor diagrams)',
+    '   - IMDA/Power Quality results are shown in on-screen badges (VMAG, IMAG, TrPwr, RePwr, ApPwr, PF, Phase, Freq) — read them from the screenshot, do NOT add redundant measurements',
+    '   - Standard measurement results: MEASUrement:MEAS<x>:RESUlts:CURRentacq:MEAN? / MAXimum? / MINimum?',
+    '   - Do NOT blindly add Period or Frequency measurements when the user asks to "read" or "get" values — they want EXISTING data read back',
+    '10. TIMEOUTS: If a command times out, the scope may be busy or the command is wrong.',
+    '   - Do NOT retry the same command repeatedly. Try a simpler query (*IDN?) to check connectivity first.',
+    '   - If TekScope PC / offline mode, waveform data is static — no need for repeated acquisitions.',
     '',
     '## Instrument',
   ];
@@ -8021,10 +8595,51 @@ export async function runToolLoop(req: McpChatRequest): Promise<ToolLoopResult> 
   // MCP-only mode is deterministic/local by design:
   // never call external model providers from here.
   if (mcpOnlyMode) {
+    const mcpMsg = req.userMessage.toLowerCase().trim();
+
+    // Check for image-only messages in MCP mode — can't process images without AI
+    const hasImages = Array.isArray(req.attachments) && req.attachments.some(
+      (f: any) => String(f?.mimeType || '').startsWith('image/')
+    );
+    const hasTextAttachments = Array.isArray(req.attachments) && req.attachments.some(
+      (f: any) => String(f?.textExcerpt || '').trim().length > 0
+    );
+    if (hasImages && !hasTextAttachments && (!mcpMsg || mcpMsg === 'use attached files as context.')) {
+      return {
+        text: 'MCP mode cannot analyze images — it uses deterministic SCPI lookup without AI vision. Switch to **AI mode** to have the AI analyze your screenshot or image.\n\nIf your image contains SCPI commands or text, paste the text directly instead.',
+        assistantThreadId: undefined,
+        errors: [],
+        warnings: ['Image attachments require AI mode'],
+        metrics: { totalMs: Date.now() - startedAt, usedShortcut: false, iterations: 0, toolCalls: 0, toolMs: 0, modelMs: 0, promptChars: { system: 0, user: 0 } },
+        debug: { toolTrace: [], resolutionPath: 'deterministic:image_not_supported' }
+      };
+    }
+
+    // Priority intents — check BEFORE smart_scpi delegation
+    if (cleanRouter.isValidationIntent(mcpMsg)) {
+      console.log('[MCP_ONLY] Validation intent detected');
+      return await runFlowValidation(req);
+    }
+    if (cleanRouter.isQuestionIntent(mcpMsg)) {
+      console.log('[MCP_ONLY] Question intent detected');
+      return await runQuestionLookup(req);
+    }
+    const browseIntent = cleanRouter.isBrowseIntent(mcpMsg);
+    if (browseIntent.isBrowse) {
+      console.log('[MCP_ONLY] Browse intent detected');
+      return await runBrowseCommands(req, browseIntent.group, browseIntent.filter);
+    }
+    if (cleanRouter.isKnowledgeSearchIntent(mcpMsg)) {
+      console.log('[MCP_ONLY] Knowledge search intent detected');
+      return await runSearchKnowledge(req);
+    }
+
     // Check if clean router wants to use Smart SCPI Assistant
     if (routeDecision.route === 'smart_scpi') {
       console.log('[MCP_ONLY] Router wants Smart SCPI Assistant - delegating to Smart SCPI');
-      return await runSmartScpiAssistant(req);
+      const scpiResult = await runSmartScpiAssistant(req);
+      // Enrich with RAG context (non-fatal)
+      return await enrichWithRag(scpiResult, req.userMessage, req.flowContext?.modelFamily);
     } else if (routeDecision.forceToolCall) {
       console.log('[MCP_ONLY] Router wants tool calls - going to tool loop');
       // Continue to tool loop below
@@ -8342,7 +8957,7 @@ export async function runToolLoop(req: McpChatRequest): Promise<ToolLoopResult> 
     };
   }
 
-  const maxToolRounds = forceToolCallMode ? 8 : (isHostedStructuredBuildRequest(req) ? 4 : 3);
+  const maxToolRounds = forceToolCallMode ? 12 : (isHostedStructuredBuildRequest(req) ? 8 : 6);
   const isAnthropicProvider = req.provider === 'anthropic';
 
   // Provider dispatch — readable if/else instead of deep ternary

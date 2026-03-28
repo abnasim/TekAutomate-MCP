@@ -23,6 +23,63 @@ export class CleanRouter {
   }
 
   /**
+   * Detect if user is asking a question (what is, explain, describe)
+   */
+  isQuestionIntent(msg: string): boolean {
+    return /^\s*(what\s+is|what\s+are|what\s+does|explain|describe|tell\s+me\s+about|how\s+does|how\s+do\s+i|how\s+to)\b/i.test(msg);
+  }
+
+  /**
+   * Detect if user wants flow validation (check/validate/review flow)
+   */
+  isValidationIntent(msg: string): boolean {
+    return /\b(validate|verify|check|review)\s+(my\s+)?(flow|commands?|steps?|sequence)\b/i.test(msg);
+  }
+
+  /**
+   * Detect if user wants to search the knowledge base / RAG
+   * e.g. "search knowledge base", "search docs", "search rag for X"
+   */
+  isKnowledgeSearchIntent(msg: string): boolean {
+    return /\b(search|find|look\s*up)\s+(knowledge|docs|documentation|rag|manual|help)\b/i.test(msg)
+      || /\b(knowledge|docs|rag)\s+(search|lookup|find)\b/i.test(msg);
+  }
+
+  /**
+   * Detect if user wants to browse/explore commands interactively
+   * e.g. "browse commands", "browse_scpi_commands", "browse trigger", "list groups", "explore measurement commands"
+   */
+  isBrowseIntent(msg: string): { isBrowse: boolean; group?: string; filter?: string } {
+    // Normalize underscores to spaces for matching
+    const normalized = msg.replace(/_/g, ' ');
+
+    // Exact tool name match (user typed "browse_scpi_commands" or "browse scpi commands")
+    if (/^\s*browse\s+scpi\s+commands?\s*$/i.test(normalized)) {
+      return { isBrowse: true };
+    }
+
+    // Explicit browse/explore/list
+    const browseMatch = normalized.match(/\b(browse|explore|list|show)\s+(all\s+)?(commands?|groups?|categories)/i);
+    if (browseMatch) {
+      return { isBrowse: true };
+    }
+
+    // Extract everything after "browse " / "explore "
+    const afterBrowse = normalized.match(/\b(?:browse|explore)\s+(.+)$/i);
+    if (afterBrowse) {
+      const rest = afterBrowse[1].replace(/\s*(commands?|group)\s*$/i, '').trim();
+      if (!rest || /^(all|commands?|groups?|categories|scpi)$/i.test(rest)) {
+        return { isBrowse: true };
+      }
+      // Return full phrase as group — browseScpiCommands will resolve it via fuzzy match
+      // and the tool handles filter separation if group doesn't match
+      return { isBrowse: true, group: rest };
+    }
+
+    return { isBrowse: false };
+  }
+
+  /**
    * Make clean routing decision without edge cases
    */
   makeRouteDecision(req: McpChatRequest): RouteDecision {
@@ -30,7 +87,7 @@ export class CleanRouter {
     const outputMode = req.outputMode;
     const isMcpOnly = this.isMcpOnlyMode(req);
     const interactionMode = req.interactionMode;
-    
+
     console.log(`[CLEAN_ROUTER] Routing decision for: "${msg}"`);
     console.log(`[CLEAN_ROUTER] Mode: ${outputMode}, MCP-only: ${isMcpOnly}`);
 
@@ -39,6 +96,16 @@ export class CleanRouter {
         route: 'smart_scpi',
         confidence: 0.98,
         reasoning: 'Live mode keeps conversational responses while routing through MCP tools',
+        forceToolCall: true
+      };
+    }
+
+    // 0a. Validation intent (check/validate flow) → route to smart_scpi with validation flag
+    if (this.isValidationIntent(msg)) {
+      return {
+        route: 'smart_scpi',
+        confidence: 0.95,
+        reasoning: 'Validation intent detected — routing to SCPI validation',
         forceToolCall: true
       };
     }

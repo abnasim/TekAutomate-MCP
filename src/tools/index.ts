@@ -23,6 +23,7 @@ import { smartScpiLookup } from '../core/smartScpiAssistant';
 import { validateActionPayload } from './validateActionPayload';
 import { validateDeviceContext } from './validateDeviceContext';
 import { verifyScpiCommands } from './verifyScpiCommands';
+import { browseScpiCommands } from './browseScpiCommands';
 import { GROUP_NAMES, COMMAND_GROUPS } from '../core/commandGroups';
 import { TEK_ROUTER_TOOL_DEFINITION } from '../core/toolRouter';
 
@@ -76,6 +77,7 @@ export const TOOL_HANDLERS = {
   get_command_by_header: getCommandByHeader,
   get_commands_by_header_batch: getCommandsByHeaderBatch,
   verify_scpi_commands: verifyScpiCommands,
+  browse_scpi_commands: browseScpiCommands,
   search_tm_devices: searchTmDevices,
   retrieve_rag_chunks: retrieveRagChunks,
   search_known_failures: searchKnownFailures,
@@ -118,7 +120,9 @@ export function getToolDefinitions() {
         '- "add jitter measurement with detailed results"\n\n' +
         'Returns: matching SCPI commands with full syntax, valid argument values, ' +
         'and Python/SCPI code examples. For broad queries, returns a conversational ' +
-        'menu to narrow down options.',
+        'menu to narrow down options.\n\n' +
+        'If this tool returns no results or the wrong commands, use browse_scpi_commands ' +
+        'to iteratively explore the command database by group and keyword.',
       parameters: {
         type: 'object',
         properties: {
@@ -250,6 +254,47 @@ export function getToolDefinitions() {
           modelFamily: { type: 'string', description: 'Optional family filter.' },
         },
         required: ['commands'],
+        additionalProperties: false,
+      },
+    },
+    {
+      name: 'browse_scpi_commands',
+      description:
+        'Interactive 3-level drill-down for exploring SCPI commands. ' +
+        'Use when smart_scpi_lookup returns no results or you need to browse commands iteratively.\n\n' +
+        'Level 1 (no args): List all command groups (Vertical, Trigger, Measurement, Bus, etc.)\n' +
+        'Level 2 (group): List commands in a group, optionally filtered by keyword\n' +
+        'Level 3 (header): Full command details — syntax, arguments, valid values, examples\n\n' +
+        'Call sequence example:\n' +
+        '1. browse_scpi_commands() → see all groups\n' +
+        '2. browse_scpi_commands({group: "Trigger"}) → see trigger commands\n' +
+        '3. browse_scpi_commands({group: "Trigger", filter: "edge"}) → narrow to edge trigger\n' +
+        '4. browse_scpi_commands({header: "TRIGger:A:EDGE:SOUrce"}) → full details',
+      parameters: {
+        type: 'object',
+        properties: {
+          group: {
+            type: 'string',
+            description: 'Command group to browse (e.g. "Trigger", "Measurement", "Vertical"). Omit to list all groups.',
+          },
+          header: {
+            type: 'string',
+            description: 'Specific SCPI command header to get full details for (e.g. "TRIGger:A:EDGE:SOUrce").',
+          },
+          modelFamily: {
+            type: 'string',
+            description: 'Optional model family filter: MSO2, MSO4, MSO5, MSO6, MSO7, etc.',
+          },
+          filter: {
+            type: 'string',
+            description: 'Keyword to filter commands within a group (e.g. "edge" within Trigger group).',
+          },
+          limit: {
+            type: 'number',
+            description: 'Max commands to return (default 30, max 100).',
+          },
+        },
+        required: [],
         additionalProperties: false,
       },
     },
@@ -571,7 +616,7 @@ export function getToolDefinitions() {
     },
     {
       name: 'capture_screenshot',
-      description: 'Capture a fresh scope screenshot via code_executor and return PNG image data. Requires liveMode=true. Use this when AI needs to see the current waveform or display state after an action. To target a different instrument, pass its VISA resource string as visaResource.',
+      description: 'Capture a fresh scope screenshot. The image always updates the user\'s UI. Pass analyze:true ONLY when you need to see and analyze the image yourself (e.g. diagnosing errors, reading measurements). Default: capture only (no image returned to you, saves tokens).',
       parameters: {
         type: 'object',
         properties: {
@@ -583,6 +628,7 @@ export function getToolDefinitions() {
           scopeType: { type: 'string', enum: ['modern', 'legacy'] },
           modelFamily: { type: 'string' },
           deviceDriver: { type: 'string' },
+          analyze: { type: 'boolean', description: 'Set true to receive the image for AI analysis. Default false (capture only, updates UI).' },
         },
         required: [],
         additionalProperties: false,

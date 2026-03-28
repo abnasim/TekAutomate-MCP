@@ -93,6 +93,11 @@ export class SmartScpiAssistant {
     const searchMatches = measurementPlan.searchTerms.flatMap((term) =>
       index.searchByQuery(term, modelFamily, 4)
     );
+
+    // When user isn't explicitly asking for power analysis, prefer MEASUrement over POWer
+    const queryLower = query.toLowerCase();
+    const wantsPower = /\b(power|wbg|dpm|switching|inductance|magnetic|efficiency)\b/i.test(queryLower);
+
     const preferredRoots = new Set(
       directMatches
         .map((cmd) => String(cmd.header || '').split(':')[0])
@@ -107,12 +112,24 @@ export class SmartScpiAssistant {
     const filteredFallbackCommands = fallbackCommands.filter(matchesPreferredRoot);
 
     const seen = new Set<string>();
-    const merged = [...directMatches, ...filteredSearchMatches, ...filteredFallbackCommands].filter((cmd) => {
+    let merged = [...directMatches, ...filteredSearchMatches, ...filteredFallbackCommands].filter((cmd) => {
       const key = `${cmd.sourceFile}:${cmd.commandId}`;
       if (seen.has(key)) return false;
       seen.add(key);
       return true;
     });
+
+    // When not explicitly requesting power, sort MEASUrement headers before POWer headers
+    if (!wantsPower && merged.length > 1) {
+      merged.sort((a, b) => {
+        const aIsMeas = String(a.header || '').startsWith('MEASUrement');
+        const bIsMeas = String(b.header || '').startsWith('MEASUrement');
+        if (aIsMeas && !bIsMeas) return -1;
+        if (!aIsMeas && bIsMeas) return 1;
+        return 0;
+      });
+    }
+
     return merged.length > 0 ? merged : fallbackCommands;
   }
 
@@ -215,6 +232,8 @@ export class SmartScpiAssistant {
       // Synonym expansion: map natural-language words to SCPI header tokens
       const synonymMap: Record<string, string> = {
         rising: 'edge', falling: 'edge', slope: 'edge',
+        screenshot: 'image', capture: 'image', print: 'image',
+        serial: 'rs232', uart: 'rs232',
       };
       for (const qw of queryWords) {
         const mapped = synonymMap[qw];
@@ -287,6 +306,14 @@ export class SmartScpiAssistant {
       // Statistics: boost STATIstics
       if (subjectLower === 'statistics' && /statist/i.test(cmd.header)) {
         score += 20;
+      }
+      // Screenshot: boost SAVe:IMAGe (user says "screenshot", header says "IMAGe")
+      if (subjectLower === 'screenshot' && /SAVe:IMAGe/i.test(cmd.header)) {
+        score += 25;
+      }
+      // Save waveform: boost SAVe:WAVEform
+      if (subjectLower === 'save_waveform' && /SAVe:WAVEform/i.test(cmd.header)) {
+        score += 25;
       }
       // Sample rate: boost SAMPlerate/MAXSamplerate
       if (subjectLower === 'sample_rate' && /samp.*rate/i.test(cmd.header)) {

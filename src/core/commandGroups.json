@@ -1034,7 +1034,14 @@
       "MEASUrement:MECH:PPAirs",
       "MEASUrement:MECH:PPRotation",
       "MEASUrement:MECH:SOUrce<x>",
-      "MEASUrement:MECH:STYPe"
+      "MEASUrement:MECH:STYPe",
+      "MEASUrement:MEAS<x>:IMDA:MEAS:TYPe",
+      "MEASUrement:MEAS<x>:RESUlts:CURRentacq:MEAN?",
+      "MEASUrement:MEAS<x>:RESUlts:CURRentacq:MAXimum?",
+      "MEASUrement:MEAS<x>:RESUlts:CURRentacq:MINimum?",
+      "MEASUrement:MEAS<x>:RESUlts:ALLAcqs:MEAN?",
+      "MEASUrement:MEAS<x>:TYPe",
+      "MEASUrement:LIST?"
     ]
   },
   "Mask": {
