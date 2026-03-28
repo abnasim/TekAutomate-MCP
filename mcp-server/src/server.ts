@@ -14,6 +14,12 @@ import { getTemplateIndex } from './core/templateIndex';
 import fs from 'fs';
 import path from 'path';
 import { fileURLToPath } from 'url';
+import { Server as McpProtocolServer } from '@modelcontextprotocol/sdk/server/index.js';
+import { StreamableHTTPServerTransport } from '@modelcontextprotocol/sdk/server/streamableHttp.js';
+import {
+  CallToolRequestSchema,
+  ListToolsRequestSchema,
+} from '@modelcontextprotocol/sdk/types.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -299,15 +305,287 @@ export async function createServer(port = 8787): Promise<http.Server> {
     }
   }
 
+  // ── MCP Protocol Server (Streamable HTTP for Claude Web / Desktop) ──
+  function createMcpProtocolServer(): McpProtocolServer {
+    const mcp = new McpProtocolServer(
+      { name: 'tekautomate', version: '3.2.0' },
+      { capabilities: { tools: {} } },
+    );
+    const toolDefs = getToolDefinitions();
+    const mcpTools = toolDefs.map((def) => ({
+      name: def.name,
+      description: def.description ?? def.name,
+      inputSchema: {
+        type: 'object' as const,
+        properties: (def.parameters as any)?.properties ?? {},
+        ...((def.parameters as any)?.required?.length
+          ? { required: (def.parameters as any).required }
+          : {}),
+      },
+    }));
+    mcp.setRequestHandler(ListToolsRequestSchema, async () => ({ tools: mcpTools }));
+    mcp.setRequestHandler(CallToolRequestSchema, async (request) => {
+      const { name, arguments: args } = request.params;
+      try {
+        const result = await runTool(name, (args as Record<string, unknown>) ?? {});
+        const text = typeof result === 'string' ? result : JSON.stringify(result, null, 2);
+        return { content: [{ type: 'text' as const, text }] };
+      } catch (err) {
+        const msg = err instanceof Error ? err.message : String(err);
+        return { content: [{ type: 'text' as const, text: `Error: ${msg}` }], isError: true };
+      }
+    });
+    return mcp;
+  }
+
+  // Per-session MCP transport map (stateless mode: one per request)
+  const mcpTransports = new Map<string, StreamableHTTPServerTransport>();
+
+  // ── HTML Tools Page ───────────────────────────────────────────────
+  function buildToolsHtml(): string {
+    const toolDefs = getToolDefinitions();
+    const toolCards = toolDefs.map((def) => {
+      const props = (def.parameters as any)?.properties ?? {};
+      const required = (def.parameters as any)?.required ?? [];
+      const paramRows = Object.entries(props).map(([key, schema]: [string, any]) => {
+        const isReq = required.includes(key);
+        const typeStr = Array.isArray(schema.type) ? schema.type.join(' | ') : (schema.type || 'any');
+        const enumStr = schema.enum ? ` <code>${schema.enum.join(' | ')}</code>` : '';
+        return `<tr>
+          <td><code>${key}</code>${isReq ? '<span class="req">*</span>' : ''}</td>
+          <td><code>${typeStr}</code>${enumStr}</td>
+          <td>${schema.description || ''}</td>
+        </tr>`;
+      }).join('');
+      return `<div class="tool-card" id="tool-${def.name}">
+        <h3>${def.name}</h3>
+        <p class="desc">${(def.description ?? '').replace(/\n/g, '<br>')}</p>
+        ${Object.keys(props).length > 0 ? `<table><thead><tr><th>Parameter</th><th>Type</th><th>Description</th></tr></thead><tbody>${paramRows}</tbody></table>` : '<p class="no-params">No parameters</p>'}
+        <details><summary>Example curl</summary><pre>curl -X POST ${process.env.MCP_PUBLIC_URL || 'https://tekautomate-mcp-production.up.railway.app'}/tools/execute \\
+  -H "Content-Type: application/json" \\
+  -d '${JSON.stringify({ tool: def.name, args: Object.fromEntries(required.map((r: string) => [r, '<value>'])) })}'</pre></details>
+      </div>`;
+    }).join('');
+
+    return `<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>TekAutomate MCP Server - Tools &amp; API</title>
+<style>
+*{box-sizing:border-box;margin:0;padding:0}
+body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;background:#0f172a;color:#e2e8f0;line-height:1.6;padding:0}
+header{background:linear-gradient(135deg,#1e293b,#334155);padding:2rem;border-bottom:1px solid #475569}
+header h1{font-size:1.8rem;font-weight:700;color:#fff}
+header p{color:#94a3b8;margin-top:0.25rem}
+.badge{display:inline-block;background:#3b82f6;color:#fff;font-size:0.7rem;padding:2px 8px;border-radius:99px;margin-left:8px;vertical-align:middle}
+.container{max-width:1100px;margin:0 auto;padding:1.5rem}
+.section{margin-bottom:2rem}
+.section h2{font-size:1.3rem;color:#f1f5f9;margin-bottom:1rem;padding-bottom:0.5rem;border-bottom:1px solid #334155}
+.setup-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(320px,1fr));gap:1rem;margin-bottom:1.5rem}
+.setup-card{background:#1e293b;border:1px solid #334155;border-radius:8px;padding:1.25rem}
+.setup-card h4{color:#60a5fa;margin-bottom:0.5rem;font-size:0.95rem}
+.setup-card pre{background:#0f172a;padding:0.75rem;border-radius:6px;font-size:0.75rem;overflow-x:auto;color:#a5b4fc;border:1px solid #1e293b}
+.setup-card .label{font-size:0.7rem;color:#94a3b8;text-transform:uppercase;letter-spacing:0.05em;margin-bottom:0.25rem}
+.endpoints{display:grid;gap:0.5rem}
+.endpoint{background:#1e293b;border:1px solid #334155;border-radius:6px;padding:0.75rem 1rem;display:flex;gap:1rem;align-items:center}
+.endpoint .method{font-weight:700;font-size:0.75rem;padding:2px 8px;border-radius:4px;min-width:50px;text-align:center}
+.method.get{background:#059669;color:#fff}.method.post{background:#3b82f6;color:#fff}
+.endpoint code{color:#e2e8f0;font-size:0.85rem}
+.endpoint .ep-desc{color:#94a3b8;font-size:0.8rem;margin-left:auto}
+.tool-card{background:#1e293b;border:1px solid #334155;border-radius:8px;padding:1.25rem;margin-bottom:1rem}
+.tool-card h3{color:#60a5fa;font-size:1rem;margin-bottom:0.5rem;font-family:monospace}
+.tool-card .desc{color:#94a3b8;font-size:0.85rem;margin-bottom:0.75rem}
+.tool-card table{width:100%;border-collapse:collapse;font-size:0.8rem}
+.tool-card th{text-align:left;color:#64748b;font-weight:600;padding:4px 8px;border-bottom:1px solid #334155;font-size:0.7rem;text-transform:uppercase}
+.tool-card td{padding:4px 8px;border-bottom:1px solid #1e293b;color:#cbd5e1}
+.tool-card td code{color:#a5b4fc;font-size:0.8rem}
+.req{color:#f87171;margin-left:2px}
+.no-params{color:#64748b;font-size:0.8rem;font-style:italic}
+details{margin-top:0.75rem}
+summary{cursor:pointer;color:#60a5fa;font-size:0.8rem}
+details pre{margin-top:0.5rem;font-size:0.75rem;background:#0f172a;padding:0.75rem;border-radius:6px;color:#a5b4fc;border:1px solid #334155;overflow-x:auto}
+.stats{display:flex;gap:1.5rem;margin:1rem 0}
+.stat{background:#1e293b;border:1px solid #334155;border-radius:8px;padding:0.75rem 1.25rem;text-align:center}
+.stat .num{font-size:1.5rem;font-weight:700;color:#60a5fa}
+.stat .lbl{font-size:0.7rem;color:#94a3b8;text-transform:uppercase}
+#search{width:100%;padding:0.6rem 1rem;background:#1e293b;border:1px solid #334155;border-radius:8px;color:#e2e8f0;font-size:0.9rem;margin-bottom:1rem}
+#search:focus{outline:none;border-color:#3b82f6}
+</style>
+</head>
+<body>
+<header>
+  <h1>TekAutomate MCP Server <span class="badge">v3.2.0</span></h1>
+  <p>AI orchestration layer for Tektronix test equipment automation</p>
+</header>
+<div class="container">
+
+<div class="stats">
+  <div class="stat"><div class="num">${toolDefs.length}</div><div class="lbl">Tools</div></div>
+  <div class="stat"><div class="num">9,300+</div><div class="lbl">SCPI Commands</div></div>
+  <div class="stat"><div class="num">2</div><div class="lbl">Transports</div></div>
+</div>
+
+<div class="section">
+  <h2>Connect as MCP Server</h2>
+  <div class="setup-grid">
+    <div class="setup-card">
+      <h4>Claude Web (claude.ai)</h4>
+      <div class="label">Add Custom Connector</div>
+      <pre>Name: TekAutomate
+URL:  ${process.env.MCP_PUBLIC_URL || 'https://tekautomate-mcp-production.up.railway.app'}/mcp</pre>
+    </div>
+    <div class="setup-card">
+      <h4>Claude Desktop</h4>
+      <div class="label">~/.claude/claude_desktop_config.json</div>
+      <pre>{
+  "mcpServers": {
+    "tekautomate": {
+      "command": "npx",
+      "args": ["tsx", "mcp-server/src/stdio.ts"],
+      "cwd": "/path/to/TekAutomate"
+    }
+  }
+}</pre>
+    </div>
+    <div class="setup-card">
+      <h4>Claude Code (CLI)</h4>
+      <div class="label">.mcp.json in project root</div>
+      <pre>{
+  "mcpServers": {
+    "tekautomate": {
+      "command": "npx",
+      "args": ["tsx", "mcp-server/src/stdio.ts"],
+      "cwd": "/path/to/TekAutomate"
+    }
+  }
+}</pre>
+    </div>
+    <div class="setup-card">
+      <h4>VS Code / Cursor</h4>
+      <div class="label">.vscode/mcp.json</div>
+      <pre>{
+  "servers": {
+    "tekautomate": {
+      "command": "npx",
+      "args": ["tsx", "mcp-server/src/stdio.ts"],
+      "cwd": "/path/to/TekAutomate"
+    }
+  }
+}</pre>
+    </div>
+  </div>
+</div>
+
+<div class="section">
+  <h2>API Endpoints</h2>
+  <div class="endpoints">
+    <div class="endpoint"><span class="method get">GET</span><code>/</code><span class="ep-desc">This page — tools &amp; API reference</span></div>
+    <div class="endpoint"><span class="method get">GET</span><code>/health</code><span class="ep-desc">Health check</span></div>
+    <div class="endpoint"><span class="method post">POST</span><code>/mcp</code><span class="ep-desc">MCP Streamable HTTP transport (for Claude Web, Desktop)</span></div>
+    <div class="endpoint"><span class="method get">GET</span><code>/tools/list</code><span class="ep-desc">List all tool definitions as JSON</span></div>
+    <div class="endpoint"><span class="method post">POST</span><code>/tools/execute</code><span class="ep-desc">Execute a tool: {"tool":"name","args":{...}}</span></div>
+    <div class="endpoint"><span class="method post">POST</span><code>/ai/chat</code><span class="ep-desc">Main AI orchestration endpoint</span></div>
+    <div class="endpoint"><span class="method post">POST</span><code>/ai/router</code><span class="ep-desc">Router-based tool dispatch</span></div>
+    <div class="endpoint"><span class="method get">GET</span><code>/ai/debug/last</code><span class="ep-desc">Last request debug bundle</span></div>
+  </div>
+</div>
+
+<div class="section">
+  <h2>Tools (${toolDefs.length})</h2>
+  <input id="search" placeholder="Filter tools..." oninput="filterTools(this.value)" />
+  ${toolCards}
+</div>
+
+</div>
+<script>
+function filterTools(q) {
+  q = q.toLowerCase();
+  document.querySelectorAll('.tool-card').forEach(c => {
+    c.style.display = (c.id + ' ' + c.textContent).toLowerCase().includes(q) ? '' : 'none';
+  });
+}
+</script>
+</body></html>`;
+  }
+
   // NOW create the HTTP server (all indexes are ready)
   const server = http.createServer(async (req, res) => {
     if (req.method === 'OPTIONS') {
       res.statusCode = 204;
       res.setHeader('Access-Control-Allow-Origin', '*');
-      res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
-      res.setHeader('Access-Control-Allow-Methods', 'GET,POST,OPTIONS');
+      res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Accept, Mcp-Session-Id');
+      res.setHeader('Access-Control-Allow-Methods', 'GET,POST,DELETE,OPTIONS');
+      res.setHeader('Access-Control-Expose-Headers', 'Mcp-Session-Id');
       res.end();
       return;
+    }
+
+    // ── GET / — Tools & API reference page ────────────────────────
+    if (req.method === 'GET' && (req.url === '/' || req.url === '/index.html')) {
+      res.statusCode = 200;
+      res.setHeader('Content-Type', 'text/html; charset=utf-8');
+      res.setHeader('Access-Control-Allow-Origin', '*');
+      res.end(buildToolsHtml());
+      return;
+    }
+
+    // ── /mcp — MCP Streamable HTTP transport ──────────────────────
+    if (req.url === '/mcp' || req.url?.startsWith('/mcp?')) {
+      res.setHeader('Access-Control-Allow-Origin', '*');
+      res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Accept, Mcp-Session-Id');
+      res.setHeader('Access-Control-Expose-Headers', 'Mcp-Session-Id');
+
+      if (req.method === 'POST' || req.method === 'GET' || req.method === 'DELETE') {
+        try {
+          // Read body for POST
+          let body: string | undefined;
+          if (req.method === 'POST') {
+            body = await new Promise<string>((resolve, reject) => {
+              const chunks: Buffer[] = [];
+              req.on('data', (chunk) => chunks.push(chunk));
+              req.on('end', () => resolve(Buffer.concat(chunks).toString()));
+              req.on('error', reject);
+            });
+          }
+
+          const sessionId = req.headers['mcp-session-id'] as string | undefined;
+
+          if (sessionId && mcpTransports.has(sessionId)) {
+            // Existing session
+            const transport = mcpTransports.get(sessionId)!;
+            await transport.handleRequest(req, res, body ? JSON.parse(body) : undefined);
+          } else if (req.method === 'POST') {
+            // New session — create transport and MCP server
+            const transport = new StreamableHTTPServerTransport({
+              sessionIdGenerator: () => `tek-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+            });
+            const mcpServer = createMcpProtocolServer();
+            await mcpServer.connect(transport);
+
+            // Store transport by session ID after first handle
+            transport.onclose = () => {
+              if (transport.sessionId) {
+                mcpTransports.delete(transport.sessionId);
+              }
+            };
+
+            await transport.handleRequest(req, res, body ? JSON.parse(body) : undefined);
+
+            if (transport.sessionId) {
+              mcpTransports.set(transport.sessionId, transport);
+            }
+          } else {
+            sendJson(res, 400, { error: 'No valid session. Send a POST to /mcp to initialize.' });
+          }
+        } catch (err) {
+          console.error('[MCP transport] Error:', err);
+          if (!res.headersSent) {
+            sendJson(res, 500, { error: 'MCP transport error' });
+          }
+        }
+        return;
+      }
     }
 
     if (req.method === 'GET' && req.url === '/health') {
