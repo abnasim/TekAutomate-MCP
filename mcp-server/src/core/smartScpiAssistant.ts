@@ -232,6 +232,8 @@ export class SmartScpiAssistant {
       // Synonym expansion: map natural-language words to SCPI header tokens
       const synonymMap: Record<string, string> = {
         rising: 'edge', falling: 'edge', slope: 'edge',
+        screenshot: 'image', capture: 'image', print: 'image',
+        serial: 'rs232', uart: 'rs232',
       };
       for (const qw of queryWords) {
         const mapped = synonymMap[qw];
@@ -304,6 +306,14 @@ export class SmartScpiAssistant {
       // Statistics: boost STATIstics
       if (subjectLower === 'statistics' && /statist/i.test(cmd.header)) {
         score += 20;
+      }
+      // Screenshot: boost SAVe:IMAGe (user says "screenshot", header says "IMAGe")
+      if (subjectLower === 'screenshot' && /SAVe:IMAGe/i.test(cmd.header)) {
+        score += 25;
+      }
+      // Save waveform: boost SAVe:WAVEform
+      if (subjectLower === 'save_waveform' && /SAVe:WAVEform/i.test(cmd.header)) {
+        score += 25;
       }
       // Sample rate: boost SAMPlerate/MAXSamplerate
       if (subjectLower === 'sample_rate' && /samp.*rate/i.test(cmd.header)) {
