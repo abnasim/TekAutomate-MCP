@@ -7267,22 +7267,28 @@ if __name__ == "__main__":
     setAskAiModalFallbackExample('');
 
     const chatStateKey = 'tekautomate.ai.chat.state';
-    const apiKeyKey = 'tekautomate.ai.byok.api_key';
     let provider: AiProvider = 'openai';
-    let model = 'gpt-4o';
+    let model = 'gpt-5.4-nano';
     let apiKey = '';
     try {
       const raw = localStorage.getItem(chatStateKey);
       if (raw) {
-        const parsed = JSON.parse(raw) as { provider?: string; model?: string; apiKey?: string };
+        const parsed = JSON.parse(raw) as { provider?: string; model?: string };
         if (parsed.provider === 'anthropic') provider = 'anthropic';
         if (typeof parsed.model === 'string' && parsed.model.trim()) model = parsed.model.trim();
-        if (typeof parsed.apiKey === 'string' && parsed.apiKey.trim()) apiKey = parsed.apiKey.trim();
       }
-      if (!apiKey) apiKey = (localStorage.getItem(apiKeyKey) || '').trim();
-    } catch {
-      apiKey = (localStorage.getItem(apiKeyKey) || '').trim();
-    }
+      // Read per-provider keys from dedicated storage
+      const openaiKey = (localStorage.getItem('tekautomate.ai.byok.api_key.openai') || '').trim();
+      const anthropicKey = (localStorage.getItem('tekautomate.ai.byok.api_key.anthropic') || '').trim();
+      // Prefer OpenAI (has KB), fallback to Anthropic
+      if (openaiKey) {
+        apiKey = openaiKey;
+        provider = 'openai';
+      } else if (anthropicKey) {
+        apiKey = anthropicKey;
+        provider = 'anthropic';
+      }
+    } catch { /* ignore */ }
 
     if (!apiKey) {
       setAskAiModalLoading(false);

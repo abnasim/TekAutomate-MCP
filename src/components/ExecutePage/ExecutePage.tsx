@@ -1,5 +1,6 @@
-import React, { useMemo, useState, useCallback } from 'react';
-import { Code, Terminal, Copy, Pencil } from 'lucide-react';
+import React, { useMemo, useState } from 'react';
+import { Code, Terminal, Copy, Pencil, Sparkles } from 'lucide-react';
+import { streamMcpChat, resolveMcpHost } from '../../utils/ai/mcpClient';
 import { StepsListPreview } from './StepsListPreview';
 import type { StepPreview } from './StepsListPreview';
 import { PythonCodeEditor } from '../PythonCodeEditor';
@@ -95,6 +96,8 @@ function ExecutePageContent({
   const [copiedLog, setCopiedLog] = useState(false);
   const [editorOpen, setEditorOpen] = useState(false);
   const [editorCode, setEditorCode] = useState('');
+  const [aiCheckResult, setAiCheckResult] = useState('');
+  const [aiCheckLoading, setAiCheckLoading] = useState(false);
   // Intentionally unused in this compact layout; execution controls are handled elsewhere.
   void onRun;
   void onBack;
@@ -310,37 +313,92 @@ function ExecutePageContent({
                 &times;
               </button>
             </div>
-            <div className="flex-1 min-h-0 overflow-hidden">
+            <div className={`${aiCheckResult ? 'flex-[2]' : 'flex-1'} min-h-0 overflow-hidden`}>
               <PythonCodeEditor
                 value={editorCode}
                 onChange={setEditorCode}
                 className="h-full [&_.cm-editor]:!bg-white dark:[&_.cm-editor]:!bg-slate-950 [&_.cm-scroller]:h-full [&_.cm-gutters]:!bg-slate-50 dark:[&_.cm-gutters]:!bg-slate-900"
               />
             </div>
-            <div className="flex items-center justify-end gap-3 px-6 py-3 border-t border-slate-200 dark:border-slate-700">
+            {aiCheckResult && (
+              <div className="flex-1 min-h-0 overflow-auto border-t border-slate-200 dark:border-slate-700 px-6 py-3 bg-slate-50 dark:bg-slate-950">
+                <div className="flex items-center justify-between mb-2">
+                  <span className="text-xs font-semibold text-purple-600 dark:text-purple-400 flex items-center gap-1"><Sparkles size={12} /> AI Review</span>
+                  <button onClick={() => setAiCheckResult('')} className="text-xs text-slate-400 hover:text-slate-600">&times; close</button>
+                </div>
+                <div className="text-xs text-slate-700 dark:text-slate-300 whitespace-pre-wrap leading-5">{aiCheckResult}</div>
+              </div>
+            )}
+            <div className="flex items-center justify-between gap-3 px-6 py-3 border-t border-slate-200 dark:border-slate-700">
               <button
-                onClick={() => setEditorOpen(false)}
-                className="px-4 py-2 text-sm rounded-lg border border-slate-300 text-slate-700 hover:bg-slate-100 dark:border-slate-600 dark:text-slate-300 dark:hover:bg-slate-800"
-              >
-                Cancel
-              </button>
-              <button
-                onClick={() => {
-                  navigator.clipboard.writeText(editorCode);
-                  setCopied(true);
-                  setTimeout(() => setCopied(false), 2000);
+                onClick={async () => {
+                  if (!editorCode.trim()) return;
+                  setAiCheckLoading(true);
+                  setAiCheckResult('');
+                  try {
+                    // Read API key from localStorage
+                    const openaiKey = (() => { try { return (localStorage.getItem('tekautomate.ai.byok.api_key.openai') || '').trim(); } catch { return ''; } })();
+                    const anthropicKey = (() => { try { return (localStorage.getItem('tekautomate.ai.byok.api_key.anthropic') || '').trim(); } catch { return ''; } })();
+                    const apiKey = openaiKey || anthropicKey;
+                    const provider = openaiKey ? 'openai' : 'anthropic';
+                    if (!apiKey) {
+                      setAiCheckResult('No API key found. Set your key in the AI panel first.');
+                      return;
+                    }
+                    let result = '';
+                    await streamMcpChat(
+                      {
+                        userMessage: `Review this TekAutomate-generated Python script for syntax errors, runtime issues, and SCPI command problems. Check:\n1. Python syntax errors\n2. Missing imports\n3. SCPI command typos or wrong syntax\n4. Scope connection/disconnection issues\n5. Missing error handling\n6. Potential timeout issues\n\nBe concise — bullet points only, max 10 items. If code looks good, say "Code looks good - no issues found."\n\n\`\`\`python\n${editorCode}\n\`\`\``,
+                        outputMode: 'chat',
+                        provider: provider as any,
+                        apiKey,
+                        model: openaiKey ? 'gpt-5.4-nano' : 'claude-sonnet-4-6',
+                        flowContext: {
+                          backend: flowContext?.backend || 'pyvisa',
+                          modelFamily: flowContext?.modelFamily || 'unknown',
+                          steps: [],
+                        },
+                      } as any,
+                      (chunk: string) => { result += chunk; }
+                    );
+                    setAiCheckResult(result || 'No response from AI.');
+                  } catch (err) {
+                    setAiCheckResult(`Error: ${err instanceof Error ? err.message : String(err)}`);
+                  } finally {
+                    setAiCheckLoading(false);
+                  }
                 }}
-                className="px-4 py-2 text-sm rounded-lg border border-slate-300 text-slate-700 hover:bg-slate-100 dark:border-slate-600 dark:text-slate-300 dark:hover:bg-slate-800 flex items-center gap-1.5"
+                disabled={aiCheckLoading || !editorCode.trim()}
+                className="px-4 py-2 text-sm rounded-lg bg-gradient-to-r from-purple-600 to-cyan-600 text-white hover:from-purple-500 hover:to-cyan-500 font-medium flex items-center gap-1.5 disabled:opacity-40"
               >
-                <Copy size={14} />
-                {copied ? 'Copied' : 'Copy'}
+                <Sparkles size={14} />
+                {aiCheckLoading ? 'Checking...' : 'Check with AI'}
               </button>
-              <button
-                onClick={() => setEditorOpen(false)}
-                className="px-4 py-2 text-sm rounded-lg bg-purple-600 text-white hover:bg-purple-500 font-medium"
-              >
-                Done
-              </button>
+              <div className="flex items-center gap-3">
+                <button
+                  onClick={() => { setEditorOpen(false); setAiCheckResult(''); }}
+                  className="px-4 py-2 text-sm rounded-lg border border-slate-300 text-slate-700 hover:bg-slate-100 dark:border-slate-600 dark:text-slate-300 dark:hover:bg-slate-800"
+                >
+                  Cancel
+                </button>
+                <button
+                  onClick={() => {
+                    navigator.clipboard.writeText(editorCode);
+                    setCopied(true);
+                    setTimeout(() => setCopied(false), 2000);
+                  }}
+                  className="px-4 py-2 text-sm rounded-lg border border-slate-300 text-slate-700 hover:bg-slate-100 dark:border-slate-600 dark:text-slate-300 dark:hover:bg-slate-800 flex items-center gap-1.5"
+                >
+                  <Copy size={14} />
+                  {copied ? 'Copied' : 'Copy'}
+                </button>
+                <button
+                  onClick={() => { setEditorOpen(false); setAiCheckResult(''); }}
+                  className="px-4 py-2 text-sm rounded-lg bg-purple-600 text-white hover:bg-purple-500 font-medium"
+                >
+                  Done
+                </button>
+              </div>
             </div>
           </div>
         </div>
