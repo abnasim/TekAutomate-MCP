@@ -7,7 +7,7 @@ import { initTemplateIndex } from './core/templateIndex';
 import { runToolLoop } from './core/toolLoop';
 import { getToolDefinitions, runTool } from './tools/index';
 import type { McpChatRequest } from './core/schemas';
-import { bootRouter, bootRouterMinimal, createReloadProvidersHandler, createRouterHandler, getRouterHealth } from './core/routerIntegration';
+import { bootRouter, createReloadProvidersHandler, createRouterHandler, getRouterHealth } from './core/routerIntegration';
 import { getCommandIndex } from './core/commandIndex';
 import { getRagIndexes } from './core/ragIndex';
 import { getTemplateIndex } from './core/templateIndex';
@@ -21,6 +21,9 @@ const __dirname = path.dirname(__filename);
 let lastAiDebug: Record<string, unknown> | null = null;
 const REQUEST_LOG_DIR = path.join(__dirname, 'logs', 'requests');
 const MAX_LOG_FILES = 500;
+let startupState: 'starting' | 'ready' | 'error' = 'starting';
+let startupError: string | null = null;
+let startupInitPromise: Promise<void> | null = null;
 
 function ensureLogDir() {
   fs.mkdirSync(REQUEST_LOG_DIR, { recursive: true });
@@ -205,6 +208,14 @@ function sendJson(res: http.ServerResponse, status: number, payload: unknown) {
   res.end(JSON.stringify(payload));
 }
 
+function getHealthPayload() {
+  return {
+    ok: startupState !== 'error',
+    status: startupState,
+    ...(startupError ? { startupError } : {}),
+  };
+}
+
 function sendSseStart(res: http.ServerResponse) {
   res.statusCode = 200;
   res.setHeader('Content-Type', 'text/event-stream');
@@ -245,46 +256,46 @@ function parseProviderError(status: number, raw: string): { code: string; messag
 }
 
 export async function createServer(port = 8787): Promise<http.Server> {
-  // CRITICAL FIX: Initialize ALL indexes BEFORE creating HTTP server
-  // Previously: initialization happened inside request handlers (race condition)
-  const startInit = Date.now();
-  console.log('[SERVER] Initializing indexes before HTTP server starts...');
-
-  const results = await Promise.allSettled([
-    initCommandIndex(),
-    initTmDevicesIndex(),
-    initRagIndexes(),
-    initTemplateIndex(),
-    ...(providerSupplementsEnabled() ? [initProviderCatalog()] : []),
-  ]);
-
-  // Check for initialization failures
-  const failures = results
-    .map((r, i) => r.status === 'rejected' ? { index: i, error: r.reason } : null)
-    .filter((f): f is { index: number; error: unknown } => Boolean(f));
-
-  if (failures.length > 0) {
-    const names = ['CommandIndex', 'TmDevicesIndex', 'RagIndexes', 'TemplateIndex', 'ProviderCatalog'];
-    const failedNames = failures.map(f => names[f.index]).join(', ');
-    const error = new Error(`[CRITICAL] Initialization failed: ${failedNames}`);
-    console.error(error.message);
-    for (const failure of failures) {
-      console.error(`  ${names[failure.index]}: ${failure.error}`);
-    }
-    throw error;
-  }
-
-  console.log(`✅ All indexes initialized in ${Date.now() - startInit}ms`);
-
-  // Bootstrap router — enabled by default, disable with MCP_ROUTER_DISABLED=true
   const routerDisabled = String(process.env.MCP_ROUTER_DISABLED || '').trim() === 'true';
-  const warmMode = String(process.env.MCP_WARM_START_MODE || 'full').trim().toLowerCase() || 'full';
-  if (!routerDisabled) {
-    try {
-      if (warmMode === 'minimal') {
-        const report = await bootRouterMinimal();
-        console.log(`[MCP:router] minimal ${report.total} tools in ${report.durationMs}ms`);
-      } else {
+  startupInitPromise = (async () => {
+    startupState = 'starting';
+    startupError = null;
+    const startInit = Date.now();
+    console.log('[SERVER] Initializing all indexes...');
+
+    const initTasks: Promise<unknown>[] = [
+      initCommandIndex(),
+      initTmDevicesIndex(),
+      initRagIndexes(),
+      initTemplateIndex(),
+    ];
+    const names = ['CommandIndex', 'TmDevicesIndex', 'RagIndexes', 'TemplateIndex'];
+    if (providerSupplementsEnabled()) {
+      initTasks.push(initProviderCatalog());
+      names.push('ProviderCatalog');
+    }
+
+    const results = await Promise.allSettled(initTasks);
+    const failures = results
+      .map((r, i) => r.status === 'rejected' ? { index: i, error: r.reason } : null)
+      .filter((f): f is { index: number; error: unknown } => Boolean(f));
+
+    if (failures.length > 0) {
+      const failedNames = failures.map((f) => names[f.index]).join(', ');
+      const error = new Error(`[CRITICAL] Initialization failed: ${failedNames}`);
+      startupState = 'error';
+      startupError = error.message;
+      console.error(error.message);
+      for (const failure of failures) {
+        console.error(`  ${names[failure.index]}: ${failure.error}`);
+      }
+      throw error;
+    }
+
+    console.log(`✅ All indexes initialized in ${Date.now() - startInit}ms`);
+
+    if (!routerDisabled) {
+      try {
         const commandIndex = await getCommandIndex();
         const ragIndexes = await getRagIndexes();
         const templates = (await getTemplateIndex()).all().map((doc) => ({
@@ -298,12 +309,19 @@ export async function createServer(port = 8787): Promise<http.Server> {
         }));
         const report = await bootRouter({ commandIndex, ragIndexes, templates });
         console.log(`[MCP:router] ${report.total} tools in ${report.durationMs}ms`);
+      } catch (error) {
+        startupState = 'error';
+        startupError = error instanceof Error ? error.message : String(error);
+        console.error('[MCP:router] Boot failed:', error);
+        throw error;
       }
-    } catch (error) {
-      console.error('[MCP:router] Boot failed:', error);
-      throw error;
     }
-  }
+    startupState = 'ready';
+  })().catch((error) => {
+    startupState = 'error';
+    startupError = error instanceof Error ? error.message : String(error);
+    throw error;
+  });
 
   // ── MCP Protocol Server (Streamable HTTP for Claude Web / Desktop) ──
   // SDK is loaded lazily so the server still boots without @modelcontextprotocol/sdk installed.
@@ -341,20 +359,29 @@ export async function createServer(port = 8787): Promise<http.Server> {
       { name: 'tekautomate', version: '3.2.0' },
       { capabilities: { tools: {} } },
     );
-    const toolDefs = getToolDefinitions();
-    const mcpTools = toolDefs.map((def: any) => ({
-      name: def.name,
-      description: def.description ?? def.name,
-      inputSchema: {
-        type: 'object' as const,
-        properties: (def.parameters as any)?.properties ?? {},
-        ...((def.parameters as any)?.required?.length
-          ? { required: (def.parameters as any).required }
-          : {}),
-      },
-    }));
-    mcp.setRequestHandler(sdk.ListToolsRequestSchema, async () => ({ tools: mcpTools }));
+    mcp.setRequestHandler(sdk.ListToolsRequestSchema, async () => {
+      if (startupInitPromise) {
+        try { await startupInitPromise; } catch { /* degrade gracefully */ }
+      }
+      const toolDefs = getToolDefinitions();
+      const mcpTools = toolDefs.map((def: any) => ({
+        name: def.name,
+        description: def.description ?? def.name,
+        inputSchema: {
+          type: 'object' as const,
+          properties: (def.parameters as any)?.properties ?? {},
+          ...((def.parameters as any)?.required?.length
+            ? { required: (def.parameters as any).required }
+            : {}),
+        },
+      }));
+      console.log(`[MCP] list_tools count=${mcpTools.length} startup=ready`);
+      return { tools: mcpTools };
+    });
     mcp.setRequestHandler(sdk.CallToolRequestSchema, async (request: any) => {
+      if (startupInitPromise) {
+        try { await startupInitPromise; } catch { /* degrade gracefully */ }
+      }
       const { name, arguments: args } = request.params;
       try {
         const result = await runTool(name, (args as Record<string, unknown>) ?? {});
@@ -573,7 +600,6 @@ function filterTools(q) {
 </body></html>`;
   }
 
-  // NOW create the HTTP server (all indexes are ready)
   const server = http.createServer(async (req, res) => {
     if (req.method === 'OPTIONS') {
       res.statusCode = 204;
@@ -659,7 +685,7 @@ function filterTools(q) {
     }
 
     if (req.method === 'GET' && req.url === '/health') {
-      sendJson(res, 200, { ok: true, status: 'ready' });
+      sendJson(res, 200, getHealthPayload());
       return;
     }
 
