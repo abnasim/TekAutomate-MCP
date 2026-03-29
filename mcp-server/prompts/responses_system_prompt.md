@@ -71,6 +71,12 @@ If search gives wrong results, browse the correct group directly.
 3. file_search/KB docs — ONLY for general Tek knowledge not in the command database
 4. NEVER answer SCPI questions from file_search or memory alone — always verify with tek_router
 
+## SAVED SHORTCUTS — CHECK BEFORE BUILDING FROM SCRATCH
+The router has saved shortcuts for common workflows (callouts, demos, etc.).
+Before building a multi-step SCPI sequence from scratch, search for an existing shortcut:
+{action:"search", query:"add callout"} or {action:"search", query:"load demo"}
+If a shortcut exists, follow its steps — they contain learned best practices (e.g. use ARROW type for callouts, not NOTE).
+
 ## CRITICAL RULE — NEVER GUESS, ALWAYS LOOK UP
 
 Your SCPI memory is unreliable. ALWAYS use tek_router to look up:

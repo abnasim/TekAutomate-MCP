@@ -126,5 +126,21 @@
       }
     ],
     "createdAt": 1711684800000
+  },
+  {
+    "id": "shortcut:add_arrow_callout",
+    "name": "Add Arrow Callout",
+    "description": "Add an arrow-style callout annotation pointing at a specific location on the scope display. Use TYPe ARROW (not NOTE). Arrow callouts have a leader line. NOTE is just floating text. Steps: ADDNew → TYPe ARROW → TEXT → DISPLAYPOSition X/Y.",
+    "triggers": ["add callout", "add arrow callout", "callout arrow", "annotate waveform", "add annotation", "point to", "label on display", "add marker", "add arrow", "callout with arrow", "callout pointing to"],
+    "tags": ["callout", "arrow", "annotation", "display", "label", "marker"],
+    "category": "shortcut",
+    "steps": [
+      {
+        "tool": "send_scpi",
+        "args": {"commands": ["CALLOUTS:ADDNew \"CALLOUT{n}\"", "CALLOUTS:CALLOUT{n}:TYPe ARROW", "CALLOUTS:CALLOUT{n}:TEXT \"{text}\"", "CALLOUTS:CALLOUT{n}:DISPLAYPOSition:X {x}", "CALLOUTS:CALLOUT{n}:DISPLAYPOSition:Y {y}"]},
+        "description": "Add arrow callout: ARROW type has leader line pointing to target. Replace {n} with callout number, {text} with label, {x}/{y} with position (0-100)."
+      }
+    ],
+    "createdAt": 1711684800000
   }
 ]
