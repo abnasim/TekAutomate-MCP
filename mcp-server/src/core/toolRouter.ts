@@ -405,6 +405,53 @@ async function handleSearchExec(req: RouterRequest, startedAt: number): Promise<
     };
   }
 
+  // ── Priority: check builtin MCP tools first ──────────────────
+  // Builtin tools (search_scpi, verify_scpi, etc.) should always win
+  // over SCPI command headers that happen to share keywords.
+  const registry = getToolRegistry();
+  const queryLower = req.query.toLowerCase().trim();
+  // Find all builtin tools whose triggers match, then pick the one
+  // with the longest matching trigger (most specific match wins).
+  let builtinMatch: typeof registry extends { all(): (infer T)[] } ? T : any = null;
+  let longestTrigger = 0;
+  for (const tool of registry.all()) {
+    if (!tool.id.startsWith('builtin:')) continue;
+    for (const t of tool.triggers) {
+      const tLower = t.toLowerCase();
+      if (queryLower.includes(tLower) && tLower.length > longestTrigger) {
+        builtinMatch = tool;
+        longestTrigger = tLower.length;
+      }
+    }
+  }
+
+  if (builtinMatch) {
+    try {
+      const result = await builtinMatch.handler(req.args || {});
+      registry.recordUsage(builtinMatch.id);
+      if (result.ok) registry.recordSuccess(builtinMatch.id);
+      else registry.recordFailure(builtinMatch.id);
+      return {
+        ok: result.ok,
+        action: 'search_exec',
+        data: result.data,
+        text: result.text ? `[${builtinMatch.name}] ${result.text}` : `Executed ${builtinMatch.name} successfully.`,
+        warnings: result.warnings,
+        error: result.error,
+        durationMs: Date.now() - startedAt,
+      };
+    } catch (err) {
+      registry.recordFailure(builtinMatch.id);
+      return {
+        ok: false,
+        action: 'search_exec',
+        error: `Builtin tool "${builtinMatch.id}" failed: ${err instanceof Error ? err.message : String(err)}`,
+        durationMs: Date.now() - startedAt,
+      };
+    }
+  }
+
+  // ── Fall through to general search engine ─────────────────────
   const engine = getToolSearchEngine();
   const hits = await engine.search(req.query, {
     limit: 1,
@@ -591,31 +638,79 @@ async function handleBuild(req: RouterRequest, startedAt: number): Promise<Route
 export const TEK_ROUTER_TOOL_DEFINITION = {
   name: 'tek_router',
   description:
-    'TekAutomate instrument automation router. Controls Tektronix oscilloscopes via SCPI commands.\n\n' +
-    '## How to use for instrument control:\n\n' +
-    '### Step 1: SEARCH for commands\n' +
-    'Use action:"search" with a natural language query. The router understands measurement types, ' +
-    'trigger types, bus protocols, and oscilloscope concepts.\n\n' +
-    'Good search queries (natural language works):\n' +
-    '- "add jitter measurement"\n' +
-    '- "configure i2c bus decode"\n' +
-    '- "setup edge trigger"\n' +
-    '- "save screenshot"\n' +
-    '- "measure rise time"\n' +
-    '- "show detailed results"\n' +
-    '- "set channel scale"\n' +
-    '- "sampling rate"\n\n' +
-    '### Step 2: EXEC the found command\n' +
-    'Use action:"exec" with the toolId from search results and appropriate args.\n' +
-    '- For SET commands: pass commandType:"set" and value:<the value>\n' +
-    '- For QUERY commands: pass commandType:"query"\n' +
-    '- For specific channels/sources: pass concreteHeader like "CH1:SCAle" instead of "CH<x>:SCAle"\n\n' +
-    '### Common multi-step workflows:\n' +
-    '- Add measurement: search "add measurement" → exec ADDMEAS with value, then set SOUrce\n' +
-    '- Set channel: search "channel scale" → exec with concreteHeader "CH1:SCAle" and value\n' +
-    '- Configure trigger: search "edge trigger" → exec TRIGger:A:LEVel with value\n' +
-    '- Bus decode: search "i2c bus" → exec BUS:TYPe, then configure pins\n\n' +
-    'Actions: "search", "exec", "search_exec", "build", "create", "update", "delete", "info", "list".',
+    'TekAutomate gateway — single entry point to 21,000+ internal tools for Tektronix oscilloscope automation.\n\n' +
+
+    '## Quick Reference\n' +
+    'Use action:"search_exec" for most tasks. Pass query + args in one call.\n\n' +
+
+    '## Internal Tools (accessible via search_exec)\n\n' +
+
+    '### SCPI Lookup & Search\n' +
+    '- "search scpi commands" + {query:"FastFrame"} → keyword SCPI search\n' +
+    '- "get command by header" + {header:"CH<x>:SCAle"} → exact header lookup\n' +
+    '- "batch header lookup" + {headers:["CH<x>:SCAle","..."]} → multiple headers at once\n' +
+    '- "browse scpi commands" + {group:"Trigger"} → browse by feature area\n' +
+    '- "list command groups" → see all available SCPI feature groups\n\n' +
+
+    '### Command Building\n' +
+    '- "materialize scpi command" + {header:"CH<x>:SCAle", commandType:"set", value:"1.0", placeholderBindings:{"CH<x>":"CH1"}} → build concrete SCPI string\n' +
+    '- "finalize scpi" + {items:[...]} → batch build + verify in one call\n\n' +
+
+    '### Verification & Validation\n' +
+    '- "verify scpi commands" + {commands:["CH1:SCAle 1.0"]} → check if commands exist in database\n' +
+    '- "validate action payload" + {actionsJson:{steps:[...]}} → validate ACTIONS_JSON structure\n' +
+    '- "validate device context" + {steps:[...]} → check device/command alignment\n\n' +
+
+    '### Knowledge & Docs\n' +
+    '- "retrieve rag chunks" + {corpus:"app_logic", query:"spectrum view"} → search knowledge base\n' +
+    '  Corpora: scpi, tmdevices, app_logic, errors, templates, pyvisa_tekhsi\n' +
+    '- "known failures" + {query:"timeout"} → known error patterns and fixes\n' +
+    '- "template examples" + {query:"jitter"} → workflow template examples\n\n' +
+
+    '### tm_devices (Python)\n' +
+    '- "search tm devices" + {query:"channel scale"} → find tm_devices Python methods\n' +
+    '- "materialize tm devices" + {methodPath:"ch[x].termination.write"} → build Python call\n\n' +
+
+    '### Policy & Schema\n' +
+    '- "get policy" + {mode:"steps_json"} → output format rules\n' +
+    '- "valid step types" + {mode:"steps_json"} → available step/block types\n\n' +
+
+    '## Actions\n\n' +
+
+    '### search_exec (RECOMMENDED)\n' +
+    'One-shot: finds best internal tool and executes it. Use for 90% of tasks.\n' +
+    '{action:"search_exec", query:"<tool trigger phrase>", args:{<tool args>}}\n\n' +
+
+    '### search\n' +
+    'Find tools without executing. Returns IDs, descriptions, schemas.\n' +
+    '{action:"search", query:"edge trigger", limit:5}\n\n' +
+
+    '### exec\n' +
+    'Execute by tool ID (from a previous search).\n' +
+    '{action:"exec", toolId:"scpi:TRIGger:{A|B}:EDGE:SOUrce", args:{commandType:"set", value:"CH1"}}\n\n' +
+
+    '### build\n' +
+    'Generate a complete SCPI workflow from natural language.\n' +
+    '{action:"build", query:"set up jitter measurement on CH1"}\n\n' +
+
+    '### create / update / delete\n' +
+    'Manage learned shortcuts.\n' +
+    '{action:"create", toolName:"SV Trigger", toolDescription:"...", toolTriggers:["sv trigger"], toolCategory:"shortcut", toolSteps:[{tool:"send_scpi", args:{commands:["..."]}}]}\n\n' +
+
+    '### info / list\n' +
+    'Inspect a tool by ID or list all registered tools.\n\n' +
+
+    '## Typical Workflows\n\n' +
+    'Find & set a command:\n' +
+    '1. tek_router({action:"search_exec", query:"materialize scpi command", args:{header:"CH<x>:SCAle", commandType:"set", value:"2.5", placeholderBindings:{"CH<x>":"CH1"}}})\n' +
+    '2. send_scpi({commands:["CH1:SCAle 2.5"]})\n\n' +
+    'Discover undocumented commands:\n' +
+    '1. discover_scpi({basePath:"TRIGger:A:LEVel"}) → finds valid sub-paths\n' +
+    '2. tek_router({action:"search_exec", query:"get command by header", args:{header:"TRIGger:A:LEVel:MAGnitude:CH1"}})\n\n' +
+    'Verify before sending:\n' +
+    '1. tek_router({action:"search_exec", query:"verify scpi commands", args:{commands:["TRIGger:A:EDGE:SOUrce CH1_MAG"]}})\n' +
+    '2. send_scpi({commands:["TRIGger:A:EDGE:SOUrce CH1_MAG"]})\n' +
+    '3. capture_screenshot()',
   parameters: {
     type: 'object',
     properties: {
