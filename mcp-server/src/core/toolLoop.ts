@@ -4664,45 +4664,103 @@ async function runChatConversation(
   const userPrompt = `${req.userMessage}${preContext}`;
 
   if (req.provider === 'anthropic') {
+    // ── Anthropic SDK with native tool calling ─────────────────────
+    const Anthropic = (await import('@anthropic-ai/sdk')).default;
+    const client = new Anthropic({ apiKey: req.apiKey });
+
     const userContent = buildAnthropicUserContent(req, userPrompt);
-    const messages = [
+
+    // Build slim tool surface (same as MCP: tek_router + live tools)
+    const { getMcpExposedTools } = await import('../tools/index');
+    const toolDefs = getMcpExposedTools().filter(t => t.name !== 'discover_scpi'); // no instrument in chat mode
+    const anthropicTools = toolDefs.map((t: any) => ({
+      name: t.name,
+      description: t.description || t.name,
+      input_schema: {
+        type: 'object' as const,
+        properties: (t.parameters as any)?.properties ?? {},
+        ...((t.parameters as any)?.required?.length
+          ? { required: (t.parameters as any).required }
+          : {}),
+      },
+    }));
+
+    const messages: Array<{ role: 'user' | 'assistant'; content: any }> = [
       ...(Array.isArray(req.history)
         ? req.history
-            .slice(-8)
+            .slice(-12)
             .map((h, i, arr) => ({
               role: h.role as 'user' | 'assistant',
               content: String(h.content || '').slice(0, i < arr.length - 2 ? 3000 : 6000),
             }))
         : []),
-      { role: 'user' as const, content: userContent },
+      { role: 'user' as const, content: userContent as any },
     ];
-    const requestPayload = {
-      model: req.model,
-      system: `${CHAT_MODE_SYSTEM_PROMPT}\n\n${developerPrompt}`,
-      max_tokens: 4096,
-      messages,
-    };
-    const anthropicBase = process.env.ANTHROPIC_BASE_URL || 'https://api.anthropic.com';
-    const res = await fetch(`${anthropicBase}/v1/messages`, {
-      method: 'POST',
-      headers: {
-        'x-api-key': req.apiKey,
-        'anthropic-version': '2023-06-01',
-        'content-type': 'application/json',
-      },
-      body: JSON.stringify(requestPayload),
-    });
-    if (!res.ok) {
-      throw new Error(`Anthropic error ${res.status}: ${await res.text()}`);
+
+    const systemPrompt = `${CHAT_MODE_SYSTEM_PROMPT}\n\n${developerPrompt}`;
+    const toolTrace: Array<Record<string, unknown>> = [];
+    let finalText = '';
+    let iterations = 0;
+    let totalToolMs = 0;
+    const MAX_TOOL_ROUNDS = 6;
+
+    for (let round = 0; round < MAX_TOOL_ROUNDS; round++) {
+      iterations++;
+      const response = await client.messages.create({
+        model: req.model || 'claude-sonnet-4-20250514',
+        system: systemPrompt,
+        max_tokens: 4096,
+        messages: messages as any,
+        tools: anthropicTools as any,
+      });
+
+      // Extract text blocks
+      const textParts = response.content
+        .filter((c: any) => c.type === 'text')
+        .map((c: any) => c.text)
+        .join('\n');
+      if (textParts) finalText = textParts;
+
+      // Check for tool calls
+      const toolUseBlocks = response.content.filter((c: any) => c.type === 'tool_use');
+      if (toolUseBlocks.length === 0 || response.stop_reason !== 'tool_use') {
+        break; // No more tool calls — done
+      }
+
+      // Add assistant response to messages
+      messages.push({ role: 'assistant', content: response.content as any });
+
+      // Execute tools and collect results
+      const toolResults: Array<{ type: 'tool_result'; tool_use_id: string; content: string }> = [];
+      for (const tu of toolUseBlocks) {
+        const toolName = (tu as any).name;
+        const toolArgs = (tu as any).input || {};
+        const toolId = (tu as any).id;
+
+        console.log(`[MCP] Anthropic tool call: ${toolName}`);
+        const toolStart = Date.now();
+        try {
+          const result = await runTool(toolName, toolArgs);
+          const resultText = typeof result === 'string' ? result : JSON.stringify(result, null, 2);
+          // Cap tool result size
+          const cappedResult = resultText.length > 30000
+            ? resultText.slice(0, 30000) + '\n[Truncated]'
+            : resultText;
+          toolResults.push({ type: 'tool_result', tool_use_id: toolId, content: cappedResult });
+          toolTrace.push({ tool: toolName, args: toolArgs, ok: true, durationMs: Date.now() - toolStart });
+        } catch (err) {
+          const msg = err instanceof Error ? err.message : String(err);
+          toolResults.push({ type: 'tool_result', tool_use_id: toolId, content: `Error: ${msg}` });
+          toolTrace.push({ tool: toolName, args: toolArgs, ok: false, error: msg, durationMs: Date.now() - toolStart });
+        }
+        totalToolMs += Date.now() - toolStart;
+      }
+
+      // Add tool results as user message
+      messages.push({ role: 'user', content: toolResults as any });
     }
-    const json = (await res.json()) as Record<string, unknown>;
-    const text = Array.isArray(json.content)
-      ? (json.content as Array<Record<string, unknown>>)
-          .filter((c) => c.type === 'text')
-          .map((c) => String(c.text || ''))
-          .join('\n')
-      : '';
-    const normalizedText = await normalizeChatBuildLikeResponse(req, text);
+
+    const normalizedText = await normalizeChatBuildLikeResponse(req, finalText);
     const modelMs = Date.now() - modelStartedAt;
     return {
       text: normalizedText,
@@ -4710,23 +4768,22 @@ async function runChatConversation(
         totalMs: modelMs,
         usedShortcut: false,
         provider: 'anthropic',
-        iterations: 1,
-        toolCalls: 0,
-        toolMs: 0,
-        modelMs,
+        iterations,
+        toolCalls: toolTrace.length,
+        toolMs: totalToolMs,
+        modelMs: modelMs - totalToolMs,
         promptChars: {
-          system: CHAT_MODE_SYSTEM_PROMPT.length + developerPrompt.length,
+          system: systemPrompt.length,
           user: userPrompt.length,
         },
       },
       debug: {
-        systemPrompt: CHAT_MODE_SYSTEM_PROMPT,
+        systemPrompt,
         developerPrompt,
         userPrompt,
-        toolDefinitions: [],
-        toolTrace: [],
-        providerRequest: requestPayload,
-        resolutionPath: 'chat',
+        toolDefinitions: anthropicTools.map((t: any) => t.name),
+        toolTrace,
+        resolutionPath: 'anthropic-sdk',
       },
     };
   }
