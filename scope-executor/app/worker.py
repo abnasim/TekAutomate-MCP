@@ -149,6 +149,43 @@ def _close_all_sessions():
             _resource_manager = None
 
 
+def _read_binary_block(session) -> bytes:
+    """Read IEEE 488.2 definite-length binary block (#NdddData...) over raw socket.
+
+    Over VXI-11 (INSTR), read_raw() works because the protocol has message framing.
+    Over raw SOCKET, there's no message boundary — we must parse the # block header
+    to know exactly how many bytes to read.
+    """
+    # Read the '#' prefix
+    header = session.read_bytes(1)
+    if header != b"#":
+        # Not a block header — fall back to reading until timeout
+        rest = session.read_raw()
+        return header + rest
+    # Read digit count (single ascii digit telling us how many digits follow)
+    digit_count_char = session.read_bytes(1)
+    digit_count = int(digit_count_char)
+    if digit_count == 0:
+        # Indefinite length block — read until newline
+        return session.read_raw()
+    # Read the byte count (N ascii digits)
+    byte_count_str = session.read_bytes(digit_count)
+    byte_count = int(byte_count_str)
+    # Read exactly that many data bytes
+    data = b""
+    remaining = byte_count
+    while remaining > 0:
+        chunk = session.read_bytes(min(remaining, 65536))
+        data += chunk
+        remaining -= len(chunk)
+    # Read trailing newline if present
+    try:
+        session.read_bytes(1)
+    except Exception:
+        pass
+    return data
+
+
 def _handle_capture_screenshot(job: dict) -> dict:
     visa = job.get("visa")
     scope_type = job.get("scope_type") or "modern"
@@ -176,6 +213,7 @@ def _handle_capture_screenshot(job: dict) -> dict:
             scpi.timeout = 30000
             scpi.write_termination = "\n"
             scpi.read_termination = None
+            is_socket = "SOCKET" in visa.upper()
 
             if scope_type == "legacy":
                 scpi.write('HARDCOPY:PORT FILE')
@@ -184,13 +222,13 @@ def _handle_capture_screenshot(job: dict) -> dict:
                 scpi.write('HARDCOPY START')
                 time.sleep(1.0)
                 scpi.write('FILESYSTEM:READFILE "C:/TekScope/Temp/screenshot.png"')
-                data = scpi.read_raw()
+                data = _read_binary_block(scpi) if is_socket else scpi.read_raw()
                 scpi.write('FILESYSTEM:DELETE "C:/TekScope/Temp/screenshot.png"')
             else:
                 scpi.write('SAVE:IMAGE "C:/Temp/screenshot.png"')
                 time.sleep(1.0)
                 scpi.write('FILESYSTEM:READFILE "C:/Temp/screenshot.png"')
-                data = scpi.read_raw()
+                data = _read_binary_block(scpi) if is_socket else scpi.read_raw()
                 scpi.write('FILESYSTEM:DELETE "C:/Temp/screenshot.png"')
 
             import base64
