@@ -146,24 +146,13 @@ async function executeMcpTool(
           || upper.includes('ACQUIRE:STATE') || upper.includes('ACQU:STATE')
           || upper.includes('AUTOSET') || upper.includes('AUTOSCALE');
       });
-      payload.timeout_ms = hasSlowCommand ? 30000 : 5000;
+      payload.timeout_ms = hasSlowCommand ? 15000 : 3000;
     }
 
-    // ── SCPI Verify Gate ──
-    // Before sending ANY command via send_scpi, verify against the command index.
-    // Bypass for discover_scpi (probing mode) and get_instrument_state (star commands).
-    if (toolName === 'send_scpi' && action === 'send_scpi') {
-      const cmds = Array.isArray(payload.commands) ? payload.commands as string[] : [];
-      const verification = await verifyScpiCommands(cmds, flowContext);
-      if (!verification.verified) {
-        return { ok: false, error: 'VERIFY_GATE_BLOCKED', message: verification.error, commands: cmds };
-      }
-    }
-
-    // Script timeout: 30s for screenshot/slow ops, 15s for simple SCPI
+    // Script timeout: 15s for screenshot/slow ops, 8s for simple SCPI
     const isSlowAction = toolName === 'capture_screenshot' || toolName === 'discover_scpi'
       || (toolName === 'send_scpi' && payload.timeout_ms && Number(payload.timeout_ms) > 10000);
-    const scriptTimeout = isSlowAction ? 30 : 15;
+    const scriptTimeout = isSlowAction ? 15 : 8;
 
     const res = await fetch(`${execUrl}/run`, {
       method: 'POST',
@@ -336,19 +325,11 @@ async function runAnthropicLoop(params: LiveToolLoopParams): Promise<LiveToolLoo
             lean = rest;
           }
           const resultStr = typeof lean === 'string' ? lean : JSON.stringify(lean);
-
-          // After send_scpi with write commands: gentle reminder to verify
-          const isSendScpi = toolName === 'send_scpi';
-          const hasWriteCommand = isSendScpi && Array.isArray(toolArgs.commands) &&
-            (toolArgs.commands as string[]).some(c => !String(c).trim().endsWith('?'));
-          const verifyHint = hasWriteCommand
-            ? '[Verify: capture_screenshot(analyze:true) to confirm the user\'s request was fulfilled.]\n'
-            : '';
           const truncated = resultStr.length > 3000 ? resultStr.slice(0, 3000) + '\n...(truncated)' : resultStr;
           toolResults.push({
             type: 'tool_result',
             tool_use_id: toolId,
-            content: verifyHint + truncated,
+            content: truncated,
           });
         }
       } catch (err) {
@@ -502,18 +483,10 @@ async function runOpenAiLoop(params: LiveToolLoopParams): Promise<LiveToolLoopRe
             }
             const resultStr = typeof lean === 'string' ? lean : JSON.stringify(lean);
             const truncated = resultStr.length > 3000 ? resultStr.slice(0, 3000) + '\n...(truncated)' : resultStr;
-
-            // After send_scpi: remind AI to verify with screenshot
-            const isSendScpi = toolName === 'send_scpi';
-            const hasWriteCmd = isSendScpi && Array.isArray(toolArgs.commands) &&
-              (toolArgs.commands as string[]).some(c => !String(c).trim().endsWith('?'));
-            const verifyHint = hasWriteCmd
-              ? '\n⚠️ You sent write commands. Call capture_screenshot(analyze:true) NOW to verify they applied. Do NOT claim success without checking.'
-              : '';
             toolResultsInput.push({
               type: 'function_call_output',
               call_id: callId,
-              output: isScreenshot ? 'Screenshot captured and displayed to user.' : verifyHint + truncated,
+              output: isScreenshot ? 'Screenshot captured and displayed to user.' : truncated,
             });
           }
         } catch (err) {
