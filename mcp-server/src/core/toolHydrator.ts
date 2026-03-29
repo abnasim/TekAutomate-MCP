@@ -578,8 +578,8 @@ export function hydrateBuiltinShortcuts(): MicroTool[] {
 // findable via tek_router's search/search_exec actions.
 const MCP_TOOL_TRIGGERS: Record<string, string[]> = {
   search_scpi: ['search scpi', 'find scpi', 'scpi search', 'command search'],
-  get_command_by_header: ['get command by header', 'exact header lookup', 'header lookup'],
-  get_commands_by_header_batch: ['batch header lookup', 'multiple headers'],
+  get_command_by_header: ['get command by header', 'exact header lookup', 'single header lookup'],
+  get_commands_by_header_batch: ['batch header lookup', 'batch headers', 'multiple headers', 'headers batch', 'get commands by header batch'],
   get_command_group: ['command group', 'group commands', 'feature area commands'],
   list_command_groups: ['list command groups', 'all groups', 'available groups', 'show groups'],
   browse_scpi_commands: ['browse scpi', 'browse commands', 'drill down commands'],
@@ -592,7 +592,7 @@ const MCP_TOOL_TRIGGERS: Record<string, string[]> = {
   retrieve_rag_chunks: ['retrieve rag', 'knowledge base', 'documentation search'],
   search_known_failures: ['known failures', 'known errors', 'common problems'],
   get_template_examples: ['template examples', 'workflow examples', 'example flows'],
-  validate_action_payload: ['validate actions', 'validate payload', 'check actions json'],
+  validate_action_payload: ['validate actions', 'validate payload', 'validate action payload', 'check actions json'],
   validate_device_context: ['validate device context', 'device context check'],
   get_policy: ['get policy', 'policy rules', 'output format rules'],
   list_valid_step_types: ['valid step types', 'step types', 'block types'],

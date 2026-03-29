@@ -405,6 +405,53 @@ async function handleSearchExec(req: RouterRequest, startedAt: number): Promise<
     };
   }
 
+  // ── Priority: check builtin MCP tools first ──────────────────
+  // Builtin tools (search_scpi, verify_scpi, etc.) should always win
+  // over SCPI command headers that happen to share keywords.
+  const registry = getToolRegistry();
+  const queryLower = req.query.toLowerCase().trim();
+  // Find all builtin tools whose triggers match, then pick the one
+  // with the longest matching trigger (most specific match wins).
+  let builtinMatch: typeof registry extends { all(): (infer T)[] } ? T : any = null;
+  let longestTrigger = 0;
+  for (const tool of registry.all()) {
+    if (!tool.id.startsWith('builtin:')) continue;
+    for (const t of tool.triggers) {
+      const tLower = t.toLowerCase();
+      if (queryLower.includes(tLower) && tLower.length > longestTrigger) {
+        builtinMatch = tool;
+        longestTrigger = tLower.length;
+      }
+    }
+  }
+
+  if (builtinMatch) {
+    try {
+      const result = await builtinMatch.handler(req.args || {});
+      registry.recordUsage(builtinMatch.id);
+      if (result.ok) registry.recordSuccess(builtinMatch.id);
+      else registry.recordFailure(builtinMatch.id);
+      return {
+        ok: result.ok,
+        action: 'search_exec',
+        data: result.data,
+        text: result.text ? `[${builtinMatch.name}] ${result.text}` : `Executed ${builtinMatch.name} successfully.`,
+        warnings: result.warnings,
+        error: result.error,
+        durationMs: Date.now() - startedAt,
+      };
+    } catch (err) {
+      registry.recordFailure(builtinMatch.id);
+      return {
+        ok: false,
+        action: 'search_exec',
+        error: `Builtin tool "${builtinMatch.id}" failed: ${err instanceof Error ? err.message : String(err)}`,
+        durationMs: Date.now() - startedAt,
+      };
+    }
+  }
+
+  // ── Fall through to general search engine ─────────────────────
   const engine = getToolSearchEngine();
   const hits = await engine.search(req.query, {
     limit: 1,
