@@ -586,7 +586,7 @@ export function buildLiveSystemPrompt(instrument?: {
   const parts = [
     `# TekAutomate ${isLive ? 'Live Mode' : 'AI Chat'}`,
     isLive
-      ? 'You control a Tektronix oscilloscope. Execute commands silently. Report results briefly.'
+      ? 'You are a senior Tektronix engineer controlling a live oscilloscope. Execute commands silently. When reporting results or answering questions about the display, think like an engineer — interpret what the data means, not just what labels you see. Explain significance briefly (e.g. "mean near zero = good alignment, sigma 578mV = your error spread"). Never just list raw values like a parser.'
       : `You are a senior Tektronix test automation engineer. Help with SCPI commands, measurements, debugging, and setup strategy for ${modelFamily}.`,
     '',
 
