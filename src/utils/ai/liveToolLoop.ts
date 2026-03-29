@@ -79,7 +79,11 @@ async function executeMcpTool(
     let payload: Record<string, unknown> = { ...args };
     if (toolName === 'get_instrument_state') {
       action = 'send_scpi';
-      payload = { commands: ['*IDN?', '*ESR?', 'ALLEV?'], timeout_ms: 10000 };
+      payload = { commands: ['*IDN?', '*ESR?', 'ALLEV?'], timeout_ms: 5000 };
+    }
+    // Default per-command timeout for live mode: 5s (valid SCPI returns in <1s)
+    if (toolName === 'send_scpi' && !payload.timeout_ms) {
+      payload.timeout_ms = 5000;
     }
 
     const res = await fetch(`${execUrl}/run`, {
@@ -88,7 +92,7 @@ async function executeMcpTool(
       body: JSON.stringify({
         protocol_version: 1,
         action,
-        timeout_sec: 90,
+        timeout_sec: 15, // 15s script timeout for live mode (was 90s)
         scope_visa: scopeVisa,
         liveMode: true,
         ...payload,
