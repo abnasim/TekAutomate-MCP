@@ -455,6 +455,13 @@ header p{color:#94a3b8;margin-top:0.25rem}
 .setup-card h4{color:#60a5fa;margin-bottom:0.5rem;font-size:0.95rem}
 .setup-card pre{background:#0f172a;padding:0.75rem;border-radius:6px;font-size:0.75rem;overflow-x:auto;color:#a5b4fc;border:1px solid #1e293b}
 .setup-card .label{font-size:0.7rem;color:#94a3b8;text-transform:uppercase;letter-spacing:0.05em;margin-bottom:0.25rem}
+.usage-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(320px,1fr));gap:1rem}
+.usage-card{background:#1e293b;border:1px solid #334155;border-radius:8px;padding:1.25rem}
+.usage-card h4{color:#60a5fa;margin-bottom:0.35rem;font-size:0.95rem;font-family:monospace}
+.usage-card p{color:#94a3b8;font-size:0.85rem;margin-bottom:0.65rem}
+.usage-card ul{margin:0 0 0.75rem 1rem;color:#cbd5e1;font-size:0.82rem}
+.usage-card li{margin-bottom:0.3rem}
+.usage-card pre{white-space:pre-wrap;word-break:break-word;background:#0f172a;padding:0.75rem;border-radius:6px;font-size:0.74rem;color:#a5b4fc;border:1px solid #334155}
 .endpoints{display:grid;gap:0.5rem}
 .endpoint{background:#1e293b;border:1px solid #334155;border-radius:6px;padding:0.75rem 1rem;display:flex;gap:1rem;align-items:center}
 .endpoint .method{font-weight:700;font-size:0.75rem;padding:2px 8px;border-radius:4px;min-width:50px;text-align:center}
@@ -590,6 +597,83 @@ Config file locations:
     <div class="endpoint"><span class="method post">POST</span><code>/ai/chat</code><span class="ep-desc">Main AI orchestration endpoint</span></div>
     <div class="endpoint"><span class="method post">POST</span><code>/ai/router</code><span class="ep-desc">Router-based tool dispatch</span></div>
     <div class="endpoint"><span class="method get">GET</span><code>/ai/debug/last</code><span class="ep-desc">Last request debug bundle</span></div>
+  </div>
+</div>
+
+<div class="section">
+  <h2>How To Use The MCP Tools</h2>
+  <p style="color:#94a3b8;font-size:0.85rem;margin-bottom:1rem">The exposed MCP surface is intentionally small. Use <code>tek_router</code> as the main gateway, and use the live tools only when you need direct scope interaction.</p>
+  <div class="usage-grid">
+    <div class="usage-card">
+      <h4>tek_router</h4>
+      <p>Main orchestration gateway to the larger internal tool graph. Best for search, exact header lookup, browse, verify, build, and examples.</p>
+      <ul>
+        <li>Exact header known: use <code>search_exec</code> + <code>get command by header</code></li>
+        <li>Need to find a command: use <code>search_exec</code> + <code>search scpi commands</code></li>
+        <li>Need to explore a feature area: use <code>search_exec</code> + <code>browse scpi commands</code></li>
+        <li>Need syntax verification: use <code>search_exec</code> + <code>verify scpi commands</code></li>
+      </ul>
+      <pre>{
+  "tool": "tek_router",
+  "args": {
+    "action": "search_exec",
+    "query": "search scpi commands",
+    "args": {
+      "query": "edge trigger level",
+      "modelFamily": "MSO6"
+    }
+  }
+}</pre>
+    </div>
+    <div class="usage-card">
+      <h4>smart_scpi_lookup</h4>
+      <p>Best first choice for fuzzy natural-language SCPI discovery. It usually outperforms raw keyword search for ambiguous prompts.</p>
+      <ul>
+        <li>Use when the user says what they want in plain English</li>
+        <li>Include <code>modelFamily</code> whenever known</li>
+        <li>Good for trigger, measurement, display, bus, math, and save/recall questions</li>
+      </ul>
+      <pre>{
+  "tool": "smart_scpi_lookup",
+  "args": {
+    "query": "callout text underline",
+    "modelFamily": "MSO6"
+  }
+}</pre>
+    </div>
+    <div class="usage-card">
+      <h4>send_scpi</h4>
+      <p>Use only for live instrument execution after the command has been found or verified. Requires a connected executor/instrument context.</p>
+      <pre>{
+  "tool": "send_scpi",
+  "args": {
+    "commands": ["ACQuire:MODE?"],
+    "liveMode": true
+  }
+}</pre>
+    </div>
+    <div class="usage-card">
+      <h4>capture_screenshot</h4>
+      <p>Grabs the current scope display. Use <code>analyze: true</code> only when you want the image returned for AI analysis.</p>
+      <pre>{
+  "tool": "capture_screenshot",
+  "args": {
+    "liveMode": true,
+    "analyze": false
+  }
+}</pre>
+    </div>
+    <div class="usage-card">
+      <h4>discover_scpi</h4>
+      <p>Read-only live probing for undocumented or mode-specific command paths. Best when search/lookup cannot find the command.</p>
+      <pre>{
+  "tool": "discover_scpi",
+  "args": {
+    "basePath": "TRIGger:A:LEVel",
+    "liveMode": true
+  }
+}</pre>
+    </div>
   </div>
 </div>
 
