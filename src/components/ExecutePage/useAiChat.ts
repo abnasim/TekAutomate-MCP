@@ -805,9 +805,9 @@ export function useAiChat(params: {
           model: state.model,
           systemPrompt,
           userMessage: effectiveMessage,
-          history: state.history.slice(-2).map((h) => ({
+          history: state.history.slice(-8).map((h) => ({
             role: h.role,
-            content: String(h.content || '').slice(0, 1000),
+            content: String(h.content || '').slice(0, 4000),
           })),
           tools: liveTools,
           instrumentEndpoint: params.instrumentEndpoint ?? undefined,
