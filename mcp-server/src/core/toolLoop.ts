@@ -4493,12 +4493,17 @@ function buildSystemPrompt(modePrompt: string, outputMode: 'steps_json' | 'block
     '- If part of the request is clear, return the verified/applyable part and mention the missing or unsupported remainder in findings instead of returning an empty response.',
     '',
     '## MCP Tools',
-    '- search_scpi / get_command_by_header: use when exact SCPI syntax is genuinely uncertain.',
-    '- search_tm_devices: use only for tm_devices backend or explicit SCPI <-> tm_devices conversion.',
-    '- retrieve_rag_chunks: use for TekAutomate app logic, backend behavior, templates, Blockly behavior, and known patterns.',
-    '- list_valid_step_types / get_block_schema: use when you are unsure which step or block shape TekAutomate supports.',
-    '- validate_action_payload: optional final sanity check for complex grouped edits; not required for every simple edit.',
-    '- get_instrument_state / probe_command: use only when live executor context is available and runtime probing is necessary.',
+    '- tek_router: PRIMARY tool. Routes to 21,000+ internal tools. Use action:"search_exec" with query + args.',
+    '  Fuzzy search: {action:"search_exec", query:"search scpi commands", args:{query:"your description"}}',
+    '  Exact lookup: {action:"search_exec", query:"get command by header", args:{header:"EXACT:HEADER"}}',
+    '  Verify: {action:"search_exec", query:"verify scpi commands", args:{commands:["CMD1","CMD2"]}}',
+    '  Build: {action:"search_exec", query:"materialize scpi command", args:{header:"...", commandType:"set", value:"...", placeholderBindings:{...}}}',
+    '  RAG: {action:"search_exec", query:"retrieve rag chunks", args:{corpus:"app_logic", query:"..."}}',
+    '  Validate: {action:"search_exec", query:"validate action payload", args:{actionsJson:{steps:[...]}}}',
+    '- smart_scpi_lookup: natural language SCPI finder. Use for quick command lookup by plain English.',
+    '- send_scpi: send commands to live instrument (requires executor context).',
+    '- capture_screenshot: capture scope display (requires executor context).',
+    '- discover_scpi: probe live instrument to find undocumented commands (requires executor context).',
     '',
     '## Validation Priority',
     '- User-visible truth comes first. If a flow already runs or logs prove success, do not invent blocker-level schema complaints.',
@@ -5694,15 +5699,15 @@ export function buildHostedResponsesTools(
   } else if (wantsTmDevices) {
     toolNames =
       phase === 'initial'
-        ? ['get_current_flow', 'search_tm_devices', 'materialize_tm_devices_call', 'validate_action_payload', ...(routerEnabledForRequest ? ['tek_router'] : [])]
-        : ['get_current_flow', 'materialize_tm_devices_call', 'validate_action_payload', ...(routerEnabledForRequest ? ['tek_router'] : [])];
+        ? ['get_current_flow', 'tek_router', 'smart_scpi_lookup', 'send_scpi', 'capture_screenshot']
+        : ['get_current_flow', 'tek_router', 'send_scpi', 'capture_screenshot'];
   } else if (options?.batchMaterializeOnly) {
     toolNames = phase === 'initial' ? ['finalize_scpi_commands'] : [];
   } else {
     toolNames =
       phase === 'initial' && !options?.restrictSearchTools
-? ['get_current_flow', 'smart_scpi_lookup', 'get_command_group', 'get_command_by_header', 'get_commands_by_header_batch', 'materialize_scpi_command', 'materialize_scpi_commands', 'finalize_scpi_commands', 'verify_scpi_commands', 'validate_action_payload', 'probe_command', 'send_scpi', 'capture_screenshot', ...(routerEnabledForRequest ? ['tek_router'] : [])]
-: ['get_current_flow', 'smart_scpi_lookup', 'get_command_by_header', 'get_commands_by_header_batch', 'materialize_scpi_command', 'materialize_scpi_commands', 'finalize_scpi_commands', 'verify_scpi_commands', 'validate_action_payload', 'probe_command', 'send_scpi', 'capture_screenshot', ...(routerEnabledForRequest ? ['tek_router'] : [])];
+? ['get_current_flow', 'tek_router', 'smart_scpi_lookup', 'send_scpi', 'capture_screenshot', 'discover_scpi']
+: ['get_current_flow', 'tek_router', 'smart_scpi_lookup', 'send_scpi', 'capture_screenshot'];
   }
 
   const allow = new Set(toolNames);
