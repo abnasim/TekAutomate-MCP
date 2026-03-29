@@ -765,6 +765,14 @@ export const TEK_ROUTER_TOOL_DEFINITION = {
     '  3. Send:   send_scpi({commands:["CALLOUTS:CALLOUT1:FONT:UNDERLine 1"]})\n' +
     '  4. Verify: capture_screenshot()\n\n' +
 
+    '## When Search Returns Wrong/No Results\n' +
+    'If your search does not find the right command:\n' +
+    '  1. Browse by group: {action:"search_exec", query:"browse scpi commands", args:{group:"Search"}} (or Trigger, Measurement, Display, etc.)\n' +
+    '  2. Try different keywords — use SCPI terms not natural language (e.g. "SEARCHTABle" not "search results table")\n' +
+    '  3. Use discover_scpi to probe the live instrument: discover_scpi({basePath:"SEARCH", liveMode:true})\n' +
+    '  4. If the user pastes manual/documentation text, parse the SCPI header from it and execute directly via send_scpi\n' +
+    '  5. NEVER loop on the same failed search — try a different approach after 1 failed attempt\n\n' +
+
     '## Model Family\n' +
     'If the user has not specified their instrument model:\n' +
     '  - ASK the user which model they have (MSO4, MSO5, MSO6, MSO6B, DPO7, AFG, AWG, etc.)\n' +
