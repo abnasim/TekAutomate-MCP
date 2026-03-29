@@ -848,11 +848,15 @@ export function useAiChat(params: {
         hasCurrentSteps: params.steps.length > 0,
         hasPendingFlowSteps: pendingFlowSteps.length > 0,
       });
-    const effectiveTekMode: TekMode = chatBuildHandoff || autoBuildFollowUp ? 'mcp' : state.tekMode;
+    // When user says "build it" with an AI provider + key, let the AI handle the build.
+    // The AI has full conversation context and can return ACTIONS_JSON via tek_router.
+    // Only fall back to MCP-only deterministic planner when no AI key is available.
+    const hasAiKey = state.apiKey.trim().length > 0;
+    const aiBuildHandoff = (chatBuildHandoff || autoBuildFollowUp) && hasAiKey;
+    const effectiveTekMode: TekMode = (chatBuildHandoff || autoBuildFollowUp) && !hasAiKey ? 'mcp' : state.tekMode;
     // When building from AI chat with OpenAI provider + key, route via assistant
-    // even though effectiveTekMode is 'mcp' for output mode purposes
-    const buildHandoffViaAssistant = (chatBuildHandoff || autoBuildFollowUp)
-      && state.tekMode === 'ai' && state.provider === 'openai' && state.apiKey.trim().length > 0;
+    const buildHandoffViaAssistant = aiBuildHandoff
+      && state.provider === 'openai';
     const forceFreshBuild = effectiveTekMode === 'mcp' && shouldForceFreshBuild(text, state.tekMode);
     const handoffHistory = (chatBuildHandoff || autoBuildFollowUp)
       ? extractActiveBuildHandoffHistory(state.history as ChatTurn[])
@@ -861,7 +865,8 @@ export function useAiChat(params: {
       ? extractStructuredBuildBrief(handoffHistory as Array<{ role: string; content?: string }>)
       : null;
     const effectiveMessage = (chatBuildHandoff || autoBuildFollowUp)
-      ? buildPromptFromRecentChat(handoffHistory as Array<{ role: string; content?: string }>, text)
+      ? buildPromptFromRecentChat(handoffHistory as Array<{ role: string; content?: string }>, text) +
+        (aiBuildHandoff ? '\n\nIMPORTANT: Return ACTIONS_JSON with the built flow. Use tek_router({action:"build", query:"<summary of what to build>"}) to generate verified steps. Return the result as ACTIONS_JSON: {...} so the app can apply it.' : '')
       : text;
     const trimmedKey = state.apiKey.trim();
     const requiresByok = state.tekMode !== 'mcp';
