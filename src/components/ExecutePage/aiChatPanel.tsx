@@ -941,7 +941,7 @@ export function AiChatPanel({
     if ((trimmed.startsWith('{') && trimmed.endsWith('}')) || (trimmed.startsWith('[') && trimmed.endsWith(']'))) {
       return <div className="space-y-3">{renderJsonDisclosure('raw-json', trimmed)}</div>;
     }
-    const blockPattern = /```([a-zA-Z0-9_-]+)?\s*\n?([\s\S]*?)```/g;
+    const blockPattern = /```([a-zA-Z0-9_-]+)?[ \t]*\n([\s\S]*?)```/g;
     const parts: React.ReactNode[] = [];
     let cursor = 0;
     let match: RegExpExecArray | null;
@@ -970,15 +970,26 @@ export function AiChatPanel({
                       {language}
                     </div>
                   )}
-                  {isPythonBlock && (
+                  <div className="flex gap-1.5">
                     <button
                       type="button"
-                      onClick={() => downloadPythonSnippet(code)}
+                      onClick={() => {
+                        navigator.clipboard.writeText(code);
+                      }}
                       className="rounded-md border border-slate-200 px-2 py-1 text-[10px] font-semibold text-slate-600 transition hover:border-cyan-300 hover:text-cyan-700 dark:border-white/10 dark:text-white/60 dark:hover:border-cyan-400/50 dark:hover:text-cyan-200"
                     >
-                      Download .py
+                      Copy
                     </button>
-                  )}
+                    {isPythonBlock && (
+                      <button
+                        type="button"
+                        onClick={() => downloadPythonSnippet(code)}
+                        className="rounded-md border border-slate-200 px-2 py-1 text-[10px] font-semibold text-slate-600 transition hover:border-cyan-300 hover:text-cyan-700 dark:border-white/10 dark:text-white/60 dark:hover:border-cyan-400/50 dark:hover:text-cyan-200"
+                      >
+                        Download .py
+                      </button>
+                    )}
+                  </div>
                 </div>
               )}
               <pre className="overflow-x-auto rounded-xl bg-slate-900 px-3 py-3 text-[11px] leading-relaxed text-slate-100">
