@@ -4493,12 +4493,17 @@ function buildSystemPrompt(modePrompt: string, outputMode: 'steps_json' | 'block
     '- If part of the request is clear, return the verified/applyable part and mention the missing or unsupported remainder in findings instead of returning an empty response.',
     '',
     '## MCP Tools',
-    '- search_scpi / get_command_by_header: use when exact SCPI syntax is genuinely uncertain.',
-    '- search_tm_devices: use only for tm_devices backend or explicit SCPI <-> tm_devices conversion.',
-    '- retrieve_rag_chunks: use for TekAutomate app logic, backend behavior, templates, Blockly behavior, and known patterns.',
-    '- list_valid_step_types / get_block_schema: use when you are unsure which step or block shape TekAutomate supports.',
-    '- validate_action_payload: optional final sanity check for complex grouped edits; not required for every simple edit.',
-    '- get_instrument_state / probe_command: use only when live executor context is available and runtime probing is necessary.',
+    '- tek_router: PRIMARY tool. Routes to 21,000+ internal tools. Use action:"search_exec" with query + args.',
+    '  Fuzzy search: {action:"search_exec", query:"search scpi commands", args:{query:"your description"}}',
+    '  Exact lookup: {action:"search_exec", query:"get command by header", args:{header:"EXACT:HEADER"}}',
+    '  Verify: {action:"search_exec", query:"verify scpi commands", args:{commands:["CMD1","CMD2"]}}',
+    '  Build: {action:"search_exec", query:"materialize scpi command", args:{header:"...", commandType:"set", value:"...", placeholderBindings:{...}}}',
+    '  RAG: {action:"search_exec", query:"retrieve rag chunks", args:{corpus:"app_logic", query:"..."}}',
+    '  Validate: {action:"search_exec", query:"validate action payload", args:{actionsJson:{steps:[...]}}}',
+    '- smart_scpi_lookup: natural language SCPI finder. Use for quick command lookup by plain English.',
+    '- send_scpi: send commands to live instrument (requires executor context).',
+    '- capture_screenshot: capture scope display (requires executor context).',
+    '- discover_scpi: probe live instrument to find undocumented commands (requires executor context).',
     '',
     '## Validation Priority',
     '- User-visible truth comes first. If a flow already runs or logs prove success, do not invent blocker-level schema complaints.',
@@ -4659,45 +4664,103 @@ async function runChatConversation(
   const userPrompt = `${req.userMessage}${preContext}`;
 
   if (req.provider === 'anthropic') {
+    // ── Anthropic SDK with native tool calling ─────────────────────
+    const Anthropic = (await import('@anthropic-ai/sdk')).default;
+    const client = new Anthropic({ apiKey: req.apiKey });
+
     const userContent = buildAnthropicUserContent(req, userPrompt);
-    const messages = [
+
+    // Build slim tool surface (same as MCP: tek_router + live tools)
+    const { getMcpExposedTools } = await import('../tools/index');
+    const toolDefs = getMcpExposedTools().filter(t => t.name !== 'discover_scpi'); // no instrument in chat mode
+    const anthropicTools = toolDefs.map((t: any) => ({
+      name: t.name,
+      description: t.description || t.name,
+      input_schema: {
+        type: 'object' as const,
+        properties: (t.parameters as any)?.properties ?? {},
+        ...((t.parameters as any)?.required?.length
+          ? { required: (t.parameters as any).required }
+          : {}),
+      },
+    }));
+
+    const messages: Array<{ role: 'user' | 'assistant'; content: any }> = [
       ...(Array.isArray(req.history)
         ? req.history
-            .slice(-8)
+            .slice(-12)
             .map((h, i, arr) => ({
               role: h.role as 'user' | 'assistant',
               content: String(h.content || '').slice(0, i < arr.length - 2 ? 3000 : 6000),
             }))
         : []),
-      { role: 'user' as const, content: userContent },
+      { role: 'user' as const, content: userContent as any },
     ];
-    const requestPayload = {
-      model: req.model,
-      system: `${CHAT_MODE_SYSTEM_PROMPT}\n\n${developerPrompt}`,
-      max_tokens: 4096,
-      messages,
-    };
-    const anthropicBase = process.env.ANTHROPIC_BASE_URL || 'https://api.anthropic.com';
-    const res = await fetch(`${anthropicBase}/v1/messages`, {
-      method: 'POST',
-      headers: {
-        'x-api-key': req.apiKey,
-        'anthropic-version': '2023-06-01',
-        'content-type': 'application/json',
-      },
-      body: JSON.stringify(requestPayload),
-    });
-    if (!res.ok) {
-      throw new Error(`Anthropic error ${res.status}: ${await res.text()}`);
+
+    const systemPrompt = `${CHAT_MODE_SYSTEM_PROMPT}\n\n${developerPrompt}`;
+    const toolTrace: Array<Record<string, unknown>> = [];
+    let finalText = '';
+    let iterations = 0;
+    let totalToolMs = 0;
+    const MAX_TOOL_ROUNDS = 6;
+
+    for (let round = 0; round < MAX_TOOL_ROUNDS; round++) {
+      iterations++;
+      const response = await client.messages.create({
+        model: req.model || 'claude-sonnet-4-20250514',
+        system: systemPrompt,
+        max_tokens: 4096,
+        messages: messages as any,
+        tools: anthropicTools as any,
+      });
+
+      // Extract text blocks
+      const textParts = response.content
+        .filter((c: any) => c.type === 'text')
+        .map((c: any) => c.text)
+        .join('\n');
+      if (textParts) finalText = textParts;
+
+      // Check for tool calls
+      const toolUseBlocks = response.content.filter((c: any) => c.type === 'tool_use');
+      if (toolUseBlocks.length === 0 || response.stop_reason !== 'tool_use') {
+        break; // No more tool calls — done
+      }
+
+      // Add assistant response to messages
+      messages.push({ role: 'assistant', content: response.content as any });
+
+      // Execute tools and collect results
+      const toolResults: Array<{ type: 'tool_result'; tool_use_id: string; content: string }> = [];
+      for (const tu of toolUseBlocks) {
+        const toolName = (tu as any).name;
+        const toolArgs = (tu as any).input || {};
+        const toolId = (tu as any).id;
+
+        console.log(`[MCP] Anthropic tool call: ${toolName}`);
+        const toolStart = Date.now();
+        try {
+          const result = await runTool(toolName, toolArgs);
+          const resultText = typeof result === 'string' ? result : JSON.stringify(result, null, 2);
+          // Cap tool result size
+          const cappedResult = resultText.length > 30000
+            ? resultText.slice(0, 30000) + '\n[Truncated]'
+            : resultText;
+          toolResults.push({ type: 'tool_result', tool_use_id: toolId, content: cappedResult });
+          toolTrace.push({ tool: toolName, args: toolArgs, ok: true, durationMs: Date.now() - toolStart });
+        } catch (err) {
+          const msg = err instanceof Error ? err.message : String(err);
+          toolResults.push({ type: 'tool_result', tool_use_id: toolId, content: `Error: ${msg}` });
+          toolTrace.push({ tool: toolName, args: toolArgs, ok: false, error: msg, durationMs: Date.now() - toolStart });
+        }
+        totalToolMs += Date.now() - toolStart;
+      }
+
+      // Add tool results as user message
+      messages.push({ role: 'user', content: toolResults as any });
     }
-    const json = (await res.json()) as Record<string, unknown>;
-    const text = Array.isArray(json.content)
-      ? (json.content as Array<Record<string, unknown>>)
-          .filter((c) => c.type === 'text')
-          .map((c) => String(c.text || ''))
-          .join('\n')
-      : '';
-    const normalizedText = await normalizeChatBuildLikeResponse(req, text);
+
+    const normalizedText = await normalizeChatBuildLikeResponse(req, finalText);
     const modelMs = Date.now() - modelStartedAt;
     return {
       text: normalizedText,
@@ -4705,23 +4768,22 @@ async function runChatConversation(
         totalMs: modelMs,
         usedShortcut: false,
         provider: 'anthropic',
-        iterations: 1,
-        toolCalls: 0,
-        toolMs: 0,
-        modelMs,
+        iterations,
+        toolCalls: toolTrace.length,
+        toolMs: totalToolMs,
+        modelMs: modelMs - totalToolMs,
         promptChars: {
-          system: CHAT_MODE_SYSTEM_PROMPT.length + developerPrompt.length,
+          system: systemPrompt.length,
           user: userPrompt.length,
         },
       },
       debug: {
-        systemPrompt: CHAT_MODE_SYSTEM_PROMPT,
+        systemPrompt,
         developerPrompt,
         userPrompt,
-        toolDefinitions: [],
-        toolTrace: [],
-        providerRequest: requestPayload,
-        resolutionPath: 'chat',
+        toolDefinitions: anthropicTools.map((t: any) => t.name),
+        toolTrace,
+        resolutionPath: 'anthropic-sdk',
       },
     };
   }
@@ -5694,15 +5756,15 @@ export function buildHostedResponsesTools(
   } else if (wantsTmDevices) {
     toolNames =
       phase === 'initial'
-        ? ['get_current_flow', 'search_tm_devices', 'materialize_tm_devices_call', 'validate_action_payload', ...(routerEnabledForRequest ? ['tek_router'] : [])]
-        : ['get_current_flow', 'materialize_tm_devices_call', 'validate_action_payload', ...(routerEnabledForRequest ? ['tek_router'] : [])];
+        ? ['get_current_flow', 'tek_router', 'smart_scpi_lookup', 'send_scpi', 'capture_screenshot']
+        : ['get_current_flow', 'tek_router', 'send_scpi', 'capture_screenshot'];
   } else if (options?.batchMaterializeOnly) {
     toolNames = phase === 'initial' ? ['finalize_scpi_commands'] : [];
   } else {
     toolNames =
       phase === 'initial' && !options?.restrictSearchTools
-? ['get_current_flow', 'smart_scpi_lookup', 'get_command_group', 'get_command_by_header', 'get_commands_by_header_batch', 'materialize_scpi_command', 'materialize_scpi_commands', 'finalize_scpi_commands', 'verify_scpi_commands', 'validate_action_payload', 'probe_command', 'send_scpi', 'capture_screenshot', ...(routerEnabledForRequest ? ['tek_router'] : [])]
-: ['get_current_flow', 'smart_scpi_lookup', 'get_command_by_header', 'get_commands_by_header_batch', 'materialize_scpi_command', 'materialize_scpi_commands', 'finalize_scpi_commands', 'verify_scpi_commands', 'validate_action_payload', 'probe_command', 'send_scpi', 'capture_screenshot', ...(routerEnabledForRequest ? ['tek_router'] : [])];
+? ['get_current_flow', 'tek_router', 'smart_scpi_lookup', 'send_scpi', 'capture_screenshot', 'discover_scpi']
+: ['get_current_flow', 'tek_router', 'smart_scpi_lookup', 'send_scpi', 'capture_screenshot'];
   }
 
   const allow = new Set(toolNames);
