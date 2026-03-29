@@ -215,9 +215,15 @@ async function handleSearch(req: RouterRequest, startedAt: number): Promise<Rout
     };
   }
 
+  // ── Stage timings ──────────────────────────────────────────────
+  let scpiMs = 0;
+  let routerMs = 0;
+  let ragMs = 0;
+
   // Direct SCPI command search via command index (header + description + tags)
   let scpiCommands: Array<Record<string, unknown>> = [];
   try {
+    const scpiStart = Date.now();
     const { getCommandIndex } = await import('./commandIndex');
     const cmdIdx = await getCommandIndex();
     const results = cmdIdx.searchByQuery(req.query, req.modelFamily, req.limit ?? 5);
@@ -234,9 +240,11 @@ async function handleSearch(req: RouterRequest, startedAt: number): Promise<Rout
       group: cmd.group,
       commandType: cmd.commandType,
     }));
+    scpiMs = Date.now() - scpiStart;
   } catch { /* non-fatal */ }
 
   // Router's own BM25/trigger search for shortcuts and templates
+  const routerStart = Date.now();
   const engine = getToolSearchEngine();
   const routerHits = await engine.searchCompound(req.query, {
     limit: 3,
@@ -251,14 +259,38 @@ async function handleSearch(req: RouterRequest, startedAt: number): Promise<Rout
   const routerResults = filteredRouterHits
     .filter((hit) => hit.tool.category === 'shortcut' || hit.tool.category === 'template' || hit.tool.category === 'instrument')
     .map((hit) => serializeHit(hit, req.debug === true));
+  routerMs = Date.now() - routerStart;
 
-  const results = [...scpiCommands, ...routerResults];
+  let results = [...scpiCommands, ...routerResults];
+
+  // ── Explorer injection (5%) ────────────────────────────────────
+  // Surface a least-used tool to encourage discovery of underused features
+  if (results.length >= 3) {
+    const resultIds = new Set(results.map((r: any) => r.id || r.name));
+    const registry = getToolRegistry();
+    const allTools = registry.all()
+      .filter(t => !resultIds.has(t.id) && !t.id.startsWith('rag:') && t.category !== 'composite')
+      .sort((a, b) => a.usageCount - b.usageCount);
+    if (allTools.length > 0) {
+      const explorer = allTools[0];
+      results[results.length - 1] = {
+        id: explorer.id,
+        name: explorer.name,
+        description: explorer.description,
+        category: explorer.category,
+        score: 0.1,
+        matchStage: 'explorer',
+        explorer: true,
+      };
+    }
+  }
 
   // RAG knowledge — only for question-like queries
   let knowledge: Array<{ corpus: string; title: string; body: string }> | undefined;
   const isQuestion = /\b(why|how|what|explain|error|fail|timeout|issue|problem|debug)\b/i.test(req.query);
   if (isQuestion) {
     try {
+      const ragStart = Date.now();
       const { retrieveRagChunks } = await import('../tools/retrieveRagChunks');
       const ragResults: Array<{ corpus: string; title: string; body: string }> = [];
       for (const corpus of ['errors', 'app_logic', 'scpi'] as const) {
@@ -273,18 +305,42 @@ async function handleSearch(req: RouterRequest, startedAt: number): Promise<Rout
         }
       }
       if (ragResults.length > 0) knowledge = ragResults;
+      ragMs = Date.now() - ragStart;
     } catch { /* non-fatal */ }
   }
+
+  // ── Blind spot prevention ──────────────────────────────────────
+  // When no results found, show available categories so AI can refine
+  let blindSpotHint: string | undefined;
+  if (results.length === 0) {
+    try {
+      const { GROUP_NAMES } = await import('./commandGroups');
+      const registry = getToolRegistry();
+      const shortcutCount = registry.all().filter(t => t.category === 'shortcut').length;
+      const builtinCount = registry.all().filter(t => t.id.startsWith('builtin:')).length;
+      blindSpotHint =
+        `No results for "${req.query}". Try a different query.\n` +
+        `Available SCPI groups: ${GROUP_NAMES.join(', ')}\n` +
+        `Shortcuts: ${shortcutCount}, Builtin tools: ${builtinCount}\n` +
+        `Tip: use more specific SCPI terms, or try action:"search_exec" with query:"browse scpi commands" args:{group:"GroupName"}`;
+    } catch { /* non-fatal */ }
+  }
+
+  // ── Timing transparency ────────────────────────────────────────
+  const totalMs = Date.now() - startedAt;
+  const timing = `${totalMs}ms (SCPI:${scpiMs}ms + Router:${routerMs}ms${ragMs ? ` + RAG:${ragMs}ms` : ''})`;
 
   return {
     ok: true,
     action: 'search',
     results,
     knowledge,
+    blindSpotHint,
+    timing,
     text: results.length
-      ? `Found ${results.length} result(s) for "${req.query}".`
-      : `No results for "${req.query}".`,
-    durationMs: Date.now() - startedAt,
+      ? `Found ${results.length} result(s) for "${req.query}" in ${timing}.`
+      : blindSpotHint || `No results for "${req.query}" (${timing}).`,
+    durationMs: totalMs,
   };
 }
 
@@ -424,10 +480,13 @@ async function handleSearchExec(req: RouterRequest, startedAt: number): Promise<
 
   if (builtinMatch) {
     try {
+      const toolStart = Date.now();
       const result = await builtinMatch.handler(req.args || {});
+      const toolMs = Date.now() - toolStart;
       registry.recordUsage(builtinMatch.id);
       if (result.ok) registry.recordSuccess(builtinMatch.id);
       else registry.recordFailure(builtinMatch.id);
+      const totalMs = Date.now() - startedAt;
       return {
         ok: result.ok,
         action: 'search_exec',
@@ -435,7 +494,8 @@ async function handleSearchExec(req: RouterRequest, startedAt: number): Promise<
         text: result.text ? `[${builtinMatch.name}] ${result.text}` : `Executed ${builtinMatch.name} successfully.`,
         warnings: result.warnings,
         error: result.error,
-        durationMs: Date.now() - startedAt,
+        timing: `${totalMs}ms (match:${totalMs - toolMs}ms + exec:${toolMs}ms)`,
+        durationMs: totalMs,
       };
     } catch (err) {
       registry.recordFailure(builtinMatch.id);
@@ -449,17 +509,29 @@ async function handleSearchExec(req: RouterRequest, startedAt: number): Promise<
   }
 
   // ── Fall through to general search engine ─────────────────────
+  const searchStart = Date.now();
   const engine = getToolSearchEngine();
   const hits = await engine.search(req.query, {
     limit: 1,
     categories: req.categories,
   });
+  const searchMs = Date.now() - searchStart;
 
+  // ── Blind spot prevention ──────────────────────────────────────
   if (!hits.length) {
+    let blindSpotHint = `No tools found for "${req.query}".`;
+    try {
+      const { GROUP_NAMES } = await import('./commandGroups');
+      const shortcutCount = registry.all().filter(t => t.category === 'shortcut').length;
+      blindSpotHint +=
+        `\nAvailable SCPI groups: ${GROUP_NAMES.join(', ')}` +
+        `\nShortcuts: ${shortcutCount}` +
+        `\nTip: try "search scpi commands" with a different query, or "browse scpi commands" with a group name.`;
+    } catch { /* non-fatal */ }
     return {
       ok: false,
       action: 'search_exec',
-      error: `No tools found for "${req.query}".`,
+      error: blindSpotHint,
       durationMs: Date.now() - startedAt,
     };
   }
