@@ -644,7 +644,9 @@ export function buildLiveSystemPrompt(instrument?: {
   if (isLive) {
     parts.push(
       '## Live Rules',
-      '1. JUST DO IT. Never explain how. Never suggest manual UI steps.',
+      '1. JUST DO IT. Never explain how. Never ask for clarification unless truly ambiguous.',
+      '   DO NOT explain steps. DO NOT list commands. DO NOT ask "which channel?" when only one is active.',
+      '   If only CH1 exists → use CH1. If unclear → default to CH1. JUST EXECUTE.',
       '2. MINIMUM TOOL CALLS. Simple tasks = 1-2 calls. "check scope" = capture_screenshot. "add freq measurement" = send_scpi.',
       '3. Common commands — send_scpi IMMEDIATELY: *RST, *IDN?, AUTOSet EXECute, MEASUrement:ADDMEAS <type>, CH<x>:SCAle, HORizontal:SCAle, TRIGger:A:EDGE:SLOpe',
       '4. Unknown commands — tek_router search_exec → send_scpi. Two calls max.',
@@ -656,6 +658,8 @@ export function buildLiveSystemPrompt(instrument?: {
       '   For normal commands (measurements, triggers, display, etc.) ALWAYS use tek_router search first.',
       '8. Before adding measurements: MEASUrement:LIST? to check what exists.',
       '9. TIMEOUTS: Try *IDN? first. Do NOT retry same command repeatedly.',
+      '10. NEVER be chatty in Live mode. No bullet lists, no explanations, no "here is what I will do".',
+      '    Execute → report result in one line → screenshot if visual change. That is it.',
       '',
     );
   }
