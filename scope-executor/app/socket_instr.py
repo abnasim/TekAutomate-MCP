@@ -17,7 +17,7 @@ import sys
 class SocketInstr:
     """Raw TCP socket connection to a Tektronix instrument."""
 
-    def __init__(self, host: str, port: int = 4000, timeout: float = 10):
+    def __init__(self, host: str, port: int = 4000, timeout: float = 20):
         self.socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
         try:
             self.socket.connect((host, port))
@@ -36,9 +36,9 @@ class SocketInstr:
     def read(self) -> str:
         """Read ASCII response until newline."""
         try:
-            resp = self.socket.recv(1024)
+            resp = self.socket.recv(8192)
             while resp[-1:] != b'\n':
-                resp += self.socket.recv(1024)
+                resp += self.socket.recv(8192)
             return resp.decode('latin_1').strip()
         except socket.error as msg:
             raise RuntimeError(f"Socket recv failed: {msg}")
