@@ -96,13 +96,18 @@ async function executeMcpTool(
       payload.timeout_ms = hasSlowCommand ? 30000 : 5000;
     }
 
+    // Script timeout: 30s for screenshot/slow ops, 15s for simple SCPI
+    const isSlowAction = toolName === 'capture_screenshot' || toolName === 'discover_scpi'
+      || (toolName === 'send_scpi' && payload.timeout_ms && Number(payload.timeout_ms) > 10000);
+    const scriptTimeout = isSlowAction ? 30 : 15;
+
     const res = await fetch(`${execUrl}/run`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
         protocol_version: 1,
         action,
-        timeout_sec: 15, // 15s script timeout for live mode (was 90s)
+        timeout_sec: scriptTimeout,
         scope_visa: scopeVisa,
         liveMode: true,
         ...payload,
