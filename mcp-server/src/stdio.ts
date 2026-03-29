@@ -89,9 +89,18 @@ async function main() {
     try {
       const result = await runTool(name, (args as Record<string, unknown>) ?? {});
 
-      const text = typeof result === 'string'
+      let text = typeof result === 'string'
         ? result
         : JSON.stringify(result, null, 2);
+
+      // Cap response size for MCP clients
+      const MAX_MCP_RESPONSE = 48000;
+      if (text.length > MAX_MCP_RESPONSE) {
+        const truncated = text.slice(0, MAX_MCP_RESPONSE);
+        const lastNewline = truncated.lastIndexOf('\n');
+        text = (lastNewline > MAX_MCP_RESPONSE * 0.8 ? truncated.slice(0, lastNewline) : truncated)
+          + `\n\n[Response truncated from ${text.length} to ${MAX_MCP_RESPONSE} chars. Use more specific queries.]`;
+      }
 
       return {
         content: [{ type: 'text' as const, text }],

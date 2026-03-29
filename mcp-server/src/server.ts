@@ -386,7 +386,15 @@ export async function createServer(port = 8787): Promise<http.Server> {
       const { name, arguments: args } = request.params;
       try {
         const result = await runTool(name, (args as Record<string, unknown>) ?? {});
-        const text = typeof result === 'string' ? result : JSON.stringify(result, null, 2);
+        let text = typeof result === 'string' ? result : JSON.stringify(result, null, 2);
+        // Cap response size for MCP clients (Claude Web has payload limits)
+        const MAX_MCP_RESPONSE = 48000; // ~48KB — safe for most MCP clients
+        if (text.length > MAX_MCP_RESPONSE) {
+          const truncated = text.slice(0, MAX_MCP_RESPONSE);
+          const lastNewline = truncated.lastIndexOf('\n');
+          text = (lastNewline > MAX_MCP_RESPONSE * 0.8 ? truncated.slice(0, lastNewline) : truncated)
+            + `\n\n[Response truncated from ${text.length} to ${MAX_MCP_RESPONSE} chars. Use more specific queries to get smaller results.]`;
+        }
         return { content: [{ type: 'text' as const, text }] };
       } catch (err) {
         const msg = err instanceof Error ? err.message : String(err);
