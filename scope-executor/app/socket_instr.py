@@ -36,9 +36,9 @@ class SocketInstr:
     def read(self) -> str:
         """Read ASCII response until newline."""
         try:
-            resp = self.socket.recv(8192)
+            resp = self.socket.recv(1048576)
             while resp[-1:] != b'\n':
-                resp += self.socket.recv(8192)
+                resp += self.socket.recv(1048576)
             return resp.decode('latin_1').strip()
         except socket.error as msg:
             raise RuntimeError(f"Socket recv failed: {msg}")

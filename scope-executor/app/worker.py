@@ -83,17 +83,22 @@ def _get_socket_session(visa: str):
         session = _socket_sessions.get(visa)
         if session is not None:
             try:
-                # Quick health check
-                session.socket.getpeername()
-                return session
+                # Real health check — send *OPC? and verify response
+                session.write('*OPC?')
+                resp = session.read()
+                if resp.strip() == '1':
+                    return session
             except Exception:
-                try:
-                    session.close()
-                except Exception:
-                    pass
-                _socket_sessions.pop(visa, None)
+                pass
+            # Session is stale — close and reopen
+            try:
+                session.close()
+            except Exception:
+                pass
+            _socket_sessions.pop(visa, None)
         host, port = _parse_socket_address(visa)
         session = SocketInstr(host, port, timeout=20)
+        session.clear()  # device clear on fresh connection
         _socket_sessions[visa] = session
         return session
 
