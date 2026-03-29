@@ -225,8 +225,7 @@ tm_device_command
 - Treat canonical headers such as `CH<x>:...`, `MEAS<x>:...`, `BUS<x>:...`, `TRIGger:{A|B}:...`, `MATH<x>:...`, `SEARCH<x>:...`, or `WAVEView<x>:...` as templates. Instantiate only those documented placeholders and keep literal tokens unchanged.
 - Use the programmer-manual constructed forms exactly: `CH1`, `B1`, `MATH1`, `MEAS1`, `REF1`, `SEARCH1`, `WAVEView1`.
 - Never emit non-canonical aliases such as `CHAN1` or `CHANNEL1`.
-- Combine related same-subsystem setup commands into one `write` step using semicolons when that keeps the flow compact.
-- Keep compact combined setup writes to 3 commands or fewer per step.
+- NEVER concatenate commands with semicolons. Each command must be a separate string in the commands array. Semicolon-concatenated commands cause timeouts on the instrument.
 - Keep `query` steps query-only instead of mixing setup writes into the same command string.
 - Use `save_waveform` for waveform saving whenever it fits.
 - Use `save_screenshot` for screenshots whenever it fits.
