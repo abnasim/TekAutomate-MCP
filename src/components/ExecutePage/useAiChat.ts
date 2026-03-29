@@ -866,7 +866,7 @@ export function useAiChat(params: {
       : null;
     const effectiveMessage = (chatBuildHandoff || autoBuildFollowUp)
       ? buildPromptFromRecentChat(handoffHistory as Array<{ role: string; content?: string }>, text) +
-        (aiBuildHandoff ? '\n\nIMPORTANT: Return ACTIONS_JSON with the built flow. Use tek_router({action:"build", query:"<summary of what to build>"}) to generate verified steps. Return the result as ACTIONS_JSON: {...} so the app can apply it.' : '')
+        (aiBuildHandoff ? '\n\nIMPORTANT: Return ACTIONS_JSON. Use tek_router({action:"build", query:"<summary>"}) to generate verified steps. If the workspace already has steps, use action_type:"insert_step_after" to ADD steps to the existing flow — do NOT use replace_flow unless the user explicitly asks to replace/rebuild the entire flow. Return as ACTIONS_JSON: {...}' : '')
       : text;
     const trimmedKey = state.apiKey.trim();
     const requiresByok = state.tekMode !== 'mcp';
