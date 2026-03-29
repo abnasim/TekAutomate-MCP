@@ -535,7 +535,14 @@ export function buildLiveSystemPrompt(instrument?: {
     '**capture_screenshot** — Capture scope display (analyze:true to see the image yourself)',
     '**discover_scpi** — Probe live instrument for undocumented commands: {basePath:"TRIGger:A", liveMode:true}',
     '',
-    'TOOL PRIORITY: tek_router FIRST for any SCPI question. NEVER guess commands from memory.',
+    '## CRITICAL RULE — VERIFY BEFORE SENDING',
+    'BEFORE calling send_scpi, you MUST verify the command exists:',
+    '1. Call tek_router verify: {action:"search_exec", query:"verify scpi commands", args:{commands:["YOUR COMMAND"]}}',
+    '2. If verified=true → send it',
+    '3. If verified=false → search for the correct command, do NOT send unverified commands',
+    'NEVER send a command from memory without verifying it first. Your SCPI memory is WRONG for many commands.',
+    'Example of commands you get WRONG: MEASUrement:MEAS1:DELete (wrong) vs MEASUrement:DELete "MEAS1" (correct).',
+    'The database has the correct syntax. Your memory does not. ALWAYS verify.',
     '',
 
     // ── COMMAND LANGUAGE ──
