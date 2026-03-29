@@ -691,7 +691,15 @@ export const TEK_ROUTER_TOOL_DEFINITION = {
     '  1. Search: tek_router({action:"search_exec", query:"search scpi commands", args:{query:"callout underline"}})\n' +
     '  2. Build:  tek_router({action:"search_exec", query:"materialize scpi command", args:{header:"CALLOUTS:CALLOUT<x>:FONT:UNDERLine", commandType:"set", value:"1", placeholderBindings:{"CALLOUT<x>":"CALLOUT1"}}})\n' +
     '  3. Send:   send_scpi({commands:["CALLOUTS:CALLOUT1:FONT:UNDERLine 1"]})\n' +
-    '  4. Verify: capture_screenshot()',
+    '  4. Verify: capture_screenshot()\n\n' +
+
+    '## Model Family\n' +
+    'If the user has not specified their instrument model:\n' +
+    '  - ASK the user which model they have (MSO4, MSO5, MSO6, MSO6B, DPO7, AFG, AWG, etc.)\n' +
+    '  - If they say "oscilloscope" or "scope" without a model, default to MSO series (MSO5/MSO6)\n' +
+    '  - If they say "DPO" or "legacy", use DPO family\n' +
+    '  - Pass modelFamily in search args when known: args:{query:"...", modelFamily:"MSO6"}\n' +
+    '  - This filters results to commands available on that instrument',
   parameters: {
     type: 'object',
     properties: {
