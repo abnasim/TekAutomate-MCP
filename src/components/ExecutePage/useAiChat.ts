@@ -961,9 +961,132 @@ export function useAiChat(params: {
         return;
       }
 
-      // ── AI Chat + Anthropic: routes through MCP server ──
-      // Server-side Anthropic SDK handles tool calling (tek_router, send_scpi, etc.)
-      // with native multi-round tool loop. No browser-direct needed.
+      // ── AI Chat + Anthropic: browser-direct with MCP context ──
+      // 1. Fetch SCPI + RAG context from MCP (tools/execute)
+      // 2. Call Anthropic API directly from browser (no MCP proxy)
+      // Claude generates ACTIONS_JSON directly when user wants to build/add steps.
+      if (effectiveTekMode === 'ai' && state.provider === 'anthropic') {
+        try {
+          // Pre-load context from MCP tools (same as MCP path does server-side)
+          let preContext = '';
+          const hasHistory = state.history.length > 0;
+          if (!hasHistory) {
+            const contextParts: string[] = [];
+            try {
+              const mcpTools = await fetchLiveTools();
+              if (mcpTools.length > 0) {
+                // Use tek_router for SCPI + knowledge in one call
+                const routerRes = await fetch(`${resolveMcpHost().replace(/\/$/, '')}/tools/execute`, {
+                  method: 'POST',
+                  headers: { 'Content-Type': 'application/json' },
+                  body: JSON.stringify({
+                    tool: 'tek_router',
+                    args: { action: 'search', query: effectiveMessage, modelFamily: params.flowContext?.modelFamily, limit: 3 },
+                  }),
+                });
+                if (routerRes.ok) {
+                  const routerJson = await routerRes.json() as { ok: boolean; result: Record<string, unknown> };
+                  if (routerJson.ok) {
+                    const results = (routerJson.result as any)?.results || [];
+                    const knowledge = (routerJson.result as any)?.knowledge || [];
+                    if (results.length > 0) {
+                      contextParts.push('Relevant SCPI commands:\n' + results.slice(0, 3).map((r: any) =>
+                        `${r.name}: ${JSON.stringify(r.syntax || {}).slice(0, 100)}`
+                      ).join('\n'));
+                    }
+                    if (knowledge.length > 0) {
+                      contextParts.push('Knowledge:\n' + knowledge.slice(0, 2).map((k: any) =>
+                        `${k.title}: ${(k.body || '').slice(0, 200)}`
+                      ).join('\n'));
+                    }
+                  }
+                }
+              }
+            } catch { /* non-fatal */ }
+            if (contextParts.length > 0) {
+              preContext = '\n\n---\nContext from TekAutomate:\n' + contextParts.join('\n\n');
+            }
+          }
+
+          // Build user content with image attachments for Anthropic vision
+          const pendingAttachments = options?.attachments || [];
+          const imageBlocks = pendingAttachments
+            .filter((a) => a.mimeType?.startsWith('image/') && a.dataUrl)
+            .slice(0, 4)
+            .map((a) => {
+              const match = String(a.dataUrl || '').match(/^data:([^;]+);base64,(.+)$/);
+              if (!match) return null;
+              return {
+                type: 'image' as const,
+                source: { type: 'base64' as const, media_type: match[1], data: match[2] },
+              };
+            })
+            .filter(Boolean);
+          const userContent = imageBlocks.length > 0
+            ? [{ type: 'text' as const, text: effectiveMessage + preContext }, ...imageBlocks]
+            : effectiveMessage + preContext;
+
+          const chatMessages: Array<Record<string, unknown>> = [
+            ...state.history.slice(-6).map((h) => ({
+              role: h.role as 'user' | 'assistant',
+              content: String(h.content || '').slice(0, 6000),
+            })),
+            { role: 'user', content: userContent },
+          ];
+          const res = await fetch('https://api.anthropic.com/v1/messages', {
+            method: 'POST',
+            headers: {
+              'x-api-key': trimmedKey,
+              'anthropic-version': '2023-06-01',
+              'anthropic-dangerous-direct-browser-access': 'true',
+              'content-type': 'application/json',
+            },
+            body: JSON.stringify({
+              model: state.model,
+              system: buildAnthropicBuilderSystemPrompt(
+                params.flowContext?.modelFamily || 'scope',
+                params.flowContext?.backend || 'pyvisa',
+                params.flowContext?.deviceType || 'SCOPE',
+              ),
+              max_tokens: 8192,
+              messages: chatMessages,
+            }),
+          });
+          if (!res.ok) {
+            const errText = await res.text();
+            throw new Error(`Anthropic ${res.status}: ${errText}`);
+          }
+          const json = await res.json() as { content: Array<Record<string, unknown>> };
+          const text = Array.isArray(json.content)
+            ? json.content.filter((c) => c.type === 'text').map((c) => String(c.text || '')).join('\n')
+            : '';
+          if (text) {
+            finalText = text;
+            dispatch({ type: 'STREAM_CHUNK', chunk: text });
+          }
+          // Parse ACTIONS_JSON / flow JSON from Claude's response
+          const anthropicParsed = (() => {
+            const result = tryParseResult(text);
+            return result ? sanitizeParsedResult(result) : null;
+          })();
+          dispatch({
+            type: 'STREAM_DONE',
+            actions: anthropicParsed?.actions,
+            parsed: anthropicParsed
+              ? {
+                  summary: anthropicParsed.summary,
+                  findings: anthropicParsed.findings,
+                  suggestedFixes: anthropicParsed.suggestedFixes,
+                  confidence: anthropicParsed.confidence,
+                }
+              : undefined,
+          });
+          return;
+        } catch (browserErr) {
+          // If browser-direct fails, fall through to MCP path
+          console.warn('[AI Chat] Anthropic browser-direct failed, falling through to MCP:', browserErr);
+        }
+      }
 
       // ── MCP and AI Chat modes route through MCP server ──
       // MCP mode: deterministic planner, no API key needed
