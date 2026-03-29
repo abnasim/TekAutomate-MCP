@@ -406,6 +406,16 @@ export async function runLiveToolLoop(params: LiveToolLoopParams): Promise<LiveT
 /**
  * Fetch tool definitions from MCP server.
  */
+// Slim MCP surface — only these tools are exposed to the AI provider.
+// Everything else is routed internally via tek_router.
+const MCP_SLIM_TOOLS = new Set([
+  'tek_router',
+  'smart_scpi_lookup',
+  'send_scpi',
+  'capture_screenshot',
+  'discover_scpi',
+]);
+
 export async function fetchLiveTools(): Promise<LiveToolDef[]> {
   const mcpHost = resolveMcpHost();
   if (!mcpHost) return [];
@@ -413,7 +423,9 @@ export async function fetchLiveTools(): Promise<LiveToolDef[]> {
     const res = await fetch(`${mcpHost.replace(/\/$/, '')}/tools/list`);
     if (!res.ok) return [];
     const json = await res.json() as { ok: boolean; tools: LiveToolDef[] };
-    return json.ok ? json.tools : [];
+    if (!json.ok) return [];
+    // Filter to slim surface — tek_router handles everything else internally
+    return json.tools.filter(t => MCP_SLIM_TOOLS.has(t.name));
   } catch {
     return [];
   }
@@ -434,13 +446,16 @@ export function buildLiveSystemPrompt(instrument?: {
     'You control a Tektronix oscilloscope. Execute commands silently. Report results briefly.',
     '',
     '## Tools',
+    '- **tek_router** — Gateway to 21,000+ internal tools. Use action:"search_exec" for SCPI lookup, verify, build, RAG, templates.',
+    '  Fuzzy search: {action:"search_exec", query:"search scpi commands", args:{query:"your description"}}',
+    '  Exact lookup: {action:"search_exec", query:"get command by header", args:{header:"EXACT:HEADER"}}',
+    '  Verify: {action:"search_exec", query:"verify scpi commands", args:{commands:["CMD1"]}}',
+    '  RAG: {action:"search_exec", query:"retrieve rag chunks", args:{corpus:"app_logic", query:"..."}}',
+    '  Browse group: {action:"search_exec", query:"browse scpi commands", args:{group:"Trigger"}}',
+    '- **smart_scpi_lookup** — Natural language SCPI search. Quick single-call shortcut.',
     '- **send_scpi** — {commands:["CMD1","CMD2?"]} → [{command, response, ok, error}]',
-    '- **capture_screenshot** — Capture scope display as image. You WILL receive the image and can see it. "check scope", "what do you see", "verify", "look at screen" = call this and describe what you see.',
-    '- **get_instrument_state** — *IDN?/*ESR?/ALLEV?',
-    '- **smart_scpi_lookup** — Natural language SCPI search.',
-    '- **search_scpi** — Keyword search.',
-    '- **get_command_by_header** — Exact header lookup.',
-    '- **retrieve_rag_chunks** — Knowledge base: corpus="errors"|"app_logic"|"pyvisa_tekhsi"|"tmdevices"',
+    '- **capture_screenshot** — Capture scope display as image. You WILL receive the image and can see it.',
+    '- **discover_scpi** — Probe live instrument for undocumented commands: {basePath:"TRIGger:A:LEVel", liveMode:true}',
     '',
     '## RULES',
     '1. JUST DO IT. Never explain how. Never suggest manual UI steps.',
