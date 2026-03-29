@@ -864,9 +864,18 @@ export function useAiChat(params: {
     const handoffBrief = (chatBuildHandoff || autoBuildFollowUp)
       ? extractStructuredBuildBrief(handoffHistory as Array<{ role: string; content?: string }>)
       : null;
+    const hasExistingSteps = params.steps.length > 0;
+    const selectedId = params.flowContext?.selectedStep ? String((params.flowContext.selectedStep as any).id || '') : '';
     const effectiveMessage = (chatBuildHandoff || autoBuildFollowUp)
       ? buildPromptFromRecentChat(handoffHistory as Array<{ role: string; content?: string }>, text) +
-        (aiBuildHandoff ? '\n\nIMPORTANT: Return ACTIONS_JSON. Use tek_router({action:"build", query:"<summary>"}) to generate verified steps. If the workspace already has steps, use action_type:"insert_step_after" to ADD steps to the existing flow — do NOT use replace_flow unless the user explicitly asks to replace/rebuild the entire flow. Return as ACTIONS_JSON: {...}' : '')
+        (aiBuildHandoff ? `\n\nIMPORTANT: Return ACTIONS_JSON. Use tek_router({action:"build", query:"<summary>"}) to generate verified steps.` +
+        (hasExistingSteps
+          ? `\nThe workspace already has ${params.steps.length} steps. ADD to the existing flow using insert_step_after — do NOT replace_flow.` +
+            `\nWrap new steps in a group (type:"group") with a descriptive name.` +
+            (selectedId ? `\nInsert after the selected step (targetStepId:"${selectedId}").` : `\nInsert at the end of the flow (targetStepId:null).`) +
+            `\nFormat: ACTIONS_JSON: {"summary":"...","actions":[{"action_type":"insert_step_after","targetStepId":${selectedId ? `"${selectedId}"` : 'null'},"newStep":{"type":"group","label":"<Group Name>","children":[...steps...]}}]}`
+          : `\nNo existing steps — use replace_flow to create a new flow.`) +
+        `\nReturn as ACTIONS_JSON: {...}` : '')
       : text;
     const trimmedKey = state.apiKey.trim();
     const requiresByok = state.tekMode !== 'mcp';
