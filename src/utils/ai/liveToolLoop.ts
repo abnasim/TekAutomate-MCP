@@ -125,6 +125,15 @@ async function executeMcpTool(
       action = 'send_scpi';
       payload = { commands: ['*IDN?', '*ESR?', 'ALLEV?'], timeout_ms: 5000 };
     }
+    // ── Normalize commands array ──
+    // OpenAI sometimes concatenates commands with semicolons into one string
+    // (e.g. "*IDN?; CH1:SCAle?") instead of separate array items.
+    // Split them so the executor handles each command individually.
+    if (toolName === 'send_scpi' && Array.isArray(payload.commands)) {
+      payload.commands = (payload.commands as string[]).flatMap(cmd =>
+        String(cmd).includes(';') ? String(cmd).split(';').map(s => s.trim()).filter(Boolean) : [cmd]
+      );
+    }
     // Default per-command timeout for live mode: 5s for simple commands.
     // Slow commands (acquisition, transfer, save, reset) get 30s.
     if (toolName === 'send_scpi' && !payload.timeout_ms) {
