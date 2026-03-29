@@ -46,9 +46,56 @@ _null.close()
 _session_lock = threading.Lock()
 _resource_manager = None
 _scope_sessions: dict[str, object] = {}
+_socket_sessions: dict[str, object] = {}  # Raw socket sessions for SOCKET VISA resources
 _capture_locks: dict[str, threading.Lock] = {}
 _recent_capture_results: dict[str, tuple[float, dict]] = {}
 _recent_capture_errors: dict[str, tuple[float, str]] = {}
+
+
+def _is_socket_resource(visa: str) -> bool:
+    """Check if VISA resource is a raw socket (not VXI-11 INSTR)."""
+    return "SOCKET" in visa.upper()
+
+
+def _parse_socket_address(visa: str) -> tuple[str, int]:
+    """Extract host and port from TCPIP::host::port::SOCKET resource string."""
+    parts = visa.split("::")
+    host = parts[1] if len(parts) > 1 else "127.0.0.1"
+    port = int(parts[2]) if len(parts) > 2 and parts[2].isdigit() else 4000
+    return host, port
+
+
+def _get_socket_session(visa: str):
+    """Get or create a raw SocketInstr session for SOCKET resources."""
+    from app.socket_instr import SocketInstr
+    with _session_lock:
+        session = _socket_sessions.get(visa)
+        if session is not None:
+            try:
+                # Quick health check
+                session.socket.getpeername()
+                return session
+            except Exception:
+                try:
+                    session.close()
+                except Exception:
+                    pass
+                _socket_sessions.pop(visa, None)
+        host, port = _parse_socket_address(visa)
+        session = SocketInstr(host, port, timeout=20)
+        _socket_sessions[visa] = session
+        return session
+
+
+def _reset_socket_session(visa: str):
+    """Close and remove a cached socket session."""
+    with _session_lock:
+        session = _socket_sessions.pop(visa, None)
+        if session is not None:
+            try:
+                session.close()
+            except Exception:
+                pass
 
 
 def _emit(obj: dict):
@@ -141,6 +188,12 @@ def _close_all_sessions():
             except Exception:
                 pass
             _scope_sessions.pop(visa, None)
+        for visa, session in list(_socket_sessions.items()):
+            try:
+                session.close()
+            except Exception:
+                pass
+            _socket_sessions.pop(visa, None)
         if _resource_manager is not None:
             try:
                 _resource_manager.close()
@@ -148,42 +201,6 @@ def _close_all_sessions():
                 pass
             _resource_manager = None
 
-
-def _read_binary_block(session) -> bytes:
-    """Read IEEE 488.2 definite-length binary block (#NdddData...) over raw socket.
-
-    Over VXI-11 (INSTR), read_raw() works because the protocol has message framing.
-    Over raw SOCKET, there's no message boundary — we must parse the # block header
-    to know exactly how many bytes to read.
-    """
-    # Read the '#' prefix
-    header = session.read_bytes(1)
-    if header != b"#":
-        # Not a block header — fall back to reading until timeout
-        rest = session.read_raw()
-        return header + rest
-    # Read digit count (single ascii digit telling us how many digits follow)
-    digit_count_char = session.read_bytes(1)
-    digit_count = int(digit_count_char)
-    if digit_count == 0:
-        # Indefinite length block — read until newline
-        return session.read_raw()
-    # Read the byte count (N ascii digits)
-    byte_count_str = session.read_bytes(digit_count)
-    byte_count = int(byte_count_str)
-    # Read exactly that many data bytes
-    data = b""
-    remaining = byte_count
-    while remaining > 0:
-        chunk = session.read_bytes(min(remaining, 65536))
-        data += chunk
-        remaining -= len(chunk)
-    # Read trailing newline if present
-    try:
-        session.read_bytes(1)
-    except Exception:
-        pass
-    return data
 
 
 def _handle_capture_screenshot(job: dict) -> dict:
@@ -203,33 +220,42 @@ def _handle_capture_screenshot(job: dict) -> dict:
             raise RuntimeError(recent_error[1])
 
         try:
-            try:
-                scpi = _get_scope_session(visa)
-            except Exception:
-                _reset_scope_session(visa)
-                _reset_resource_manager()
-                scpi = _get_scope_session(visa)
-
-            scpi.timeout = 30000
-            scpi.write_termination = "\n"
-            scpi.read_termination = None
-            is_socket = "SOCKET" in visa.upper()
-
-            if scope_type == "legacy":
-                scpi.write('HARDCOPY:PORT FILE')
-                scpi.write('HARDCOPY:FORMAT PNG')
-                scpi.write('HARDCOPY:FILENAME "C:/TekScope/Temp/screenshot.png"')
-                scpi.write('HARDCOPY START')
-                time.sleep(1.0)
-                scpi.write('FILESYSTEM:READFILE "C:/TekScope/Temp/screenshot.png"')
-                data = _read_binary_block(scpi) if is_socket else scpi.read_raw()
-                scpi.write('FILESYSTEM:DELETE "C:/TekScope/Temp/screenshot.png"')
+            # Use raw SocketInstr for SOCKET resources — pyvisa can't handle
+            # binary block transfers (screenshots, curve data) over raw sockets.
+            if _is_socket_resource(visa):
+                try:
+                    sock = _get_socket_session(visa)
+                except Exception:
+                    _reset_socket_session(visa)
+                    sock = _get_socket_session(visa)
+                data = sock.fetch_screen("temp_screenshot.png")
             else:
-                scpi.write('SAVE:IMAGE "C:/Temp/screenshot.png"')
-                time.sleep(1.0)
-                scpi.write('FILESYSTEM:READFILE "C:/Temp/screenshot.png"')
-                data = _read_binary_block(scpi) if is_socket else scpi.read_raw()
-                scpi.write('FILESYSTEM:DELETE "C:/Temp/screenshot.png"')
+                try:
+                    scpi = _get_scope_session(visa)
+                except Exception:
+                    _reset_scope_session(visa)
+                    _reset_resource_manager()
+                    scpi = _get_scope_session(visa)
+
+                scpi.timeout = 30000
+                scpi.write_termination = "\n"
+                scpi.read_termination = None
+
+                if scope_type == "legacy":
+                    scpi.write('HARDCOPY:PORT FILE')
+                    scpi.write('HARDCOPY:FORMAT PNG')
+                    scpi.write('HARDCOPY:FILENAME "C:/TekScope/Temp/screenshot.png"')
+                    scpi.write('HARDCOPY START')
+                    time.sleep(1.0)
+                    scpi.write('FILESYSTEM:READFILE "C:/TekScope/Temp/screenshot.png"')
+                    data = scpi.read_raw()
+                    scpi.write('FILESYSTEM:DELETE "C:/TekScope/Temp/screenshot.png"')
+                else:
+                    scpi.write('SAVE:IMAGE "C:/Temp/screenshot.png"')
+                    time.sleep(1.0)
+                    scpi.write('FILESYSTEM:READFILE "C:/Temp/screenshot.png"')
+                    data = scpi.read_raw()
+                    scpi.write('FILESYSTEM:DELETE "C:/Temp/screenshot.png"')
 
             import base64
 
@@ -259,13 +285,19 @@ def _handle_send_scpi(job: dict) -> dict:
     if not isinstance(commands, list) or not all(isinstance(cmd, str) for cmd in commands):
         raise RuntimeError("send_scpi requires string commands")
 
-    scpi = _get_scope_session(visa)
-    scpi.timeout = timeout_ms
-    scpi.write_termination = "\n"
-    scpi.read_termination = "\n"
+    # Use raw SocketInstr for SOCKET resources — more reliable for Tek scopes
+    use_socket = _is_socket_resource(visa)
+
+    if use_socket:
+        scpi = _get_socket_session(visa)
+    else:
+        scpi = _get_scope_session(visa)
+        scpi.timeout = timeout_ms
+        scpi.write_termination = "\n"
+        scpi.read_termination = "\n"
 
     if verbose:
-        _emit({"log": "scpi", "level": "info", "msg": f"[SCPI] Sending {len(commands)} command(s) to {visa} (timeout={timeout_ms}ms)"})
+        _emit({"log": "scpi", "level": "info", "msg": f"[SCPI] Sending {len(commands)} command(s) to {visa} (timeout={timeout_ms}ms) [{'socket' if use_socket else 'visa'}]"})
 
     started = time.time()
     responses = []
@@ -288,12 +320,16 @@ def _handle_send_scpi(job: dict) -> dict:
             if not session_reset:
                 session_reset = True
                 try:
-                    _reset_scope_session(visa)
-                    _reset_resource_manager()
-                    scpi = _get_scope_session(visa)
-                    scpi.timeout = timeout_ms
-                    scpi.write_termination = "\n"
-                    scpi.read_termination = "\n"
+                    if use_socket:
+                        _reset_socket_session(visa)
+                        scpi = _get_socket_session(visa)
+                    else:
+                        _reset_scope_session(visa)
+                        _reset_resource_manager()
+                        scpi = _get_scope_session(visa)
+                        scpi.timeout = timeout_ms
+                        scpi.write_termination = "\n"
+                        scpi.read_termination = "\n"
                     if cmd.strip().endswith("?"):
                         response = str(scpi.query(cmd)).strip()
                     else:
@@ -413,20 +449,29 @@ def _run_job(job: dict):
     try:
         if action == "disconnect":
             if visa:
-                _reset_scope_session(visa)
+                if _is_socket_resource(visa):
+                    _reset_socket_session(visa)
+                else:
+                    _reset_scope_session(visa)
             _emit({"id": job_id, "done": True, "ok": True, "exit_code": 0, "error": None, "result_data": {"disconnected": visa}})
             return
         if action == "capture_screenshot":
             result = _handle_capture_screenshot(job)
             _emit({"id": job_id, "done": True, "ok": True, "exit_code": 0, "error": None, "result_data": result})
             if not keep_alive and visa:
-                _reset_scope_session(visa)
+                if _is_socket_resource(visa):
+                    _reset_socket_session(visa)
+                else:
+                    _reset_scope_session(visa)
             return
         if action == "send_scpi":
             result = _handle_send_scpi(job)
             _emit({"id": job_id, "done": True, "ok": bool(result.get("ok", False)), "exit_code": 0, "error": None, "result_data": result})
             if not keep_alive and visa:
-                _reset_scope_session(visa)
+                if _is_socket_resource(visa):
+                    _reset_socket_session(visa)
+                else:
+                    _reset_scope_session(visa)
             return
         _run_python_job(job_id, code, visa)
     except Exception:
@@ -441,8 +486,11 @@ def _run_job(job: dict):
             }
         )
         if visa:
-            _reset_scope_session(visa)
-            _reset_resource_manager()
+            if _is_socket_resource(visa):
+                _reset_socket_session(visa)
+            else:
+                _reset_scope_session(visa)
+                _reset_resource_manager()
 
 
 def main():
