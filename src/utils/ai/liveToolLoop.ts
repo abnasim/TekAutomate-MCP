@@ -342,13 +342,13 @@ async function runAnthropicLoop(params: LiveToolLoopParams): Promise<LiveToolLoo
           const hasWriteCommand = isSendScpi && Array.isArray(toolArgs.commands) &&
             (toolArgs.commands as string[]).some(c => !String(c).trim().endsWith('?'));
           const verifyHint = hasWriteCommand
-            ? '\n⚠️ You sent write commands. Call capture_screenshot(analyze:true) NOW to verify they applied. Do NOT claim success without checking.'
+            ? '⚠️ STOP. Before responding to the user, you MUST call capture_screenshot({analyze:true}) and describe what you see. If the change is not visible, say "Didn\'t apply." Do NOT tell the user it worked without visual confirmation.\n\n'
             : '';
           const truncated = resultStr.length > 3000 ? resultStr.slice(0, 3000) + '\n...(truncated)' : resultStr;
           toolResults.push({
             type: 'tool_result',
             tool_use_id: toolId,
-            content: truncated + verifyHint,
+            content: verifyHint + truncated,
           });
         }
       } catch (err) {
@@ -513,7 +513,7 @@ async function runOpenAiLoop(params: LiveToolLoopParams): Promise<LiveToolLoopRe
             toolResultsInput.push({
               type: 'function_call_output',
               call_id: callId,
-              output: isScreenshot ? 'Screenshot captured and displayed to user.' : truncated + verifyHint,
+              output: isScreenshot ? 'Screenshot captured and displayed to user.' : verifyHint + truncated,
             });
           }
         } catch (err) {
