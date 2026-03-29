@@ -23,7 +23,7 @@ const DEFAULT_MODELS = {
     'gpt-4o',
     'gpt-4o-mini',
   ],
-  anthropic: ['claude-sonnet-4-6', 'claude-sonnet-4-5-20250514', 'claude-3-7-sonnet-latest', 'claude-3-5-sonnet-latest', 'claude-3-5-haiku-latest'],
+  anthropic: ['claude-sonnet-4-6', 'claude-opus-4-6', 'claude-haiku-4-5-20251001'],
 };
 
 /**
