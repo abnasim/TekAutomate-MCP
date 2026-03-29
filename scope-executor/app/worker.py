@@ -48,8 +48,19 @@ _resource_manager = None
 _scope_sessions: dict[str, object] = {}
 _socket_sessions: dict[str, object] = {}  # Raw socket sessions for SOCKET VISA resources
 _capture_locks: dict[str, threading.Lock] = {}
+_visa_locks: dict[str, threading.Lock] = {}  # Per-VISA resource lock — prevents send_scpi + screenshot race
 _recent_capture_results: dict[str, tuple[float, dict]] = {}
 _recent_capture_errors: dict[str, tuple[float, str]] = {}
+
+
+def _visa_lock_for(visa: str) -> threading.Lock:
+    """Get or create a per-VISA lock. All operations on the same instrument must hold this."""
+    with _session_lock:
+        lock = _visa_locks.get(visa)
+        if lock is None:
+            lock = threading.Lock()
+            _visa_locks[visa] = lock
+        return lock
 
 
 def _is_socket_resource(visa: str) -> bool:
@@ -456,7 +467,9 @@ def _run_job(job: dict):
             _emit({"id": job_id, "done": True, "ok": True, "exit_code": 0, "error": None, "result_data": {"disconnected": visa}})
             return
         if action == "capture_screenshot":
-            result = _handle_capture_screenshot(job)
+            # Per-VISA lock prevents race with concurrent send_scpi on same instrument
+            with _visa_lock_for(visa):
+                result = _handle_capture_screenshot(job)
             _emit({"id": job_id, "done": True, "ok": True, "exit_code": 0, "error": None, "result_data": result})
             if not keep_alive and visa:
                 if _is_socket_resource(visa):
@@ -465,7 +478,9 @@ def _run_job(job: dict):
                     _reset_scope_session(visa)
             return
         if action == "send_scpi":
-            result = _handle_send_scpi(job)
+            # Per-VISA lock prevents race with concurrent capture_screenshot on same instrument
+            with _visa_lock_for(visa):
+                result = _handle_send_scpi(job)
             _emit({"id": job_id, "done": True, "ok": bool(result.get("ok", False)), "exit_code": 0, "error": None, "result_data": result})
             if not keep_alive and visa:
                 if _is_socket_resource(visa):
