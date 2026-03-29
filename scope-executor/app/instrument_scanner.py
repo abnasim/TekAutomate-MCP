@@ -47,8 +47,27 @@ def _parse_idn(idn: str) -> tuple[str, str, str, str]:
     return parts[0], parts[1], parts[2], parts[3]
 
 
+def _is_valid_idn(idn: str) -> bool:
+    """Check if *IDN? response looks like a real instrument (not HTTP/garbage)."""
+    if not idn or len(idn) < 5:
+        return False
+    # Real IDN has comma-separated fields: MANUFACTURER,MODEL,SERIAL,FIRMWARE
+    if idn.count(",") < 2:
+        return False
+    # Reject HTTP responses
+    if "HTTP/" in idn or "<!DOCTYPE" in idn or "<html" in idn.lower():
+        return False
+    return True
+
+
+def _extract_host(resource: str) -> str:
+    """Extract host from VISA resource string."""
+    parts = resource.split("::")
+    return parts[1] if len(parts) > 1 else ""
+
+
 class InstrumentScanThread(threading.Thread):
-    def __init__(self, query_idn: bool = True, timeout_ms: int = 3000):
+    def __init__(self, query_idn: bool = True, timeout_ms: int = 5000):
         super().__init__(daemon=True)
         self._query_idn = query_idn
         self._timeout_ms = timeout_ms
@@ -69,17 +88,15 @@ class InstrumentScanThread(threading.Thread):
             return
 
         # Pre-import pyvisa-py so it registers even in frozen EXE
-        # (PyInstaller breaks entry_points discovery)
         try:
             import pyvisa_py  # noqa: F401
         except ImportError:
             pass
 
-        # Use pyvisa with default backend (NI-VISA if installed, otherwise system default)
+        # Use pyvisa with default backend (NI-VISA/TekVISA if installed, fallback to @py)
         rm = None
         all_resources: list[str] = []
         try:
-            # Try default backend (NI-VISA) first, fall back to pyvisa-py
             try:
                 rm = pyvisa.ResourceManager()
             except Exception:
@@ -99,127 +116,81 @@ class InstrumentScanThread(threading.Thread):
             self.scan_finished.emit(0)
             return
 
+        # Filter out serial ports
         resources = [r for r in all_resources if not r.upper().startswith("ASRL")]
 
-        # TekScopePC/local VISA endpoints may be directly reachable even when
-        # list_resources() returns nothing. Probe a few common fallbacks too.
+        # Add localhost fallbacks if not already discovered
         fallback_resources = [
             "TCPIP::127.0.0.1::INSTR",
             "TCPIP::localhost::INSTR",
-            "TCPIP::127.0.0.1::4000::SOCKET",
-            "TCPIP::127.0.0.1::5025::SOCKET",
         ]
-
-        # Scan the local subnet for instruments on the LAN.
-        # Uses fast TCP port 4000 probe (SCPI raw socket, ~100ms timeout)
-        # to find reachable hosts before trying slow VISA open.
-        try:
-            import socket as _socket
-            local_ip = _socket.gethostbyname(_socket.gethostname())
-            if local_ip and not local_ip.startswith("127."):
-                subnet = ".".join(local_ip.split(".")[:3])
-                lan_hosts: list[str] = []
-
-                def _probe_tcp(ip: str, port: int = 4000, timeout: float = 0.15) -> bool:
-                    try:
-                        s = _socket.socket(_socket.AF_INET, _socket.SOCK_STREAM)
-                        s.settimeout(timeout)
-                        s.connect((ip, port))
-                        s.close()
-                        return True
-                    except Exception:
-                        return False
-
-                # Parallel fast probe — check port 4000 (SCPI socket) on all /24 IPs
-                import concurrent.futures
-                def _check_ip(octet: int) -> str | None:
-                    ip = f"{subnet}.{octet}"
-                    if ip == local_ip:
-                        return None
-                    # Only probe port 4000 (SCPI raw socket) — port 80 catches routers/gateways
-                    if _probe_tcp(ip, 4000):
-                        return ip
-                    return None
-
-                with concurrent.futures.ThreadPoolExecutor(max_workers=64) as pool:
-                    for result in pool.map(_check_ip, range(1, 255)):
-                        if result:
-                            lan_hosts.append(result)
-
-                for host in lan_hosts:
-                    # Prefer raw socket (port 4000) — more reliable than VXI-11 INSTR
-                    # on many Tek scopes (MSO2, MSO4 etc. may not support VXI-11 properly)
-                    sock_candidate = f"TCPIP::{host}::4000::SOCKET"
-                    instr_candidate = f"TCPIP::{host}::INSTR"
-                    if sock_candidate not in resources and sock_candidate not in fallback_resources:
-                        fallback_resources.append(sock_candidate)
-                    if instr_candidate not in resources and instr_candidate not in fallback_resources:
-                        fallback_resources.append(instr_candidate)
-        except Exception:
-            pass
-
         for res in fallback_resources:
             if res not in resources:
                 resources.append(res)
 
-        # Deduplicate: same host+type seen via multiple network interfaces.
-        seen: set[str] = set()
-        unique: list[str] = []
-        for res in resources:
-            key = res.upper()
-            if key.startswith("TCPIP"):
-                parts = key.split("::")
-                host = parts[1] if len(parts) > 1 else ""
-                suffix = parts[-1] if len(parts) > 2 else "INSTR"
-                dedup_key = f"{host}::{suffix}"
-                if dedup_key in seen:
-                    continue
-                seen.add(dedup_key)
-            elif key in seen:
-                continue
-            else:
-                seen.add(key)
-            unique.append(res)
-
+        # ── Dedup by (host, serial) to avoid showing same scope multiple times ──
+        # TekVISA often returns the same scope via 127.0.0.1, localhost, and LAN IP
         count = 0
+        seen_serials: dict[str, str] = {}  # serial → first resource shown
+        seen_hosts: set[str] = set()
         socket_hosts_probed: set[str] = set()
 
-        for res in unique:
+        for res in resources:
+            # Skip exact duplicates
+            key = res.upper()
+            if key.startswith("TCPIP"):
+                host = _extract_host(res)
+                host_key = host.upper()
+                # Normalize localhost variants
+                if host_key in ("127.0.0.1", "LOCALHOST", "0.0.0.0"):
+                    host_key = "LOCALHOST"
+            else:
+                host_key = key
+
             info = InstrumentInfo(
                 resource=res,
                 conn_type=_parse_conn_type(res),
             )
+
             if self._query_idn:
-                # LAN instruments may need longer timeout for first connection
-                is_lan = res.upper().startswith("TCPIP") and "127.0.0.1" not in res and "LOCALHOST" not in res.upper()
-                probe_timeout = max(self._timeout_ms, 5000) if is_lan else self._timeout_ms
                 try:
-                    inst = rm.open_resource(res, timeout=probe_timeout)
+                    inst = rm.open_resource(res, timeout=self._timeout_ms)
                     idn = inst.query("*IDN?").strip()
                     inst.close()
+                    if not _is_valid_idn(idn):
+                        continue  # Not a real instrument (HTTP server, router, etc.)
                     info.identity = idn
                     info.manufacturer, info.model, info.serial, info.firmware = _parse_idn(idn)
                     info.reachable = True
                 except Exception:
-                    info.reachable = False
+                    continue  # Unreachable — skip entirely
             else:
                 info.reachable = True
 
-            # Only show instruments that actually responded
-            if not info.reachable:
-                continue
+            # Dedup by serial number — same scope via different addresses
+            if info.serial:
+                existing = seen_serials.get(info.serial)
+                if existing:
+                    # Prefer INSTR over SOCKET, prefer LAN IP over localhost
+                    existing_is_socket = "SOCKET" in existing.upper()
+                    new_is_socket = "SOCKET" in res.upper()
+                    existing_is_localhost = any(x in existing.upper() for x in ("127.0.0.1", "LOCALHOST"))
+                    new_is_localhost = any(x in res.upper() for x in ("127.0.0.1", "LOCALHOST"))
+                    # Skip if this is a worse variant of an already-shown instrument
+                    if not (existing_is_localhost and not new_is_localhost):
+                        continue
+                seen_serials[info.serial] = res
 
             self.instrument_found.emit(info)
             count += 1
 
-            # For each reachable TCPIP INSTR host, probe socket ports too
-            if info.reachable and res.upper().startswith("TCPIP"):
-                parts = res.split("::")
-                host = parts[1] if len(parts) > 1 else ""
+            # For each reachable TCPIP INSTR host, also probe socket port
+            if info.reachable and res.upper().startswith("TCPIP") and "SOCKET" not in res.upper():
+                host = _extract_host(res)
                 if host and host not in socket_hosts_probed:
                     socket_hosts_probed.add(host)
-                    for port in (4000, 5025):
-                        sock_res = f"TCPIP::{host}::{port}::SOCKET"
+                    sock_res = f"TCPIP::{host}::4000::SOCKET"
+                    if sock_res not in resources:
                         sock_info = InstrumentInfo(
                             resource=sock_res,
                             conn_type="tcpip",
@@ -228,13 +199,16 @@ class InstrumentScanThread(threading.Thread):
                             inst = rm.open_resource(sock_res, timeout=self._timeout_ms)
                             idn = inst.query("*IDN?").strip()
                             inst.close()
-                            sock_info.identity = idn
-                            sock_info.manufacturer, sock_info.model, sock_info.serial, sock_info.firmware = _parse_idn(idn)
-                            sock_info.reachable = True
+                            if _is_valid_idn(idn):
+                                sock_info.identity = idn
+                                sock_info.manufacturer, sock_info.model, sock_info.serial, sock_info.firmware = _parse_idn(idn)
+                                sock_info.reachable = True
+                                # Only show socket if different serial (shouldn't happen, but safety check)
+                                if sock_info.serial and sock_info.serial not in seen_serials:
+                                    seen_serials[sock_info.serial] = sock_res
+                                    self.instrument_found.emit(sock_info)
+                                    count += 1
                         except Exception:
-                            sock_info.reachable = False
-                        if sock_info.reachable:
-                            self.instrument_found.emit(sock_info)
-                            count += 1
+                            pass
 
         self.scan_finished.emit(count)
