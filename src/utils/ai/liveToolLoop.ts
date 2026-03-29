@@ -327,11 +327,19 @@ async function runAnthropicLoop(params: LiveToolLoopParams): Promise<LiveToolLoo
             lean = rest;
           }
           const resultStr = typeof lean === 'string' ? lean : JSON.stringify(lean);
+
+          // After send_scpi: remind AI to verify with screenshot
+          const isSendScpi = toolName === 'send_scpi';
+          const hasWriteCommand = isSendScpi && Array.isArray(toolArgs.commands) &&
+            (toolArgs.commands as string[]).some(c => !String(c).trim().endsWith('?'));
+          const verifyHint = hasWriteCommand
+            ? '\n⚠️ You sent write commands. Call capture_screenshot(analyze:true) NOW to verify they applied. Do NOT claim success without checking.'
+            : '';
           const truncated = resultStr.length > 3000 ? resultStr.slice(0, 3000) + '\n...(truncated)' : resultStr;
           toolResults.push({
             type: 'tool_result',
             tool_use_id: toolId,
-            content: truncated,
+            content: truncated + verifyHint,
           });
         }
       } catch (err) {
@@ -485,10 +493,18 @@ async function runOpenAiLoop(params: LiveToolLoopParams): Promise<LiveToolLoopRe
             }
             const resultStr = typeof lean === 'string' ? lean : JSON.stringify(lean);
             const truncated = resultStr.length > 3000 ? resultStr.slice(0, 3000) + '\n...(truncated)' : resultStr;
+
+            // After send_scpi: remind AI to verify with screenshot
+            const isSendScpi = toolName === 'send_scpi';
+            const hasWriteCmd = isSendScpi && Array.isArray(toolArgs.commands) &&
+              (toolArgs.commands as string[]).some(c => !String(c).trim().endsWith('?'));
+            const verifyHint = hasWriteCmd
+              ? '\n⚠️ You sent write commands. Call capture_screenshot(analyze:true) NOW to verify they applied. Do NOT claim success without checking.'
+              : '';
             toolResultsInput.push({
               type: 'function_call_output',
               call_id: callId,
-              output: isScreenshot ? 'Screenshot captured and displayed to user.' : truncated,
+              output: isScreenshot ? 'Screenshot captured and displayed to user.' : truncated + verifyHint,
             });
           }
         } catch (err) {
