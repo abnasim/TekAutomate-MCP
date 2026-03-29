@@ -538,6 +538,53 @@ export function AiChatPanel({
         );
         continue;
       }
+      // Markdown table — collect consecutive pipe-delimited lines
+      if (line.trim().startsWith('|') && line.trim().endsWith('|')) {
+        const tableLines: string[] = [];
+        while (i < lines.length && lines[i].trim().startsWith('|') && lines[i].trim().endsWith('|')) {
+          tableLines.push(lines[i]);
+          i++;
+        }
+        if (tableLines.length >= 2) {
+          // Parse header row
+          const parseRow = (row: string) =>
+            row.split('|').slice(1, -1).map(cell => cell.trim());
+          const headerCells = parseRow(tableLines[0]);
+          // Skip separator row (|---|---|)
+          const isSeparator = (row: string) => /^\|[\s\-:|]+\|$/.test(row.trim());
+          const dataStart = isSeparator(tableLines[1]) ? 2 : 1;
+          const dataRows = tableLines.slice(dataStart).map(parseRow);
+          nodes.push(
+            <div key={`tbl-${i}`} className="my-1.5 overflow-x-auto">
+              <table className="text-xs border-collapse w-full">
+                <thead>
+                  <tr className="border-b border-slate-300 dark:border-white/20">
+                    {headerCells.map((cell, ci) => (
+                      <th key={ci} className="px-2 py-1 text-left font-semibold text-slate-700 dark:text-white/80 bg-slate-100 dark:bg-white/5">
+                        {renderInlineMarkdown(cell)}
+                      </th>
+                    ))}
+                  </tr>
+                </thead>
+                <tbody>
+                  {dataRows.map((row, ri) => (
+                    <tr key={ri} className="border-b border-slate-200 dark:border-white/10">
+                      {row.map((cell, ci) => (
+                        <td key={ci} className="px-2 py-1 text-slate-600 dark:text-white/70">
+                          {renderInlineMarkdown(cell)}
+                        </td>
+                      ))}
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          );
+          continue;
+        }
+        // Single pipe line — not a table, fall through
+        i -= tableLines.length;
+      }
       // Empty line
       if (!line.trim()) {
         nodes.push(<div key={`br-${i}`} className="h-0.5" />);
