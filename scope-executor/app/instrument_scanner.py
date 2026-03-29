@@ -79,7 +79,11 @@ class InstrumentScanThread(threading.Thread):
         rm = None
         all_resources: list[str] = []
         try:
-            rm = pyvisa.ResourceManager()
+            # Try default backend (NI-VISA) first, fall back to pyvisa-py
+            try:
+                rm = pyvisa.ResourceManager()
+            except Exception:
+                rm = pyvisa.ResourceManager("@py")
             for query in ("?*::INSTR", "?*::SOCKET"):
                 try:
                     all_resources.extend(rm.list_resources(query))

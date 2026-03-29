@@ -61,7 +61,11 @@ def _resource_manager_instance():
     if _resource_manager is None:
         if pyvisa is None:
             raise RuntimeError("pyvisa is not available in worker")
-        _resource_manager = pyvisa.ResourceManager()
+        # Try default backend (NI-VISA) first, fall back to pyvisa-py
+        try:
+            _resource_manager = pyvisa.ResourceManager()
+        except Exception:
+            _resource_manager = pyvisa.ResourceManager("@py")
     return _resource_manager
 
 
