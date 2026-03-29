@@ -81,9 +81,19 @@ async function executeMcpTool(
       action = 'send_scpi';
       payload = { commands: ['*IDN?', '*ESR?', 'ALLEV?'], timeout_ms: 5000 };
     }
-    // Default per-command timeout for live mode: 5s (valid SCPI returns in <1s)
+    // Default per-command timeout for live mode: 5s for simple commands.
+    // Slow commands (acquisition, transfer, save, reset) get 30s.
     if (toolName === 'send_scpi' && !payload.timeout_ms) {
-      payload.timeout_ms = 5000;
+      const cmds = Array.isArray(payload.commands) ? payload.commands as string[] : [];
+      const hasSlowCommand = cmds.some(c => {
+        const upper = String(c).toUpperCase();
+        return upper.includes('*OPC') || upper.includes('*RST') || upper.includes('*WAI')
+          || upper.includes('CURVE') || upper.includes('WFMOUTPRE')
+          || upper.startsWith('SAVE:') || upper.startsWith('RECALL:') || upper.startsWith('RECAL:')
+          || upper.includes('ACQUIRE:STATE') || upper.includes('ACQU:STATE')
+          || upper.includes('AUTOSET') || upper.includes('AUTOSCALE');
+      });
+      payload.timeout_ms = hasSlowCommand ? 30000 : 5000;
     }
 
     const res = await fetch(`${execUrl}/run`, {
