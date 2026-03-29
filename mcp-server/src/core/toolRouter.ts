@@ -638,59 +638,79 @@ async function handleBuild(req: RouterRequest, startedAt: number): Promise<Route
 export const TEK_ROUTER_TOOL_DEFINITION = {
   name: 'tek_router',
   description:
-    'TekAutomate gateway — routes to 21,000+ internal tools for Tektronix instrument automation.\n' +
-    'This is the PRIMARY tool for all SCPI lookup, command building, validation, and knowledge retrieval.\n' +
-    'Behind this single tool: SCPI search, command materialization, verification, RAG knowledge,\n' +
-    'tm_devices lookup, template examples, known failure patterns, and workflow management.\n\n' +
+    'TekAutomate gateway — single entry point to 21,000+ internal tools for Tektronix oscilloscope automation.\n\n' +
+
+    '## Quick Reference\n' +
+    'Use action:"search_exec" for most tasks. Pass query + args in one call.\n\n' +
+
+    '## Internal Tools (accessible via search_exec)\n\n' +
+
+    '### SCPI Lookup & Search\n' +
+    '- "search scpi commands" + {query:"FastFrame"} → keyword SCPI search\n' +
+    '- "get command by header" + {header:"CH<x>:SCAle"} → exact header lookup\n' +
+    '- "batch header lookup" + {headers:["CH<x>:SCAle","..."]} → multiple headers at once\n' +
+    '- "browse scpi commands" + {group:"Trigger"} → browse by feature area\n' +
+    '- "list command groups" → see all available SCPI feature groups\n\n' +
+
+    '### Command Building\n' +
+    '- "materialize scpi command" + {header:"CH<x>:SCAle", commandType:"set", value:"1.0", placeholderBindings:{"CH<x>":"CH1"}} → build concrete SCPI string\n' +
+    '- "finalize scpi" + {items:[...]} → batch build + verify in one call\n\n' +
+
+    '### Verification & Validation\n' +
+    '- "verify scpi commands" + {commands:["CH1:SCAle 1.0"]} → check if commands exist in database\n' +
+    '- "validate action payload" + {actionsJson:{steps:[...]}} → validate ACTIONS_JSON structure\n' +
+    '- "validate device context" + {steps:[...]} → check device/command alignment\n\n' +
+
+    '### Knowledge & Docs\n' +
+    '- "retrieve rag chunks" + {corpus:"app_logic", query:"spectrum view"} → search knowledge base\n' +
+    '  Corpora: scpi, tmdevices, app_logic, errors, templates, pyvisa_tekhsi\n' +
+    '- "known failures" + {query:"timeout"} → known error patterns and fixes\n' +
+    '- "template examples" + {query:"jitter"} → workflow template examples\n\n' +
+
+    '### tm_devices (Python)\n' +
+    '- "search tm devices" + {query:"channel scale"} → find tm_devices Python methods\n' +
+    '- "materialize tm devices" + {methodPath:"ch[x].termination.write"} → build Python call\n\n' +
+
+    '### Policy & Schema\n' +
+    '- "get policy" + {mode:"steps_json"} → output format rules\n' +
+    '- "valid step types" + {mode:"steps_json"} → available step/block types\n\n' +
 
     '## Actions\n\n' +
 
-    '### search_exec (RECOMMENDED — one-shot search + execute)\n' +
-    'Finds the best matching internal tool and executes it in one call.\n' +
-    'Example: {action:"search_exec", query:"verify scpi commands", args:{commands:["CH1:SCAle 1.0"]}}\n' +
-    'Example: {action:"search_exec", query:"get command group Trigger"}\n' +
-    'Example: {action:"search_exec", query:"search scpi fastframe", args:{query:"FastFrame"}}\n' +
-    'Example: {action:"search_exec", query:"materialize scpi command", args:{header:"CH<x>:SCAle", value:"1.0", placeholderBindings:{"CH<x>":"CH1"}}}\n' +
-    'Example: {action:"search_exec", query:"retrieve rag chunks", args:{corpus:"scpi", query:"spectrum view trigger"}}\n' +
-    'Example: {action:"search_exec", query:"validate actions json", args:{actionsJson:{...}}}\n\n' +
+    '### search_exec (RECOMMENDED)\n' +
+    'One-shot: finds best internal tool and executes it. Use for 90% of tasks.\n' +
+    '{action:"search_exec", query:"<tool trigger phrase>", args:{<tool args>}}\n\n' +
 
     '### search\n' +
-    'Find tools by natural language. Returns tool IDs, descriptions, and schemas.\n' +
-    'Example: {action:"search", query:"edge trigger setup"}\n' +
-    'Example: {action:"search", query:"known failures timeout"}\n\n' +
+    'Find tools without executing. Returns IDs, descriptions, schemas.\n' +
+    '{action:"search", query:"edge trigger", limit:5}\n\n' +
 
     '### exec\n' +
-    'Execute a tool by its ID (from a previous search result).\n' +
-    'Example: {action:"exec", toolId:"scpi:TRIGger:{A|B}:EDGE:SOUrce", args:{commandType:"set", value:"CH1"}}\n\n' +
+    'Execute by tool ID (from a previous search).\n' +
+    '{action:"exec", toolId:"scpi:TRIGger:{A|B}:EDGE:SOUrce", args:{commandType:"set", value:"CH1"}}\n\n' +
 
     '### build\n' +
-    'Generate a complete SCPI workflow from a natural language description.\n' +
-    'Example: {action:"build", query:"set up jitter measurement on CH1"}\n\n' +
-
-    '### info\n' +
-    'Get full details about a tool by ID.\n' +
-    'Example: {action:"info", toolId:"scpi:CH<x>:SCAle"}\n\n' +
-
-    '### list\n' +
-    'List all registered tools with categories.\n\n' +
+    'Generate a complete SCPI workflow from natural language.\n' +
+    '{action:"build", query:"set up jitter measurement on CH1"}\n\n' +
 
     '### create / update / delete\n' +
-    'Manage runtime shortcut tools (learned workflows).\n' +
-    'Example: {action:"create", toolName:"Eye Jitter Setup", toolDescription:"...", toolTriggers:["eye jitter","jitter measurement"], toolCategory:"shortcut", toolSteps:[...]}\n\n' +
+    'Manage learned shortcuts.\n' +
+    '{action:"create", toolName:"SV Trigger", toolDescription:"...", toolTriggers:["sv trigger"], toolCategory:"shortcut", toolSteps:[{tool:"send_scpi", args:{commands:["..."]}}]}\n\n' +
 
-    '## What the router handles internally (you do NOT need separate tools for these):\n' +
-    '- SCPI command search, browse, and lookup (search_scpi, browse_scpi, get_command_by_header, etc.)\n' +
-    '- Command materialization (materialize_scpi_command, finalize_scpi_commands)\n' +
-    '- Command verification (verify_scpi_commands)\n' +
-    '- Validation (validate_action_payload, validate_device_context)\n' +
-    '- Knowledge retrieval (retrieve_rag_chunks, search_known_failures, get_template_examples)\n' +
-    '- tm_devices lookup (search_tm_devices, materialize_tm_devices_call)\n' +
-    '- Policy and schema (get_policy, list_valid_step_types, get_block_schema)\n\n' +
+    '### info / list\n' +
+    'Inspect a tool by ID or list all registered tools.\n\n' +
 
-    '## Typical workflow:\n' +
-    '1. tek_router({action:"search_exec", query:"channel 1 scale", args:{commandType:"set", value:"1.0", concreteHeader:"CH1:SCAle"}})\n' +
-    '2. send_scpi({commands:["CH1:SCAle 1.0"]}) — to actually send to the instrument\n' +
-    '3. capture_screenshot() — to verify visually',
+    '## Typical Workflows\n\n' +
+    'Find & set a command:\n' +
+    '1. tek_router({action:"search_exec", query:"materialize scpi command", args:{header:"CH<x>:SCAle", commandType:"set", value:"2.5", placeholderBindings:{"CH<x>":"CH1"}}})\n' +
+    '2. send_scpi({commands:["CH1:SCAle 2.5"]})\n\n' +
+    'Discover undocumented commands:\n' +
+    '1. discover_scpi({basePath:"TRIGger:A:LEVel"}) → finds valid sub-paths\n' +
+    '2. tek_router({action:"search_exec", query:"get command by header", args:{header:"TRIGger:A:LEVel:MAGnitude:CH1"}})\n\n' +
+    'Verify before sending:\n' +
+    '1. tek_router({action:"search_exec", query:"verify scpi commands", args:{commands:["TRIGger:A:EDGE:SOUrce CH1_MAG"]}})\n' +
+    '2. send_scpi({commands:["TRIGger:A:EDGE:SOUrce CH1_MAG"]})\n' +
+    '3. capture_screenshot()',
   parameters: {
     type: 'object',
     properties: {
