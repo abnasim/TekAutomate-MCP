@@ -5317,6 +5317,10 @@ function usesServerDefaultHostedPrompt(req: McpChatRequest): boolean {
   return String(req.openaiAssistantId || '').trim() === SERVER_DEFAULT_ASSISTANT_TOKEN;
 }
 
+// Default prompt ID and version — users don't need to configure this
+const DEFAULT_OPENAI_PROMPT_ID = 'pmpt_69ba258ea3e8819092c7b41dbb41fd580ac4f618c91da843';
+const DEFAULT_OPENAI_PROMPT_VERSION = ''; // empty = latest version
+
 function resolveOpenAiPromptId(req: McpChatRequest): string {
   const requested = String(req.openaiAssistantId || '').trim().replace(/\s+/g, '');
   if (VALID_PROMPT_ID.test(requested)) return requested;
@@ -5324,12 +5328,12 @@ function resolveOpenAiPromptId(req: McpChatRequest): string {
   if (VALID_PROMPT_ID.test(serverPromptId)) return serverPromptId;
   const legacyAssistantEnv = String(process.env.OPENAI_ASSISTANT_ID || '').trim().replace(/\s+/g, '');
   if (VALID_PROMPT_ID.test(legacyAssistantEnv)) return legacyAssistantEnv;
-  return '';
+  return DEFAULT_OPENAI_PROMPT_ID;
 }
 
 function resolveOpenAiPromptVersion(): string {
   const raw = String(process.env.OPENAI_PROMPT_VERSION || '').trim();
-  return raw ? String(raw) : '';
+  return raw ? String(raw) : DEFAULT_OPENAI_PROMPT_VERSION;
 }
 
 function resolveOpenAiResponseCursor(req: McpChatRequest): string {
@@ -6732,7 +6736,7 @@ async function runOpenAiHostedResponse(
     `[MCP] OpenAI hosted responses: model ${hostedModel}${reasoningCfg?.effort ? ` reasoning=${String(reasoningCfg.effort)}` : ''}`
   );
   if (usesServerDefaultHostedPrompt(req) && canAttachHostedPrompt && !promptConfig?.id) {
-    throw new Error('OPENAI_PROMPT_ID is missing. Add OPENAI_PROMPT_ID=pmpt_69ba258ea3e8819092c7b41dbb41fd580ac4f618c91da843 to mcp-server/.env (or set it in Railway environment variables).');
+    throw new Error('OPENAI_PROMPT_ID could not be resolved. Using default but hosted prompt attachment failed.');
   }
   if (usesServerDefaultHostedPrompt(req) && !canAttachHostedPrompt) {
     console.log(
