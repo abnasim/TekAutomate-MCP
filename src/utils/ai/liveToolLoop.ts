@@ -407,10 +407,10 @@ export async function runLiveToolLoop(params: LiveToolLoopParams): Promise<LiveT
  * Fetch tool definitions from MCP server.
  */
 // Slim MCP surface — only these tools are exposed to the AI provider.
+// smart_scpi_lookup stays internal (MCP-only deterministic planner).
 // Everything else is routed internally via tek_router.
 const MCP_SLIM_TOOLS = new Set([
   'tek_router',
-  'smart_scpi_lookup',
   'send_scpi',
   'capture_screenshot',
   'discover_scpi',
@@ -452,7 +452,6 @@ export function buildLiveSystemPrompt(instrument?: {
     '  Verify: {action:"search_exec", query:"verify scpi commands", args:{commands:["CMD1"]}}',
     '  RAG: {action:"search_exec", query:"retrieve rag chunks", args:{corpus:"app_logic", query:"..."}}',
     '  Browse group: {action:"search_exec", query:"browse scpi commands", args:{group:"Trigger"}}',
-    '- **smart_scpi_lookup** — Natural language SCPI search. Quick single-call shortcut.',
     '- **send_scpi** — {commands:["CMD1","CMD2?"]} → [{command, response, ok, error}]',
     '- **capture_screenshot** — Capture scope display as image. You WILL receive the image and can see it.',
     '- **discover_scpi** — Probe live instrument for undocumented commands: {basePath:"TRIGger:A:LEVel", liveMode:true}',
