@@ -147,9 +147,14 @@ class InstrumentScanThread(threading.Thread):
                             lan_hosts.append(result)
 
                 for host in lan_hosts:
-                    candidate = f"TCPIP::{host}::INSTR"
-                    if candidate not in resources and candidate not in fallback_resources:
-                        fallback_resources.append(candidate)
+                    # Prefer raw socket (port 4000) — more reliable than VXI-11 INSTR
+                    # on many Tek scopes (MSO2, MSO4 etc. may not support VXI-11 properly)
+                    sock_candidate = f"TCPIP::{host}::4000::SOCKET"
+                    instr_candidate = f"TCPIP::{host}::INSTR"
+                    if sock_candidate not in resources and sock_candidate not in fallback_resources:
+                        fallback_resources.append(sock_candidate)
+                    if instr_candidate not in resources and instr_candidate not in fallback_resources:
+                        fallback_resources.append(instr_candidate)
         except Exception:
             pass
 
