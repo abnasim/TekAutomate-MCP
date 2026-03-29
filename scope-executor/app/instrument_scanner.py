@@ -136,8 +136,8 @@ class InstrumentScanThread(threading.Thread):
                     ip = f"{subnet}.{octet}"
                     if ip == local_ip:
                         return None
-                    # Try port 4000 (SCPI raw socket) and port 80 (web UI)
-                    if _probe_tcp(ip, 4000) or _probe_tcp(ip, 80):
+                    # Only probe port 4000 (SCPI raw socket) — port 80 catches routers/gateways
+                    if _probe_tcp(ip, 4000):
                         return ip
                     return None
 
@@ -185,8 +185,11 @@ class InstrumentScanThread(threading.Thread):
                 conn_type=_parse_conn_type(res),
             )
             if self._query_idn:
+                # LAN instruments may need longer timeout for first connection
+                is_lan = res.upper().startswith("TCPIP") and "127.0.0.1" not in res and "LOCALHOST" not in res.upper()
+                probe_timeout = max(self._timeout_ms, 5000) if is_lan else self._timeout_ms
                 try:
-                    inst = rm.open_resource(res, timeout=self._timeout_ms)
+                    inst = rm.open_resource(res, timeout=probe_timeout)
                     idn = inst.query("*IDN?").strip()
                     inst.close()
                     info.identity = idn
@@ -196,6 +199,10 @@ class InstrumentScanThread(threading.Thread):
                     info.reachable = False
             else:
                 info.reachable = True
+
+            # Only show instruments that actually responded
+            if not info.reachable:
+                continue
 
             self.instrument_found.emit(info)
             count += 1
