@@ -1026,40 +1026,45 @@ export function useAiChat(params: {
             ? [{ type: 'text' as const, text: effectiveMessage + preContext }, ...imageBlocks]
             : effectiveMessage + preContext;
 
-          const chatMessages: Array<Record<string, unknown>> = [
-            ...state.history.slice(-6).map((h) => ({
-              role: h.role as 'user' | 'assistant',
+          // Fetch slim tool surface from MCP server
+          const chatTools = await fetchLiveTools();
+
+          // Use the live tool loop for multi-round tool calling
+          const loopResult = await runLiveToolLoop({
+            provider: 'anthropic',
+            apiKey: trimmedKey,
+            model: state.model,
+            systemPrompt: buildAnthropicBuilderSystemPrompt(
+              params.flowContext?.modelFamily || 'scope',
+              params.flowContext?.backend || 'pyvisa',
+              params.flowContext?.deviceType || 'SCOPE',
+            ),
+            userMessage: (typeof userContent === 'string' ? userContent : effectiveMessage + preContext),
+            history: state.history.slice(-8).map((h) => ({
+              role: h.role as string,
               content: String(h.content || '').slice(0, 6000),
             })),
-            { role: 'user', content: userContent },
-          ];
-          const res = await fetch('https://api.anthropic.com/v1/messages', {
-            method: 'POST',
-            headers: {
-              'x-api-key': trimmedKey,
-              'anthropic-version': '2023-06-01',
-              'anthropic-dangerous-direct-browser-access': 'true',
-              'content-type': 'application/json',
+            tools: chatTools,
+            instrumentEndpoint: params.flowContext ? {
+              executorUrl: '',
+              visaResource: '',
+              backend: params.flowContext.backend || 'pyvisa',
+              liveMode: false,
+            } : undefined,
+            flowContext: {
+              modelFamily: params.flowContext?.modelFamily,
+              deviceDriver: params.flowContext?.deviceDriver,
             },
-            body: JSON.stringify({
-              model: state.model,
-              system: buildAnthropicBuilderSystemPrompt(
-                params.flowContext?.modelFamily || 'scope',
-                params.flowContext?.backend || 'pyvisa',
-                params.flowContext?.deviceType || 'SCOPE',
-              ),
-              max_tokens: 8192,
-              messages: chatMessages,
-            }),
+            maxIterations: 6,
+            onChunk: (chunk) => dispatch({ type: 'STREAM_CHUNK', chunk }),
+            onToolCall: (name, args) => console.log(`[AI Chat] Tool call: ${name}`, args),
+            onToolResult: (name, result) => console.log(`[AI Chat] Tool result: ${name}`, result),
           });
-          if (!res.ok) {
-            const errText = await res.text();
-            throw new Error(`Anthropic ${res.status}: ${errText}`);
+
+          const text = loopResult.text || '';
+          if (loopResult.error) {
+            console.warn('[AI Chat] Anthropic tool loop error:', loopResult.error);
           }
-          const json = await res.json() as { content: Array<Record<string, unknown>> };
-          const text = Array.isArray(json.content)
-            ? json.content.filter((c) => c.type === 'text').map((c) => String(c.text || '')).join('\n')
-            : '';
           if (text) {
             finalText = text;
             dispatch({ type: 'STREAM_CHUNK', chunk: text });
