@@ -5,6 +5,7 @@ import { getToolRegistry, type MicroTool, type MicroToolResult, type MicroToolSc
 import { getToolSearchEngine } from './toolSearch';
 import { materializeScpiCommand } from '../tools/materializeScpiCommand';
 import { verifyScpiCommands } from '../tools/verifyScpiCommands';
+import { TOOL_HANDLERS, getToolDefinitions } from '../tools/index';
 
 export interface TemplateEntry {
   id: string;
@@ -572,6 +573,83 @@ export function hydrateBuiltinShortcuts(): MicroTool[] {
   ];
 }
 
+// ── Hydrate built-in MCP tools so tek_router can route to them ───────
+// These are the 25+ tools hidden from the MCP surface but need to be
+// findable via tek_router's search/search_exec actions.
+const MCP_TOOL_TRIGGERS: Record<string, string[]> = {
+  search_scpi: ['search scpi', 'find scpi', 'scpi search', 'command search'],
+  get_command_by_header: ['get command by header', 'exact header lookup', 'header lookup'],
+  get_commands_by_header_batch: ['batch header lookup', 'multiple headers'],
+  get_command_group: ['command group', 'group commands', 'feature area commands'],
+  list_command_groups: ['list command groups', 'all groups', 'available groups', 'show groups'],
+  browse_scpi_commands: ['browse scpi', 'browse commands', 'drill down commands'],
+  verify_scpi_commands: ['verify scpi', 'check scpi', 'validate scpi syntax'],
+  materialize_scpi_command: ['materialize scpi', 'build scpi string', 'concrete scpi'],
+  materialize_scpi_commands: ['batch materialize', 'materialize multiple'],
+  finalize_scpi_commands: ['finalize scpi', 'build and verify scpi'],
+  materialize_tm_devices_call: ['materialize tm devices', 'tm devices python call'],
+  search_tm_devices: ['search tm devices', 'tm devices lookup', 'python method search'],
+  retrieve_rag_chunks: ['retrieve rag', 'knowledge base', 'documentation search'],
+  search_known_failures: ['known failures', 'known errors', 'common problems'],
+  get_template_examples: ['template examples', 'workflow examples', 'example flows'],
+  validate_action_payload: ['validate actions', 'validate payload', 'check actions json'],
+  validate_device_context: ['validate device context', 'device context check'],
+  get_policy: ['get policy', 'policy rules', 'output format rules'],
+  list_valid_step_types: ['valid step types', 'step types', 'block types'],
+  get_block_schema: ['block schema', 'block definition', 'block fields'],
+  save_learned_workflow: ['save workflow', 'save learned', 'create shortcut'],
+  probe_command: ['probe command', 'test single command', 'try command'],
+  get_instrument_state: ['instrument state', 'instrument identity', 'scope id'],
+  get_visa_resources: ['visa resources', 'list instruments', 'connected instruments'],
+  get_environment: ['runtime environment', 'executor environment'],
+};
+
+export function hydrateBuiltinMcpTools(): MicroTool[] {
+  const toolDefs = getToolDefinitions();
+  const tools: MicroTool[] = [];
+
+  for (const def of toolDefs) {
+    // Skip tek_router itself (it's the gateway, not a routable tool)
+    if (def.name === 'tek_router') continue;
+
+    const handler = (TOOL_HANDLERS as Record<string, Function>)[def.name];
+    if (!handler) continue;
+
+    const triggers = MCP_TOOL_TRIGGERS[def.name] || [def.name.replace(/_/g, ' ')];
+    const tool: MicroTool = {
+      id: `builtin:${def.name}`,
+      name: def.name.replace(/_/g, ' ').replace(/\b\w/g, c => c.toUpperCase()),
+      description: def.description?.slice(0, 200) || def.name,
+      triggers,
+      tags: ['builtin', 'mcp_tool', def.name],
+      category: 'composite' as ToolCategory,
+      schema: {
+        type: 'object',
+        properties: (def.parameters as any)?.properties ?? {},
+        required: (def.parameters as any)?.required,
+      },
+      handler: async (args: Record<string, unknown>) => {
+        const result = await handler(args);
+        const r = result as Record<string, unknown>;
+        return {
+          ok: r.ok !== false,
+          data: r.data ?? r,
+          text: typeof r.text === 'string' ? r.text : undefined,
+          warnings: Array.isArray(r.warnings) ? r.warnings : [],
+          error: typeof r.error === 'string' ? r.error : undefined,
+        } as MicroToolResult;
+      },
+      usageCount: 0,
+      lastUsedAt: 0,
+      successCount: 0,
+      failureCount: 0,
+    };
+    tools.push(tool);
+  }
+
+  return tools;
+}
+
 export async function hydrateAllTools(sources: HydrationSources): Promise<HydrationReport> {
   const startedAt = Date.now();
   const registry = getToolRegistry();
@@ -603,6 +681,10 @@ export async function hydrateAllTools(sources: HydrationSources): Promise<Hydrat
   const shortcuts = hydrateBuiltinShortcuts();
   registry.registerBatch(shortcuts);
 
+  // Register built-in MCP tools so tek_router can route to them
+  const builtinMcpTools = hydrateBuiltinMcpTools();
+  registry.registerBatch(builtinMcpTools);
+
   if (sources.usageStats?.length) {
     registry.importUsageStats(sources.usageStats);
   }
@@ -612,7 +694,7 @@ export async function hydrateAllTools(sources: HydrationSources): Promise<Hydrat
   const durationMs = Date.now() - startedAt;
   const total = registry.size();
   console.log(
-    `[MCP:router] Hydrated ${total} tools in ${durationMs}ms (${scpiCount} SCPI, ${templateCount} templates, ${ragCount} RAG, ${shortcuts.length} shortcuts)`
+    `[MCP:router] Hydrated ${total} tools in ${durationMs}ms (${scpiCount} SCPI, ${templateCount} templates, ${ragCount} RAG, ${shortcuts.length} shortcuts, ${builtinMcpTools.length} builtin)`
   );
 
   return {
