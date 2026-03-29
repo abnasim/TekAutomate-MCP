@@ -459,13 +459,9 @@ async function handleSearchExec(req: RouterRequest, startedAt: number): Promise<
   }
 
   // ── Priority: check builtin MCP tools first ──────────────────
-  // Builtin tools (search_scpi, verify_scpi, etc.) should always win
-  // over SCPI command headers that happen to share keywords.
   const registry = getToolRegistry();
   const queryLower = req.query.toLowerCase().trim();
-  // Find all builtin tools whose triggers match, then pick the one
-  // with the longest matching trigger (most specific match wins).
-  let builtinMatch: typeof registry extends { all(): (infer T)[] } ? T : any = null;
+  let builtinMatch: MicroTool | null = null;
   let longestTrigger = 0;
   for (const tool of registry.all()) {
     if (!tool.id.startsWith('builtin:')) continue;
@@ -481,16 +477,29 @@ async function handleSearchExec(req: RouterRequest, startedAt: number): Promise<
   if (builtinMatch) {
     try {
       const toolStart = Date.now();
-      const result = await builtinMatch.handler(req.args || {});
+      const mergedArgs = { ...req.args };
+      if (req.modelFamily && !mergedArgs.modelFamily) {
+        mergedArgs.modelFamily = req.modelFamily;
+      }
+      const result = await builtinMatch.handler(mergedArgs);
       const toolMs = Date.now() - toolStart;
       registry.recordUsage(builtinMatch.id);
       if (result.ok) registry.recordSuccess(builtinMatch.id);
       else registry.recordFailure(builtinMatch.id);
       const totalMs = Date.now() - startedAt;
+      // Structure results as best_match + alternatives when data is an array
+      let structuredData = result.data;
+      if (Array.isArray(result.data) && result.data.length > 0) {
+        structuredData = {
+          best_match: result.data[0],
+          alternatives: result.data.slice(1, 5),
+          total: result.data.length,
+        };
+      }
       return {
         ok: result.ok,
         action: 'search_exec',
-        data: result.data,
+        data: structuredData,
         text: result.text ? `[${builtinMatch.name}] ${result.text}` : `Executed ${builtinMatch.name} successfully.`,
         warnings: result.warnings,
         error: result.error,
@@ -508,11 +517,11 @@ async function handleSearchExec(req: RouterRequest, startedAt: number): Promise<
     }
   }
 
-  // ── Fall through to general search engine ─────────────────────
+  // ── Fall through to general search engine — return top 5 ─────
   const searchStart = Date.now();
   const engine = getToolSearchEngine();
   const hits = await engine.search(req.query, {
-    limit: 1,
+    limit: req.limit ?? 5,
     categories: req.categories,
   });
   const searchMs = Date.now() - searchStart;
@@ -542,22 +551,40 @@ async function handleSearchExec(req: RouterRequest, startedAt: number): Promise<
       ok: true,
       action: 'search_exec',
       results: hits.map((hit) => serializeHit(hit, req.debug === true)),
-      text: `Low confidence match. Top result: ${top.tool.name} (score: ${top.score.toFixed(2)}). Use action:"exec" with the tool ID and args to proceed.`,
+      text: `Found ${hits.length} result(s) for "${req.query}". Top: ${top.tool.name} (score: ${top.score.toFixed(2)}). Use action:"exec" with the tool ID and args to proceed.`,
       durationMs: Date.now() - startedAt,
     };
   }
 
   try {
-    const result = await top.tool.handler(req.args || {});
+    // Ensure modelFamily flows through to builtin tool handlers
+    const mergedArgs = { ...req.args };
+    if (req.modelFamily && !mergedArgs.modelFamily) {
+      mergedArgs.modelFamily = req.modelFamily;
+    }
+    const result = await top.tool.handler(mergedArgs);
     const registry = getToolRegistry();
     registry.recordUsage(top.tool.id);
     if (result.ok) registry.recordSuccess(top.tool.id);
     else registry.recordFailure(top.tool.id);
+    // Structure results as best_match + alternatives when data is an array
+    let structuredData = result.data;
+    if (Array.isArray(result.data) && result.data.length > 0) {
+      structuredData = {
+        best_match: result.data[0],
+        alternatives: result.data.slice(1, 5),
+        total: result.data.length,
+      };
+    }
+    const alternatives = hits.slice(1).map((hit) => serializeHit(hit, req.debug === true));
     return {
       ok: result.ok,
       action: 'search_exec',
-      data: result.data,
-      text: result.text ? `[${top.tool.name}] ${result.text}` : `Executed ${top.tool.name} successfully.`,
+      data: structuredData,
+      results: alternatives.length > 0 ? alternatives : undefined,
+      text: result.text
+        ? `[${top.tool.name}] ${result.text}${alternatives.length > 0 ? ` (${alternatives.length} alternative(s) available)` : ''}`
+        : `Executed ${top.tool.name} successfully.`,
       warnings: result.warnings,
       error: result.error,
       durationMs: Date.now() - startedAt,
@@ -567,7 +594,8 @@ async function handleSearchExec(req: RouterRequest, startedAt: number): Promise<
     return {
       ok: false,
       action: 'search_exec',
-      error: `Auto-exec of "${top.tool.id}" failed: ${err instanceof Error ? err.message : String(err)}`,
+      results: hits.map((hit) => serializeHit(hit, req.debug === true)),
+      error: `Auto-exec of "${top.tool.id}" failed: ${err instanceof Error ? err.message : String(err)}. See results for alternatives.`,
       durationMs: Date.now() - startedAt,
     };
   }
