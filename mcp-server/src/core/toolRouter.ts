@@ -215,35 +215,33 @@ async function handleSearch(req: RouterRequest, startedAt: number): Promise<Rout
     };
   }
 
-  // Primary: use smart_scpi_lookup for SCPI command search (best intent + group logic)
+  // Direct SCPI command search via command index (header + description + tags)
   let scpiCommands: Array<Record<string, unknown>> = [];
   try {
-    const { smartScpiLookup } = await import('./smartScpiAssistant');
-    const scpiRes = await smartScpiLookup({ query: req.query, modelFamily: req.modelFamily });
-    if (scpiRes.ok && Array.isArray(scpiRes.data) && scpiRes.data.length > 0) {
-      scpiCommands = scpiRes.data.slice(0, req.limit ?? 5).map((cmd: any) => ({
-        id: cmd.commandId || cmd.header || '',
-        name: cmd.header || '',
-        description: cmd.shortDescription || cmd.description || '',
-        category: 'scpi',
-        score: 10,
-        matchStage: 'smart_scpi',
-        syntax: cmd.syntax,
-        arguments: cmd.arguments,
-        examples: cmd.examples || cmd.codeExamples,
-        group: cmd.group,
-        commandType: cmd.commandType,
-      }));
-    }
+    const { getCommandIndex } = await import('./commandIndex');
+    const cmdIdx = await getCommandIndex();
+    const results = cmdIdx.searchByQuery(req.query, req.modelFamily, req.limit ?? 5);
+    scpiCommands = results.map((cmd: any) => ({
+      id: cmd.commandId || cmd.header || '',
+      name: cmd.header || '',
+      description: cmd.shortDescription || cmd.description || '',
+      category: 'scpi',
+      score: 10,
+      matchStage: 'command_index',
+      syntax: cmd.syntax,
+      arguments: cmd.arguments,
+      examples: cmd.examples || cmd.codeExamples,
+      group: cmd.group,
+      commandType: cmd.commandType,
+    }));
   } catch { /* non-fatal */ }
 
-  // Secondary: router's own BM25/trigger search for shortcuts and templates
+  // Router's own BM25/trigger search for shortcuts and templates
   const engine = getToolSearchEngine();
   const routerHits = await engine.searchCompound(req.query, {
     limit: 3,
     categories: req.categories,
   });
-  // Filter DPOJET
   const familyHint = (req.modelFamily || '').toUpperCase();
   const filteredRouterHits = routerHits.filter((hit) => {
     const toolId = (hit.tool.id || '').toLowerCase();
@@ -254,10 +252,9 @@ async function handleSearch(req: RouterRequest, startedAt: number): Promise<Rout
     .filter((hit) => hit.tool.category === 'shortcut' || hit.tool.category === 'template' || hit.tool.category === 'instrument')
     .map((hit) => serializeHit(hit, req.debug === true));
 
-  // Combine: SCPI commands first, then shortcuts/templates
   const results = [...scpiCommands, ...routerResults];
 
-  // RAG knowledge — only for queries that sound like questions, not SCPI commands
+  // RAG knowledge — only for question-like queries
   let knowledge: Array<{ corpus: string; title: string; body: string }> | undefined;
   const isQuestion = /\b(why|how|what|explain|error|fail|timeout|issue|problem|debug)\b/i.test(req.query);
   if (isQuestion) {
