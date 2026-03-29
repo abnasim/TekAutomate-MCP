@@ -503,7 +503,7 @@ export function buildLiveSystemPrompt(instrument?: {
     '1. JUST DO IT. Never explain how. Never suggest manual UI steps.',
     '2. MINIMUM TOOL CALLS. Simple tasks = 1-2 calls max. "check scope" = just capture_screenshot. "add freq measurement" = just send_scpi. Do NOT search for commands you already know.',
     '3. Common commands — send_scpi IMMEDIATELY: *RST, *IDN?, AUTOSet EXECute, MEASUrement:ADDMEAS <type>, MEASUrement:DELete, CH<x>:SCAle, HORizontal:SCAle, TRIGger:A:EDGE:SLOpe, MEASUrement:STATIstics:CYCLEMode',
-    '4. Unknown commands — smart_scpi_lookup → send_scpi. Two calls max.',
+    '4. Unknown commands — tek_router search_exec → send_scpi. Two calls max.',
     '5. Errors — read response, fix, retry. Briefly say what failed before trying next.',
     '6. Be natural. Brief for actions, detailed only when asked to explain.',
     '7. Replace placeholders: <NR3>→number, CH<x>→CH1.',
