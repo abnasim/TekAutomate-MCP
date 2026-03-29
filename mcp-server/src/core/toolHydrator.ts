@@ -604,6 +604,13 @@ const MCP_TOOL_TRIGGERS: Record<string, string[]> = {
   get_environment: ['runtime environment', 'executor environment'],
 };
 
+// Tools that depend on heavy indexes (tm_devices: 14MB+28MB JSON)
+// Exclude from builtin hydration to prevent OOM/hang on resource-limited hosts
+const HEAVY_INDEX_TOOLS = new Set([
+  'search_tm_devices',
+  'materialize_tm_devices_call',
+]);
+
 export function hydrateBuiltinMcpTools(): MicroTool[] {
   const toolDefs = getToolDefinitions();
   const tools: MicroTool[] = [];
@@ -611,6 +618,8 @@ export function hydrateBuiltinMcpTools(): MicroTool[] {
   for (const def of toolDefs) {
     // Skip tek_router itself (it's the gateway, not a routable tool)
     if (def.name === 'tek_router') continue;
+    // Skip tools with heavy index dependencies that can crash limited hosts
+    if (HEAVY_INDEX_TOOLS.has(def.name)) continue;
 
     const handler = (TOOL_HANDLERS as Record<string, Function>)[def.name];
     if (!handler) continue;
