@@ -241,6 +241,13 @@ class _Handler(BaseHTTPRequestHandler):
                 self._emit("POST", "/run", 400, f"too many commands action={action_label} count={len(commands)}")
                 return
             timeout_sec = min(max(timeout_sec, 15), ui_timeout)
+            # Verbose mode: log request details
+            output_mode = data.get("outputMode") or data.get("output_mode") or "clean"
+            if output_mode == "verbose":
+                cmd_preview = "; ".join(commands[:5])
+                if len(commands) > 5:
+                    cmd_preview += f" ... (+{len(commands) - 5} more)"
+                self._emit("POST", "/run", 0, f"\033[34m[REQ]\033[0m send_scpi visa={scope_visa} cmds={len(commands)} timeout={timeout_ms}ms [{cmd_preview}]")
         # disconnect: no commands needed, just scope_visa (already validated above)
 
         self._emit_status("busy")
@@ -264,8 +271,9 @@ class _Handler(BaseHTTPRequestHandler):
             elif action == "capture_screenshot":
                 result = run_executor_action("capture_screenshot", {"scope_type": scope_type, "keep_alive": keep_alive}, timeout_sec, scope_visa, on_line=_on_line)
             else:
-                result = run_executor_action("send_scpi", {"commands": commands, "timeout_ms": timeout_ms, "keep_alive": keep_alive}, timeout_sec, scope_visa, on_line=_on_line)
-                # Broadcast per-command results for verbose logging
+                verbose = (data.get("outputMode") or data.get("output_mode") or "clean") == "verbose"
+                result = run_executor_action("send_scpi", {"commands": commands, "timeout_ms": timeout_ms, "keep_alive": keep_alive, "verbose": verbose}, timeout_sec, scope_visa, on_line=_on_line)
+                # Broadcast per-command results with color-coded verbose logging
                 scpi_responses = result.get("responses") or result.get("result_data", {}).get("responses") or []
                 for item in scpi_responses:
                     cmd = item.get("command", "")
@@ -273,10 +281,12 @@ class _Handler(BaseHTTPRequestHandler):
                     ok = item.get("ok", True)
                     ms = item.get("timeMs", 0)
                     if cmd.strip().endswith("?"):
-                        line = f"  → {cmd}  =  {resp}  ({ms}ms)"
+                        line = f"\033[32m  → {cmd}\033[0m  =  \033[33m{resp}\033[0m  ({ms}ms)"
                     else:
-                        status = "OK" if ok else f"ERR: {item.get('error', '?')}"
-                        line = f"  → {cmd}  [{status}]  ({ms}ms)"
+                        if ok:
+                            line = f"\033[32m  → {cmd}\033[0m  [OK]  ({ms}ms)"
+                        else:
+                            line = f"\033[31m  → {cmd}  [ERR: {item.get('error', '?')}]\033[0m  ({ms}ms)"
                     _on_line("stdout", line)
 
             elapsed = time.time() - t0

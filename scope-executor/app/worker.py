@@ -211,6 +211,7 @@ def _handle_send_scpi(job: dict) -> dict:
     visa = job.get("visa")
     commands = job.get("commands")
     timeout_ms = int(job.get("timeout_ms", 5000) or 5000)
+    verbose = job.get("verbose", False)
     if not isinstance(visa, str) or not visa:
         raise RuntimeError("send_scpi requires visa")
     if not isinstance(commands, list) or not all(isinstance(cmd, str) for cmd in commands):
@@ -221,6 +222,9 @@ def _handle_send_scpi(job: dict) -> dict:
     scpi.write_termination = "\n"
     scpi.read_termination = "\n"
 
+    if verbose:
+        _emit({"log": "scpi", "level": "info", "msg": f"[SCPI] Sending {len(commands)} command(s) to {visa} (timeout={timeout_ms}ms)"})
+
     started = time.time()
     responses = []
     session_reset = False
@@ -229,6 +233,10 @@ def _handle_send_scpi(job: dict) -> dict:
         ok = True
         error = None
         response = "OK"
+
+        if verbose:
+            _emit({"log": "scpi", "level": "send", "msg": f"[SCPI TX] {cmd}"})
+
         try:
             if cmd.strip().endswith("?"):
                 response = str(scpi.query(cmd)).strip()
@@ -256,20 +264,34 @@ def _handle_send_scpi(job: dict) -> dict:
                 ok = False
                 response = ""
                 error = str(exc)
+        elapsed_ms = round((time.time() - cmd_started) * 1000, 1)
+
+        if verbose:
+            if ok:
+                _emit({"log": "scpi", "level": "recv", "msg": f"[SCPI RX] {cmd} → {response} ({elapsed_ms}ms)"})
+            else:
+                _emit({"log": "scpi", "level": "error", "msg": f"[SCPI ERR] {cmd} → {error} ({elapsed_ms}ms)"})
+
         responses.append(
             {
                 "command": cmd,
                 "response": response,
                 "ok": ok,
                 "error": error,
-                "timeMs": round((time.time() - cmd_started) * 1000, 1),
+                "timeMs": elapsed_ms,
             }
         )
+
+    total_ms = round((time.time() - started) * 1000, 1)
+
+    if verbose:
+        ok_count = sum(1 for r in responses if r["ok"])
+        _emit({"log": "scpi", "level": "info", "msg": f"[SCPI] Done: {ok_count}/{len(responses)} OK in {total_ms}ms"})
 
     return {
         "ok": all(item["ok"] for item in responses),
         "responses": responses,
-        "totalTimeMs": round((time.time() - started) * 1000, 1),
+        "totalTimeMs": total_ms,
     }
 
 

@@ -59,6 +59,50 @@ const EXECUTOR_TOOLS = new Set([
 ]);
 
 /**
+ * Verify SCPI commands against the command index before sending to the instrument.
+ * Bypasses verification for star commands (*IDN?, *RST, etc.) which are universal.
+ */
+async function verifyScpiCommands(
+  commands: string[],
+  flowContext?: LiveToolLoopParams['flowContext']
+): Promise<{ verified: boolean; error?: string }> {
+  const mcpHost = resolveMcpHost();
+  if (!mcpHost) return { verified: true };
+
+  const nonStarCommands = commands.filter(c => !String(c).trim().startsWith('*'));
+  if (nonStarCommands.length === 0) return { verified: true };
+
+  try {
+    const res = await fetch(`${mcpHost.replace(/\/$/, '')}/tools/execute`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        tool: 'verify_scpi_commands',
+        args: { commands: nonStarCommands, modelFamily: flowContext?.modelFamily },
+      }),
+    });
+    if (!res.ok) return { verified: true };
+
+    const json = await res.json() as { ok: boolean; result?: { data?: Array<{ command: string; verified: boolean }> } };
+    const results = json.result?.data;
+    if (!Array.isArray(results)) return { verified: true };
+
+    const failures = results.filter(r => !r.verified);
+    if (failures.length === 0) return { verified: true };
+
+    const failList = failures.map(f => `  - Unverified: ${f.command}`).join('\n');
+    return {
+      verified: false,
+      error:
+        `SCPI verify gate blocked ${failures.length} of ${nonStarCommands.length} command(s):\n${failList}\n` +
+        'Use tek_router to find the correct command: {action:"search_exec", query:"search scpi commands", args:{query:"..."}}',
+    };
+  } catch {
+    return { verified: true };
+  }
+}
+
+/**
  * Execute a tool call. Instrument tools go directly to the executor (browser → executor).
  * Knowledge/search tools go through MCP server (/tools/execute).
  * This means live mode works even when MCP is hosted — browser reaches executor directly.
@@ -94,6 +138,17 @@ async function executeMcpTool(
           || upper.includes('AUTOSET') || upper.includes('AUTOSCALE');
       });
       payload.timeout_ms = hasSlowCommand ? 30000 : 5000;
+    }
+
+    // ── SCPI Verify Gate ──
+    // Before sending ANY command via send_scpi, verify against the command index.
+    // Bypass for discover_scpi (probing mode) and get_instrument_state (star commands).
+    if (toolName === 'send_scpi' && action === 'send_scpi') {
+      const cmds = Array.isArray(payload.commands) ? payload.commands as string[] : [];
+      const verification = await verifyScpiCommands(cmds, flowContext);
+      if (!verification.verified) {
+        return { ok: false, error: 'VERIFY_GATE_BLOCKED', message: verification.error, commands: cmds };
+      }
     }
 
     // Script timeout: 30s for screenshot/slow ops, 15s for simple SCPI
@@ -523,17 +578,48 @@ export function buildLiveSystemPrompt(instrument?: {
     '## MCP Tools — USE THESE',
     'You have 4 tools. Use them — do NOT guess SCPI commands from memory.',
     '',
-    '**tek_router** — PRIMARY tool. Gateway to 21,000+ SCPI commands.',
-    '  Search: {action:"search_exec", query:"search scpi commands", args:{query:"histogram plot"}}',
-    '  Exact:  {action:"search_exec", query:"get command by header", args:{header:"PLOT:PLOT<x>:TYPe"}}',
-    '  Browse: {action:"search_exec", query:"browse scpi commands", args:{group:"Measurement"}}',
-    '  Verify: {action:"search_exec", query:"verify scpi commands", args:{commands:["CH1:SCAle 1.0"]}}',
-    '  Build:  {action:"build", query:"set up jitter measurement on CH1"}',
-    '  RAG:    {action:"search_exec", query:"retrieve rag chunks", args:{corpus:"app_logic", query:"..."}}',
+    '### Tool Decision Tree',
+    '1. **Know the exact SCPI header?** → tek_router: "get command by header"',
+    '   {action:"search_exec", query:"get command by header", args:{header:"PLOT:PLOT<x>:TYPe"}}',
+    '2. **Need to find a command?** → tek_router: "search scpi commands"',
+    '   {action:"search_exec", query:"search scpi commands", args:{query:"histogram plot"}}',
+    '   Returns: best_match + alternatives. Use the best_match. If wrong, check alternatives.',
+    '3. **Want to explore a group?** → tek_router: "browse scpi commands"',
+    '   {action:"search_exec", query:"browse scpi commands", args:{group:"Horizontal"}}',
+    '   Use this when search returns wrong results — browse the correct group directly.',
+    '4. **Verify before sending** → tek_router: "verify scpi commands"',
+    '   {action:"search_exec", query:"verify scpi commands", args:{commands:["CH1:SCAle 1.0"]}}',
+    '5. **Build a workflow** → tek_router: build',
+    '   {action:"build", query:"set up jitter measurement on CH1"}',
     '',
     '**send_scpi** — Send commands to live instrument: {commands:["CMD1","CMD2?"]}',
     '**capture_screenshot** — Capture scope display (analyze:true to see the image yourself)',
     '**discover_scpi** — Probe live instrument for undocumented commands: {basePath:"TRIGger:A", liveMode:true}',
+    '',
+    '### SCPI Command Groups (use for browse/search context)',
+    'Acquisition (15) — acquire modes, run/stop, sample/average',
+    'Bus (339) — decode: CAN, I2C, SPI, UART, LIN, FlexRay, MIL-1553',
+    'Callout (14) — annotations, bookmarks, labels on display',
+    'Cursor (121) — cursor bars, readouts, delta measurements',
+    'Digital (33) — digital/logic channels and probes',
+    'Display (130) — graticule, intensity, waveview, stacked/overlay',
+    'Histogram (28) — histogram analysis and display',
+    'Horizontal (48) — timebase, record length, FastFrame, sample rate',
+    'Mask (29) — mask/eye testing, pass/fail criteria',
+    'Math (85) — FFT, waveform math, expressions, spectral analysis',
+    'Measurement (367) — automated: freq, period, rise/fall, jitter, eye, pk2pk',
+    'Miscellaneous (71) — autoset, preset, *IDN?, *RST, *OPC, common commands',
+    'Plot (47) — trend plots, histogram plots, XY plots',
+    'Power (268) — power analysis: harmonics, switching loss, efficiency, SOA',
+    'Save and Recall (26) — save/recall setups, waveforms, screenshots',
+    'Search and Mark (650) — search waveform records, mark events, bus decode results',
+    'Spectrum view (52) — RF spectrum analysis, center freq, span, RBW',
+    'Trigger (266) — edge, pulse, runt, logic, bus, holdoff, level, slope',
+    'Waveform Transfer (41) — curve data, wfmoutpre, data source transfer',
+    'Zoom (20) — magnify/expand waveform display',
+    '',
+    'Use these groups to guide your searches. Example: "FastFrame" → Horizontal group.',
+    'If search gives wrong results, browse the correct group directly.',
     '',
     '## CRITICAL RULE — VERIFY BEFORE SENDING',
     'BEFORE calling send_scpi, you MUST verify the command exists:',
@@ -608,11 +694,13 @@ export function buildLiveSystemPrompt(instrument?: {
   // ── SEARCH FAILURE RECOVERY ──
   parts.push(
     '## When Search Fails',
-    '1. Browse by group: {action:"search_exec", query:"browse scpi commands", args:{group:"Display"}}',
-    '2. Use SCPI terms not natural language: "PLOT TYPe HISTOGRAM" not "histogram chart"',
-    '3. discover_scpi to probe live instrument',
-    '4. Parse user-pasted manual text directly',
-    '5. NEVER loop on same failed search',
+    '1. Check the alternatives in the search result — the correct command may be there',
+    '2. Browse the correct group directly: {action:"search_exec", query:"browse scpi commands", args:{group:"Trigger"}}',
+    '   Refer to the SCPI Command Groups list above to pick the right group.',
+    '3. Use SCPI terms not natural language: "PLOT TYPe HISTOGRAM" not "histogram chart"',
+    '4. discover_scpi to probe live instrument',
+    '5. Parse user-pasted manual text directly',
+    '6. NEVER loop on same failed search — try a different approach after 1 attempt',
     '',
   );
 
