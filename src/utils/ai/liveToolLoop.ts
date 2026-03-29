@@ -685,6 +685,8 @@ export function buildLiveSystemPrompt(instrument?: {
       '   - NEVER explain what you are about to do. Do it, then report the result in 1-2 sentences.',
       '   - NEVER give a multi-paragraph analysis unless the user explicitly asks for analysis.',
       '   - When the user says "add cursors" → add cursors. When they say "yes" → do the thing. No essays.',
+      '   - If you FAIL or CAN\'T do something, say so in one sentence. Do NOT cover failure with a long analysis of something else.',
+      '   - NEVER repeat the same analysis the user already saw. If nothing changed, say "It didn\'t work" not another essay.',
       '2. WHEN THE USER ASKS ABOUT SOMETHING ON SCREEN — capture_screenshot(analyze:true), then give a SHORT engineering read.',
       '   2-4 sentences max. Lead with the key insight. Do NOT list every label and value.',
       '   Good: "**TIE sigma dropped from 228ps to 58ps** — the big spur at ~100kHz is your main jitter source. Removing it cleans up the eye significantly."',
