@@ -1,4 +1,4 @@
-﻿import http from 'http';
+import http from 'http';
 import { initCommandIndex } from './core/commandIndex';
 import { initProviderCatalog, providerSupplementsEnabled } from './core/providerCatalog';
 import { initTmDevicesIndex } from './core/tmDevicesIndex';
@@ -7,7 +7,7 @@ import { initTemplateIndex } from './core/templateIndex';
 import { runToolLoop } from './core/toolLoop';
 import { getToolDefinitions, getMcpExposedTools, runTool } from './tools/index';
 import type { McpChatRequest } from './core/schemas';
-import { bootRouter, bootRouterMinimal, createReloadProvidersHandler, createRouterHandler, getRouterHealth } from './core/routerIntegration';
+import { bootRouter, createReloadProvidersHandler, createRouterHandler, getRouterHealth } from './core/routerIntegration';
 import { getCommandIndex } from './core/commandIndex';
 import { getRagIndexes } from './core/ragIndex';
 import { getTemplateIndex } from './core/templateIndex';
@@ -261,18 +261,18 @@ export async function createServer(port = 8787): Promise<http.Server> {
     startupState = 'starting';
     startupError = null;
     const startInit = Date.now();
-    const warmMode = String(process.env.MCP_WARM_START_MODE || 'minimal').trim().toLowerCase() || 'minimal';
-    console.log(`[SERVER] Initializing indexes in background (mode=${warmMode})...`);
+    console.log('[SERVER] Initializing all indexes in background...');
 
-    const initTasks: Promise<unknown>[] = [initCommandIndex()];
-    const names = ['CommandIndex'];
-    if (warmMode === 'full') {
-      initTasks.push(initTmDevicesIndex(), initRagIndexes(), initTemplateIndex());
-      names.push('TmDevicesIndex', 'RagIndexes', 'TemplateIndex');
-      if (providerSupplementsEnabled()) {
-        initTasks.push(initProviderCatalog());
-        names.push('ProviderCatalog');
-      }
+    const initTasks: Promise<unknown>[] = [
+      initCommandIndex(),
+      initTmDevicesIndex(),
+      initRagIndexes(),
+      initTemplateIndex(),
+    ];
+    const names = ['CommandIndex', 'TmDevicesIndex', 'RagIndexes', 'TemplateIndex'];
+    if (providerSupplementsEnabled()) {
+      initTasks.push(initProviderCatalog());
+      names.push('ProviderCatalog');
     }
 
     const results = await Promise.allSettled(initTasks);
@@ -296,23 +296,20 @@ export async function createServer(port = 8787): Promise<http.Server> {
 
     if (!routerDisabled) {
       try {
-        const report =
-          warmMode === 'full'
-            ? await (async () => {
-                const commandIndex = await getCommandIndex();
-                const ragIndexes = await getRagIndexes();
-                const templates = (await getTemplateIndex()).all().map((doc) => ({
-                  id: doc.id,
-                  name: doc.name,
-                  description: doc.description,
-                  backend: 'template',
-                  deviceType: 'workflow',
-                  tags: [],
-                  steps: doc.steps,
-                }));
-                return bootRouter({ commandIndex, ragIndexes, templates });
-              })()
-            : await bootRouterMinimal();
+        const report = await (async () => {
+          const commandIndex = await getCommandIndex();
+          const ragIndexes = await getRagIndexes();
+          const templates = (await getTemplateIndex()).all().map((doc) => ({
+            id: doc.id,
+            name: doc.name,
+            description: doc.description,
+            backend: 'template',
+            deviceType: 'workflow',
+            tags: [],
+            steps: doc.steps,
+          }));
+          return bootRouter({ commandIndex, ragIndexes, templates });
+        })();
         console.log(`[MCP:router] ${report.total} tools in ${report.durationMs}ms`);
       } catch (error) {
         startupState = 'error';
@@ -328,7 +325,7 @@ export async function createServer(port = 8787): Promise<http.Server> {
     throw error;
   });
 
-  // â”€â”€ MCP Protocol Server (Streamable HTTP for Claude Web / Desktop) â”€â”€
+  // ── MCP Protocol Server (Streamable HTTP for Claude Web / Desktop) ──
   // SDK is loaded lazily so the server still boots without @modelcontextprotocol/sdk installed.
   let _mcpSdk: {
     Server: any;
@@ -368,7 +365,7 @@ export async function createServer(port = 8787): Promise<http.Server> {
       if (startupInitPromise) {
         try { await startupInitPromise; } catch { /* degrade gracefully */ }
       }
-      // Slim MCP surface â€” only gateway + live tools exposed
+      // Slim MCP surface — only gateway + live tools exposed
       const toolDefs = getMcpExposedTools();
       const mcpTools = toolDefs.map((def: any) => ({
         name: def.name,
@@ -393,7 +390,7 @@ export async function createServer(port = 8787): Promise<http.Server> {
         const result = await runTool(name, (args as Record<string, unknown>) ?? {});
         let text = typeof result === 'string' ? result : JSON.stringify(result, null, 2);
         // Cap response size for MCP clients (Claude Web has payload limits)
-        const MAX_MCP_RESPONSE = 48000; // ~48KB â€” safe for most MCP clients
+        const MAX_MCP_RESPONSE = 48000; // ~48KB — safe for most MCP clients
         if (text.length > MAX_MCP_RESPONSE) {
           const truncated = text.slice(0, MAX_MCP_RESPONSE);
           const lastNewline = truncated.lastIndexOf('\n');
@@ -412,7 +409,7 @@ export async function createServer(port = 8787): Promise<http.Server> {
   // Per-session MCP transport map
   const mcpTransports = new Map<string, any>();
 
-  // â”€â”€ HTML Tools Page â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+  // ── HTML Tools Page ───────────────────────────────────────────────
   function buildToolsHtml(): string {
     const toolDefs = getToolDefinitions();
     const toolCards = toolDefs.map((def) => {
@@ -498,7 +495,7 @@ details pre{margin-top:0.5rem;font-size:0.75rem;background:#0f172a;padding:0.75r
 </div>
 
 <div class="section">
-  <h2>Remote â€” No Install Needed</h2>
+  <h2>Remote — No Install Needed</h2>
   <p style="color:#94a3b8;font-size:0.85rem;margin-bottom:1rem">Connect via Streamable HTTP. No local files or Node.js required.</p>
   <div class="setup-grid">
     <div class="setup-card">
@@ -507,11 +504,11 @@ details pre{margin-top:0.5rem;font-size:0.75rem;background:#0f172a;padding:0.75r
       <pre>Name: TekAutomate
 URL:  ${process.env.MCP_PUBLIC_URL || 'https://tekautomate-mcp-production.up.railway.app'}/mcp
 
-No OAuth â€” leave Advanced settings blank</pre>
+No OAuth — leave Advanced settings blank</pre>
     </div>
     <div class="setup-card">
       <h4>Claude Desktop / Code / VS Code / Cursor</h4>
-      <div class="label">Use type: "http" â€” config file varies by client</div>
+      <div class="label">Use type: "http" — config file varies by client</div>
       <pre>{
   "mcpServers": {
     "tekautomate": {
@@ -531,7 +528,7 @@ Config file locations:
 </div>
 
 <div class="section">
-  <h2>Local â€” Run from Cloned Repo (STDIO)</h2>
+  <h2>Local — Run from Cloned Repo (STDIO)</h2>
   <p style="color:#94a3b8;font-size:0.85rem;margin-bottom:1rem">Requires the TekAutomate repo cloned locally + Node.js. Replace <code>/path/to/TekAutomate</code> with your actual folder path.</p>
   <div class="setup-grid">
     <div class="setup-card">
@@ -585,7 +582,7 @@ Config file locations:
 <div class="section">
   <h2>API Endpoints</h2>
   <div class="endpoints">
-    <div class="endpoint"><span class="method get">GET</span><code>/</code><span class="ep-desc">This page â€” tools &amp; API reference</span></div>
+    <div class="endpoint"><span class="method get">GET</span><code>/</code><span class="ep-desc">This page — tools &amp; API reference</span></div>
     <div class="endpoint"><span class="method get">GET</span><code>/health</code><span class="ep-desc">Health check</span></div>
     <div class="endpoint"><span class="method post">POST</span><code>/mcp</code><span class="ep-desc">MCP Streamable HTTP transport (for Claude Web, Desktop)</span></div>
     <div class="endpoint"><span class="method get">GET</span><code>/tools/list</code><span class="ep-desc">List all tool definitions as JSON</span></div>
@@ -625,7 +622,7 @@ function filterTools(q) {
       return;
     }
 
-    // â”€â”€ GET / â€” Tools & API reference page â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+    // ── GET / — Tools & API reference page ────────────────────────
     if (req.method === 'GET' && (req.url === '/' || req.url === '/index.html')) {
       res.statusCode = 200;
       res.setHeader('Content-Type', 'text/html; charset=utf-8');
@@ -634,7 +631,7 @@ function filterTools(q) {
       return;
     }
 
-    // â”€â”€ /mcp â€” MCP Streamable HTTP transport â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+    // ── /mcp — MCP Streamable HTTP transport ──────────────────────
     if (req.url === '/mcp' || req.url?.startsWith('/mcp?')) {
       res.setHeader('Access-Control-Allow-Origin', '*');
       res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Accept, Mcp-Session-Id');
@@ -671,7 +668,7 @@ function filterTools(q) {
             const transport = mcpTransports.get(sessionId)!;
             await transport.handleRequest(req, res, body ? JSON.parse(body) : undefined);
           } else if (req.method === 'POST') {
-            // New session â€” create transport and MCP server
+            // New session — create transport and MCP server
             const transport = new sdk.StreamableHTTPServerTransport({
               sessionIdGenerator: () => `tek-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
             });
@@ -746,7 +743,7 @@ function filterTools(q) {
       return;
     }
 
-    // â”€â”€ Tool endpoints: browser calls these directly, AI proxy not needed â”€â”€
+    // ── Tool endpoints: browser calls these directly, AI proxy not needed ──
 
     if (req.method === 'GET' && req.url === '/tools/list') {
       const tools = getToolDefinitions();
@@ -754,7 +751,7 @@ function filterTools(q) {
       return;
     }
 
-    // Disconnect live VISA session â€” call before switching away from live mode
+    // Disconnect live VISA session — call before switching away from live mode
     if (req.method === 'POST' && req.url === '/tools/disconnect') {
       try {
         const body = (await readJsonBody(req)) as {
@@ -855,7 +852,7 @@ function filterTools(q) {
         if (vectorStoreId) {
           requestBody.tools = [{ type: 'file_search', vector_store_ids: [vectorStoreId] }];
         }
-        // Use server key â€” owns the vector store. User's apiKey is for authentication
+        // Use server key — owns the vector store. User's apiKey is for authentication
         // to this service only; OpenAI is billed to the server account.
         const openaiRes = await fetch('https://api.openai.com/v1/responses', {
           method: 'POST',
@@ -896,7 +893,7 @@ function filterTools(q) {
           const { value, done } = await reader.read();
           if (done) break;
           const chunk = decoder.decode(value, { stream: true });
-          // Write raw SSE chunks through â€” client parser handles them
+          // Write raw SSE chunks through — client parser handles them
           res.write(chunk);
         }
         res.end();
