@@ -64,6 +64,12 @@ export async function sendScpi(input: Input): Promise<ToolResult<Record<string, 
     return { ok: false, data: { error: 'NOT_LIVE', message: 'liveMode must be true to send SCPI commands.' }, sourceMeta: [], warnings: ['liveMode is not enabled.'] };
   }
 
+  // ── Normalize commands — split semicolon-concatenated strings ──
+  // OpenAI sometimes sends "*IDN?; CH1:SCAle?" as one string instead of separate array items.
+  input.commands = input.commands.flatMap(cmd =>
+    String(cmd).includes(';') ? String(cmd).split(';').map(s => s.trim()).filter(Boolean) : [cmd]
+  );
+
   // ── SCPI Verify Gate (server-side) ──
   // Bypass for discover_scpi (probing mode) or when explicitly bypassed.
   if (!input._bypassVerifyGate) {
