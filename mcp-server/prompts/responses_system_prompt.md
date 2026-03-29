@@ -186,10 +186,14 @@ If search returns wrong results (e.g., POWer commands when you searched for trig
 - Don't know the right command? **Search it.** Don't guess. Don't send wrong commands twice.
 - Before adding measurements: query `MEASUrement:LIST?` to see what already exists.
 
-### How to verify
-- After ANY write command that should change the display: `capture_screenshot(analyze:true)` and confirm you can see the change.
-- If screenshot shows no change → tell the user "Didn't apply." Never claim success without visual proof.
-- NEVER trust SCPI "OK" alone — the scope can silently ignore commands (especially TekScope PC in offline mode).
+### How to verify — confirm you fulfilled the user's request
+- When the user asks you to DO something (add cursor, measurement, callout, change setting, etc.):
+  1. Send the SCPI commands
+  2. `capture_screenshot({analyze:true})` to see the result
+  3. Check: did the thing the user asked for actually appear/change on screen?
+  4. If YES → report briefly. If NO → say "Didn't work" and try a different approach.
+- Do NOT claim success based on SCPI "OK" alone. The scope can silently reject.
+- If user says "I don't see it" or "try again" → take a fresh screenshot, see what's actually there, try differently.
 
 ### What NOT to do
 - NEVER use `discover_scpi` without user confirmation.

@@ -337,12 +337,12 @@ async function runAnthropicLoop(params: LiveToolLoopParams): Promise<LiveToolLoo
           }
           const resultStr = typeof lean === 'string' ? lean : JSON.stringify(lean);
 
-          // After send_scpi: remind AI to verify with screenshot
+          // After send_scpi with write commands: gentle reminder to verify
           const isSendScpi = toolName === 'send_scpi';
           const hasWriteCommand = isSendScpi && Array.isArray(toolArgs.commands) &&
             (toolArgs.commands as string[]).some(c => !String(c).trim().endsWith('?'));
           const verifyHint = hasWriteCommand
-            ? '⚠️ STOP. Before responding to the user, you MUST call capture_screenshot({analyze:true}) and describe what you see. If the change is not visible, say "Didn\'t apply." Do NOT tell the user it worked without visual confirmation.\n\n'
+            ? '[Verify: capture_screenshot(analyze:true) to confirm the user\'s request was fulfilled.]\n'
             : '';
           const truncated = resultStr.length > 3000 ? resultStr.slice(0, 3000) + '\n...(truncated)' : resultStr;
           toolResults.push({
@@ -695,10 +695,14 @@ export function buildLiveSystemPrompt(instrument?: {
       '- Don\'t know the right command? Search it. Don\'t guess. Don\'t send wrong commands twice.',
       '- Before adding measurements: MEASUrement:LIST? to check what exists.',
       '',
-      '### Verification',
-      '- After ANY write command: capture_screenshot(analyze:true) and confirm it actually changed.',
-      '- If screenshot shows no change → say "Didn\'t apply" — never claim success without visual proof.',
-      '- NEVER trust SCPI "OK" alone — the scope can silently reject (especially TekScope PC offline).',
+      '### Verification — confirm you fulfilled the request',
+      '- When the user asks you to DO something (add cursor, add measurement, change setting, add callout, etc.):',
+      '  1. Send the SCPI commands',
+      '  2. capture_screenshot(analyze:true) to see the result',
+      '  3. Check: did the thing the user asked for actually appear/change on screen?',
+      '  4. If YES → report success briefly. If NO → say "Didn\'t work" and try a different approach.',
+      '- Do NOT claim success based on SCPI "OK" alone. The scope can silently reject commands.',
+      '- If the user says "I don\'t see it" or "try again" → take a fresh screenshot, see what\'s actually there, and try differently.',
       '',
       '### Restrictions',
       '- NEVER use discover_scpi unless search AND browse failed AND user confirms. It is slow.',
