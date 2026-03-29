@@ -16,12 +16,12 @@
 import { config } from 'dotenv';
 import { resolve, dirname } from 'path';
 import { fileURLToPath } from 'url';
-import { Server } from '@modelcontextprotocol/sdk/server/index.js';
-import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js';
+import { Server } from '@modelcontextprotocol/sdk/server';
+import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio';
 import {
   CallToolRequestSchema,
   ListToolsRequestSchema,
-} from '@modelcontextprotocol/sdk/types.js';
+} from '@modelcontextprotocol/sdk/types';
 
 import { initCommandIndex } from './core/commandIndex.js';
 import { initTmDevicesIndex } from './core/tmDevicesIndex.js';
@@ -29,7 +29,7 @@ import { initRagIndexes } from './core/ragIndex.js';
 import { initTemplateIndex } from './core/templateIndex.js';
 import { initProviderCatalog, providerSupplementsEnabled } from './core/providerCatalog.js';
 import { bootRouter } from './core/routerIntegration.js';
-import { getToolDefinitions, runTool } from './tools/index.js';
+import { getMcpExposedTools, runTool } from './tools/index.js';
 
 // ── env ──────────────────────────────────────────────────────────────
 const __dirname = dirname(fileURLToPath(import.meta.url));
@@ -62,8 +62,9 @@ async function main() {
     { capabilities: { tools: {} } },
   );
 
-  // Build the tools list from existing definitions
-  const toolDefs = getToolDefinitions();
+  // Only expose the slim MCP surface (gateway + live tools)
+  // All other tools are routed internally via tek_router
+  const toolDefs = getMcpExposedTools();
   const mcpTools = toolDefs.map((def) => ({
     name: def.name,
     description: def.description ?? def.name,

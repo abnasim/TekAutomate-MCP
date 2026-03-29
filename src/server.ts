@@ -5,7 +5,7 @@ import { initTmDevicesIndex } from './core/tmDevicesIndex';
 import { initRagIndexes } from './core/ragIndex';
 import { initTemplateIndex } from './core/templateIndex';
 import { runToolLoop } from './core/toolLoop';
-import { getToolDefinitions, runTool } from './tools/index';
+import { getToolDefinitions, getMcpExposedTools, runTool } from './tools/index';
 import type { McpChatRequest } from './core/schemas';
 import { bootRouter, bootRouterMinimal, createReloadProvidersHandler, createRouterHandler, getRouterHealth } from './core/routerIntegration';
 import { getCommandIndex } from './core/commandIndex';
@@ -377,7 +377,7 @@ export async function createServer(port = 8787, host = '0.0.0.0'): Promise<http.
       if (startupInitPromise) {
         try { await startupInitPromise; } catch { /* degrade gracefully */ }
       }
-      const toolDefs = getToolDefinitions();
+      const toolDefs = getMcpExposedTools();
       const mcpTools = toolDefs.map((def) => ({
         name: def.name,
         description: def.description ?? def.name,

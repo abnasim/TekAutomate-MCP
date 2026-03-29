@@ -102,14 +102,18 @@ export class ToolSearchEngine {
       return filteredTriggerHits
         .map((tool) => {
           const usage = this.scoreBoosts(tool, recencyWindowMs, recencyBoost);
+          // Builtin MCP tools get a strong boost so they auto-execute via search_exec
+          // (threshold is 5.0, trigger base is 3.0, so builtins need +4.0 to clear it)
+          const builtinBoost = tool.id.startsWith('builtin:') ? 4.0 : 0;
           return {
             tool,
-            score: TRIGGER_WEIGHT + usage.total,
+            score: TRIGGER_WEIGHT + usage.total + builtinBoost,
             matchStage: 'trigger' as const,
             debug: {
               usageBoost: usage.usageBoost,
               successRate: usage.successRate,
               recencyBoost: usage.recencyBoost,
+              builtinBoost,
             },
           };
         })
