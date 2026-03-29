@@ -64,7 +64,15 @@ export async function materializeTmDevicesCall(
     return { ok: false, data: null, sourceMeta: [], warnings: ['Missing methodPath'] };
   }
 
-  const index = await getTmDevicesIndex();
+  let index;
+  try {
+    index = await Promise.race([
+      getTmDevicesIndex(),
+      new Promise<never>((_, reject) => setTimeout(() => reject(new Error('tm_devices index timed out (15s)')), 15000)),
+    ]);
+  } catch (err) {
+    return { ok: false, data: null, sourceMeta: [], warnings: [`tm_devices index unavailable: ${err instanceof Error ? err.message : String(err)}`] };
+  }
   const doc =
     buildMethodPathVariants(requestedPath)
       .map((candidate) => index.getByMethodPath(candidate, input.model))
