@@ -105,6 +105,50 @@ class InstrumentScanThread(threading.Thread):
             "TCPIP::127.0.0.1::4000::SOCKET",
             "TCPIP::127.0.0.1::5025::SOCKET",
         ]
+
+        # Scan the local subnet for instruments on the LAN.
+        # Uses fast TCP port 4000 probe (SCPI raw socket, ~100ms timeout)
+        # to find reachable hosts before trying slow VISA open.
+        try:
+            import socket as _socket
+            local_ip = _socket.gethostbyname(_socket.gethostname())
+            if local_ip and not local_ip.startswith("127."):
+                subnet = ".".join(local_ip.split(".")[:3])
+                lan_hosts: list[str] = []
+
+                def _probe_tcp(ip: str, port: int = 4000, timeout: float = 0.15) -> bool:
+                    try:
+                        s = _socket.socket(_socket.AF_INET, _socket.SOCK_STREAM)
+                        s.settimeout(timeout)
+                        s.connect((ip, port))
+                        s.close()
+                        return True
+                    except Exception:
+                        return False
+
+                # Parallel fast probe — check port 4000 (SCPI socket) on all /24 IPs
+                import concurrent.futures
+                def _check_ip(octet: int) -> str | None:
+                    ip = f"{subnet}.{octet}"
+                    if ip == local_ip:
+                        return None
+                    # Try port 4000 (SCPI raw socket) and port 80 (web UI)
+                    if _probe_tcp(ip, 4000) or _probe_tcp(ip, 80):
+                        return ip
+                    return None
+
+                with concurrent.futures.ThreadPoolExecutor(max_workers=64) as pool:
+                    for result in pool.map(_check_ip, range(1, 255)):
+                        if result:
+                            lan_hosts.append(result)
+
+                for host in lan_hosts:
+                    candidate = f"TCPIP::{host}::INSTR"
+                    if candidate not in resources and candidate not in fallback_resources:
+                        fallback_resources.append(candidate)
+        except Exception:
+            pass
+
         for res in fallback_resources:
             if res not in resources:
                 resources.append(res)
