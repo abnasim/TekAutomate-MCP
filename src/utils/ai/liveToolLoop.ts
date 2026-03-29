@@ -277,7 +277,7 @@ async function runAnthropicLoop(params: LiveToolLoopParams): Promise<LiveToolLoo
   return { text: finalText, toolCalls: toolCallLog, iterations };
 }
 
-// ── OpenAI Direct Loop ──
+// ── OpenAI Responses API Loop ──
 
 async function runOpenAiLoop(params: LiveToolLoopParams): Promise<LiveToolLoopResult> {
   const {
@@ -288,13 +288,15 @@ async function runOpenAiLoop(params: LiveToolLoopParams): Promise<LiveToolLoopRe
 
   const openAiTools = tools.map((t) => ({
     type: 'function' as const,
-    function: { name: t.name, description: t.description, parameters: t.parameters },
+    name: t.name,
+    description: t.description,
+    parameters: t.parameters,
   }));
 
-  const messages: Array<Record<string, unknown>> = [
-    { role: 'system', content: systemPrompt },
+  // Build initial input with history + current message
+  const initialInput: Array<Record<string, unknown>> = [
     ...history.slice(-12).map((h) => ({
-      role: h.role,
+      role: h.role === 'assistant' ? 'assistant' : 'user',
       content: String(h.content || '').slice(0, 3000),
     })),
     { role: 'user', content: userMessage },
@@ -303,22 +305,35 @@ async function runOpenAiLoop(params: LiveToolLoopParams): Promise<LiveToolLoopRe
   const toolCallLog: LiveToolLoopResult['toolCalls'] = [];
   let finalText = '';
   let iterations = 0;
+  let previousResponseId: string | undefined;
+  let currentInput: Array<Record<string, unknown>> = initialInput;
 
   for (let i = 0; i < maxIterations; i++) {
     iterations = i + 1;
 
-    const res = await fetch('https://api.openai.com/v1/chat/completions', {
+    const requestBody: Record<string, unknown> = {
+      model,
+      instructions: systemPrompt,
+      tools: openAiTools,
+      max_output_tokens: 4096,
+    };
+
+    if (previousResponseId) {
+      // Follow-up: use previous_response_id for conversation continuity
+      requestBody.previous_response_id = previousResponseId;
+      requestBody.input = currentInput;
+    } else {
+      // First call: send full input
+      requestBody.input = currentInput;
+    }
+
+    const res = await fetch('https://api.openai.com/v1/responses', {
       method: 'POST',
       headers: {
         Authorization: `Bearer ${apiKey}`,
         'Content-Type': 'application/json',
       },
-      body: JSON.stringify({
-        model,
-        messages,
-        tools: openAiTools,
-        max_completion_tokens: 2048,
-      }),
+      body: JSON.stringify(requestBody),
     });
 
     if (!res.ok) {
@@ -326,69 +341,97 @@ async function runOpenAiLoop(params: LiveToolLoopParams): Promise<LiveToolLoopRe
       return { text: finalText, toolCalls: toolCallLog, iterations, error: `OpenAI ${res.status}: ${errText}` };
     }
 
-    const json = await res.json() as { choices: Array<{ message: Record<string, unknown> }> };
-    const message = json.choices?.[0]?.message;
-    if (!message) break;
+    const json = await res.json() as {
+      id: string;
+      output: Array<Record<string, unknown>>;
+      status: string;
+    };
 
-    if (typeof message.content === 'string' && message.content) {
-      finalText = message.content;
-      onChunk?.(message.content);
-    }
+    previousResponseId = json.id;
+    const output = Array.isArray(json.output) ? json.output : [];
+    let hasToolCalls = false;
+    const toolResultsInput: Array<Record<string, unknown>> = [];
 
-    const toolCalls = Array.isArray(message.tool_calls) ? message.tool_calls as Array<Record<string, unknown>> : [];
-    if (toolCalls.length === 0) break;
+    for (const item of output) {
+      // Extract text from message items
+      if (item.type === 'message') {
+        const content = Array.isArray(item.content) ? item.content as Array<Record<string, unknown>> : [];
+        for (const c of content) {
+          if (c.type === 'output_text' && typeof c.text === 'string') {
+            finalText = c.text;
+            onChunk?.(c.text);
+          }
+        }
+      }
 
-    messages.push(message);
+      // Handle tool calls
+      if (item.type === 'function_call') {
+        hasToolCalls = true;
+        const toolName = String(item.name || '');
+        const callId = String(item.call_id || '');
+        let toolArgs: Record<string, unknown> = {};
+        try {
+          toolArgs = typeof item.arguments === 'string' ? JSON.parse(item.arguments) : {};
+        } catch { /* ignore */ }
 
-    for (const tc of toolCalls) {
-      const fn = tc.function as Record<string, unknown> | undefined;
-      const toolName = String(fn?.name || '');
-      const toolId = String(tc.id || '');
-      let toolArgs: Record<string, unknown> = {};
-      try { toolArgs = typeof fn?.arguments === 'string' ? JSON.parse(fn.arguments) : {}; } catch { /* ignore */ }
+        onToolCall?.(toolName, toolArgs);
 
-      onToolCall?.(toolName, toolArgs);
+        try {
+          const result = await executeMcpTool(toolName, toolArgs, instrumentEndpoint, flowContext);
+          onToolResult?.(toolName, result);
+          toolCallLog.push({ tool: toolName, args: toolArgs, result });
 
-      try {
-        const result = await executeMcpTool(toolName, toolArgs, instrumentEndpoint, flowContext);
-        onToolResult?.(toolName, result);
-        toolCallLog.push({ tool: toolName, args: toolArgs, result });
-        // Screenshots: send image to AI so it can see the scope display
-        const resultObj = result && typeof result === 'object' ? result as Record<string, unknown> : null;
-        const isScreenshot = resultObj && typeof resultObj.base64 === 'string';
-        if (isScreenshot) {
-          const wantsAnalysis = toolArgs.analyze === true;
-          if (wantsAnalysis) {
-            const base64 = resultObj.base64 as string;
-            const mimeType = (resultObj.mimeType as string) || 'image/png';
-            messages.push({ role: 'tool', tool_call_id: toolId, content: 'Screenshot captured. See image below.' });
-            messages.push({
+          const resultObj = result && typeof result === 'object' ? result as Record<string, unknown> : null;
+          const isScreenshot = resultObj && typeof resultObj.base64 === 'string';
+
+          if (isScreenshot && toolArgs.analyze === true) {
+            // Send screenshot for AI analysis
+            toolResultsInput.push({
+              type: 'function_call_output',
+              call_id: callId,
+              output: 'Screenshot captured. Analyze the image below.',
+            });
+            toolResultsInput.push({
               role: 'user',
               content: [
-                { type: 'text', text: 'Here is the current scope display. Describe what you see briefly.' },
-                { type: 'image_url', image_url: { url: `data:${mimeType};base64,${base64}` } },
+                {
+                  type: 'input_image',
+                  image_url: `data:${(resultObj.mimeType as string) || 'image/png'};base64,${resultObj.base64}`,
+                },
+                { type: 'input_text', text: 'Describe what you see on the scope display.' },
               ],
             });
           } else {
-            messages.push({ role: 'tool', tool_call_id: toolId, content: 'Screenshot captured and displayed to user.' });
+            // Strip verbose fields, truncate
+            let lean = result;
+            if (typeof result === 'object' && result !== null) {
+              const r = result as Record<string, unknown>;
+              const { rawStdout, rawStderr, combinedOutput, transcript, outputMode, durationSec, ...rest } = r;
+              lean = rest;
+            }
+            const resultStr = typeof lean === 'string' ? lean : JSON.stringify(lean);
+            const truncated = resultStr.length > 3000 ? resultStr.slice(0, 3000) + '\n...(truncated)' : resultStr;
+            toolResultsInput.push({
+              type: 'function_call_output',
+              call_id: callId,
+              output: isScreenshot ? 'Screenshot captured and displayed to user.' : truncated,
+            });
           }
-        } else {
-          // Strip verbose fields to keep token count low
-          let lean = result;
-          if (typeof result === 'object' && result !== null) {
-            const r = result as Record<string, unknown>;
-            const { rawStdout, rawStderr, combinedOutput, transcript, outputMode, durationSec, ...rest } = r;
-            lean = rest;
-          }
-          const resultStr = typeof lean === 'string' ? lean : JSON.stringify(lean);
-          const truncated = resultStr.length > 3000 ? resultStr.slice(0, 3000) + '\n...(truncated)' : resultStr;
-          messages.push({ role: 'tool', tool_call_id: toolId, content: truncated });
+        } catch (err) {
+          toolResultsInput.push({
+            type: 'function_call_output',
+            call_id: callId,
+            output: `Error: ${err instanceof Error ? err.message : String(err)}`,
+          });
+          toolCallLog.push({ tool: toolName, args: toolArgs, result: { error: String(err) } });
         }
-      } catch (err) {
-        messages.push({ role: 'tool', tool_call_id: toolId, content: `Error: ${err instanceof Error ? err.message : String(err)}` });
-        toolCallLog.push({ tool: toolName, args: toolArgs, result: { error: String(err) } });
       }
     }
+
+    if (!hasToolCalls) break;
+
+    // Feed tool results back for next iteration
+    currentInput = toolResultsInput;
   }
 
   return { text: finalText, toolCalls: toolCallLog, iterations };
