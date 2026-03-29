@@ -640,6 +640,11 @@ function filterTools(q) {
       res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Accept, Mcp-Session-Id');
       res.setHeader('Access-Control-Expose-Headers', 'Mcp-Session-Id');
 
+      const transportSessionId = req.headers['mcp-session-id'] as string | undefined;
+      console.log(
+        `[MCP] transport method=${req.method} session=${transportSessionId || 'none'} accept=${req.headers['accept'] || 'none'} content-type=${req.headers['content-type'] || 'none'}`
+      );
+
       if (req.method === 'POST' || req.method === 'GET' || req.method === 'DELETE') {
         try {
           const sdk = await getMcpSdk();
