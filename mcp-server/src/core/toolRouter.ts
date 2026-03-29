@@ -771,7 +771,8 @@ export const TEK_ROUTER_TOOL_DEFINITION = {
     '  2. Try different keywords — use SCPI terms not natural language (e.g. "SEARCHTABle" not "search results table")\n' +
     '  3. Use discover_scpi to probe the live instrument: discover_scpi({basePath:"SEARCH", liveMode:true})\n' +
     '  4. If the user pastes manual/documentation text, parse the SCPI header from it and execute directly via send_scpi\n' +
-    '  5. NEVER loop on the same failed search — try a different approach after 1 failed attempt\n\n' +
+    '  5. After finding the right command, SAVE IT: {action:"create", toolName:"<descriptive name>", toolDescription:"<what it does>", toolTriggers:["<natural language phrases that should find this>"], toolCategory:"shortcut", toolSteps:[{tool:"send_scpi", args:{commands:["<the command>"]}}]}\n' +
+    '  6. NEVER loop on the same failed search — try a different approach after 1 failed attempt\n\n' +
 
     '## Model Family\n' +
     'If the user has not specified their instrument model:\n' +

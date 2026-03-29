@@ -4510,6 +4510,7 @@ function buildSystemPrompt(modePrompt: string, outputMode: 'steps_json' | 'block
     '- Use SCPI terminology not natural language (e.g. "SEARCHTABle" not "search results panel")',
     '- Use discover_scpi to probe the live instrument when the database has no match',
     '- If the user pastes documentation text containing SCPI syntax, parse the header and execute directly via send_scpi',
+    '- After discovering a command the hard way, SAVE it as a shortcut: tek_router({action:"create", toolName:"...", toolDescription:"...", toolTriggers:["natural language phrases"], toolCategory:"shortcut", toolSteps:[...]})',
     '- NEVER loop on the same failed search — try a different approach after 1 failed attempt',
     '',
     '## Validation Priority',
