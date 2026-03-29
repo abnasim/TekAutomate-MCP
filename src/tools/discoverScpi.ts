@@ -161,11 +161,14 @@ async function probeBatch(
 
 // ── Main discover function ───────────────────────────────────────────
 export async function discoverScpi(input: Input): Promise<ToolResult<Record<string, unknown>>> {
+  if (!input.executorUrl) {
+    return { ok: false, data: { error: 'NO_INSTRUMENT', message: 'No instrument connected. Connect to a scope via the Execute page first.' }, sourceMeta: [], warnings: ['No executorUrl — instrument not connected.'] };
+  }
   if (!input.liveMode) {
-    return { ok: false, data: {}, sourceMeta: [], warnings: ['discover_scpi requires liveMode=true — must be connected to a live instrument.'] };
+    return { ok: false, data: { error: 'NOT_LIVE', message: 'liveMode must be true. discover_scpi probes a live instrument.' }, sourceMeta: [], warnings: ['liveMode is not enabled.'] };
   }
   if (!input.basePath?.trim()) {
-    return { ok: false, data: {}, sourceMeta: [], warnings: ['basePath is required. Example: "TRIGger:A:LEVel" or "CH1:SV"'] };
+    return { ok: false, data: { error: 'NO_BASE_PATH' }, sourceMeta: [], warnings: ['basePath is required. Example: "TRIGger:A:LEVel" or "CH1:SV"'] };
   }
 
   const base = input.basePath.trim().replace(/\?$/, '');

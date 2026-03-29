@@ -255,13 +255,11 @@ function parseProviderError(status: number, raw: string): { code: string; messag
   return { code, message, hint };
 }
 
-async function warmStartup(): Promise<void> {
-  if (startupInitPromise) return startupInitPromise;
-
+export async function createServer(port = 8787): Promise<http.Server> {
+  const routerDisabled = String(process.env.MCP_ROUTER_DISABLED || '').trim() === 'true';
   startupInitPromise = (async () => {
     startupState = 'starting';
     startupError = null;
-
     const startInit = Date.now();
     const warmMode = String(process.env.MCP_WARM_START_MODE || 'minimal').trim().toLowerCase() || 'minimal';
     console.log(`[SERVER] Initializing indexes in background (mode=${warmMode})...`);
@@ -278,9 +276,8 @@ async function warmStartup(): Promise<void> {
     }
 
     const results = await Promise.allSettled(initTasks);
-
     const failures = results
-      .map((r, i) => (r.status === 'rejected' ? { index: i, error: r.reason } : null))
+      .map((r, i) => r.status === 'rejected' ? { index: i, error: r.reason } : null)
       .filter((f): f is { index: number; error: unknown } => Boolean(f));
 
     if (failures.length > 0) {
@@ -297,7 +294,6 @@ async function warmStartup(): Promise<void> {
 
     console.log(`[SERVER] Background startup initialized ${names.join(', ')} in ${Date.now() - startInit}ms`);
 
-    const routerDisabled = String(process.env.MCP_ROUTER_DISABLED || '').trim() === 'true';
     if (!routerDisabled) {
       try {
         const report =
@@ -325,7 +321,6 @@ async function warmStartup(): Promise<void> {
         throw error;
       }
     }
-
     startupState = 'ready';
   })().catch((error) => {
     startupState = 'error';
@@ -333,11 +328,8 @@ async function warmStartup(): Promise<void> {
     throw error;
   });
 
-  return startupInitPromise;
-}
-
-export async function createServer(port = 8787, host = '0.0.0.0'): Promise<http.Server> {
-  const routerDisabled = String(process.env.MCP_ROUTER_DISABLED || '').trim() === 'true';
+  // â”€â”€ MCP Protocol Server (Streamable HTTP for Claude Web / Desktop) â”€â”€
+  // SDK is loaded lazily so the server still boots without @modelcontextprotocol/sdk installed.
   let _mcpSdk: {
     Server: any;
     StreamableHTTPServerTransport: any;
@@ -365,7 +357,6 @@ export async function createServer(port = 8787, host = '0.0.0.0'): Promise<http.
     }
   }
 
-  // â”€â”€ MCP Protocol Server (Streamable HTTP for Claude Web / Desktop) â”€â”€
   async function createMcpProtocolServer() {
     const sdk = await getMcpSdk();
     if (!sdk) throw new Error('MCP SDK not installed. Run: npm install @modelcontextprotocol/sdk');
@@ -377,8 +368,9 @@ export async function createServer(port = 8787, host = '0.0.0.0'): Promise<http.
       if (startupInitPromise) {
         try { await startupInitPromise; } catch { /* degrade gracefully */ }
       }
+      // Slim MCP surface â€” only gateway + live tools exposed
       const toolDefs = getMcpExposedTools();
-      const mcpTools = toolDefs.map((def) => ({
+      const mcpTools = toolDefs.map((def: any) => ({
         name: def.name,
         description: def.description ?? def.name,
         inputSchema: {
@@ -389,7 +381,7 @@ export async function createServer(port = 8787, host = '0.0.0.0'): Promise<http.
             : {}),
         },
       }));
-      console.log(`[MCP] list_tools count=${mcpTools.length} startup=${startupState}`);
+      console.log(`[MCP] list_tools count=${mcpTools.length} startup=ready`);
       return { tools: mcpTools };
     });
     mcp.setRequestHandler(sdk.CallToolRequestSchema, async (request: any) => {
@@ -397,22 +389,27 @@ export async function createServer(port = 8787, host = '0.0.0.0'): Promise<http.
         try { await startupInitPromise; } catch { /* degrade gracefully */ }
       }
       const { name, arguments: args } = request.params;
-      console.log(`[MCP] call_tool name=${name}`);
       try {
         const result = await runTool(name, (args as Record<string, unknown>) ?? {});
-        const text = typeof result === 'string' ? result : JSON.stringify(result, null, 2);
-        console.log(`[MCP] call_tool_ok name=${name}`);
+        let text = typeof result === 'string' ? result : JSON.stringify(result, null, 2);
+        // Cap response size for MCP clients (Claude Web has payload limits)
+        const MAX_MCP_RESPONSE = 48000; // ~48KB â€” safe for most MCP clients
+        if (text.length > MAX_MCP_RESPONSE) {
+          const truncated = text.slice(0, MAX_MCP_RESPONSE);
+          const lastNewline = truncated.lastIndexOf('\n');
+          text = (lastNewline > MAX_MCP_RESPONSE * 0.8 ? truncated.slice(0, lastNewline) : truncated)
+            + `\n\n[Response truncated from ${text.length} to ${MAX_MCP_RESPONSE} chars. Use more specific queries to get smaller results.]`;
+        }
         return { content: [{ type: 'text' as const, text }] };
       } catch (err) {
         const msg = err instanceof Error ? err.message : String(err);
-        console.error(`[MCP] call_tool_error name=${name}: ${msg}`);
         return { content: [{ type: 'text' as const, text: `Error: ${msg}` }], isError: true };
       }
     });
     return mcp;
   }
 
-  // Per-session MCP transport map (stateless mode: one per request)
+  // Per-session MCP transport map
   const mcpTransports = new Map<string, any>();
 
   // â”€â”€ HTML Tools Page â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
@@ -459,14 +456,8 @@ header p{color:#94a3b8;margin-top:0.25rem}
 .setup-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(320px,1fr));gap:1rem;margin-bottom:1.5rem}
 .setup-card{background:#1e293b;border:1px solid #334155;border-radius:8px;padding:1.25rem}
 .setup-card h4{color:#60a5fa;margin-bottom:0.5rem;font-size:0.95rem}
-.setup-card pre{background:#0f172a;padding:0.75rem;border-radius:6px;font-size:0.75rem;overflow-wrap:anywhere;word-break:break-word;white-space:pre-wrap;color:#a5b4fc;border:1px solid #1e293b}
+.setup-card pre{background:#0f172a;padding:0.75rem;border-radius:6px;font-size:0.75rem;overflow-x:auto;color:#a5b4fc;border:1px solid #1e293b}
 .setup-card .label{font-size:0.7rem;color:#94a3b8;text-transform:uppercase;letter-spacing:0.05em;margin-bottom:0.25rem}
-.setup-card p{color:#cbd5e1;font-size:0.82rem;margin-bottom:0.65rem}
-.setup-card .muted{color:#94a3b8;font-size:0.78rem}
-.setup-card ol{margin:0.5rem 0 0.75rem 1rem;color:#cbd5e1;font-size:0.82rem}
-.setup-card li{margin:0.2rem 0}
-.setup-card a{color:#60a5fa;text-decoration:none}
-.setup-card a:hover{text-decoration:underline}
 .endpoints{display:grid;gap:0.5rem}
 .endpoint{background:#1e293b;border:1px solid #334155;border-radius:6px;padding:0.75rem 1rem;display:flex;gap:1rem;align-items:center}
 .endpoint .method{font-weight:700;font-size:0.75rem;padding:2px 8px;border-radius:4px;min-width:50px;text-align:center}
@@ -484,7 +475,7 @@ header p{color:#94a3b8;margin-top:0.25rem}
 .no-params{color:#64748b;font-size:0.8rem;font-style:italic}
 details{margin-top:0.75rem}
 summary{cursor:pointer;color:#60a5fa;font-size:0.8rem}
-details pre{margin-top:0.5rem;font-size:0.75rem;background:#0f172a;padding:0.75rem;border-radius:6px;color:#a5b4fc;border:1px solid #334155;overflow-wrap:anywhere;word-break:break-word;white-space:pre-wrap}
+details pre{margin-top:0.5rem;font-size:0.75rem;background:#0f172a;padding:0.75rem;border-radius:6px;color:#a5b4fc;border:1px solid #334155;overflow-x:auto}
 .stats{display:flex;gap:1.5rem;margin:1rem 0}
 .stat{background:#1e293b;border:1px solid #334155;border-radius:8px;padding:0.75rem 1.25rem;text-align:center}
 .stat .num{font-size:1.5rem;font-weight:700;color:#60a5fa}
@@ -507,71 +498,83 @@ details pre{margin-top:0.5rem;font-size:0.75rem;background:#0f172a;padding:0.75r
 </div>
 
 <div class="section">
-  <h2>Connect as MCP Server</h2>
+  <h2>Remote â€” No Install Needed</h2>
+  <p style="color:#94a3b8;font-size:0.85rem;margin-bottom:1rem">Connect via Streamable HTTP. No local files or Node.js required.</p>
   <div class="setup-grid">
     <div class="setup-card">
       <h4>Claude Web (claude.ai)</h4>
-      <div class="label">Remote / Hosted (HTTP)</div>
-      <p>Use the hosted MCP server directly. No local install is required.</p>
+      <div class="label">Settings &gt; Connectors &gt; Add Custom Connector</div>
       <pre>Name: TekAutomate
-URL: ${process.env.MCP_PUBLIC_URL || 'https://tekautomate-mcp-production.up.railway.app'}/mcp</pre>
-      <p class="muted">Claude Web: Settings > Connectors > Add Custom Connector. Leave auth blank unless you add your own auth layer later.</p>
+URL:  ${process.env.MCP_PUBLIC_URL || 'https://tekautomate-mcp-production.up.railway.app'}/mcp
+
+No OAuth â€” leave Advanced settings blank</pre>
     </div>
     <div class="setup-card">
-      <h4>Claude Desktop</h4>
-      <div class="label">Local / STDIO</div>
-      <p><code>cwd</code> must be a local folder path where you cloned the repo. It is not a URL.</p>
-      <ol>
-        <li>Clone <a href="https://github.com/abnasim/TekAutomate-MCP">TekAutomate-MCP</a></li>
-        <li>Run <code>npm install</code></li>
-        <li>Use the config below with your local clone path</li>
-      </ol>
-      <div class="label">~/.claude/claude_desktop_config.json</div>
+      <h4>Claude Desktop / Code / VS Code / Cursor</h4>
+      <div class="label">Use type: "http" â€” config file varies by client</div>
       <pre>{
   "mcpServers": {
     "tekautomate": {
-      "command": "npx",
-      "args": ["tsx", "mcp-server/src/stdio.ts"],
-      "cwd": "C:\\Users\\YourName\\TekAutomate-MCP"
+      "type": "http",
+      "url": "${process.env.MCP_PUBLIC_URL || 'https://tekautomate-mcp-production.up.railway.app'}/mcp"
     }
   }
-}</pre>
+}
+
+Config file locations:
+  Desktop:       ~/.claude/claude_desktop_config.json
+  Claude Code:   .mcp.json (project root)
+  VS Code:       .vscode/mcp.json
+  Cursor:        .cursor/mcp.json</pre>
     </div>
+  </div>
+</div>
+
+<div class="section">
+  <h2>Local â€” Run from Cloned Repo (STDIO)</h2>
+  <p style="color:#94a3b8;font-size:0.85rem;margin-bottom:1rem">Requires the TekAutomate repo cloned locally + Node.js. Replace <code>/path/to/TekAutomate</code> with your actual folder path.</p>
+  <div class="setup-grid">
     <div class="setup-card">
-      <h4>Claude Code (CLI)</h4>
-      <div class="label">Local / STDIO</div>
-      <p>Best when you want the MCP server to run from a local clone on your machine.</p>
-      <div class="label">.mcp.json in project root</div>
+      <h4>Claude Desktop / Claude Code</h4>
+      <div class="label">~/.claude/claude_desktop_config.json or .mcp.json</div>
       <pre>{
   "mcpServers": {
     "tekautomate": {
       "command": "npx",
       "args": ["tsx", "mcp-server/src/stdio.ts"],
-      "cwd": "C:\\Users\\YourName\\TekAutomate-MCP"
+      "cwd": "/path/to/TekAutomate"
     }
   }
 }</pre>
     </div>
     <div class="setup-card">
       <h4>VS Code / Cursor</h4>
-      <div class="label">Choose One Transport</div>
-      <p>Use local STDIO if you cloned the repo. Use HTTP only if your MCP client supports remote MCP URLs.</p>
       <div class="label">.vscode/mcp.json</div>
       <pre>{
   "servers": {
     "tekautomate": {
       "command": "npx",
       "args": ["tsx", "mcp-server/src/stdio.ts"],
-      "cwd": "C:\\Users\\YourName\\TekAutomate-MCP"
+      "cwd": "/path/to/TekAutomate"
     }
   }
 }</pre>
-      <p class="muted">Remote example if your client supports HTTP MCP:</p>
+    </div>
+  </div>
+</div>
+
+<div class="section">
+  <h2>Local HTTP Server (localhost:8787)</h2>
+  <p style="color:#94a3b8;font-size:0.85rem;margin-bottom:1rem">If you have the MCP server running locally via <code>npm start</code>, use this URL instead of the hosted one.</p>
+  <div class="setup-grid">
+    <div class="setup-card">
+      <h4>Any MCP Client</h4>
+      <div class="label">Same config as Remote, but with localhost URL</div>
       <pre>{
-  "servers": {
+  "mcpServers": {
     "tekautomate": {
       "type": "http",
-      "url": "${process.env.MCP_PUBLIC_URL || 'https://tekautomate-mcp-production.up.railway.app'}/mcp"
+      "url": "http://localhost:8787/mcp"
     }
   }
 }</pre>
@@ -611,7 +614,6 @@ function filterTools(q) {
 </body></html>`;
   }
 
-  // NOW create the HTTP server (all indexes are ready)
   const server = http.createServer(async (req, res) => {
     if (req.method === 'OPTIONS') {
       res.statusCode = 204;
@@ -658,7 +660,6 @@ function filterTools(q) {
           }
 
           const sessionId = req.headers['mcp-session-id'] as string | undefined;
-          console.log(`[MCP] transport method=${req.method} session=${sessionId || 'new'}`);
 
           if (sessionId && mcpTransports.has(sessionId)) {
             // Existing session
@@ -699,15 +700,6 @@ function filterTools(q) {
 
     if (req.method === 'GET' && req.url === '/health') {
       sendJson(res, 200, getHealthPayload());
-      return;
-    }
-
-    if (startupState !== 'ready') {
-      sendJson(res, startupState === 'starting' ? 503 : 500, {
-        ok: false,
-        error: startupState === 'starting' ? 'Server is still initializing.' : startupError || 'Server failed to initialize.',
-        status: startupState,
-      });
       return;
     }
 
@@ -807,7 +799,6 @@ function filterTools(q) {
           sendJson(res, 400, { ok: false, error: 'Missing tool name' });
           return;
         }
-        console.log(`[MCP] execute_tool name=${toolName}`);
         // Inject instrument endpoint for live tools
         let args = body.args || {};
         const liveTools = ['get_instrument_state', 'probe_command', 'send_scpi', 'capture_screenshot', 'get_visa_resources', 'get_environment'];
@@ -824,10 +815,8 @@ function filterTools(q) {
           };
         }
         const result = await runTool(toolName, args);
-        console.log(`[MCP] execute_tool_ok name=${toolName}`);
         sendJson(res, 200, { ok: true, tool: toolName, result });
       } catch (err) {
-        console.error(`[MCP] execute_tool_error: ${err instanceof Error ? err.message : 'Tool execution error'}`);
         sendJson(res, 500, { ok: false, error: err instanceof Error ? err.message : 'Tool execution error' });
       }
       return;
@@ -1199,12 +1188,8 @@ function filterTools(q) {
   });
 
   await new Promise<void>((resolve) => {
-    server.listen(port, host, () => resolve());
-  });
-  void warmStartup().catch(() => {
-    // Startup failures are surfaced through /health and route guards.
+    server.listen(port, () => resolve());
   });
   return server;
 }
-
 
