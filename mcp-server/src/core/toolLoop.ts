@@ -4500,7 +4500,6 @@ function buildSystemPrompt(modePrompt: string, outputMode: 'steps_json' | 'block
     '  Build: {action:"search_exec", query:"materialize scpi command", args:{header:"...", commandType:"set", value:"...", placeholderBindings:{...}}}',
     '  RAG: {action:"search_exec", query:"retrieve rag chunks", args:{corpus:"app_logic", query:"..."}}',
     '  Validate: {action:"search_exec", query:"validate action payload", args:{actionsJson:{steps:[...]}}}',
-    '- smart_scpi_lookup: natural language SCPI finder. Use for quick command lookup by plain English.',
     '- send_scpi: send commands to live instrument (requires executor context).',
     '- capture_screenshot: capture scope display (requires executor context).',
     '- discover_scpi: probe live instrument to find undocumented commands (requires executor context).',
@@ -5764,15 +5763,15 @@ export function buildHostedResponsesTools(
   } else if (wantsTmDevices) {
     toolNames =
       phase === 'initial'
-        ? ['get_current_flow', 'tek_router', 'smart_scpi_lookup', 'send_scpi', 'capture_screenshot']
+        ? ['get_current_flow', 'tek_router', 'send_scpi', 'capture_screenshot']
         : ['get_current_flow', 'tek_router', 'send_scpi', 'capture_screenshot'];
   } else if (options?.batchMaterializeOnly) {
     toolNames = phase === 'initial' ? ['finalize_scpi_commands'] : [];
   } else {
     toolNames =
       phase === 'initial' && !options?.restrictSearchTools
-? ['get_current_flow', 'tek_router', 'smart_scpi_lookup', 'send_scpi', 'capture_screenshot', 'discover_scpi']
-: ['get_current_flow', 'tek_router', 'smart_scpi_lookup', 'send_scpi', 'capture_screenshot'];
+? ['get_current_flow', 'tek_router', 'send_scpi', 'capture_screenshot', 'discover_scpi']
+: ['get_current_flow', 'tek_router', 'send_scpi', 'capture_screenshot'];
   }
 
   const allow = new Set(toolNames);

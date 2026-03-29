@@ -718,12 +718,10 @@ export function getToolDefinitions() {
 
 // ── Slim MCP surface (for stdio / Streamable HTTP transports) ────────
 // Only expose the gateway + live passthrough tools to the AI client.
-// Everything else (search, materialize, validate, browse, RAG, etc.)
-// is routed internally via tek_router's search_exec action.
-// This keeps the AI's context window small (~500 tokens vs ~50,000).
+// smart_scpi_lookup stays internal — used by MCP-only deterministic planner.
+// Everything else is routed internally via tek_router's search_exec action.
 const MCP_EXPOSED_TOOLS = new Set([
   'tek_router',           // gateway — routes to 21,000+ internal tools
-  'smart_scpi_lookup',    // hot path — natural language SCPI finder
   'send_scpi',            // live passthrough — send commands to instrument
   'capture_screenshot',   // live passthrough — scope screenshot
   'discover_scpi',        // live passthrough — tree-walk undocumented commands
