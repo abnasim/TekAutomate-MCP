@@ -448,19 +448,194 @@ async function handleList(startedAt: number): Promise<RouterResponse> {
   };
 }
 
+// ── Intent normalization ────────────────────────────────────────
+// Map common AI phrasings to the correct trigger phrase.
+// The AI doesn't need to know exact triggers — close enough works.
+const QUERY_ALIASES: Array<{ pattern: RegExp; trigger: string }> = [
+  // Search variants
+  { pattern: /\b(find|search|look\s*up|lookup)\s*(scpi|command)/i, trigger: 'search scpi commands' },
+  { pattern: /\bsearch\s*for\b/i, trigger: 'search scpi commands' },
+  { pattern: /\bfind\s*(a|the)?\s*command/i, trigger: 'search scpi commands' },
+  // Exact lookup variants
+  { pattern: /\b(get|lookup|look\s*up|fetch)\s*(command\s*)?(by\s*)?header/i, trigger: 'get command by header' },
+  { pattern: /\bexact\s*(header|lookup|command)/i, trigger: 'get command by header' },
+  { pattern: /\bheader\s*lookup/i, trigger: 'get command by header' },
+  // Browse variants
+  { pattern: /\bbrowse\s*(scpi|commands?|group)/i, trigger: 'browse scpi commands' },
+  { pattern: /\blist\s*(commands?\s*in|all)\s*group/i, trigger: 'browse scpi commands' },
+  { pattern: /\bexplore\s*(group|commands?)/i, trigger: 'browse scpi commands' },
+  // Verify variants
+  { pattern: /\bverify\s*(scpi|command|this)/i, trigger: 'verify scpi commands' },
+  { pattern: /\bcheck\s*(if\s*)?(command|valid|scpi)/i, trigger: 'verify scpi commands' },
+  { pattern: /\bvalidate\s*(command|scpi)/i, trigger: 'verify scpi commands' },
+  // List groups
+  { pattern: /\blist\s*(command\s*)?groups/i, trigger: 'list command groups' },
+  { pattern: /\bshow\s*(all\s*)?groups/i, trigger: 'list command groups' },
+  { pattern: /\bwhat\s*groups/i, trigger: 'list command groups' },
+  // Materialize
+  { pattern: /\b(materialize|build\s*command|concrete\s*command)/i, trigger: 'materialize scpi command' },
+  // RAG
+  { pattern: /\b(rag|knowledge|docs)\b/i, trigger: 'retrieve rag chunks' },
+  // Known failures
+  { pattern: /\b(known\s*failure|error\s*fix|common\s*error)/i, trigger: 'known failures' },
+];
+
+// Auto-detect intent from args shape when query is vague or missing
+function inferQueryFromArgs(args: Record<string, unknown>): string | null {
+  if (typeof args.header === 'string' && args.header.includes(':')) {
+    return 'get command by header';
+  }
+  if (Array.isArray(args.commands)) {
+    return 'verify scpi commands';
+  }
+  if (typeof args.group === 'string') {
+    return 'browse scpi commands';
+  }
+  if (typeof args.query === 'string' && !args.header) {
+    return 'search scpi commands';
+  }
+  if (Array.isArray(args.headers)) {
+    return 'batch header lookup';
+  }
+  if (typeof args.corpus === 'string') {
+    return 'retrieve rag chunks';
+  }
+  return null;
+}
+
+// Map "browse trigger" → group:"Trigger", "browse measurement" → group:"Measurement"
+const BROWSE_GROUP_ALIASES: Record<string, string> = {
+  trigger: 'Trigger', measurement: 'Measurement', math: 'Math', display: 'Display',
+  cursor: 'Cursor', horizontal: 'Horizontal', vertical: 'Vertical', bus: 'Bus',
+  power: 'Power', spectrum: 'Spectrum view', mask: 'Mask', histogram: 'Histogram',
+  plot: 'Plot', zoom: 'Zoom', digital: 'Digital', acquisition: 'Acquisition',
+  save: 'Save and Recall', recall: 'Save and Recall', search: 'Search and Mark',
+  waveform: 'Waveform Transfer', callout: 'Callout', afg: 'AFG', dvm: 'DVM',
+};
+
+function normalizeQuery(query: string, args: Record<string, unknown>): string {
+  const q = query.trim();
+
+  // 1. Shape-based inference FIRST — most reliable
+  const inferred = inferQueryFromArgs(args);
+  if (inferred) return inferred;
+
+  // 2. Alias matching SECOND — catch common AI phrasings
+  for (const { pattern, trigger } of QUERY_ALIASES) {
+    if (pattern.test(q)) return trigger;
+  }
+
+  // 3. Browse + group inference — "browse trigger" → browse scpi commands + args.group
+  const browseMatch = q.match(/\bbrowse\s+(\w+)/i);
+  if (browseMatch) {
+    const groupKey = browseMatch[1].toLowerCase();
+    const group = BROWSE_GROUP_ALIASES[groupKey];
+    if (group) {
+      args.group = group;
+      return 'browse scpi commands';
+    }
+  }
+
+  return q;
+}
+
+// Self-healing error response — tells AI exactly how to fix the call
+function selfHealingError(
+  action: string,
+  message: string,
+  expectedQuery: string,
+  howToFix: string,
+  example: Record<string, unknown>,
+  startedAt: number
+): RouterResponse {
+  return {
+    ok: false,
+    action,
+    error: message,
+    data: { expected_query: expectedQuery, how_to_fix: howToFix, example },
+    durationMs: Date.now() - startedAt,
+  };
+}
+
 async function handleSearchExec(req: RouterRequest, startedAt: number): Promise<RouterResponse> {
+  const args = req.args || {};
+
+  // ── No query? Try to infer from args shape ──
   if (!req.query?.trim()) {
-    return {
-      ok: false,
-      action: 'search_exec',
-      error: 'Missing required field: query',
-      durationMs: Date.now() - startedAt,
-    };
+    const inferred = inferQueryFromArgs(args);
+    if (inferred) {
+      req.query = inferred;
+    } else {
+      return selfHealingError(
+        'search_exec',
+        'Missing required field: query. Could not infer intent from args.',
+        'search scpi commands',
+        'Set query to a trigger phrase, or pass args that indicate intent (args.header, args.query, args.commands, args.group).',
+        { action: 'search_exec', query: 'search scpi commands', args: { query: 'edge trigger level' } },
+        startedAt
+      );
+    }
+  }
+
+  // ── Normalize query — map AI phrasings to correct triggers ──
+  const originalQuery = req.query;
+  req.query = normalizeQuery(req.query, args);
+
+  // ── Validate args for known tools and return helpful errors ──
+  const queryLower = req.query.toLowerCase().trim();
+  if (queryLower.includes('get command by header') && !args.header) {
+    return selfHealingError(
+      'search_exec',
+      'This looks like an exact header lookup, but args.header is missing.',
+      'get command by header',
+      'Pass the SCPI header in args.header.',
+      { action: 'search_exec', query: 'get command by header', args: { header: 'CH<x>:SCAle' } },
+      startedAt
+    );
+  }
+  if (queryLower.includes('browse scpi') && !args.group && !args.filter) {
+    return selfHealingError(
+      'search_exec',
+      'Browse requires a group name. Use "list command groups" first to see available groups.',
+      'browse scpi commands',
+      'Pass the group name in args.group.',
+      { action: 'search_exec', query: 'browse scpi commands', args: { group: 'Trigger' } },
+      startedAt
+    );
+  }
+  if (queryLower.includes('verify scpi') && !Array.isArray(args.commands)) {
+    return selfHealingError(
+      'search_exec',
+      'Verify requires an array of SCPI command strings in args.commands.',
+      'verify scpi commands',
+      'Pass commands as an array of strings.',
+      { action: 'search_exec', query: 'verify scpi commands', args: { commands: ['CH1:SCAle 1.0', 'ACQuire:MODE?'] } },
+      startedAt
+    );
+  }
+  if (queryLower.includes('search scpi') && !args.query) {
+    return selfHealingError(
+      'search_exec',
+      'Search requires a query string in args.query.',
+      'search scpi commands',
+      'Pass your search terms in args.query.',
+      { action: 'search_exec', query: 'search scpi commands', args: { query: 'edge trigger level' } },
+      startedAt
+    );
+  }
+  if (queryLower.includes('retrieve rag') && !args.corpus) {
+    return selfHealingError(
+      'search_exec',
+      'RAG retrieval requires args.corpus (scpi, app_logic, errors, templates).',
+      'retrieve rag chunks',
+      'Pass the corpus name in args.corpus.',
+      { action: 'search_exec', query: 'retrieve rag chunks', args: { corpus: 'scpi', query: 'spectrum view' } },
+      startedAt
+    );
   }
 
   // ── Priority: check builtin MCP tools first ──────────────────
   const registry = getToolRegistry();
-  const queryLower = req.query.toLowerCase().trim();
   let builtinMatch: MicroTool | null = null;
   let longestTrigger = 0;
   for (const tool of registry.all()) {
@@ -735,80 +910,33 @@ async function handleBuild(req: RouterRequest, startedAt: number): Promise<Route
 export const TEK_ROUTER_TOOL_DEFINITION = {
   name: 'tek_router',
   description:
-    'TekAutomate gateway — routes to 21,000+ internal SCPI tools for Tektronix oscilloscopes.\n\n' +
+    'TekAutomate SCPI gateway. Use action:"search_exec" for lookup/verify/browse. Put inner tool params inside args.\n\n' +
 
-    '## IMPORTANT: How to call\n' +
-    'Always use action:"search_exec". The query field selects which internal tool to use.\n' +
-    'The args field passes that tool\'s parameters. Structure:\n' +
-    '  {action:"search_exec", query:"<trigger phrase>", args:{<tool parameters>}}\n\n' +
+    '## Examples — copy these exactly, replace values:\n\n' +
 
-    '## Decision Rule: FUZZY vs EXACT\n' +
-    '- Know the intent but NOT the exact SCPI header?\n' +
-    '  → query:"search scpi commands", args:{query:"your description here"}\n' +
-    '  Example: {action:"search_exec", query:"search scpi commands", args:{query:"callout text underline"}}\n' +
-    '  Example: {action:"search_exec", query:"search scpi commands", args:{query:"vertical cursor position MathFFT"}}\n\n' +
-    '- Know the EXACT SCPI header?\n' +
-    '  → query:"get command by header", args:{header:"EXACT:HEADER:HERE"}\n' +
-    '  Example: {action:"search_exec", query:"get command by header", args:{header:"CALLOUTS:CALLOUT<x>:FONT:UNDERLine"}}\n' +
-    '  IMPORTANT: header must be exact canonical form. If unsure, use "search scpi commands" first.\n\n' +
+    'SEARCH (fuzzy):   {"action":"search_exec","query":"search scpi commands","args":{"query":"edge trigger level"}}\n' +
+    'EXACT LOOKUP:     {"action":"search_exec","query":"get command by header","args":{"header":"TRIGger:A:LEVel:CH<x>"}}\n' +
+    'BROWSE GROUP:     {"action":"search_exec","query":"browse scpi commands","args":{"group":"Trigger"}}\n' +
+    'BROWSE+FILTER:    {"action":"search_exec","query":"browse scpi commands","args":{"group":"Measurement","filter":"jitter"}}\n' +
+    'VERIFY:           {"action":"search_exec","query":"verify scpi commands","args":{"commands":["CH1:SCAle 1.0"]}}\n' +
+    'BUILD WORKFLOW:   {"action":"build","query":"set up jitter measurement on CH1"}\n' +
+    'LIST GROUPS:      {"action":"search_exec","query":"list command groups","args":{}}\n' +
+    'MATERIALIZE:      {"action":"search_exec","query":"materialize scpi command","args":{"header":"CH<x>:SCAle","commandType":"set","value":"1.0","placeholderBindings":{"CH<x>":"CH1"}}}\n\n' +
 
-    '## Available Internal Tools (query trigger → args)\n\n' +
+    '## Smart routing — args shape auto-selects the right tool:\n' +
+    'args.header (with colons) → exact header lookup\n' +
+    'args.query (plain English) → fuzzy SCPI search\n' +
+    'args.commands (array) → verify commands\n' +
+    'args.group → browse that group\n' +
+    'You don\'t need exact trigger phrases. Close enough works.\n\n' +
 
-    'SEARCH:\n' +
-    '  "search scpi commands"     → {query:"<natural language or keywords>"}\n' +
-    '  "get command by header"    → {header:"<exact canonical SCPI header>"}\n' +
-    '  "batch header lookup"      → {headers:["header1","header2",...]}\n' +
-    '  "browse scpi commands"     → {group:"Trigger"} or {group:"Measurement", filter:"jitter"}\n' +
-    '  "list command groups"      → {} (no args needed)\n\n' +
+    '## Chain calls — don\'t stop at one:\n' +
+    '1. Search → find the command family\n' +
+    '2. Exact lookup → see valid values + syntax\n' +
+    '3. Verify → confirm it\'s valid\n' +
+    '4. send_scpi → execute\n\n' +
 
-    'BUILD:\n' +
-    '  "materialize scpi command" → {header:"CH<x>:SCAle", commandType:"set", value:"1.0", placeholderBindings:{"CH<x>":"CH1"}}\n' +
-    '  "finalize scpi"            → {items:[{header:"...", commandType:"set", value:"..."}]}\n\n' +
-
-    'VERIFY:\n' +
-    '  "verify scpi commands"     → {commands:["CH1:SCAle 1.0","ACQuire:MODE?"]}\n' +
-    '  "validate action payload"  → {actionsJson:{steps:[...]}}\n' +
-    '  "validate device context"  → {steps:[...]}\n\n' +
-
-    'KNOWLEDGE:\n' +
-    '  "retrieve rag chunks"      → {corpus:"scpi"|"app_logic"|"errors"|"templates", query:"..."}\n' +
-    '  "known failures"           → {query:"timeout"}\n' +
-    '  "template examples"        → {query:"jitter measurement"}\n\n' +
-
-    'POLICY:\n' +
-    '  "get policy"               → {mode:"steps_json"}\n' +
-    '  "valid step types"         → {mode:"steps_json"}\n\n' +
-
-    '## Other Actions\n' +
-    '  action:"search"  → search SCPI commands by description. {query:"edge trigger", limit:5}\n' +
-    '  action:"build"   → generate workflow. {query:"set up jitter measurement on CH1"}\n' +
-    '  action:"exec"    → run tool by ID. {toolId:"scpi:CH<x>:SCAle", args:{...}}\n' +
-    '  action:"create"  → save shortcut. {toolName:"...", toolDescription:"...", toolTriggers:[...], toolCategory:"shortcut", toolSteps:[...]}\n' +
-    '  action:"info"    → tool details. {toolId:"scpi:CH<x>:SCAle"}\n' +
-    '  action:"list"    → list all tools.\n\n' +
-
-    '## Workflow Pattern\n' +
-    '  1. Search: tek_router({action:"search_exec", query:"search scpi commands", args:{query:"callout underline"}})\n' +
-    '  2. Build:  tek_router({action:"search_exec", query:"materialize scpi command", args:{header:"CALLOUTS:CALLOUT<x>:FONT:UNDERLine", commandType:"set", value:"1", placeholderBindings:{"CALLOUT<x>":"CALLOUT1"}}})\n' +
-    '  3. Send:   send_scpi({commands:["CALLOUTS:CALLOUT1:FONT:UNDERLine 1"]})\n' +
-    '  4. Verify: capture_screenshot()\n\n' +
-
-    '## When Search Returns Wrong/No Results\n' +
-    'If your search does not find the right command:\n' +
-    '  1. Browse by group: {action:"search_exec", query:"browse scpi commands", args:{group:"Search"}} (or Trigger, Measurement, Display, etc.)\n' +
-    '  2. Try different keywords — use SCPI terms not natural language (e.g. "SEARCHTABle" not "search results table")\n' +
-    '  3. Use discover_scpi to probe the live instrument: discover_scpi({basePath:"SEARCH", liveMode:true})\n' +
-    '  4. If the user pastes manual/documentation text, parse the SCPI header from it and execute directly via send_scpi\n' +
-    '  5. After finding the right command, SAVE IT: {action:"create", toolName:"<descriptive name>", toolDescription:"<what it does>", toolTriggers:["<natural language phrases that should find this>"], toolCategory:"shortcut", toolSteps:[{tool:"send_scpi", args:{commands:["<the command>"]}}]}\n' +
-    '  6. NEVER loop on the same failed search — try a different approach after 1 failed attempt\n\n' +
-
-    '## Model Family\n' +
-    'If the user has not specified their instrument model:\n' +
-    '  - ASK the user which model they have (MSO4, MSO5, MSO6, MSO6B, DPO7, AFG, AWG, etc.)\n' +
-    '  - If they say "oscilloscope" or "scope" without a model, default to MSO series (MSO5/MSO6)\n' +
-    '  - If they say "DPO" or "legacy", use DPO family\n' +
-    '  - Pass modelFamily in search args when known: args:{query:"...", modelFamily:"MSO6"}\n' +
-    '  - This filters results to commands available on that instrument',
+    '## Groups (for BROWSE): Acquisition, Bus, Callout, Cursor, Digital, Display, Histogram, Horizontal, Mask, Math, Measurement, Miscellaneous, Plot, Power, Save and Recall, Search and Mark, Spectrum view, Trigger, Waveform Transfer, Zoom',
   parameters: {
     type: 'object',
     properties: {
