@@ -213,18 +213,29 @@ async function runAnthropicLoop(params: LiveToolLoopParams): Promise<LiveToolLoo
   }));
 
   const messages: Array<Record<string, unknown>> = [
-    ...history.slice(-12).map((h) => ({
+    ...history.slice(-6).map((h) => ({
       role: h.role,
-      content: String(h.content || '').slice(0, 3000),
+      content: String(h.content || '').slice(0, 2000),
     })),
     { role: 'user', content: userMessage },
   ];
+  // Track how many messages existed before the tool loop started, so we can
+  // apply a sliding window that only keeps recent tool round-trips.
+  const baseMessageCount = messages.length;
 
   const toolCallLog: LiveToolLoopResult['toolCalls'] = [];
   let finalText = '';
   let iterations = 0;
 
   for (let i = 0; i < maxIterations; i++) {
+    // ── Sliding window: keep base messages + last 4 tool-loop messages ──
+    // Each tool iteration appends 2 messages (assistant + user/tool_result).
+    // After 2+ iterations the earlier round-trips are stale; prune them to
+    // avoid sending the full history on every request.
+    const maxToolMessages = 4; // 2 iterations × 2 messages each
+    if (messages.length > baseMessageCount + maxToolMessages) {
+      messages.splice(baseMessageCount, messages.length - baseMessageCount - maxToolMessages);
+    }
     iterations = i + 1;
 
     const res = await fetch('https://api.anthropic.com/v1/messages', {
@@ -344,6 +355,24 @@ async function runAnthropicLoop(params: LiveToolLoopParams): Promise<LiveToolLoo
     }
 
     messages.push({ role: 'user', content: toolResults });
+
+    // ── Prune base64 images from earlier messages to avoid re-sending them ──
+    // The AI has already seen the image on this iteration; replace with a
+    // lightweight text placeholder so subsequent iterations don't pay the cost.
+    for (const msg of messages) {
+      const arr = Array.isArray(msg.content) ? msg.content as Array<Record<string, unknown>> : null;
+      if (!arr) continue;
+      for (let j = 0; j < arr.length; j++) {
+        const item = arr[j];
+        if (item.type === 'tool_result' && Array.isArray(item.content)) {
+          const inner = item.content as Array<Record<string, unknown>>;
+          const hasImage = inner.some((c) => c.type === 'image');
+          if (hasImage) {
+            item.content = '[Screenshot was captured and already analyzed]';
+          }
+        }
+      }
+    }
   }
 
   return { text: finalText, toolCalls: toolCallLog, iterations };
@@ -367,9 +396,9 @@ async function runOpenAiLoop(params: LiveToolLoopParams): Promise<LiveToolLoopRe
 
   // Build initial input with history + current message
   const initialInput: Array<Record<string, unknown>> = [
-    ...history.slice(-12).map((h) => ({
+    ...history.slice(-6).map((h) => ({
       role: h.role === 'assistant' ? 'assistant' : 'user',
-      content: String(h.content || '').slice(0, 3000),
+      content: String(h.content || '').slice(0, 2000),
     })),
     { role: 'user', content: userMessage },
   ];

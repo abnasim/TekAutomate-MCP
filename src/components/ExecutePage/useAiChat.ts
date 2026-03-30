@@ -1075,8 +1075,13 @@ export function useAiChat(params: {
         },
         runContext: {
           runStatus: params.runStatus,
-          logTail: params.runLog || '',
-          auditOutput: params.lastAuditReport ? JSON.stringify(params.lastAuditReport, null, 2) : '',
+          logTail: (params.runLog || '').slice(-1500),  // last 1500 chars only
+          auditOutput: (() => {
+            if (!params.lastAuditReport) return '';
+            // Send only the summary section to save tokens; full report is too large
+            const summary = params.lastAuditReport.summary;
+            return summary ? JSON.stringify(summary) : JSON.stringify(params.lastAuditReport).slice(0, 1500);
+          })(),
           exitCode:
             typeof params.lastAuditReport?.summary?.exit_code === 'number'
               ? params.lastAuditReport.summary.exit_code
