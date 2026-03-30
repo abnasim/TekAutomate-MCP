@@ -4500,7 +4500,6 @@ function buildSystemPrompt(modePrompt: string, outputMode: 'steps_json' | 'block
     '  Build: {action:"search_exec", query:"materialize scpi command", args:{header:"...", commandType:"set", value:"...", placeholderBindings:{...}}}',
     '  RAG: {action:"search_exec", query:"retrieve rag chunks", args:{corpus:"app_logic", query:"..."}}',
     '  Validate: {action:"search_exec", query:"validate action payload", args:{actionsJson:{steps:[...]}}}',
-    '- smart_scpi_lookup: natural language SCPI finder. Use for quick command lookup by plain English.',
     '- send_scpi: send commands to live instrument (requires executor context).',
     '- capture_screenshot: capture scope display (requires executor context).',
     '- discover_scpi: probe live instrument to find undocumented commands (requires executor context).',
@@ -4532,7 +4531,24 @@ const CHAT_MODE_SYSTEM_PROMPT = [
   '- **Relevant SCPI commands** — exact command syntax from the 9,300+ command database (header, set syntax, query syntax)',
   '- **Knowledge base** — relevant docs from error guides, app logic, PyVISA/TekHSI reference, tm_devices reference',
   'Use this pre-loaded context as your primary source of truth for command syntax and Tek-specific knowledge.',
-  'When the pre-loaded context covers the question, use it directly. When it does not, fall back to your general engineering knowledge but say so.',
+  'When the pre-loaded context covers the question, use it directly. When it does not, use tek_router to search.',
+  '',
+  '## MCP Tools — USE THESE for SCPI lookup',
+  'ALWAYS use tek_router for SCPI command lookup. Do NOT rely solely on file_search or pre-loaded context.',
+  '- **tek_router** — Gateway to 21,000+ SCPI commands. Use action:"search_exec" with query + args:',
+  '  Search: {action:"search_exec", query:"search scpi commands", args:{query:"histogram plot measurement"}}',
+  '  Exact:  {action:"search_exec", query:"get command by header", args:{header:"PLOT:PLOT<x>:TYPe"}}',
+  '  Browse: {action:"search_exec", query:"browse scpi commands", args:{group:"Measurement"}}',
+  '  Verify: {action:"search_exec", query:"verify scpi commands", args:{commands:["PLOT:ADDNew \\"PLOT1\\""]}}}',
+  '- **send_scpi** — Send commands to live instrument',
+  '- **capture_screenshot** — Capture scope display',
+  '- **discover_scpi** — Probe live instrument for undocumented commands',
+  '',
+  '## IMPORTANT: Tool priority',
+  '1. tek_router search_exec — FIRST for any SCPI command question',
+  '2. Pre-loaded context — use if it directly answers the question',
+  '3. file_search/KB — LAST, only for general Tek knowledge not covered above',
+  'NEVER answer SCPI questions from file_search alone — always verify with tek_router.',
   '',
   '## How to use SCPI command data',
   '- The pre-loaded SCPI commands show exact syntax: `CH<x>:SCAle <NR3>` means the set form, `CH<x>:SCAle?` means the query form.',
@@ -5318,6 +5334,10 @@ function usesServerDefaultHostedPrompt(req: McpChatRequest): boolean {
   return String(req.openaiAssistantId || '').trim() === SERVER_DEFAULT_ASSISTANT_TOKEN;
 }
 
+// Default prompt ID and version — users don't need to configure this
+const DEFAULT_OPENAI_PROMPT_ID = 'pmpt_69ba258ea3e8819092c7b41dbb41fd580ac4f618c91da843';
+const DEFAULT_OPENAI_PROMPT_VERSION = ''; // empty = latest version
+
 function resolveOpenAiPromptId(req: McpChatRequest): string {
   const requested = String(req.openaiAssistantId || '').trim().replace(/\s+/g, '');
   if (VALID_PROMPT_ID.test(requested)) return requested;
@@ -5325,12 +5345,12 @@ function resolveOpenAiPromptId(req: McpChatRequest): string {
   if (VALID_PROMPT_ID.test(serverPromptId)) return serverPromptId;
   const legacyAssistantEnv = String(process.env.OPENAI_ASSISTANT_ID || '').trim().replace(/\s+/g, '');
   if (VALID_PROMPT_ID.test(legacyAssistantEnv)) return legacyAssistantEnv;
-  return '';
+  return DEFAULT_OPENAI_PROMPT_ID;
 }
 
 function resolveOpenAiPromptVersion(): string {
   const raw = String(process.env.OPENAI_PROMPT_VERSION || '').trim();
-  return raw ? String(raw) : '';
+  return raw ? String(raw) : DEFAULT_OPENAI_PROMPT_VERSION;
 }
 
 function resolveOpenAiResponseCursor(req: McpChatRequest): string {
@@ -5764,15 +5784,15 @@ export function buildHostedResponsesTools(
   } else if (wantsTmDevices) {
     toolNames =
       phase === 'initial'
-        ? ['get_current_flow', 'tek_router', 'smart_scpi_lookup', 'send_scpi', 'capture_screenshot']
+        ? ['get_current_flow', 'tek_router', 'send_scpi', 'capture_screenshot']
         : ['get_current_flow', 'tek_router', 'send_scpi', 'capture_screenshot'];
   } else if (options?.batchMaterializeOnly) {
     toolNames = phase === 'initial' ? ['finalize_scpi_commands'] : [];
   } else {
     toolNames =
       phase === 'initial' && !options?.restrictSearchTools
-? ['get_current_flow', 'tek_router', 'smart_scpi_lookup', 'send_scpi', 'capture_screenshot', 'discover_scpi']
-: ['get_current_flow', 'tek_router', 'smart_scpi_lookup', 'send_scpi', 'capture_screenshot'];
+? ['get_current_flow', 'tek_router', 'send_scpi', 'capture_screenshot', 'discover_scpi']
+: ['get_current_flow', 'tek_router', 'send_scpi', 'capture_screenshot'];
   }
 
   const allow = new Set(toolNames);
@@ -6733,7 +6753,7 @@ async function runOpenAiHostedResponse(
     `[MCP] OpenAI hosted responses: model ${hostedModel}${reasoningCfg?.effort ? ` reasoning=${String(reasoningCfg.effort)}` : ''}`
   );
   if (usesServerDefaultHostedPrompt(req) && canAttachHostedPrompt && !promptConfig?.id) {
-    throw new Error('OPENAI_PROMPT_ID is missing. Add OPENAI_PROMPT_ID=pmpt_69ba258ea3e8819092c7b41dbb41fd580ac4f618c91da843 to mcp-server/.env (or set it in Railway environment variables).');
+    throw new Error('OPENAI_PROMPT_ID could not be resolved. Using default but hosted prompt attachment failed.');
   }
   if (usesServerDefaultHostedPrompt(req) && !canAttachHostedPrompt) {
     console.log(
@@ -8188,6 +8208,11 @@ function buildLiveSystemPrompt(req: McpChatRequest, sessionContext?: string): st
     '10. TIMEOUTS: If a command times out, the scope may be busy or the command is wrong.',
     '   - Do NOT retry the same command repeatedly. Try a simpler query (*IDN?) to check connectivity first.',
     '   - If TekScope PC / offline mode, waveform data is static — no need for repeated acquisitions.',
+    '11. NEVER NARRATE INTENT. Never say "I\'ll do X now" or "Let me check Y" then stop.',
+    '    If you decide to do something, DO IT in the same response. Tool calls + brief result. No planning monologues.',
+    '12. FIX, DON\'T JUST DIAGNOSE. When you find a problem (wrong bandwidth, bad setting, missing config),',
+    '    FIX IT IMMEDIATELY — send the corrective command, then confirm. Don\'t explain the problem and wait.',
+    '    The user wants you to act like a colleague who fixes things, not a consultant who writes reports.',
     '',
     '## Instrument',
   ];
