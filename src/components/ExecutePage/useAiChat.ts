@@ -805,7 +805,7 @@ export function useAiChat(params: {
           model: state.model,
           systemPrompt,
           userMessage: effectiveMessage,
-          history: state.history.slice(-8).map((h) => ({
+          history: state.history.slice(-12).map((h) => ({
             role: h.role,
             content: String(h.content || '').slice(0, 4000),
           })),
@@ -942,7 +942,7 @@ export function useAiChat(params: {
               params.flowContext?.deviceType || 'SCOPE',
             ),
             userMessage: (typeof userContent === 'string' ? userContent : effectiveMessage + preContext),
-            history: state.history.slice(-8).map((h) => ({
+            history: state.history.slice(-12).map((h) => ({
               role: h.role as string,
               content: String(h.content || '').slice(0, 6000),
             })),
