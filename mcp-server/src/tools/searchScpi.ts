@@ -330,6 +330,9 @@ export async function searchScpi(input: SearchScpiInput): Promise<ToolResult<unk
     { pattern: /\bbaud\s*rate/i, expand: 'BITRate baud rate' },
     { pattern: /\brecord\s*length/i, expand: 'RECOrdlength horizontal record' },
     { pattern: /\bsample\s*rate/i, expand: 'SAMPLERate sample rate horizontal' },
+    { pattern: /\barinc\s*429/i, expand: 'ARINC429A arinc bus' },
+    { pattern: /\bmil.?std.?1553|mil.?1553/i, expand: 'MIL1553B mil bus' },
+    { pattern: /\bstandard\s*dev/i, expand: 'STATIstics statistics STDDev measurement' },
   ];
   let expandedQuery = q;
   for (const { pattern, expand } of QUERY_EXPANSIONS) {
