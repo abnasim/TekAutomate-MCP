@@ -327,7 +327,16 @@ export async function searchScpi(input: SearchScpiInput): Promise<ToolResult<unk
   }
 
   // Re-rank using intent classification and group-aware scoring
-  const reRanked = reRankWithIntent(merged, q);
+  let reRanked = reRankWithIntent(merged, q);
+
+  // For certain intents, force injected commands to the top regardless of BM25 score.
+  // BM25 scores can be so high for noisy matches that additive boosts can't overcome them.
+  if (intent.subject === 'zone_trigger') {
+    const visual = reRanked.filter(c => c.header.toLowerCase().startsWith('visual'));
+    const rest = reRanked.filter(c => !c.header.toLowerCase().startsWith('visual'));
+    reRanked = [...visual, ...rest];
+  }
+
   const final = reRanked.slice(0, limit);
 
   return {
