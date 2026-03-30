@@ -270,8 +270,10 @@ const SUBJECT_GROUP_MAP: Array<{
   { pattern: /\b(wbg|wide\s*band\s*gap|double\s*pulse)\b/i, groups: ['Wide Band Gap Analysis (WBG)'], intent: 'wbg', subject: 'wbg' },
 
   // ── Display ──
-  { pattern: /\b(cursor|bar|crosshair|readout)\b/i, groups: ['Cursor'], intent: 'display', subject: 'cursor' },
-  { pattern: /\b(graticule|grid|persistence|intensity|brightness)\b/i, groups: ['Display'], intent: 'display', subject: 'display' },
+  { pattern: /\b(graticule|grid\s*type|display\s*grid)\b/i, groups: ['Display'], intent: 'display', subject: 'graticule' },
+  { pattern: /\b(cursor|bar|readout)\b/i, groups: ['Cursor'], intent: 'display', subject: 'cursor' },
+  { pattern: /\b(crosshair)\b/i, groups: ['Display'], intent: 'display', subject: 'graticule' },
+  { pattern: /\b(persistence|intensity|brightness)\b/i, groups: ['Display'], intent: 'display', subject: 'display' },
   { pattern: /\b(waveview|display|screen)\b/i, groups: ['Display'], intent: 'display', subject: 'display' },
   { pattern: /\b(histogram)\b/i, groups: ['Histogram'], intent: 'display', subject: 'histogram' },
   { pattern: /\b(plot|trend)\b/i, groups: ['Plot'], intent: 'display', subject: 'plot' },
