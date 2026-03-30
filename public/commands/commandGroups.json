@@ -2927,6 +2927,8 @@
       "TRIGger:{A|B}:RUNT:SOUrce",
       "TRIGger:{A|B}:RUNT:WHEn",
       "TRIGger:{A|B}:RUNT:WIDth",
+      "TRIGger:{A|B}:RUNT:THReshold:HIGH",
+      "TRIGger:{A|B}:RUNT:THReshold:LOW",
       "TRIGger:{A|B}:SETHold:CLOCk:EDGE",
       "TRIGger:{A|B}:SETHold:CLOCk:SOUrce",
       "TRIGger:{A|B}:SETHold:HOLDTime",
