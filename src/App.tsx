@@ -4086,15 +4086,8 @@ function AppInner() {
     };
   }, [config, devices]);
 
-  const liveModeAttachment = useMemo<McpChatAttachment[]>(() => {
-    if (executionSource !== 'live' || !liveModeCapture?.dataUrl) return [];
-    return [{
-      name: `live-scope-${liveModeCapture.capturedAt.replace(/[:.]/g, '-')}.png`,
-      mimeType: liveModeCapture.mimeType,
-      size: liveModeCapture.sizeBytes,
-      dataUrl: liveModeCapture.dataUrl,
-    }];
-  }, [executionSource, liveModeCapture]);
+  // Live-mode screenshots are available on-demand via the MCP capture_screenshot tool.
+  // We no longer auto-attach them to every chat message to avoid excessive token usage.
 
   /* Python generation */
   const generateMultiDevicePython = () => {
@@ -9562,7 +9555,7 @@ Keep under 120 words. No headings. Bullets only. Stay on this command. Do not de
               backend: activeInstrumentConfig.backend,
               liveMode: true,
             } : null}
-            chatContextAttachments={liveModeAttachment}
+            chatContextAttachments={[]}
             flowContext={{
               backend: activeInstrumentConfig.backend,
               modelFamily: activeInstrumentConfig.modelFamily,
