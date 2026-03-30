@@ -195,9 +195,30 @@ function reRankWithIntent(
     }
 
     // ── 5. Prefer STATE/enable commands for feature queries ──
-    // "FastFrame" → user probably wants to enable/check it, not configure COUNt first
     if (headerTokens.some(t => t === 'state' || t === 'enable')) {
       score += 5;
+    }
+
+    // ── 5b. Subject-specific header boosts ──
+    // zone_trigger → VISual:* commands, not SEARCH:* or TRIGger:*
+    if (intent.subject === 'zone_trigger') {
+      if (headerLower.startsWith('visual:') || headerLower.startsWith('visual')) {
+        score += 30;
+      } else if (!headerLower.includes('visual')) {
+        score -= 20;
+      }
+    }
+    // trigger_level → commands with LEVel in header
+    if (intent.subject === 'trigger_level') {
+      if (headerTokens.some(t => t === 'level' || t.startsWith('lev'))) {
+        score += 20;
+      }
+    }
+    // trigger_slope → commands with SLOpe in header
+    if (intent.subject === 'trigger_slope') {
+      if (headerTokens.some(t => t === 'slope' || t.startsWith('slo'))) {
+        score += 20;
+      }
     }
 
     // ── 6. Exact SCPI-style match boost ──
