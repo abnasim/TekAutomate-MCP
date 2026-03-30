@@ -252,6 +252,33 @@ function reRankWithIntent(
       }
     }
 
+    // power_soa → POWer:*:SOA commands
+    if (intent.subject === 'power_soa') {
+      if (headerLower.includes('soa')) {
+        score += 60;
+      } else if (headerLower.startsWith('power:')) {
+        score += 10;
+      } else {
+        score -= 30;
+      }
+    }
+    // afg → AFG:* commands, not measurement frequency
+    if (intent.subject === 'afg') {
+      if (headerLower.startsWith('afg:')) {
+        score += 80;
+      } else {
+        score -= 40;
+      }
+    }
+    // histogram_box → HIStogram:BOX commands
+    if (intent.subject === 'histogram_box') {
+      if (headerLower.includes('histogram') || headerLower.includes('hist')) {
+        score += 40;
+      } else {
+        score -= 20;
+      }
+    }
+
     // bus intent → prefer TRIGger:A:BUS over SEARCH:SEARCH<x>:TRIGger:A:BUS
     if (intent.intent === 'bus') {
       if (headerLower.startsWith('trigger:') || headerLower.startsWith('trigger:{')) {
@@ -393,6 +420,18 @@ export async function searchScpi(input: SearchScpiInput): Promise<ToolResult<unk
       'POWer:POWer<x>:TYPe', 'POWer:ADDNew',
       'POWer:POWer<x>:HARMONICS:CLASs', 'POWer:POWer<x>:HARMONICS:STANDard',
       'POWer:POWer<x>:HARMONICS:UNITs', 'POWer:POWer<x>:HARMONICS:FUNDamental',
+    ],
+    power_soa: [
+      'POWer:POWer<x>:SOA:POINT<x>', 'POWer:POWer<x>:TYPe',
+      'POWer:ADDNew',
+    ],
+    afg: [
+      'AFG:FUNCtion', 'AFG:FREQuency', 'AFG:AMPLitude', 'AFG:OFFSet',
+      'AFG:OUTPut:STATE', 'AFG:PERIod', 'AFG:SYMMetry', 'AFG:PHASe',
+    ],
+    histogram_box: [
+      'HIStogram:BOX', 'HIStogram:BOXPcnt',
+      'HIStogram:DISplay', 'HIStogram:MODe',
     ],
     waveform_transfer: [
       'WFMOutpre:ENCdg', 'DATa:ENCdg', 'DATa:SOUrce', 'DATa:STARt', 'DATa:STOP',
