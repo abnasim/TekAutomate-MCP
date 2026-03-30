@@ -103,7 +103,13 @@ function reRankWithIntent(
     let score = 0;
     const cmdGroup = cmd.group || '';
     const headerLower = cmd.header.toLowerCase();
-    const headerTokens = headerLower.replace(/[{}<>?|]/g, '').split(/[:\s]+/).filter(Boolean);
+    // Keep original-case tokens for SCPI mnemonic matching
+    const headerTokensRaw = cmd.header.replace(/[{}<>?|]/g, '').split(/[:\s]+/).filter(Boolean);
+    const headerTokens = headerTokensRaw.map(t => t.toLowerCase());
+
+    // Also extract SCPI argument names/values from the command record
+    const argNames = (cmd.arguments || []).map(a => a.name.toLowerCase());
+    const argDescriptions = (cmd.arguments || []).map(a => a.description.toLowerCase()).join(' ');
 
     // ── 1. Group affinity ──
     if (affinityGroups) {
@@ -118,25 +124,43 @@ function reRankWithIntent(
       }
     }
 
-    // ── 2. Header TOKEN matching (not just substring) ──
-    // Count how many query words match header tokens. More matches = better fit.
+    // ── 2. SCPI mnemonic-aware token matching ──
+    // SCPI uses mixed-case mnemonics: LEVel, SLOpe, SOUrce, FREQuency
+    // The uppercase part is the abbreviation. We match query words against:
+    //   - Full token lowercase: "level" matches "level" in "LEVel"
+    //   - SCPI abbreviation: extract uppercase chars → "LEV" from "LEVel"
+    //   - startsWith in both directions
+    // This is a BIG improvement — "level" now matches LEVel in TRIGger:A:LEVel
+    // even when the BM25 raw header is "trigger:a:level:ch<x>"
+
+    const scpiAbbreviations = headerTokensRaw.map(t => {
+      // Extract uppercase letters as the SCPI abbreviation
+      const upper = t.replace(/[^A-Z]/g, '');
+      return upper.length >= 2 ? upper.toLowerCase() : t.toLowerCase();
+    });
+
     let tokenMatchCount = 0;
     for (const word of queryWords) {
-      if (headerTokens.some(t => t === word || t.startsWith(word) || word.startsWith(t))) {
+      const matched = headerTokens.some(t => t === word || t.startsWith(word) || word.startsWith(t))
+        || scpiAbbreviations.some(a => a === word || a.startsWith(word) || word.startsWith(a))
+        || argNames.some(a => a === word || a.startsWith(word));
+      if (matched) {
         score += 10;
         tokenMatchCount++;
       }
     }
     for (const word of subjectWords) {
       const wordLower = word.toLowerCase();
-      if (headerTokens.some(t => t === wordLower || t.startsWith(wordLower) || wordLower.startsWith(t))) {
+      const matched = headerTokens.some(t => t === wordLower || t.startsWith(wordLower) || wordLower.startsWith(t))
+        || scpiAbbreviations.some(a => a === wordLower || a.startsWith(wordLower) || wordLower.startsWith(a));
+      if (matched) {
         score += 15;
         tokenMatchCount++;
       }
     }
-    // Bonus for matching MULTIPLE query words in the header (compound match)
-    if (tokenMatchCount >= 3) score += 10;
-    if (tokenMatchCount >= 2) score += 5;
+    // Bonus for matching MULTIPLE query words (compound match = better fit)
+    if (tokenMatchCount >= 3) score += 12;
+    else if (tokenMatchCount >= 2) score += 6;
 
     // ── 3. Header depth/simplicity preference ──
     // Shorter headers are usually the primary command, longer ones are sub-settings.
