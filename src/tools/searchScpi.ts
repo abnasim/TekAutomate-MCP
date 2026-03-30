@@ -515,6 +515,9 @@ export async function searchScpi(input: SearchScpiInput): Promise<ToolResult<unk
     screenshot: [
       'SAVe:IMAGe', 'SAVe:IMAGe:FILEFormat',
     ],
+    horizontal_scale: [
+      'HORizontal:SCAle', 'HORizontal:POSition', 'HORizontal:MODe',
+    ],
     fastframe: [
       'HORizontal:FASTframe:STATE', 'HORizontal:FASTframe:COUNt',
       'HORizontal:FASTframe:MAXFRames', 'HORizontal:FASTframe:SELECTED',
