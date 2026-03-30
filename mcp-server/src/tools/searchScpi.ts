@@ -314,6 +314,43 @@ function reRankWithIntent(
       }
     }
 
+    // channel_on/off → DISplay:GLObal:CH<x>:STATE, not IF output
+    if (intent.subject === 'channel_on' || intent.subject === 'channel_off') {
+      if (headerLower.includes('display:global') || headerLower.includes('ch<x>:state')) {
+        score += 40;
+      }
+      if (headerLower.includes('output') || headerLower.includes('if:')) {
+        score -= 40;
+      }
+    }
+    // digital_threshold → CH<x>:DIGItal:THReshold, not probe degauss
+    if (intent.subject === 'digital_threshold') {
+      if (headerLower.includes('digital') && headerLower.includes('threshold')) {
+        score += 50;
+      }
+      if (headerLower.includes('probe') || headerLower.includes('degauss')) {
+        score -= 40;
+      }
+    }
+    // search_navigate → MARK:SELECTED:NEXT/PREV, not SEARCHTABle:DELete
+    if (intent.subject === 'search_navigate') {
+      if (headerLower.includes('mark:') || headerLower.includes('navigate')) {
+        score += 40;
+      }
+      if (headerLower.includes('delete') || headerLower.includes('table')) {
+        score -= 30;
+      }
+    }
+    // math_channel → MATH:DEFine or MATH:ADDNew, not MATH:STATE
+    if (intent.subject === 'math_channel') {
+      if (headerLower.includes('define') || headerLower.includes('addnew')) {
+        score += 30;
+      }
+      if (headerLower.includes(':state') && !headerLower.includes('addnew')) {
+        score -= 15;
+      }
+    }
+
     // runt trigger → RUNT commands, not SETHold
     if (intent.subject === 'runt') {
       if (headerLower.includes('runt')) {
@@ -533,6 +570,22 @@ export async function searchScpi(input: SearchScpiInput): Promise<ToolResult<unk
     ],
     screenshot: [
       'SAVe:IMAGe', 'SAVe:IMAGe:FILEFormat',
+    ],
+    channel_on: [
+      'DISplay:GLObal:CH<x>:STATE', 'CH<x>:STATE',
+    ],
+    channel_off: [
+      'DISplay:GLObal:CH<x>:STATE', 'CH<x>:STATE',
+    ],
+    digital_threshold: [
+      'CH<x>:DIGItal:THReshold', 'CH<x>:DIGItal:MAGnivu:POSition',
+    ],
+    search_navigate: [
+      'MARK:SELECTED:NEXT', 'MARK:SELECTED:PREVious', 'MARK:CREAte',
+      'MARK:DELEte', 'SEARCH:SEARCH<x>:NAVigate',
+    ],
+    math_channel: [
+      'MATH:ADDNew', 'MATH<x>:DEFine', 'MATH:MATH<x>:DEFine',
     ],
     runt: [
       'TRIGger:{A|B}:RUNT:POLarity', 'TRIGger:{A|B}:RUNT:THReshold:HIGH',

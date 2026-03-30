@@ -56,6 +56,19 @@ const SUBJECT_GROUP_MAP: Array<{
   { pattern: /\btimebase\b.*\bscale\b/i, groups: ['Horizontal'], intent: 'horizontal', subject: 'horizontal_scale' },
   { pattern: /\btime\s*per\s*div/i, groups: ['Horizontal'], intent: 'horizontal', subject: 'horizontal_scale' },
 
+  // ── Channel on/off (MUST be before generic "channel" matches vertical) ──
+  { pattern: /\b(turn\s*on|enable)\s*(channel|ch\s*\d)/i, groups: ['Display', 'Vertical'], intent: 'display', subject: 'channel_on' },
+  { pattern: /\b(turn\s*off|disable)\s*(channel|ch\s*\d)/i, groups: ['Display', 'Vertical'], intent: 'display', subject: 'channel_off' },
+
+  // ── Digital channel threshold (MUST be before generic "voltage"/"threshold") ──
+  { pattern: /\bdigital\b.*\bthreshold/i, groups: ['Digital'], intent: 'digital', subject: 'digital_threshold' },
+  { pattern: /\bthreshold\b.*\bdigital/i, groups: ['Digital'], intent: 'digital', subject: 'digital_threshold' },
+
+  // ── Search/Mark navigation (MUST be before generic "search") ──
+  { pattern: /\b(next|previous|prev)\s*(event|mark|search)/i, groups: ['Search and Mark'], intent: 'search', subject: 'search_navigate' },
+  { pattern: /\bmark\s*(next|previous|prev|create|add|delete)/i, groups: ['Search and Mark'], intent: 'search', subject: 'search_navigate' },
+  { pattern: /\bnavigate\b.*\b(search|mark|event)/i, groups: ['Search and Mark'], intent: 'search', subject: 'search_navigate' },
+
   // ── Acquisition averaging (MUST be before "mean"/"average" matches measurement) ──
   { pattern: /\b(average|averaging)\s*(mode|acq|acquisition|\d+\s*sample)/i, groups: ['Acquisition'], intent: 'acquisition', subject: 'averaging' },
   { pattern: /\b(acq|acquisition)\s*(average|averaging)/i, groups: ['Acquisition'], intent: 'acquisition', subject: 'averaging' },

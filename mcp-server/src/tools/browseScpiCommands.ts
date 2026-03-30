@@ -122,6 +122,7 @@ export async function browseScpiCommands(input: BrowseScpiInput): Promise<ToolRe
       const entry = index.getByHeader(h, input.modelFamily);
       return {
         header: h,
+        commandId: entry?.commandId || h,
         commandType: entry?.commandType || 'unknown',
         shortDescription: entry?.shortDescription || '',
       };
