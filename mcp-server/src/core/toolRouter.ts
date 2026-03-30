@@ -920,6 +920,7 @@ export const TEK_ROUTER_TOOL_DEFINITION = {
     'BROWSE+FILTER:    {"action":"search_exec","query":"browse scpi commands","args":{"group":"Measurement","filter":"jitter"}}\n' +
     'VERIFY:           {"action":"search_exec","query":"verify scpi commands","args":{"commands":["CH1:SCAle 1.0"]}}\n' +
     'BUILD WORKFLOW:   {"action":"build","query":"set up jitter measurement on CH1"}\n' +
+    'SAVE/LEARN:       {"action":"create","toolName":"Edge Trigger Setup","toolDescription":"Configure edge trigger","toolTriggers":["edge trigger","set trigger"],"toolCategory":"shortcut","toolSteps":[{"tool":"send_scpi","args":{"commands":["TRIGger:A:TYPe EDGE"]}}]}\n' +
     'LIST GROUPS:      {"action":"search_exec","query":"list command groups","args":{}}\n' +
     'MATERIALIZE:      {"action":"search_exec","query":"materialize scpi command","args":{"header":"CH<x>:SCAle","commandType":"set","value":"1.0","placeholderBindings":{"CH<x>":"CH1"}}}\n\n' +
 
