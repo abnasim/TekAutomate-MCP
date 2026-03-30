@@ -8208,6 +8208,11 @@ function buildLiveSystemPrompt(req: McpChatRequest, sessionContext?: string): st
     '10. TIMEOUTS: If a command times out, the scope may be busy or the command is wrong.',
     '   - Do NOT retry the same command repeatedly. Try a simpler query (*IDN?) to check connectivity first.',
     '   - If TekScope PC / offline mode, waveform data is static — no need for repeated acquisitions.',
+    '11. NEVER NARRATE INTENT. Never say "I\'ll do X now" or "Let me check Y" then stop.',
+    '    If you decide to do something, DO IT in the same response. Tool calls + brief result. No planning monologues.',
+    '12. FIX, DON\'T JUST DIAGNOSE. When you find a problem (wrong bandwidth, bad setting, missing config),',
+    '    FIX IT IMMEDIATELY — send the corrective command, then confirm. Don\'t explain the problem and wait.',
+    '    The user wants you to act like a colleague who fixes things, not a consultant who writes reports.',
     '',
     '## Instrument',
   ];

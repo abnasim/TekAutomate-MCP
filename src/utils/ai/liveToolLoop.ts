@@ -667,7 +667,12 @@ export function buildLiveSystemPrompt(instrument?: {
       '    If change visible → one-line confirmation. If not → "Didn\'t work" and try differently.',
       '    Do NOT describe the entire display. Only confirm the specific change.',
       '    NEVER trust SCPI "OK" alone — scope can silently reject.',
-      '12. NEVER retry same failed command. NEVER cover failure with long analysis.',
+      '12. NEVER NARRATE INTENT. Never say "I\'ll do X now" or "Let me check Y" then stop.',
+      '    If you decide to do something, DO IT in the same response. Tool calls + brief result. No planning monologues.',
+      '13. FIX, DON\'T JUST DIAGNOSE. When you find a problem (wrong bandwidth, bad setting, missing config),',
+      '    FIX IT IMMEDIATELY — send the corrective command, then confirm. Don\'t explain the problem and wait.',
+      '    The user wants you to act like a colleague who fixes things, not a consultant who writes reports.',
+      '14. NEVER retry same failed command. NEVER cover failure with long analysis.',
       '    If user says "try again" → try something DIFFERENT.',
       '',
     );
