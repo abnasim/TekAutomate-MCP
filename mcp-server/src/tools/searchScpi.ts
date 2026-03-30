@@ -314,6 +314,32 @@ function reRankWithIntent(
       }
     }
 
+    // plot → PLOT:* commands, not measurement jitter
+    if (intent.subject === 'plot') {
+      if (headerLower.startsWith('plot:')) {
+        score += 60;
+      } else {
+        score -= 30;
+      }
+    }
+    // waveform_preamble → WFMOutpre:* commands
+    if (intent.subject === 'waveform_preamble') {
+      if (headerLower.startsWith('wfmoutpre')) {
+        score += 80;
+      } else {
+        score -= 40;
+      }
+    }
+    // trigger_sequence → TRIGger:B:BY/TIMe, not Ethernet TCP SEQnum
+    if (intent.subject === 'trigger_sequence') {
+      if (headerLower.includes('trigger:b:') || headerLower.includes('trigger:{a|b}')) {
+        score += 40;
+      }
+      if (headerLower.includes('ethernet') || headerLower.includes('tcp') || headerLower.includes('seq')) {
+        score -= 50;
+      }
+    }
+
     // channel_on/off → DISplay:GLObal:CH<x>:STATE, not IF output
     if (intent.subject === 'channel_on' || intent.subject === 'channel_off') {
       if (headerLower.includes('display:global') || headerLower.includes('ch<x>:state')) {
@@ -454,6 +480,8 @@ export async function searchScpi(input: SearchScpiInput): Promise<ToolResult<unk
     { pattern: /\bbadge\b.*\bstat/i, expand: 'DISPlaystat ENABle measurement badge statistics' },
     { pattern: /\bstat.*\bbadge/i, expand: 'DISPlaystat ENABle measurement badge statistics' },
     { pattern: /\bbadge/i, expand: 'DISPlaystat badge measurement display' },
+    { pattern: /\bpreamble/i, expand: 'WFMOutpre preamble waveform transfer encoding' },
+    { pattern: /\bsequence\b.*\btrigger|trigger\b.*\bsequence/i, expand: 'TRIGger:B:BY trigger sequence A B delayed' },
   ];
   let expandedQuery = q;
   for (const { pattern, expand } of QUERY_EXPANSIONS) {
@@ -570,6 +598,18 @@ export async function searchScpi(input: SearchScpiInput): Promise<ToolResult<unk
     ],
     screenshot: [
       'SAVe:IMAGe', 'SAVe:IMAGe:FILEFormat',
+    ],
+    plot: [
+      'PLOT:PLOT<x>:SOUrce<x>', 'PLOT:PLOT<x>:TYPe', 'PLOT:ADDNew', 'PLOT:DELEte',
+    ],
+    waveform_preamble: [
+      'WFMOutpre:ENCdg', 'WFMOutpre:BYT_Nr', 'WFMOutpre:BIT_Nr',
+      'WFMOutpre:XINcr', 'WFMOutpre:XZEro', 'WFMOutpre:YMUlt',
+      'WFMOutpre:YOFf', 'WFMOutpre:YZEro',
+    ],
+    trigger_sequence: [
+      'TRIGger:B:BY', 'TRIGger:B:TIMe', 'TRIGger:B:STATE',
+      'TRIGger:B:EDGE:SOUrce', 'TRIGger:B:EDGE:SLOpe',
     ],
     channel_on: [
       'DISplay:GLObal:CH<x>:STATE', 'CH<x>:STATE',

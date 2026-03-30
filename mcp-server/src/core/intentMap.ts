@@ -77,6 +77,19 @@ const SUBJECT_GROUP_MAP: Array<{
   // ── Zone/Visual trigger (MUST be before measurement patterns — "area" matches measurement) ──
   { pattern: /\b(zone\s*trigger|trigger\s*zone|trigger\s*area|enter\s*area|exit\s*area|visual\s*trigger|trigger\s*visual)\b/i, groups: ['Trigger', 'Display'], intent: 'trigger', subject: 'zone_trigger' },
 
+  // ── Plot (MUST be before "jitter"/"spectrum" matches measurement) ──
+  { pattern: /\bplot\s*(jitter|spectrum|source|trend|xy|histogram)/i, groups: ['Plot'], intent: 'display', subject: 'plot' },
+  { pattern: /\b(jitter|spectrum|trend)\s*plot/i, groups: ['Plot'], intent: 'display', subject: 'plot' },
+
+  // ── Waveform preamble / WFMOutpre (no SCPI keyword overlap) ──
+  { pattern: /\bpreamble/i, groups: ['Waveform Transfer'], intent: 'waveform', subject: 'waveform_preamble' },
+  { pattern: /\bwfmoutpre/i, groups: ['Waveform Transfer'], intent: 'waveform', subject: 'waveform_preamble' },
+
+  // ── Trigger A then B sequence (before generic trigger) ──
+  { pattern: /\btrigger\s*a\s*(then|and)\s*b/i, groups: ['Trigger'], intent: 'trigger', subject: 'trigger_sequence' },
+  { pattern: /\bsequence\s*trigger|trigger\s*sequence/i, groups: ['Trigger'], intent: 'trigger', subject: 'trigger_sequence' },
+  { pattern: /\ba\s*then\s*b\s*trigger/i, groups: ['Trigger'], intent: 'trigger', subject: 'trigger_sequence' },
+
   // ── DVM — before "RMS"/"AC"/"DC" match measurement ──
   { pattern: /\bDVM\b/i, groups: ['DVM'], intent: 'dvm', subject: 'dvm' },
 
