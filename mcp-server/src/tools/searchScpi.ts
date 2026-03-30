@@ -307,6 +307,13 @@ function reRankWithIntent(
       }
     }
 
+    // statistics + "badge" in query → DISPlaystat commands
+    if (intent.subject === 'statistics' && /badge/i.test(queryLower)) {
+      if (headerLower.includes('displaystat')) {
+        score += 40;
+      }
+    }
+
     // bus intent → prefer TRIGger:A:BUS over SEARCH:SEARCH<x>:TRIGger:A:BUS
     if (intent.intent === 'bus') {
       if (headerLower.startsWith('trigger:') || headerLower.startsWith('trigger:{')) {
@@ -388,6 +395,9 @@ export async function searchScpi(input: SearchScpiInput): Promise<ToolResult<unk
     { pattern: /\barinc\s*429/i, expand: 'ARINC429A arinc bus' },
     { pattern: /\bmil.?std.?1553|mil.?1553/i, expand: 'MIL1553B mil bus' },
     { pattern: /\bstandard\s*dev/i, expand: 'STATIstics statistics STDDev measurement' },
+    { pattern: /\bbadge\b.*\bstat/i, expand: 'DISPlaystat ENABle measurement badge statistics' },
+    { pattern: /\bstat.*\bbadge/i, expand: 'DISPlaystat ENABle measurement badge statistics' },
+    { pattern: /\bbadge/i, expand: 'DISPlaystat badge measurement display' },
   ];
   let expandedQuery = q;
   for (const { pattern, expand } of QUERY_EXPANSIONS) {
@@ -468,6 +478,10 @@ export async function searchScpi(input: SearchScpiInput): Promise<ToolResult<unk
     cphy: [
       'BUS:B<x>:CPHY:A:SOUrce', 'BUS:B<x>:CPHY:A:THRESHold',
       'BUS:B<x>:CPHY:SUBTYPe',
+    ],
+    statistics: [
+      'MEASUrement:MEAS<x>:DISPlaystat:ENABle', 'MEASUrement:STATIstics:CYCLEMode',
+      'MEASUrement:STATIstics:COUNt', 'MEASUrement:STATIstics:MODe',
     ],
     rise_time: [
       'MEASUrement:ADDMEAS', 'MEASUrement:MEAS<x>:TYPe',
