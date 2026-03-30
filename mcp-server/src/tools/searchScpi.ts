@@ -296,25 +296,37 @@ export async function searchScpi(input: SearchScpiInput): Promise<ToolResult<unk
   const merged: CommandRecord[] = [];
   const seen = new Set<string>();
 
-  // ── Direct injection for intents where BM25 fails ──
-  // Zone trigger: BM25 can't find VISual:* because "zone" has no SCPI keyword overlap.
-  // Inject the key VISual commands directly so the re-ranker can boost them.
-  const intent = classifyIntent(q);
-  if (intent.subject === 'zone_trigger') {
-    const visualHeaders = [
+  // ── Intent-based header injection ──
+  // When BM25 can't find the right commands (no keyword overlap between
+  // natural language and SCPI headers), inject known headers directly.
+  // This is extensible — add entries as you discover gaps.
+  const INTENT_HEADER_INJECTIONS: Record<string, string[]> = {
+    zone_trigger: [
       'VISual:ENABLE', 'VISual:AREA<x>:SHAPE', 'VISual:AREA<x>:SOUrce',
       'VISual:AREA<x>:HITType', 'VISual:AREA<x>:HEIGht', 'VISual:AREA<x>:VERTICES',
-      'VISual:AREA<x>:RESET', 'VISual:AREA<x>:ROTAtion', 'VISual:AREA<x>:ASPEctratio',
-      'VISual:AREA<x>:FLIP:HORizontal', 'VISual:AREA<x>:FLIP:VERTical',
-    ];
-    for (const h of visualHeaders) {
-      const entry = index.getByHeader(h, input.modelFamily);
-      if (entry) {
-        const key = `${entry.sourceFile}:${entry.commandId}`;
-        if (!seen.has(key)) {
-          seen.add(key);
-          merged.push(entry);
-        }
+      'VISual:AREA<x>:RESET', 'VISual:AREA<x>:ROTAtion',
+    ],
+    trigger_level: [
+      'TRIGger:{A|B}:LEVel:CH<x>', 'TRIGger:A:LEVel:CH<x>',
+    ],
+    screenshot: [
+      'SAVe:IMAGe', 'SAVe:IMAGe:FILEFormat',
+    ],
+    fastframe: [
+      'HORizontal:FASTframe:STATE', 'HORizontal:FASTframe:COUNt',
+      'HORizontal:FASTframe:MAXFRames', 'HORizontal:FASTframe:SELECTED',
+    ],
+  };
+
+  const intent = classifyIntent(q);
+  const injectionHeaders = INTENT_HEADER_INJECTIONS[intent.subject] || [];
+  for (const h of injectionHeaders) {
+    const entry = index.getByHeader(h, input.modelFamily);
+    if (entry) {
+      const key = `${entry.sourceFile}:${entry.commandId}`;
+      if (!seen.has(key)) {
+        seen.add(key);
+        merged.push(entry);
       }
     }
   }
@@ -329,12 +341,16 @@ export async function searchScpi(input: SearchScpiInput): Promise<ToolResult<unk
   // Re-rank using intent classification and group-aware scoring
   let reRanked = reRankWithIntent(merged, q);
 
-  // For certain intents, force injected commands to the top regardless of BM25 score.
-  // BM25 scores can be so high for noisy matches that additive boosts can't overcome them.
-  if (intent.subject === 'zone_trigger') {
-    const visual = reRanked.filter(c => c.header.toLowerCase().startsWith('visual'));
-    const rest = reRanked.filter(c => !c.header.toLowerCase().startsWith('visual'));
-    reRanked = [...visual, ...rest];
+  // For intents with injected headers, force them to the top.
+  // BM25 scores can be so high that additive boosts can't overcome them.
+  if (injectionHeaders.length > 0) {
+    const injectedSet = new Set(injectionHeaders.map(h => h.toLowerCase()));
+    const isInjected = (cmd: CommandRecord) =>
+      injectedSet.has(cmd.header.toLowerCase()) ||
+      injectionHeaders.some(h => cmd.header.toLowerCase().startsWith(h.toLowerCase().split('<')[0]));
+    const top = reRanked.filter(isInjected);
+    const rest = reRanked.filter(c => !isInjected(c));
+    reRanked = [...top, ...rest];
   }
 
   const final = reRanked.slice(0, limit);
@@ -348,5 +364,12 @@ export async function searchScpi(input: SearchScpiInput): Promise<ToolResult<unk
       section: e.group,
     })),
     warnings: final.length ? [] : ['No commands matched query'],
-  };
+    debug: {
+      intent: intent.intent,
+      subject: intent.subject,
+      groups: intent.groups,
+      injected: injectionHeaders.length,
+      expanded: expandedQuery !== q,
+    },
+  } as ToolResult<unknown[]>;
 }
