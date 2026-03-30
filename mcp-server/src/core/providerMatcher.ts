@@ -1,7 +1,7 @@
 import type { ProviderSupplementEntry, ProviderSupplementKind } from './providerCatalog';
 
-const MIN_HINT_SCORE = 0.2;    // Very low to catch more variations
-const MIN_OVERRIDE_SCORE = 0.4; // Much lower for template execution
+const MIN_HINT_SCORE = 0.2;    // Low to catch more variations for hints
+const MIN_OVERRIDE_SCORE = 0.7; // Must be high confidence to override the planner — 0.4 was too low, single-keyword matches at 0.49 were hijacking multi-intent queries
 const STOP_WORDS = new Set([
   'a',
   'an',

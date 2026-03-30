@@ -11,10 +11,10 @@ interface SearchScpiInput {
   commandType?: CommandType;
 }
 
-// ── Group-aware penalty ──────────────────────────────────────────────
-// Penalize commands from groups that don't match the query's intent.
-// Fixes POWer:ADDNew showing up for "edge trigger level", "FastFrame", etc.
-const GROUP_PENALTY_MAP: Record<string, Set<string>> = {
+// ── Group affinity map ───────────────────────────────────────────────
+// Maps intent → groups that SHOULD appear in results.
+// Everything else gets penalized.
+const GROUP_AFFINITY: Record<string, Set<string>> = {
   trigger: new Set(['Trigger']),
   measurement: new Set(['Measurement']),
   power: new Set(['Power', 'Digital Power Management']),
@@ -36,9 +36,16 @@ const GROUP_PENALTY_MAP: Record<string, Set<string>> = {
   status: new Set(['Status and Error', 'Miscellaneous']),
 };
 
-const STRONGLY_PENALIZED_GROUPS = new Set([
+// Groups that should NEVER appear for non-matching intents
+const HARD_PENALIZED_GROUPS = new Set([
   'Power', 'Digital Power Management', 'Inverter Motors and Drive Analysis',
   'Wide Band Gap Analysis (WBG)', 'AFG',
+]);
+
+// Groups that are noisy — they contain "trigger" or "search" keywords
+// but are NOT the primary Trigger or Search group
+const NOISY_GROUPS_FOR_TRIGGER = new Set([
+  'Search and Mark', 'Bus',
 ]);
 
 function headerCandidates(raw: string): string[] {
@@ -64,6 +71,18 @@ function headerCandidates(raw: string): string[] {
 /**
  * Re-rank search results using intent classification and group-aware scoring.
  * Uses the same classifyIntent() as smart_scpi_lookup so both paths converge.
+ *
+ * The key insight: BM25 returns commands that mention query keywords anywhere
+ * (header, description, tags). But "edge trigger level" should return
+ * TRIGger:A:EDGE:LEVel, not SEARCH:SEARCH<x>:TRIGger:A:BUS:CPHY:...
+ * even though both mention "trigger" in their header.
+ *
+ * We fix this by:
+ * 1. Boosting commands in the correct group (+25)
+ * 2. Hard-penalizing commands from wrong specialty groups (-60)
+ * 3. Penalizing noisy cross-group matches (-30 for Search/Bus when intent is Trigger)
+ * 4. Boosting header TOKEN matches (not just substring) for query words
+ * 5. Penalizing deeply nested headers (SEARCH:SEARCH<x>:TRIGger:A:BUS:CPHY:... is 8 tokens deep)
  */
 function reRankWithIntent(
   results: CommandRecord[],
@@ -72,44 +91,61 @@ function reRankWithIntent(
   if (results.length <= 1) return results;
 
   const intent = classifyIntent(query);
-  const intentGroups = GROUP_PENALTY_MAP[intent.intent];
+  const affinityGroups = GROUP_AFFINITY[intent.intent];
   const queryLower = query.toLowerCase();
   const wantsPower = /\b(power|wbg|dpm|switching|inductance|magnetic|efficiency|harmonics|soa)\b/i.test(queryLower);
+
+  // Split query into meaningful words for token matching
+  const queryWords = queryLower.split(/\s+/).filter(w => w.length > 2);
+  const subjectWords = intent.subject.split(/[_\s]+/).filter(w => w.length > 1);
 
   const scored = results.map((cmd) => {
     let score = 0;
     const cmdGroup = cmd.group || '';
+    const headerLower = cmd.header.toLowerCase();
+    const headerTokens = headerLower.replace(/[{}<>?|]/g, '').split(/[:\s]+/).filter(Boolean);
 
-    // Group affinity boost/penalty
-    if (intentGroups) {
-      if (intentGroups.has(cmdGroup)) {
-        score += 20;
-      } else if (STRONGLY_PENALIZED_GROUPS.has(cmdGroup) && !wantsPower) {
-        score -= 50;
+    // ── 1. Group affinity ──
+    if (affinityGroups) {
+      if (affinityGroups.has(cmdGroup)) {
+        score += 25;  // Right group
+      } else if (HARD_PENALIZED_GROUPS.has(cmdGroup) && !wantsPower) {
+        score -= 60;  // Specialty group, definitely wrong
+      } else if (intent.intent === 'trigger' && NOISY_GROUPS_FOR_TRIGGER.has(cmdGroup)) {
+        score -= 30;  // Search/Bus commands with "trigger" in path — noisy
       } else {
-        score -= 10;
+        score -= 15;  // Wrong group, mild penalty
       }
     }
 
-    // Header keyword matching
-    const headerLower = cmd.header.toLowerCase();
-    const queryWords = queryLower.split(/\s+/).filter(w => w.length > 2);
+    // ── 2. Header TOKEN matching (not just substring) ──
+    // "edge" matching "EDGE" as a token in TRIGger:A:EDGE:SLOpe (+10)
+    // vs "edge" as substring in some description (+0)
     for (const word of queryWords) {
-      if (headerLower.includes(word)) score += 8;
+      if (headerTokens.some(t => t === word || t.startsWith(word) || word.startsWith(t))) {
+        score += 10;  // Direct header token match
+      }
     }
-
-    // Subject matching
-    const subjectWords = intent.subject.split(/[_\s]+/).filter(w => w.length > 1);
     for (const word of subjectWords) {
-      if (headerLower.includes(word.toLowerCase())) score += 12;
+      const wordLower = word.toLowerCase();
+      if (headerTokens.some(t => t === wordLower || t.startsWith(wordLower) || wordLower.startsWith(t))) {
+        score += 15;  // Subject token match (higher weight)
+      }
     }
 
-    // Exact SCPI-style match boost
+    // ── 3. Header depth penalty ──
+    // Short headers like TRIGger:A:EDGE:LEVel (4 tokens) are more likely what the user wants
+    // than SEARCH:SEARCH<x>:TRIGger:A:BUS:CPHY:DATa:VALue (8 tokens)
+    if (headerTokens.length > 6) {
+      score -= (headerTokens.length - 6) * 3;  // -3 per extra token beyond 6
+    }
+
+    // ── 4. Exact SCPI-style match boost ──
     if (queryLower.includes(':') && headerLower.includes(queryLower.replace(/\?$/, ''))) {
       score += 50;
     }
 
-    // POWer:ADDNew specific penalty for non-power queries
+    // ── 5. POWer:ADDNew specific penalty ──
     if (headerLower === 'power:addnew' && !wantsPower) {
       score -= 40;
     }
@@ -131,7 +167,7 @@ export async function searchScpi(input: SearchScpiInput): Promise<ToolResult<unk
   const measurementPlan = buildMeasurementSearchPlan(q);
 
   // Fetch more candidates than needed so re-ranking has room to work
-  const fetchLimit = Math.max(limit * 3, 20);
+  const fetchLimit = Math.max(limit * 4, 30);
   const searchEntries = index.searchByQuery(q, input.modelFamily, fetchLimit, input.commandType);
 
   const headerLike = q.includes(':') || q.startsWith('*');
