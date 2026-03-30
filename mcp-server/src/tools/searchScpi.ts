@@ -119,32 +119,30 @@ function reRankWithIntent(
     }
 
     // ── 2. Header TOKEN matching (not just substring) ──
-    // "edge" matching "EDGE" as a token in TRIGger:A:EDGE:SLOpe (+10)
-    // vs "edge" as substring in some description (+0)
+    // Count how many query words match header tokens. More matches = better fit.
+    let tokenMatchCount = 0;
     for (const word of queryWords) {
       if (headerTokens.some(t => t === word || t.startsWith(word) || word.startsWith(t))) {
-        score += 10;  // Direct header token match
+        score += 10;
+        tokenMatchCount++;
       }
     }
     for (const word of subjectWords) {
       const wordLower = word.toLowerCase();
       if (headerTokens.some(t => t === wordLower || t.startsWith(wordLower) || wordLower.startsWith(t))) {
-        score += 15;  // Subject token match (higher weight)
+        score += 15;
+        tokenMatchCount++;
       }
     }
+    // Bonus for matching MULTIPLE query words in the header (compound match)
+    if (tokenMatchCount >= 3) score += 10;
+    if (tokenMatchCount >= 2) score += 5;
 
     // ── 3. Header depth/simplicity preference ──
     // Shorter headers are usually the primary command, longer ones are sub-settings.
-    // "SAVe:WAVEform" (2 tokens) should rank above "SAVe:WAVEform:DATa:STARt" (4 tokens)
-    // "HORizontal:FASTframe:STATE" (3 tokens) above "HORizontal:FASTframe:COUNt" (3 tokens) — equal
-    // "TRIGger:A:LEVel" (3 tokens) above "TRIGger:B:RESET:EDGE:LEVel" (5 tokens)
-    if (headerTokens.length <= 3) {
-      score += 8;   // Short/primary command bonus
-    } else if (headerTokens.length <= 5) {
-      score += 0;   // Normal
-    } else {
-      score -= (headerTokens.length - 5) * 3;  // Deep nesting penalty
-    }
+    // Graduated bonus: fewer tokens = more likely to be the main command.
+    const tokenBonus = Math.max(0, 12 - headerTokens.length * 2);  // 2 tokens=+8, 3=+6, 4=+4, 5=+2, 6+=0
+    score += tokenBonus;
 
     // ── 4. Prefer TRIGger:A over TRIGger:B and RESET variants ──
     // TRIGger:A is the primary trigger, TRIGger:B is secondary, RESET is a sub-variant
