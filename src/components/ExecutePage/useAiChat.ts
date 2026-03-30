@@ -813,6 +813,22 @@ export function useAiChat(params: {
           instrumentEndpoint: params.instrumentEndpoint ?? undefined,
           flowContext: { modelFamily, deviceDriver },
           maxIterations: 12,
+          onToolResult: (name, result) => {
+            // Push screenshots to UI in real-time as they happen during the AI loop
+            if (name === 'capture_screenshot' && params.onLiveScreenshot && result && typeof result === 'object') {
+              const r = result as Record<string, unknown>;
+              const base64 = r.base64 as string | undefined;
+              const mimeType = (r.mimeType as string) || 'image/png';
+              if (base64 && base64.length > 100) {
+                params.onLiveScreenshot({
+                  dataUrl: `data:${mimeType};base64,${base64}`,
+                  mimeType,
+                  sizeBytes: Math.round(base64.length * 0.75),
+                  capturedAt: (r.capturedAt as string) || new Date().toISOString(),
+                });
+              }
+            }
+          },
         });
 
         if (result.error) {
