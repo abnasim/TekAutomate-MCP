@@ -128,6 +128,38 @@
     "createdAt": 1711684800000
   },
   {
+    "id": "shortcut:edge_trigger_setup",
+    "name": "Edge Trigger Setup",
+    "description": "Configure edge trigger on a Tektronix scope. Key commands: TRIGger:A:TYPe EDGE, TRIGger:A:EDGE:SOUrce CH<x>, TRIGger:A:EDGE:SLOpe {RISe|FALL|EITher}, TRIGger:A:LEVel:CH<x> <voltage>. Use TRIGger:A (primary) not TRIGger:B (secondary).",
+    "triggers": ["edge trigger", "trigger level", "trigger slope", "trigger source", "set trigger", "edge trigger level", "rising edge trigger", "falling edge trigger", "trigger edge", "configure trigger"],
+    "tags": ["trigger", "edge", "level", "slope", "source", "rising", "falling"],
+    "category": "shortcut",
+    "steps": [
+      {
+        "tool": "send_scpi",
+        "args": {"commands": ["TRIGger:A:TYPe EDGE", "TRIGger:A:EDGE:SOUrce CH1", "TRIGger:A:EDGE:SLOpe RISe", "TRIGger:A:LEVel:CH1 0"]},
+        "description": "Set edge trigger: type=EDGE, source=CH1, slope=RISE, level=0V. Adjust source/slope/level as needed."
+      }
+    ],
+    "createdAt": 1711684800000
+  },
+  {
+    "id": "shortcut:zone_trigger",
+    "name": "Zone Trigger (Visual Trigger)",
+    "description": "Configure visual/zone trigger on a Tektronix scope. Zone trigger defines a rectangular area on the display — the scope triggers when the waveform enters or exits the zone. Key commands: VISual:ENABLE ON, VISual:AREA<x>:SHAPE RECTangle, VISual:AREA<x>:SOUrce CH<x>, VISual:AREA<x>:YAXis:MAX/MIN, VISual:AREA<x>:XAXis:MAX/MIN, VISual:AREA<x>:LOGICSTATE {IN|OUT}.",
+    "triggers": ["zone trigger", "visual trigger", "trigger zone", "trigger area", "enter area", "exit area", "zone trigger enter", "zone trigger exit", "rectangular trigger"],
+    "tags": ["trigger", "zone", "visual", "area", "rectangle", "enter", "exit"],
+    "category": "shortcut",
+    "steps": [
+      {
+        "tool": "send_scpi",
+        "args": {"commands": ["VISual:ENABLE ON", "VISual:AREA1:SHAPE RECTangle", "VISual:AREA1:SOUrce CH1", "VISual:AREA1:LOGICSTATE IN"]},
+        "description": "Enable visual/zone trigger with rectangular area on CH1, trigger when signal enters the zone. Adjust area bounds with XAXis:MAX/MIN and YAXis:MAX/MIN."
+      }
+    ],
+    "createdAt": 1711684800000
+  },
+  {
     "id": "shortcut:add_arrow_callout",
     "name": "Add Arrow Callout",
     "description": "Add an arrow-style callout annotation pointing at a specific location on the scope display. Use TYPe ARROW (not NOTE). Arrow callouts have a leader line. NOTE is just floating text. Steps: ADDNew → TYPe ARROW → TEXT → DISPLAYPOSition X/Y.",

@@ -51,6 +51,9 @@ const SUBJECT_GROUP_MAP: Array<{
   { pattern: /\bself\s*test\b/i, groups: ['Miscellaneous'], intent: 'misc', subject: 'tst' },
   { pattern: /\bevent\s*status\s*register\b/i, groups: ['Status and Error'], intent: 'status', subject: 'esr' },
 
+  // ── Zone/Visual trigger (MUST be before measurement patterns — "area" matches measurement) ──
+  { pattern: /\b(zone\s*trigger|trigger\s*zone|trigger\s*area|enter\s*area|exit\s*area|visual\s*trigger|trigger\s*visual)\b/i, groups: ['Trigger', 'Display'], intent: 'trigger', subject: 'zone_trigger' },
+
   // ── Trigger source/channel patterns (before generic channel match) ──
   { pattern: /\btrigger\b.*\bsource\b/i, groups: ['Trigger'], intent: 'trigger', subject: 'trigger_source' },
   { pattern: /\bsource\b.*\btrigger\b/i, groups: ['Trigger'], intent: 'trigger', subject: 'trigger_source' },
@@ -180,7 +183,15 @@ const SUBJECT_GROUP_MAP: Array<{
   { pattern: /\b(probe\s*attenuation|probe\s*atten)\b/i, groups: ['Vertical'], intent: 'vertical', subject: 'probe_atten' },
   { pattern: /\b(vernier|fine\s*scale)\b/i, groups: ['Vertical'], intent: 'vertical', subject: 'vernier' },
 
-  // ── Trigger types ──
+  // ── Trigger types (COMPOUND patterns first — more specific wins) ──
+  // "edge trigger level" must match trigger_level, not edge
+  { pattern: /\bedge\s*trigger\s*level\b/i, groups: ['Trigger'], intent: 'trigger', subject: 'trigger_level' },
+  { pattern: /\btrigger\s*edge\s*level\b/i, groups: ['Trigger'], intent: 'trigger', subject: 'trigger_level' },
+  { pattern: /\b(trigger\s*level|level\s*trigger)\b/i, groups: ['Trigger'], intent: 'trigger', subject: 'trigger_level' },
+  { pattern: /\b(trigger\s*slope|slope\s*trigger)\b/i, groups: ['Trigger'], intent: 'trigger', subject: 'trigger_slope' },
+  { pattern: /\b(trigger\s*holdoff|holdoff\s*trigger)\b/i, groups: ['Trigger'], intent: 'trigger', subject: 'trigger_holdoff' },
+  { pattern: /\b(trigger\s*mode|mode\s*trigger)\b/i, groups: ['Trigger'], intent: 'trigger', subject: 'trigger_mode' },
+  // Standard trigger types
   { pattern: /\b(edge\s*trigger|trigger\s*edge|set\s*trigger\s*to\s*edge)\b/i, groups: ['Trigger'], intent: 'trigger', subject: 'edge' },
   { pattern: /\btrigger\b.*\b(rising|falling)\b/i, groups: ['Trigger'], intent: 'trigger', subject: 'edge' },
   { pattern: /\b(rising|falling)\b.*\btrigger\b/i, groups: ['Trigger'], intent: 'trigger', subject: 'edge' },
@@ -191,11 +202,7 @@ const SUBJECT_GROUP_MAP: Array<{
   { pattern: /\b(video\s*trigger|trigger\s*video)\b/i, groups: ['Trigger'], intent: 'trigger', subject: 'video' },
   { pattern: /\b(window\s*trigger|trigger\s*window)\b/i, groups: ['Trigger'], intent: 'trigger', subject: 'window' },
   { pattern: /\b(bus\s*trigger|trigger\s*bus|trigger.*protocol)\b/i, groups: ['Trigger', 'Bus'], intent: 'trigger', subject: 'bus_trigger' },
-  { pattern: /\b(trigger\s*level)\b/i, groups: ['Trigger'], intent: 'trigger', subject: 'trigger_level' },
-  { pattern: /\b(trigger\s*slope)\b/i, groups: ['Trigger'], intent: 'trigger', subject: 'trigger_slope' },
-  { pattern: /\b(trigger\s*holdoff)\b/i, groups: ['Trigger'], intent: 'trigger', subject: 'trigger_holdoff' },
-  { pattern: /\b(trigger\s*mode)\b/i, groups: ['Trigger'], intent: 'trigger', subject: 'trigger_mode' },
-  { pattern: /\b(trigger|trig|holdoff|level)\b/i, groups: ['Trigger'], intent: 'trigger', subject: 'trigger' },
+  { pattern: /\b(trigger|trig|holdoff)\b/i, groups: ['Trigger'], intent: 'trigger', subject: 'trigger' },
   { pattern: /\b(slope|edge)\b/i, groups: ['Trigger'], intent: 'trigger', subject: 'edge' },
 
   // ── Acquisition ──

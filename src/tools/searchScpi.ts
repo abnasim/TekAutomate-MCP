@@ -11,10 +11,10 @@ interface SearchScpiInput {
   commandType?: CommandType;
 }
 
-// ── Group-aware penalty ──────────────────────────────────────────────
-// Penalize commands from groups that don't match the query's intent.
-// Fixes POWer:ADDNew showing up for "edge trigger level", "FastFrame", etc.
-const GROUP_PENALTY_MAP: Record<string, Set<string>> = {
+// ── Group affinity map ───────────────────────────────────────────────
+// Maps intent → groups that SHOULD appear in results.
+// Everything else gets penalized.
+const GROUP_AFFINITY: Record<string, Set<string>> = {
   trigger: new Set(['Trigger']),
   measurement: new Set(['Measurement']),
   power: new Set(['Power', 'Digital Power Management']),
@@ -36,9 +36,16 @@ const GROUP_PENALTY_MAP: Record<string, Set<string>> = {
   status: new Set(['Status and Error', 'Miscellaneous']),
 };
 
-const STRONGLY_PENALIZED_GROUPS = new Set([
+// Groups that should NEVER appear for non-matching intents
+const HARD_PENALIZED_GROUPS = new Set([
   'Power', 'Digital Power Management', 'Inverter Motors and Drive Analysis',
   'Wide Band Gap Analysis (WBG)', 'AFG',
+]);
+
+// Groups that are noisy — they contain "trigger" or "search" keywords
+// but are NOT the primary Trigger or Search group
+const NOISY_GROUPS_FOR_TRIGGER = new Set([
+  'Search and Mark', 'Bus',
 ]);
 
 function headerCandidates(raw: string): string[] {
@@ -64,6 +71,18 @@ function headerCandidates(raw: string): string[] {
 /**
  * Re-rank search results using intent classification and group-aware scoring.
  * Uses the same classifyIntent() as smart_scpi_lookup so both paths converge.
+ *
+ * The key insight: BM25 returns commands that mention query keywords anywhere
+ * (header, description, tags). But "edge trigger level" should return
+ * TRIGger:A:EDGE:LEVel, not SEARCH:SEARCH<x>:TRIGger:A:BUS:CPHY:...
+ * even though both mention "trigger" in their header.
+ *
+ * We fix this by:
+ * 1. Boosting commands in the correct group (+25)
+ * 2. Hard-penalizing commands from wrong specialty groups (-60)
+ * 3. Penalizing noisy cross-group matches (-30 for Search/Bus when intent is Trigger)
+ * 4. Boosting header TOKEN matches (not just substring) for query words
+ * 5. Penalizing deeply nested headers (SEARCH:SEARCH<x>:TRIGger:A:BUS:CPHY:... is 8 tokens deep)
  */
 function reRankWithIntent(
   results: CommandRecord[],
@@ -72,44 +91,143 @@ function reRankWithIntent(
   if (results.length <= 1) return results;
 
   const intent = classifyIntent(query);
-  const intentGroups = GROUP_PENALTY_MAP[intent.intent];
+  const affinityGroups = GROUP_AFFINITY[intent.intent];
   const queryLower = query.toLowerCase();
   const wantsPower = /\b(power|wbg|dpm|switching|inductance|magnetic|efficiency|harmonics|soa)\b/i.test(queryLower);
+
+  // Split query into meaningful words for token matching
+  const queryWords = queryLower.split(/\s+/).filter(w => w.length > 2);
+  const subjectWords = intent.subject.split(/[_\s]+/).filter(w => w.length > 1);
 
   const scored = results.map((cmd) => {
     let score = 0;
     const cmdGroup = cmd.group || '';
+    const headerLower = cmd.header.toLowerCase();
+    // Keep original-case tokens for SCPI mnemonic matching
+    const headerTokensRaw = cmd.header.replace(/[{}<>?|]/g, '').split(/[:\s]+/).filter(Boolean);
+    const headerTokens = headerTokensRaw.map(t => t.toLowerCase());
 
-    // Group affinity boost/penalty
-    if (intentGroups) {
-      if (intentGroups.has(cmdGroup)) {
-        score += 20;
-      } else if (STRONGLY_PENALIZED_GROUPS.has(cmdGroup) && !wantsPower) {
-        score -= 50;
+    // Also extract SCPI argument names/values from the command record
+    const argNames = (cmd.arguments || []).map(a => a.name.toLowerCase());
+    const argDescriptions = (cmd.arguments || []).map(a => a.description.toLowerCase()).join(' ');
+
+    // ── 1. Group affinity ──
+    if (affinityGroups) {
+      if (affinityGroups.has(cmdGroup)) {
+        score += 25;  // Right group
+      } else if (HARD_PENALIZED_GROUPS.has(cmdGroup) && !wantsPower) {
+        score -= 60;  // Specialty group, definitely wrong
+      } else if (intent.intent === 'trigger' && NOISY_GROUPS_FOR_TRIGGER.has(cmdGroup)) {
+        score -= 30;  // Search/Bus commands with "trigger" in path — noisy
       } else {
-        score -= 10;
+        score -= 15;  // Wrong group, mild penalty
       }
     }
 
-    // Header keyword matching
-    const headerLower = cmd.header.toLowerCase();
-    const queryWords = queryLower.split(/\s+/).filter(w => w.length > 2);
+    // ── 2. SCPI mnemonic-aware token matching ──
+    // SCPI uses mixed-case mnemonics: LEVel, SLOpe, SOUrce, FREQuency
+    // The uppercase part is the abbreviation. We match query words against:
+    //   - Full token lowercase: "level" matches "level" in "LEVel"
+    //   - SCPI abbreviation: extract uppercase chars → "LEV" from "LEVel"
+    //   - startsWith in both directions
+    // This is a BIG improvement — "level" now matches LEVel in TRIGger:A:LEVel
+    // even when the BM25 raw header is "trigger:a:level:ch<x>"
+
+    const scpiAbbreviations = headerTokensRaw.map(t => {
+      // Extract uppercase letters as the SCPI abbreviation
+      const upper = t.replace(/[^A-Z]/g, '');
+      return upper.length >= 2 ? upper.toLowerCase() : t.toLowerCase();
+    });
+
+    let tokenMatchCount = 0;
     for (const word of queryWords) {
-      if (headerLower.includes(word)) score += 8;
+      const matched = headerTokens.some(t => t === word || t.startsWith(word) || word.startsWith(t))
+        || scpiAbbreviations.some(a => a === word || a.startsWith(word) || word.startsWith(a))
+        || argNames.some(a => a === word || a.startsWith(word));
+      if (matched) {
+        score += 10;
+        tokenMatchCount++;
+      }
     }
-
-    // Subject matching
-    const subjectWords = intent.subject.split(/[_\s]+/).filter(w => w.length > 1);
     for (const word of subjectWords) {
-      if (headerLower.includes(word.toLowerCase())) score += 12;
+      const wordLower = word.toLowerCase();
+      const matched = headerTokens.some(t => t === wordLower || t.startsWith(wordLower) || wordLower.startsWith(t))
+        || scpiAbbreviations.some(a => a === wordLower || a.startsWith(wordLower) || wordLower.startsWith(a));
+      if (matched) {
+        score += 15;
+        tokenMatchCount++;
+      }
+    }
+    // Bonus for matching MULTIPLE query words (compound match = better fit)
+    if (tokenMatchCount >= 3) score += 12;
+    else if (tokenMatchCount >= 2) score += 6;
+
+    // ── Focus word boost ──
+    // The last meaningful word in the query is usually the most specific part.
+    // "edge trigger level" → focus is "level", not "edge" or "trigger"
+    // "save waveform to usb" → focus is "waveform" (skip stop words like "to", "usb")
+    const focusWord = queryWords.filter(w => !['to', 'the', 'a', 'an', 'on', 'in', 'for', 'of', 'with'].includes(w)).pop();
+    if (focusWord) {
+      const focusMatched = headerTokens.some(t => t === focusWord || t.startsWith(focusWord) || focusWord.startsWith(t))
+        || scpiAbbreviations.some(a => a === focusWord || a.startsWith(focusWord) || focusWord.startsWith(a));
+      if (focusMatched) {
+        score += 12;  // Strong boost for matching the focus word
+      }
     }
 
-    // Exact SCPI-style match boost
+    // ── 3. Header depth/simplicity preference ──
+    // Shorter headers are usually the primary command, longer ones are sub-settings.
+    // Graduated bonus: fewer tokens = more likely to be the main command.
+    const tokenBonus = Math.max(0, 12 - headerTokens.length * 2);  // 2 tokens=+8, 3=+6, 4=+4, 5=+2, 6+=0
+    score += tokenBonus;
+
+    // ── 4. Prefer TRIGger:A over TRIGger:B and RESET variants ──
+    if (intent.intent === 'trigger') {
+      if (headerLower.includes('trigger:a:') || headerLower.includes('trigger:{a|b}')) {
+        score += 10;  // Primary trigger
+      }
+      if (headerLower.includes('trigger:b:') && !headerLower.includes('{a|b}')) {
+        score -= 15;  // Secondary trigger — user almost never means B specifically
+      }
+      if (headerLower.includes(':reset:')) {
+        score -= 20;  // RESET is a sub-variant of trigger B, rarely wanted
+      }
+    }
+
+    // ── 5. Prefer STATE/enable commands for feature queries ──
+    if (headerTokens.some(t => t === 'state' || t === 'enable')) {
+      score += 5;
+    }
+
+    // ── 5b. Subject-specific header boosts ──
+    // zone_trigger → VISual:* commands, not SEARCH:* or TRIGger:*
+    // This needs to be DOMINANT because BM25 scores for CPHY/bus commands are very high
+    if (intent.subject === 'zone_trigger') {
+      if (headerLower.startsWith('visual')) {
+        score += 80;
+      } else {
+        score -= 40;
+      }
+    }
+    // trigger_level → commands with LEVel in header
+    if (intent.subject === 'trigger_level') {
+      if (headerTokens.some(t => t === 'level' || t.startsWith('lev'))) {
+        score += 20;
+      }
+    }
+    // trigger_slope → commands with SLOpe in header
+    if (intent.subject === 'trigger_slope') {
+      if (headerTokens.some(t => t === 'slope' || t.startsWith('slo'))) {
+        score += 20;
+      }
+    }
+
+    // ── 6. Exact SCPI-style match boost ──
     if (queryLower.includes(':') && headerLower.includes(queryLower.replace(/\?$/, ''))) {
       score += 50;
     }
 
-    // POWer:ADDNew specific penalty for non-power queries
+    // ── 7. POWer:ADDNew specific penalty ──
     if (headerLower === 'power:addnew' && !wantsPower) {
       score -= 40;
     }
@@ -130,9 +248,34 @@ export async function searchScpi(input: SearchScpiInput): Promise<ToolResult<unk
   const limit = input.limit || 10;
   const measurementPlan = buildMeasurementSearchPlan(q);
 
+  // ── Query expansion for terms that don't match SCPI keywords ──
+  // "zone trigger" → SCPI uses "VISual" not "zone"
+  // "screenshot" → SCPI uses "SAVe:IMAGe" not "screenshot"
+  const QUERY_EXPANSIONS: Array<{ pattern: RegExp; expand: string }> = [
+    { pattern: /\bzone\s*trigger/i, expand: 'VISual AREA trigger zone' },
+    { pattern: /\bvisual\s*trigger/i, expand: 'VISual AREA trigger' },
+    { pattern: /\bscreenshot/i, expand: 'SAVe IMAGe screenshot' },
+    { pattern: /\bbaud\s*rate/i, expand: 'BITRate baud rate' },
+    { pattern: /\brecord\s*length/i, expand: 'RECOrdlength horizontal record' },
+    { pattern: /\bsample\s*rate/i, expand: 'SAMPLERate sample rate horizontal' },
+  ];
+  let expandedQuery = q;
+  for (const { pattern, expand } of QUERY_EXPANSIONS) {
+    if (pattern.test(q)) {
+      expandedQuery = `${q} ${expand}`;
+      break;
+    }
+  }
+
   // Fetch more candidates than needed so re-ranking has room to work
-  const fetchLimit = Math.max(limit * 3, 20);
-  const searchEntries = index.searchByQuery(q, input.modelFamily, fetchLimit, input.commandType);
+  const fetchLimit = Math.max(limit * 4, 30);
+  // Search with both original and expanded queries
+  let searchEntries = index.searchByQuery(expandedQuery, input.modelFamily, fetchLimit, input.commandType);
+  if (expandedQuery !== q) {
+    // Also search original to not lose direct matches
+    const originalEntries = index.searchByQuery(q, input.modelFamily, fetchLimit, input.commandType);
+    searchEntries = [...searchEntries, ...originalEntries];
+  }
 
   const headerLike = q.includes(':') || q.startsWith('*');
   const directEntries = headerLike
@@ -152,6 +295,42 @@ export async function searchScpi(input: SearchScpiInput): Promise<ToolResult<unk
   // Merge and dedup all candidates
   const merged: CommandRecord[] = [];
   const seen = new Set<string>();
+
+  // ── Intent-based header injection ──
+  // When BM25 can't find the right commands (no keyword overlap between
+  // natural language and SCPI headers), inject known headers directly.
+  // This is extensible — add entries as you discover gaps.
+  const INTENT_HEADER_INJECTIONS: Record<string, string[]> = {
+    zone_trigger: [
+      'VISual:ENABLE', 'VISual:AREA<x>:SHAPE', 'VISual:AREA<x>:SOUrce',
+      'VISual:AREA<x>:HITType', 'VISual:AREA<x>:HEIGht', 'VISual:AREA<x>:VERTICES',
+      'VISual:AREA<x>:RESET', 'VISual:AREA<x>:ROTAtion',
+    ],
+    trigger_level: [
+      'TRIGger:{A|B}:LEVel:CH<x>', 'TRIGger:A:LEVel:CH<x>',
+    ],
+    screenshot: [
+      'SAVe:IMAGe', 'SAVe:IMAGe:FILEFormat',
+    ],
+    fastframe: [
+      'HORizontal:FASTframe:STATE', 'HORizontal:FASTframe:COUNt',
+      'HORizontal:FASTframe:MAXFRames', 'HORizontal:FASTframe:SELECTED',
+    ],
+  };
+
+  const intent = classifyIntent(q);
+  const injectionHeaders = INTENT_HEADER_INJECTIONS[intent.subject] || [];
+  for (const h of injectionHeaders) {
+    const entry = index.getByHeader(h, input.modelFamily);
+    if (entry) {
+      const key = `${entry.sourceFile}:${entry.commandId}`;
+      if (!seen.has(key)) {
+        seen.add(key);
+        merged.push(entry);
+      }
+    }
+  }
+
   for (const entry of [...measurementDirectEntries, ...directEntries, ...measurementSearchEntries, ...searchEntries]) {
     const key = `${entry.sourceFile}:${entry.commandId}`;
     if (seen.has(key)) continue;
@@ -160,7 +339,20 @@ export async function searchScpi(input: SearchScpiInput): Promise<ToolResult<unk
   }
 
   // Re-rank using intent classification and group-aware scoring
-  const reRanked = reRankWithIntent(merged, q);
+  let reRanked = reRankWithIntent(merged, q);
+
+  // For intents with injected headers, force them to the top.
+  // BM25 scores can be so high that additive boosts can't overcome them.
+  if (injectionHeaders.length > 0) {
+    const injectedSet = new Set(injectionHeaders.map(h => h.toLowerCase()));
+    const isInjected = (cmd: CommandRecord) =>
+      injectedSet.has(cmd.header.toLowerCase()) ||
+      injectionHeaders.some(h => cmd.header.toLowerCase().startsWith(h.toLowerCase().split('<')[0]));
+    const top = reRanked.filter(isInjected);
+    const rest = reRanked.filter(c => !isInjected(c));
+    reRanked = [...top, ...rest];
+  }
+
   const final = reRanked.slice(0, limit);
 
   return {
@@ -172,5 +364,12 @@ export async function searchScpi(input: SearchScpiInput): Promise<ToolResult<unk
       section: e.group,
     })),
     warnings: final.length ? [] : ['No commands matched query'],
-  };
+    debug: {
+      intent: intent.intent,
+      subject: intent.subject,
+      groups: intent.groups,
+      injected: injectionHeaders.length,
+      expanded: expandedQuery !== q,
+    },
+  } as ToolResult<unknown[]>;
 }
