@@ -54,6 +54,16 @@ const SUBJECT_GROUP_MAP: Array<{
   // ── Zone/Visual trigger (MUST be before measurement patterns — "area" matches measurement) ──
   { pattern: /\b(zone\s*trigger|trigger\s*zone|trigger\s*area|enter\s*area|exit\s*area|visual\s*trigger|trigger\s*visual)\b/i, groups: ['Trigger', 'Display'], intent: 'trigger', subject: 'zone_trigger' },
 
+  // ── Spectrum view (MUST be before frequency/measurement — "frequency" steals "spectrum view center frequency") ──
+  { pattern: /\b(spectrum\s*view|spectral\s*view)\b/i, groups: ['Spectrum view'], intent: 'math', subject: 'spectrum_view' },
+  { pattern: /\bSV:/i, groups: ['Spectrum view'], intent: 'math', subject: 'spectrum_view' },
+
+  // ── Eye diagram / BER (MUST be before generic measurement — "BER" matches RSA audio commands) ──
+  { pattern: /\b(eye\s*diagram|eye\s*pattern|eye\s*measurement|eye.*BER|BER.*eye)\b/i, groups: ['Measurement'], intent: 'measurement', subject: 'eye_diagram' },
+
+  // ── Power harmonics / THD (MUST be before generic THD — "THD" matches audio distortion commands) ──
+  { pattern: /\b(power\s*harmonics|harmonics\s*THD|THD\s*limit|power.*THD|harmonics.*limit)\b/i, groups: ['Power'], intent: 'power', subject: 'power_harmonics' },
+
   // ── Trigger source/channel patterns (before generic channel match) ──
   { pattern: /\btrigger\b.*\bsource\b/i, groups: ['Trigger'], intent: 'trigger', subject: 'trigger_source' },
   { pattern: /\bsource\b.*\btrigger\b/i, groups: ['Trigger'], intent: 'trigger', subject: 'trigger_source' },
