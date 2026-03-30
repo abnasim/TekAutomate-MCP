@@ -54,6 +54,13 @@ const SUBJECT_GROUP_MAP: Array<{
   // ── Zone/Visual trigger (MUST be before measurement patterns — "area" matches measurement) ──
   { pattern: /\b(zone\s*trigger|trigger\s*zone|trigger\s*area|enter\s*area|exit\s*area|visual\s*trigger|trigger\s*visual)\b/i, groups: ['Trigger', 'Display'], intent: 'trigger', subject: 'zone_trigger' },
 
+  // ── DVM — before "RMS"/"AC"/"DC" match measurement ──
+  { pattern: /\bDVM\b/i, groups: ['DVM'], intent: 'dvm', subject: 'dvm' },
+
+  // ── DPHY / CPHY — before generic bus or IMDA patterns ──
+  { pattern: /\bDPHY\b/i, groups: ['Bus', 'Trigger'], intent: 'bus', subject: 'dphy' },
+  { pattern: /\bCPHY\b/i, groups: ['Bus', 'Trigger'], intent: 'bus', subject: 'cphy' },
+
   // ── Compound patterns that MUST come before generic keyword matches ──
   // These prevent generic keywords (area, frequency, position, etc.) from stealing specific intents.
 

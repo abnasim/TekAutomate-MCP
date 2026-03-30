@@ -279,6 +279,34 @@ function reRankWithIntent(
       }
     }
 
+    // dvm → DVM:* commands, not measurement RMS
+    if (intent.subject === 'dvm') {
+      if (headerLower.startsWith('dvm')) {
+        score += 80;
+      } else {
+        score -= 40;
+      }
+    }
+    // dphy/cphy → BUS:B<x>:DPHY/CPHY commands
+    if (intent.subject === 'dphy' || intent.subject === 'cphy') {
+      const proto = intent.subject.toUpperCase();
+      if (headerLower.includes(proto.toLowerCase())) {
+        score += 40;
+      }
+      if (headerLower.startsWith('bus:')) {
+        score += 15;
+      }
+    }
+    // rise_time → measurement commands, penalize SEARCH timeout
+    if (intent.subject === 'rise_time') {
+      if (headerLower.includes('measurement') || headerLower.includes('addmeas')) {
+        score += 20;
+      }
+      if (headerLower.startsWith('search:')) {
+        score -= 20;
+      }
+    }
+
     // bus intent → prefer TRIGger:A:BUS over SEARCH:SEARCH<x>:TRIGger:A:BUS
     if (intent.intent === 'bus') {
       if (headerLower.startsWith('trigger:') || headerLower.startsWith('trigger:{')) {
@@ -428,6 +456,21 @@ export async function searchScpi(input: SearchScpiInput): Promise<ToolResult<unk
     afg: [
       'AFG:FUNCtion', 'AFG:FREQuency', 'AFG:AMPLitude', 'AFG:OFFSet',
       'AFG:OUTPut:STATE', 'AFG:PERIod', 'AFG:SYMMetry', 'AFG:PHASe',
+    ],
+    dvm: [
+      'DVM:MODe', 'DVM:AUTORange', 'DVM:SOUrce', 'DVM:MEASUrement:FREQuency?',
+      'DVM:MEASUrement:VALue?',
+    ],
+    dphy: [
+      'BUS:B<x>:DPHY:CLOCk:SOUrce', 'BUS:B<x>:DPHY:CLOCk:THRESHold',
+      'BUS:B<x>:DPHY:LP:THRESHold', 'BUS:B<x>:DPHY:PROTocol:TYPe',
+    ],
+    cphy: [
+      'BUS:B<x>:CPHY:A:SOUrce', 'BUS:B<x>:CPHY:A:THRESHold',
+      'BUS:B<x>:CPHY:SUBTYPe',
+    ],
+    rise_time: [
+      'MEASUrement:ADDMEAS', 'MEASUrement:MEAS<x>:TYPe',
     ],
     histogram_box: [
       'HIStogram:BOX', 'HIStogram:BOXPcnt',
