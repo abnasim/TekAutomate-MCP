@@ -662,9 +662,11 @@ async function handleSearchExec(req: RouterRequest, startedAt: number): Promise<
       if (result.ok) registry.recordSuccess(builtinMatch.id);
       else registry.recordFailure(builtinMatch.id);
       const totalMs = Date.now() - startedAt;
-      // Structure results as best_match + alternatives when data is an array
+      // Structure search results as best_match + alternatives when data is an array.
+      // Skip for list/browse/directory actions where the full array IS the result.
       let structuredData = result.data;
-      if (Array.isArray(result.data) && result.data.length > 0) {
+      const isDirectoryResult = /list|browse|group/i.test(builtinMatch.name);
+      if (Array.isArray(result.data) && result.data.length > 0 && !isDirectoryResult) {
         structuredData = {
           best_match: result.data[0],
           alternatives: result.data.slice(1, 5),
@@ -742,9 +744,12 @@ async function handleSearchExec(req: RouterRequest, startedAt: number): Promise<
     registry.recordUsage(top.tool.id);
     if (result.ok) registry.recordSuccess(top.tool.id);
     else registry.recordFailure(top.tool.id);
-    // Structure results as best_match + alternatives when data is an array
+    // Structure search results as best_match + alternatives when data is an array.
+    // BUT skip structuring for list/directory actions (list command groups, browse)
+    // where the full array IS the intended result.
     let structuredData = result.data;
-    if (Array.isArray(result.data) && result.data.length > 0) {
+    const isListAction = /list|browse|group/i.test(builtinMatch.name);
+    if (Array.isArray(result.data) && result.data.length > 0 && !isListAction) {
       structuredData = {
         best_match: result.data[0],
         alternatives: result.data.slice(1, 5),
