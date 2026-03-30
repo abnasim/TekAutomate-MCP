@@ -152,7 +152,7 @@ async function executeMcpTool(
     // Script timeout: 15s for screenshot/slow ops, 8s for simple SCPI
     const isSlowAction = toolName === 'capture_screenshot' || toolName === 'discover_scpi'
       || (toolName === 'send_scpi' && payload.timeout_ms && Number(payload.timeout_ms) > 10000);
-    const scriptTimeout = isSlowAction ? 45 : 8;
+    const scriptTimeout = isSlowAction ? 15 : 8;
 
     const res = await fetch(`${execUrl}/run`, {
       method: 'POST',
@@ -288,10 +288,17 @@ async function runAnthropicLoop(params: LiveToolLoopParams): Promise<LiveToolLoo
 
     // Execute tools
     const toolResults: Array<Record<string, unknown>> = [];
+    let prevToolName = '';
     for (const tu of toolUseBlocks) {
       const toolName = String(tu.name || '');
       const toolId = String(tu.id || '');
       const toolArgs = (tu.input && typeof tu.input === 'object') ? tu.input as Record<string, unknown> : {};
+
+      // Let the scope settle between SCPI commands and screenshot capture.
+      // Both go through the same socket — firing back-to-back can crash the connection.
+      if (toolName === 'capture_screenshot' && prevToolName === 'send_scpi') {
+        await new Promise(r => setTimeout(r, 1500));
+      }
 
       onToolCall?.(toolName, toolArgs);
 
@@ -352,6 +359,7 @@ async function runAnthropicLoop(params: LiveToolLoopParams): Promise<LiveToolLoo
         });
         toolCallLog.push({ tool: toolName, args: toolArgs, result: { error: String(err) } });
       }
+      prevToolName = toolName;
     }
 
     messages.push({ role: 'user', content: toolResults });
@@ -453,6 +461,7 @@ async function runOpenAiLoop(params: LiveToolLoopParams): Promise<LiveToolLoopRe
     let hasToolCalls = false;
     const toolResultsInput: Array<Record<string, unknown>> = [];
 
+    let prevToolNameOai = '';
     for (const item of output) {
       // Extract text from message items
       if (item.type === 'message') {
@@ -474,6 +483,11 @@ async function runOpenAiLoop(params: LiveToolLoopParams): Promise<LiveToolLoopRe
         try {
           toolArgs = typeof item.arguments === 'string' ? JSON.parse(item.arguments) : {};
         } catch { /* ignore */ }
+
+        // Let the scope settle between SCPI commands and screenshot capture.
+        if (toolName === 'capture_screenshot' && prevToolNameOai === 'send_scpi') {
+          await new Promise(r => setTimeout(r, 1500));
+        }
 
         onToolCall?.(toolName, toolArgs);
 
@@ -526,6 +540,7 @@ async function runOpenAiLoop(params: LiveToolLoopParams): Promise<LiveToolLoopRe
           });
           toolCallLog.push({ tool: toolName, args: toolArgs, result: { error: String(err) } });
         }
+        prevToolNameOai = toolName;
       }
     }
 
