@@ -249,7 +249,7 @@ async function runAnthropicLoop(params: LiveToolLoopParams): Promise<LiveToolLoo
       body: JSON.stringify({
         model,
         system: systemPrompt,
-        max_tokens: 2048,
+        max_tokens: 4096,
         messages,
         tools: anthropicTools,
       }),
@@ -724,6 +724,9 @@ export function buildLiveSystemPrompt(instrument?: {
       '- If told "wrong command": look up the correct one via tek_router, don\'t re-analyze the screenshot.',
       '',
       '### Execution',
+      '- BATCH tool calls: call send_scpi AND capture_screenshot in the SAME response when possible.',
+      '  Don\'t waste a round-trip just to take a screenshot — include it alongside your commands.',
+      '- Pack ALL related SCPI commands into ONE send_scpi call. Don\'t send them one at a time.',
       '- Common commands → send_scpi IMMEDIATELY. No search needed for: *RST, *IDN?, AUTOSet, ADDMEAS, SCAle, TRIGger:A:EDGE.',
       '- Unknown commands → tek_router search → send_scpi. Two calls max.',
       '- Don\'t know the right command? Search it. Don\'t guess. Don\'t send wrong commands twice.',
