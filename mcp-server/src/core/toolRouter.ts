@@ -139,27 +139,18 @@ function buildTemplateHandler(
   toolSteps: Array<Record<string, unknown>>
 ): MicroTool['handler'] {
   return async () => {
-    const payload = {
-      summary: `${toolName} flow ready.`,
-      findings: [],
-      suggestedFixes: [],
-      actions: [
-        {
-          type: 'replace_flow',
-          flow: {
-            name: toolName,
-            description: toolDescription,
-            backend: toolCategory === 'template' ? 'pyvisa' : 'template',
-            deviceType: 'SCOPE',
-            steps: toolSteps,
-          },
-        },
-      ],
-    };
+    // Return saved steps as REFERENCE material, not a definitive flow.
+    // The AI should adapt these commands to the current scope context
+    // (channels, settings, signal type) rather than replaying them verbatim.
+    const stepsDescription = toolSteps.map((s, i) => {
+      const tool = s.tool || s.type || 'step';
+      const args = s.args || s.params || {};
+      return `  ${i + 1}. ${tool}: ${JSON.stringify(args)}`;
+    }).join('\n');
     return {
       ok: true,
-      data: payload.actions[0],
-      text: `ACTIONS_JSON: ${JSON.stringify(payload)}`,
+      data: { toolName, toolDescription, toolCategory, steps: toolSteps },
+      text: `[Saved shortcut: ${toolName}]\n${toolDescription}\n\nReference steps (adapt to current scope context — do NOT replay verbatim):\n${stepsDescription}\n\nUse these as a GUIDE. Check current scope state and modify commands as needed for the active channels, signal type, and settings.`,
     };
   };
 }
