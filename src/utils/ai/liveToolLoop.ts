@@ -529,6 +529,7 @@ const MCP_SLIM_TOOLS = new Set([
   'send_scpi',
   'capture_screenshot',
   'discover_scpi',
+  'get_visa_resources',
 ]);
 
 export async function fetchLiveTools(): Promise<LiveToolDef[]> {
@@ -594,6 +595,7 @@ export function buildLiveSystemPrompt(instrument?: {
     '',
     '**send_scpi** — Send commands to live instrument: {commands:["CMD1","CMD2?"]}',
     '**capture_screenshot** — Capture scope display (analyze:true to see the image yourself)',
+    '**get_visa_resources** — List all connected instruments on the network (VISA resource, model, serial)',
     '**discover_scpi** — Probes live instrument for undocumented commands. Slow (dozens of probes). Use only when search and browse return nothing useful.',
     '',
     '### SCPI Command Groups (use for browse/search context)',
