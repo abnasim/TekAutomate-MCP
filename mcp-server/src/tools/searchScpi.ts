@@ -294,6 +294,30 @@ export async function searchScpi(input: SearchScpiInput): Promise<ToolResult<unk
   // Merge and dedup all candidates
   const merged: CommandRecord[] = [];
   const seen = new Set<string>();
+
+  // ── Direct injection for intents where BM25 fails ──
+  // Zone trigger: BM25 can't find VISual:* because "zone" has no SCPI keyword overlap.
+  // Inject the key VISual commands directly so the re-ranker can boost them.
+  const intent = classifyIntent(q);
+  if (intent.subject === 'zone_trigger') {
+    const visualHeaders = [
+      'VISual:ENABLE', 'VISual:AREA<x>:SHAPE', 'VISual:AREA<x>:SOUrce',
+      'VISual:AREA<x>:HITType', 'VISual:AREA<x>:HEIGht', 'VISual:AREA<x>:VERTICES',
+      'VISual:AREA<x>:RESET', 'VISual:AREA<x>:ROTAtion', 'VISual:AREA<x>:ASPEctratio',
+      'VISual:AREA<x>:FLIP:HORizontal', 'VISual:AREA<x>:FLIP:VERTical',
+    ];
+    for (const h of visualHeaders) {
+      const entry = index.getByHeader(h, input.modelFamily);
+      if (entry) {
+        const key = `${entry.sourceFile}:${entry.commandId}`;
+        if (!seen.has(key)) {
+          seen.add(key);
+          merged.push(entry);
+        }
+      }
+    }
+  }
+
   for (const entry of [...measurementDirectEntries, ...directEntries, ...measurementSearchEntries, ...searchEntries]) {
     const key = `${entry.sourceFile}:${entry.commandId}`;
     if (seen.has(key)) continue;
