@@ -1483,13 +1483,13 @@ export function AiChatPanel({
                     <select
                       value={state.model}
                       onChange={(e) => setModel(e.target.value)}
-                      className="w-full rounded-lg border border-slate-200 dark:border-white/10 bg-slate-50 dark:bg-white/5 px-2 py-1.5 text-xs text-slate-700 dark:text-white/80 focus:outline-none focus:border-violet-500/50"
+                      className="w-full rounded-lg border border-slate-200 dark:border-white/10 bg-slate-50 dark:bg-slate-800 px-2 py-1.5 text-xs text-slate-700 dark:text-white/80 focus:outline-none focus:border-violet-500/50"
                     >
                       {!providerModels.includes(state.model) && state.model ? (
-                        <option value={state.model}>{state.model}</option>
+                        <option value={state.model} className="bg-white dark:bg-slate-800 dark:text-white/80">{state.model}</option>
                       ) : null}
                       {providerModels.map((m) => (
-                        <option key={m} value={m}>{m}</option>
+                        <option key={m} value={m} className="bg-white dark:bg-slate-800 dark:text-white/80">{m}</option>
                       ))}
                     </select>
                     <div className="relative">
@@ -1561,10 +1561,10 @@ export function AiChatPanel({
                 <select
                   value={instrumentOutputMode}
                   onChange={(e) => setInstrumentOutputMode(e.target.value === 'clean' ? 'clean' : 'verbose')}
-                  className="mt-1 w-full rounded-lg border border-slate-200 dark:border-white/10 bg-slate-50 dark:bg-white/5 px-2 py-1.5 text-xs text-slate-700 dark:text-white/80 focus:outline-none focus:border-violet-500/50"
+                  className="mt-1 w-full rounded-lg border border-slate-200 dark:border-white/10 bg-slate-50 dark:bg-slate-800 px-2 py-1.5 text-xs text-slate-700 dark:text-white/80 focus:outline-none focus:border-violet-500/50"
                 >
-                  <option value="verbose">Verbose</option>
-                  <option value="clean">Clean</option>
+                  <option value="verbose" className="bg-white dark:bg-slate-800 dark:text-white/80">Verbose</option>
+                  <option value="clean" className="bg-white dark:bg-slate-800 dark:text-white/80">Clean</option>
                 </select>
               </label>
               <label
