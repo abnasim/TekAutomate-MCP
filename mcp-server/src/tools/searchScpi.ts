@@ -314,6 +314,25 @@ function reRankWithIntent(
       }
     }
 
+    // runt trigger → RUNT commands, not SETHold
+    if (intent.subject === 'runt') {
+      if (headerLower.includes('runt')) {
+        score += 40;
+      }
+      if (headerLower.includes('sethold') || headerLower.includes('holdtime')) {
+        score -= 30;
+      }
+    }
+    // averaging → ACQuire:NUMAVg, not horizontal record length
+    if (intent.subject === 'averaging') {
+      if (headerLower.includes('numavg') || headerLower.includes('acquire:mode')) {
+        score += 40;
+      }
+      if (headerLower.includes('horizontal') || headerLower.includes('record')) {
+        score -= 20;
+      }
+    }
+
     // bus intent → prefer TRIGger:A:BUS over SEARCH:SEARCH<x>:TRIGger:A:BUS
     if (intent.intent === 'bus') {
       if (headerLower.startsWith('trigger:') || headerLower.startsWith('trigger:{')) {
@@ -514,6 +533,13 @@ export async function searchScpi(input: SearchScpiInput): Promise<ToolResult<unk
     ],
     screenshot: [
       'SAVe:IMAGe', 'SAVe:IMAGe:FILEFormat',
+    ],
+    runt: [
+      'TRIGger:{A|B}:RUNT:POLarity', 'TRIGger:{A|B}:RUNT:THReshold:HIGH',
+      'TRIGger:{A|B}:RUNT:THReshold:LOW', 'TRIGger:{A|B}:RUNT:WIDth',
+    ],
+    averaging: [
+      'ACQuire:NUMAVg', 'ACQuire:MODe',
     ],
     horizontal_scale: [
       'HORizontal:SCAle', 'HORizontal:POSition', 'HORizontal:MODe',

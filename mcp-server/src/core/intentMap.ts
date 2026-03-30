@@ -56,6 +56,11 @@ const SUBJECT_GROUP_MAP: Array<{
   { pattern: /\btimebase\b.*\bscale\b/i, groups: ['Horizontal'], intent: 'horizontal', subject: 'horizontal_scale' },
   { pattern: /\btime\s*per\s*div/i, groups: ['Horizontal'], intent: 'horizontal', subject: 'horizontal_scale' },
 
+  // ── Acquisition averaging (MUST be before "mean"/"average" matches measurement) ──
+  { pattern: /\b(average|averaging)\s*(mode|acq|acquisition|\d+\s*sample)/i, groups: ['Acquisition'], intent: 'acquisition', subject: 'averaging' },
+  { pattern: /\b(acq|acquisition)\s*(average|averaging)/i, groups: ['Acquisition'], intent: 'acquisition', subject: 'averaging' },
+  { pattern: /\bnum\s*avg|numavg/i, groups: ['Acquisition'], intent: 'acquisition', subject: 'averaging' },
+
   // ── Zone/Visual trigger (MUST be before measurement patterns — "area" matches measurement) ──
   { pattern: /\b(zone\s*trigger|trigger\s*zone|trigger\s*area|enter\s*area|exit\s*area|visual\s*trigger|trigger\s*visual)\b/i, groups: ['Trigger', 'Display'], intent: 'trigger', subject: 'zone_trigger' },
 
