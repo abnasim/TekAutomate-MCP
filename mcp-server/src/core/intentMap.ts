@@ -284,6 +284,7 @@ const SUBJECT_GROUP_MAP: Array<{
   { pattern: /\b(grid|graticule|intensity|brightness)\b/i, groups: ['Display'], intent: 'display', subject: 'display_general' },
 
   // ── Save / Recall ──
+  { pattern: /\b(recall\s*waveform|reference\s*waveform\s*recall|recall\s*ref|load\s*waveform|load\s*reference)\b/i, groups: ['Save and Recall'], intent: 'save', subject: 'recall_waveform' },
   { pattern: /\b(recall\s*setup|load\s*setup|setup\s*recall|load\s*.*\.tss|recall\s*.*\.tss|load\s*.*\.set)\b/i, groups: ['Save and Recall', 'File System'], intent: 'save', subject: 'recall_setup' },
   { pattern: /\b(save\s*setup|store\s*setup|setup\s*save)\b/i, groups: ['Save and Recall'], intent: 'save', subject: 'save_setup' },
   { pattern: /\b(screenshot|screen\s*capture|save\s*image|print)\b/i, groups: ['Save and Recall'], intent: 'save', subject: 'screenshot' },

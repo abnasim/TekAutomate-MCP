@@ -252,6 +252,35 @@ function reRankWithIntent(
       }
     }
 
+    // bus intent → prefer TRIGger:A:BUS over SEARCH:SEARCH<x>:TRIGger:A:BUS
+    if (intent.intent === 'bus') {
+      if (headerLower.startsWith('trigger:') || headerLower.startsWith('trigger:{')) {
+        score += 10;
+      }
+      if (headerLower.startsWith('search:search')) {
+        score -= 10;
+      }
+      if (headerLower.startsWith('bus:')) {
+        score += 15;
+      }
+    }
+
+    // waveform_transfer → WFMOutpre/DATa/CURVe commands, not trigger
+    if (intent.subject === 'waveform_transfer') {
+      if (headerLower.includes('wfmoutpre') || headerLower.includes('data:') || headerLower.startsWith('curve')) {
+        score += 40;
+      }
+      if (headerLower.includes('trigger')) {
+        score -= 30;
+      }
+    }
+    // dpm → DPM-specific measurement commands
+    if (intent.subject === 'dpm') {
+      if (headerLower.includes('dpm')) {
+        score += 30;
+      }
+    }
+
     // ── 6. Exact SCPI-style match boost ──
     if (queryLower.includes(':') && headerLower.includes(queryLower.replace(/\?$/, ''))) {
       score += 50;
@@ -361,6 +390,25 @@ export async function searchScpi(input: SearchScpiInput): Promise<ToolResult<unk
       'POWer:POWer<x>:TYPe', 'POWer:ADDNew',
       'POWer:POWer<x>:HARMONICS:CLASs', 'POWer:POWer<x>:HARMONICS:STANDard',
       'POWer:POWer<x>:HARMONICS:UNITs', 'POWer:POWer<x>:HARMONICS:FUNDamental',
+    ],
+    waveform_transfer: [
+      'WFMOutpre:ENCdg', 'DATa:ENCdg', 'DATa:SOUrce', 'DATa:STARt', 'DATa:STOP',
+      'CURVe', 'WFMOutpre:BYT_Nr', 'WFMOutpre:XINcr', 'WFMOutpre:YMUlt',
+    ],
+    dpm: [
+      'MEASUrement:MEAS<x>:DPM:TYPE',
+    ],
+    recall_setup: [
+      'RECAll:SETUp', 'RECAll:SESsion',
+    ],
+    recall_session: [
+      'RECAll:SESsion', 'RECAll:SETUp',
+    ],
+    recall_waveform: [
+      'RECAll:WAVEform', 'RECAll:WAVEform:FILEPath',
+    ],
+    save_waveform: [
+      'SAVe:WAVEform', 'SAVe:WAVEform:FILEFormat',
     ],
     trigger_level: [
       'TRIGger:{A|B}:LEVel:CH<x>', 'TRIGger:A:LEVel:CH<x>',
