@@ -288,17 +288,10 @@ async function runAnthropicLoop(params: LiveToolLoopParams): Promise<LiveToolLoo
 
     // Execute tools
     const toolResults: Array<Record<string, unknown>> = [];
-    let prevToolName = '';
     for (const tu of toolUseBlocks) {
       const toolName = String(tu.name || '');
       const toolId = String(tu.id || '');
       const toolArgs = (tu.input && typeof tu.input === 'object') ? tu.input as Record<string, unknown> : {};
-
-      // Let the scope settle between SCPI commands and screenshot capture.
-      // Both go through the same socket — firing back-to-back can crash the connection.
-      if (toolName === 'capture_screenshot' && prevToolName === 'send_scpi') {
-        await new Promise(r => setTimeout(r, 1500));
-      }
 
       onToolCall?.(toolName, toolArgs);
 
@@ -359,7 +352,6 @@ async function runAnthropicLoop(params: LiveToolLoopParams): Promise<LiveToolLoo
         });
         toolCallLog.push({ tool: toolName, args: toolArgs, result: { error: String(err) } });
       }
-      prevToolName = toolName;
     }
 
     messages.push({ role: 'user', content: toolResults });
