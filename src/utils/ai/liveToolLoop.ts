@@ -213,9 +213,9 @@ async function runAnthropicLoop(params: LiveToolLoopParams): Promise<LiveToolLoo
   }));
 
   const messages: Array<Record<string, unknown>> = [
-    ...history.slice(-6).map((h) => ({
+    ...history.slice(-10).map((h) => ({
       role: h.role,
-      content: String(h.content || '').slice(0, 2000),
+      content: String(h.content || '').slice(0, 3000),
     })),
     { role: 'user', content: userMessage },
   ];
@@ -232,7 +232,7 @@ async function runAnthropicLoop(params: LiveToolLoopParams): Promise<LiveToolLoo
     // Each tool iteration appends 2 messages (assistant + user/tool_result).
     // After 2+ iterations the earlier round-trips are stale; prune them to
     // avoid sending the full history on every request.
-    const maxToolMessages = 4; // 2 iterations × 2 messages each
+    const maxToolMessages = 8; // 4 iterations × 2 messages each
     if (messages.length > baseMessageCount + maxToolMessages) {
       messages.splice(baseMessageCount, messages.length - baseMessageCount - maxToolMessages);
     }
@@ -396,9 +396,9 @@ async function runOpenAiLoop(params: LiveToolLoopParams): Promise<LiveToolLoopRe
 
   // Build initial input with history + current message
   const initialInput: Array<Record<string, unknown>> = [
-    ...history.slice(-6).map((h) => ({
+    ...history.slice(-10).map((h) => ({
       role: h.role === 'assistant' ? 'assistant' : 'user',
-      content: String(h.content || '').slice(0, 2000),
+      content: String(h.content || '').slice(0, 3000),
     })),
     { role: 'user', content: userMessage },
   ];
