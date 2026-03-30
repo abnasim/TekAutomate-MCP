@@ -217,7 +217,7 @@ class _Handler(BaseHTTPRequestHandler):
         code = ""
         scope_type = "modern"
         commands = None
-        timeout_ms = 5000
+        timeout_ms = 3000
 
         if action == "run_python":
             code = data.get("code")
@@ -231,7 +231,7 @@ class _Handler(BaseHTTPRequestHandler):
                 scope_type = "modern"
         elif action == "send_scpi":
             commands = data.get("commands")
-            timeout_ms = int(data.get("timeout_ms", 5000) or 5000)
+            timeout_ms = int(data.get("timeout_ms", 3000) or 3000)
             if not isinstance(commands, list) or not commands or not all(isinstance(cmd, str) for cmd in commands):
                 self._json_response(400, {"ok": False, "error": "Missing or invalid commands"})
                 self._emit("POST", "/run", 400, f"missing commands action={action_label} payload_keys={','.join(sorted(data.keys()))}")
@@ -240,7 +240,9 @@ class _Handler(BaseHTTPRequestHandler):
                 self._json_response(400, {"ok": False, "error": "Maximum 50 commands per request"})
                 self._emit("POST", "/run", 400, f"too many commands action={action_label} count={len(commands)}")
                 return
-            timeout_sec = min(max(timeout_sec, 15), ui_timeout)
+            # Job-level timeout: enough for all commands at their per-command timeout, plus buffer
+            min_needed = max(int((timeout_ms / 1000.0) * len(commands)) + 5, 10)
+            timeout_sec = min(max(timeout_sec, min_needed), ui_timeout)
             # Verbose mode: log request details
             output_mode = data.get("outputMode") or data.get("output_mode") or "clean"
             if output_mode == "verbose":

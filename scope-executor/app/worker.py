@@ -83,9 +83,11 @@ def _get_socket_session(visa: str):
         session = _socket_sessions.get(visa)
         if session is not None:
             try:
-                # Real health check — send *OPC? and verify response
+                # Health check with short timeout — don't block 20s on stale session
+                session.set_timeout(3)
                 session.write('*OPC?')
                 resp = session.read()
+                session.set_timeout(5)  # restore default
                 if resp.strip() == '1':
                     return session
             except Exception:
@@ -97,7 +99,7 @@ def _get_socket_session(visa: str):
                 pass
             _socket_sessions.pop(visa, None)
         host, port = _parse_socket_address(visa)
-        session = SocketInstr(host, port, timeout=20)
+        session = SocketInstr(host, port, timeout=5)
         session.clear()  # device clear on fresh connection
         _socket_sessions[visa] = session
         return session
@@ -244,6 +246,7 @@ def _handle_capture_screenshot(job: dict) -> dict:
                 except Exception:
                     _reset_socket_session(visa)
                     sock = _get_socket_session(visa)
+                sock.set_timeout(5)  # screenshot commands are instant
                 data = sock.fetch_screen("temp_screenshot.png")
             else:
                 try:
@@ -253,7 +256,7 @@ def _handle_capture_screenshot(job: dict) -> dict:
                     _reset_resource_manager()
                     scpi = _get_scope_session(visa)
 
-                scpi.timeout = 30000
+                scpi.timeout = 5000
                 scpi.write_termination = "\n"
                 scpi.read_termination = None
 
@@ -294,7 +297,7 @@ def _handle_capture_screenshot(job: dict) -> dict:
 def _handle_send_scpi(job: dict) -> dict:
     visa = job.get("visa")
     commands = job.get("commands")
-    timeout_ms = int(job.get("timeout_ms", 5000) or 5000)
+    timeout_ms = int(job.get("timeout_ms", 3000) or 3000)
     verbose = job.get("verbose", False)
     if not isinstance(visa, str) or not visa:
         raise RuntimeError("send_scpi requires visa")
@@ -306,6 +309,7 @@ def _handle_send_scpi(job: dict) -> dict:
 
     if use_socket:
         scpi = _get_socket_session(visa)
+        scpi.set_timeout(timeout_ms / 1000.0)  # socket timeout is in seconds
     else:
         scpi = _get_scope_session(visa)
         scpi.timeout = timeout_ms
@@ -339,6 +343,7 @@ def _handle_send_scpi(job: dict) -> dict:
                     if use_socket:
                         _reset_socket_session(visa)
                         scpi = _get_socket_session(visa)
+                        scpi.set_timeout(timeout_ms / 1000.0)
                     else:
                         _reset_scope_session(visa)
                         _reset_resource_manager()

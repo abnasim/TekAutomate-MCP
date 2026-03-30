@@ -26,6 +26,10 @@ class SocketInstr:
         except socket.error as msg:
             raise RuntimeError(f"Could not connect to {host}:{port}: {msg}")
 
+    def set_timeout(self, timeout: float):
+        """Update socket timeout (seconds)."""
+        self.socket.settimeout(timeout)
+
     def close(self):
         try:
             self.socket.shutdown(socket.SHUT_RDWR)
