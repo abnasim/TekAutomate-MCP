@@ -182,13 +182,15 @@ function reRankWithIntent(
     score += tokenBonus;
 
     // ── 4. Prefer TRIGger:A over TRIGger:B and RESET variants ──
-    // TRIGger:A is the primary trigger, TRIGger:B is secondary, RESET is a sub-variant
     if (intent.intent === 'trigger') {
       if (headerLower.includes('trigger:a:') || headerLower.includes('trigger:{a|b}')) {
-        score += 8;  // Primary trigger
+        score += 10;  // Primary trigger
+      }
+      if (headerLower.includes('trigger:b:') && !headerLower.includes('{a|b}')) {
+        score -= 15;  // Secondary trigger — user almost never means B specifically
       }
       if (headerLower.includes(':reset:')) {
-        score -= 10;  // RESET sub-variant, rarely what user wants first
+        score -= 20;  // RESET is a sub-variant of trigger B, rarely wanted
       }
     }
 
@@ -224,9 +226,34 @@ export async function searchScpi(input: SearchScpiInput): Promise<ToolResult<unk
   const limit = input.limit || 10;
   const measurementPlan = buildMeasurementSearchPlan(q);
 
+  // ── Query expansion for terms that don't match SCPI keywords ──
+  // "zone trigger" → SCPI uses "VISual" not "zone"
+  // "screenshot" → SCPI uses "SAVe:IMAGe" not "screenshot"
+  const QUERY_EXPANSIONS: Array<{ pattern: RegExp; expand: string }> = [
+    { pattern: /\bzone\s*trigger/i, expand: 'VISual AREA trigger zone' },
+    { pattern: /\bvisual\s*trigger/i, expand: 'VISual AREA trigger' },
+    { pattern: /\bscreenshot/i, expand: 'SAVe IMAGe screenshot' },
+    { pattern: /\bbaud\s*rate/i, expand: 'BITRate baud rate' },
+    { pattern: /\brecord\s*length/i, expand: 'RECOrdlength horizontal record' },
+    { pattern: /\bsample\s*rate/i, expand: 'SAMPLERate sample rate horizontal' },
+  ];
+  let expandedQuery = q;
+  for (const { pattern, expand } of QUERY_EXPANSIONS) {
+    if (pattern.test(q)) {
+      expandedQuery = `${q} ${expand}`;
+      break;
+    }
+  }
+
   // Fetch more candidates than needed so re-ranking has room to work
   const fetchLimit = Math.max(limit * 4, 30);
-  const searchEntries = index.searchByQuery(q, input.modelFamily, fetchLimit, input.commandType);
+  // Search with both original and expanded queries
+  let searchEntries = index.searchByQuery(expandedQuery, input.modelFamily, fetchLimit, input.commandType);
+  if (expandedQuery !== q) {
+    // Also search original to not lose direct matches
+    const originalEntries = index.searchByQuery(q, input.modelFamily, fetchLimit, input.commandType);
+    searchEntries = [...searchEntries, ...originalEntries];
+  }
 
   const headerLike = q.includes(':') || q.startsWith('*');
   const directEntries = headerLike
