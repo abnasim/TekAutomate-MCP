@@ -201,11 +201,12 @@ function reRankWithIntent(
 
     // ── 5b. Subject-specific header boosts ──
     // zone_trigger → VISual:* commands, not SEARCH:* or TRIGger:*
+    // This needs to be DOMINANT because BM25 scores for CPHY/bus commands are very high
     if (intent.subject === 'zone_trigger') {
-      if (headerLower.startsWith('visual:') || headerLower.startsWith('visual')) {
-        score += 30;
-      } else if (!headerLower.includes('visual')) {
-        score -= 20;
+      if (headerLower.startsWith('visual')) {
+        score += 80;
+      } else {
+        score -= 40;
       }
     }
     // trigger_level → commands with LEVel in header
