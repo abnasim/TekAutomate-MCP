@@ -307,6 +307,13 @@ function reRankWithIntent(
       }
     }
 
+    // statistics + "badge" in query → DISPlaystat commands
+    if (intent.subject === 'statistics' && /badge/i.test(queryLower)) {
+      if (headerLower.includes('displaystat')) {
+        score += 40;
+      }
+    }
+
     // bus intent → prefer TRIGger:A:BUS over SEARCH:SEARCH<x>:TRIGger:A:BUS
     if (intent.intent === 'bus') {
       if (headerLower.startsWith('trigger:') || headerLower.startsWith('trigger:{')) {
@@ -388,6 +395,9 @@ export async function searchScpi(input: SearchScpiInput): Promise<ToolResult<unk
     { pattern: /\barinc\s*429/i, expand: 'ARINC429A arinc bus' },
     { pattern: /\bmil.?std.?1553|mil.?1553/i, expand: 'MIL1553B mil bus' },
     { pattern: /\bstandard\s*dev/i, expand: 'STATIstics statistics STDDev measurement' },
+    { pattern: /\bbadge\b.*\bstat/i, expand: 'DISPlaystat ENABle measurement badge statistics' },
+    { pattern: /\bstat.*\bbadge/i, expand: 'DISPlaystat ENABle measurement badge statistics' },
+    { pattern: /\bbadge/i, expand: 'DISPlaystat badge measurement display' },
   ];
   let expandedQuery = q;
   for (const { pattern, expand } of QUERY_EXPANSIONS) {
@@ -469,6 +479,10 @@ export async function searchScpi(input: SearchScpiInput): Promise<ToolResult<unk
       'BUS:B<x>:CPHY:A:SOUrce', 'BUS:B<x>:CPHY:A:THRESHold',
       'BUS:B<x>:CPHY:SUBTYPe',
     ],
+    statistics: [
+      'MEASUrement:MEAS<x>:DISPlaystat:ENABle', 'MEASUrement:STATIstics:CYCLEMode',
+      'MEASUrement:STATIstics:COUNt', 'MEASUrement:STATIstics:MODe',
+    ],
     rise_time: [
       'MEASUrement:ADDMEAS', 'MEASUrement:MEAS<x>:TYPe',
     ],
@@ -533,10 +547,19 @@ export async function searchScpi(input: SearchScpiInput): Promise<ToolResult<unk
   // For intents with injected headers, force them to the top.
   // BM25 scores can be so high that additive boosts can't overcome them.
   if (injectionHeaders.length > 0) {
-    const injectedSet = new Set(injectionHeaders.map(h => h.toLowerCase()));
-    const isInjected = (cmd: CommandRecord) =>
-      injectedSet.has(cmd.header.toLowerCase()) ||
-      injectionHeaders.some(h => cmd.header.toLowerCase().startsWith(h.toLowerCase().split('<')[0]));
+    // Build set of injected headers for exact matching.
+    // Also include the resolved form (e.g. "sv:span" from "SV:SPAN")
+    const injectedSet = new Set<string>();
+    for (const h of injectionHeaders) {
+      injectedSet.add(h.toLowerCase());
+      // Add the prefix before any placeholder as a fallback
+      const stripped = h.replace(/<[^>]+>/g, '').replace(/:$/, '').toLowerCase();
+      if (stripped !== h.toLowerCase()) injectedSet.add(stripped);
+    }
+    const isInjected = (cmd: CommandRecord) => {
+      const hdr = cmd.header.toLowerCase();
+      return injectedSet.has(hdr);
+    };
     const top = reRanked.filter(isInjected);
     const rest = reRanked.filter(c => !isInjected(c));
     reRanked = [...top, ...rest];
