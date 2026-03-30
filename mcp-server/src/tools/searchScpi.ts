@@ -162,6 +162,19 @@ function reRankWithIntent(
     if (tokenMatchCount >= 3) score += 12;
     else if (tokenMatchCount >= 2) score += 6;
 
+    // ── Focus word boost ──
+    // The last meaningful word in the query is usually the most specific part.
+    // "edge trigger level" → focus is "level", not "edge" or "trigger"
+    // "save waveform to usb" → focus is "waveform" (skip stop words like "to", "usb")
+    const focusWord = queryWords.filter(w => !['to', 'the', 'a', 'an', 'on', 'in', 'for', 'of', 'with'].includes(w)).pop();
+    if (focusWord) {
+      const focusMatched = headerTokens.some(t => t === focusWord || t.startsWith(focusWord) || focusWord.startsWith(t))
+        || scpiAbbreviations.some(a => a === focusWord || a.startsWith(focusWord) || focusWord.startsWith(a));
+      if (focusMatched) {
+        score += 12;  // Strong boost for matching the focus word
+      }
+    }
+
     // ── 3. Header depth/simplicity preference ──
     // Shorter headers are usually the primary command, longer ones are sub-settings.
     // Graduated bonus: fewer tokens = more likely to be the main command.
