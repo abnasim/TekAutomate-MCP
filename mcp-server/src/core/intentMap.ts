@@ -51,6 +51,9 @@ const SUBJECT_GROUP_MAP: Array<{
   { pattern: /\bself\s*test\b/i, groups: ['Miscellaneous'], intent: 'misc', subject: 'tst' },
   { pattern: /\bevent\s*status\s*register\b/i, groups: ['Status and Error'], intent: 'status', subject: 'esr' },
 
+  // ── Zone/Visual trigger (MUST be before measurement patterns — "area" matches measurement) ──
+  { pattern: /\b(zone\s*trigger|trigger\s*zone|trigger\s*area|enter\s*area|exit\s*area|visual\s*trigger|trigger\s*visual)\b/i, groups: ['Trigger', 'Display'], intent: 'trigger', subject: 'zone_trigger' },
+
   // ── Trigger source/channel patterns (before generic channel match) ──
   { pattern: /\btrigger\b.*\bsource\b/i, groups: ['Trigger'], intent: 'trigger', subject: 'trigger_source' },
   { pattern: /\bsource\b.*\btrigger\b/i, groups: ['Trigger'], intent: 'trigger', subject: 'trigger_source' },
@@ -188,8 +191,6 @@ const SUBJECT_GROUP_MAP: Array<{
   { pattern: /\b(trigger\s*slope|slope\s*trigger)\b/i, groups: ['Trigger'], intent: 'trigger', subject: 'trigger_slope' },
   { pattern: /\b(trigger\s*holdoff|holdoff\s*trigger)\b/i, groups: ['Trigger'], intent: 'trigger', subject: 'trigger_holdoff' },
   { pattern: /\b(trigger\s*mode|mode\s*trigger)\b/i, groups: ['Trigger'], intent: 'trigger', subject: 'trigger_mode' },
-  // Zone/visual trigger — SCPI uses VISual:* commands, not TRIGger:*
-  { pattern: /\b(zone\s*trigger|trigger\s*zone|trigger\s*area|enter\s*area|exit\s*area|visual\s*trigger|trigger\s*visual)\b/i, groups: ['Trigger', 'Display'], intent: 'trigger', subject: 'zone_trigger' },
   // Standard trigger types
   { pattern: /\b(edge\s*trigger|trigger\s*edge|set\s*trigger\s*to\s*edge)\b/i, groups: ['Trigger'], intent: 'trigger', subject: 'edge' },
   { pattern: /\btrigger\b.*\b(rising|falling)\b/i, groups: ['Trigger'], intent: 'trigger', subject: 'edge' },
