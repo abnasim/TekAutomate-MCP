@@ -1525,5 +1525,21 @@
     ],
     "syntax": { "set": "TRIGger:{A|B}:RUNT:THReshold:LOW <NR3>", "query": "TRIGger:{A|B}:RUNT:THReshold:LOW?" },
     "relatedCommands": ["TRIGger:{A|B}:RUNT:THReshold:HIGH", "TRIGger:{A|B}:RUNT:POLarity", "TRIGger:{A|B}:RUNT:WIDth"]
+  },
+  {
+    "command": "SV:CH<x>:FREQuency:OFFSet",
+    "header": "SV:CH<x>:FREQuency:OFFSet",
+    "mnemonics": ["SV", "CH<x>", "FREQuency", "OFFSet"],
+    "commandType": "both",
+    "group": "Spectrum view",
+    "description": "This command sets or queries the frequency offset for the specified Spectrum View channel. The offset shifts the displayed frequency axis.",
+    "shortDescription": "Set or query Spectrum View channel frequency offset",
+    "instruments": { "families": ["MSO5", "MSO6", "MSO7"], "models": [], "exclusions": [] },
+    "arguments": [
+      { "name": "channel", "type": "mnemonic", "required": true, "position": 0, "description": "CH<x> where x is the channel number", "validValues": { "type": "mnemonic_range", "pattern": "CH<x>", "examples": ["CH1", "CH2"] } },
+      { "name": "offset", "type": "numeric", "required": true, "position": 1, "description": "Frequency offset in Hz", "validValues": { "type": "NR3" } }
+    ],
+    "syntax": { "set": "SV:CH<x>:FREQuency:OFFSet <NR3>", "query": "SV:CH<x>:FREQuency:OFFSet?" },
+    "relatedCommands": ["SV:CENTERFrequency", "SV:SPAN", "SV:CH<x>:SELect:RF_FREQuency"]
   }
 ]
