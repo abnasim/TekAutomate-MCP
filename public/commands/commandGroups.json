@@ -2927,6 +2927,8 @@
       "TRIGger:{A|B}:RUNT:SOUrce",
       "TRIGger:{A|B}:RUNT:WHEn",
       "TRIGger:{A|B}:RUNT:WIDth",
+      "TRIGger:{A|B}:RUNT:THReshold:HIGH",
+      "TRIGger:{A|B}:RUNT:THReshold:LOW",
       "TRIGger:{A|B}:SETHold:CLOCk:EDGE",
       "TRIGger:{A|B}:SETHold:CLOCk:SOUrce",
       "TRIGger:{A|B}:SETHold:HOLDTime",
@@ -3119,6 +3121,44 @@
       "DISplay:WAVEView<x>:ZOOM:ZOOM<x>:VERTical:SCALe",
       "DISplay:WAVEView<x>:ZOOM?",
       "DISplay:WAVEView<x>:ZOOM:ZOOM<x>?"
+    ]
+  },
+  "Vertical": {
+    "description": "Vertical (Channel) commands configure analog channel properties including scale, offset, bandwidth, termination, coupling, probe settings, position, and label. These are the most fundamental channel setup commands.",
+    "commands": [
+      "CH<x>:SCAle",
+      "CH<x>:OFFSet",
+      "CH<x>:POSition",
+      "CH<x>:BANdwidth",
+      "CH<x>:BANdwidth:ACTUal",
+      "CH<x>:BANdwidth:ENHanced:STATE",
+      "CH<x>:COUPling",
+      "CH<x>:TERmination",
+      "CH<x>:PRObe",
+      "CH<x>:PRObe:AUTOZero",
+      "CH<x>:PRObe:COMPensate",
+      "CH<x>:PRObe:DEGAUss",
+      "CH<x>:PRObe:DEGAUss:STATE",
+      "CH<x>:PRObe:FORCEDRange",
+      "CH<x>:PRObe:GAIN",
+      "CH<x>:PRObe:ID:SERnumber",
+      "CH<x>:PRObe:ID:TYPe",
+      "CH<x>:PRObe:RESistance",
+      "CH<x>:PRObe:SIGnal",
+      "CH<x>:PRObe:TIPtype",
+      "CH<x>:PRObe:UNIts",
+      "CH<x>:INVert",
+      "CH<x>:LABel:COLor",
+      "CH<x>:LABel:FONT:BOLD",
+      "CH<x>:LABel:FONT:ITALic",
+      "CH<x>:LABel:FONT:SIZE",
+      "CH<x>:LABel:FONT:TYPE",
+      "CH<x>:LABel:FONT:UNDERline",
+      "CH<x>:LABel:NAMe",
+      "CH<x>:CLIPping",
+      "CH<x>:DESKew",
+      "CH<x>:DITHERrange",
+      "CH<x>:VTERm:BIAS"
     ]
   }
 }

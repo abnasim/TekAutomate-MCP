@@ -314,6 +314,88 @@ function reRankWithIntent(
       }
     }
 
+    // plot → PLOT:* commands, not measurement jitter
+    if (intent.subject === 'plot') {
+      if (headerLower.startsWith('plot:')) {
+        score += 60;
+      } else {
+        score -= 30;
+      }
+    }
+    // waveform_preamble → WFMOutpre:* commands
+    if (intent.subject === 'waveform_preamble') {
+      if (headerLower.startsWith('wfmoutpre')) {
+        score += 80;
+      } else {
+        score -= 40;
+      }
+    }
+    // trigger_sequence → TRIGger:B:BY/TIMe, not Ethernet TCP SEQnum
+    if (intent.subject === 'trigger_sequence') {
+      if (headerLower.includes('trigger:b:') || headerLower.includes('trigger:{a|b}')) {
+        score += 40;
+      }
+      if (headerLower.includes('ethernet') || headerLower.includes('tcp') || headerLower.includes('seq')) {
+        score -= 50;
+      }
+    }
+
+    // channel_on/off → DISplay:GLObal:CH<x>:STATE, not IF output
+    if (intent.subject === 'channel_on' || intent.subject === 'channel_off') {
+      if (headerLower.includes('display:global') || headerLower.includes('ch<x>:state')) {
+        score += 40;
+      }
+      if (headerLower.includes('output') || headerLower.includes('if:')) {
+        score -= 40;
+      }
+    }
+    // digital_threshold → CH<x>:DIGItal:THReshold, not probe degauss
+    if (intent.subject === 'digital_threshold') {
+      if (headerLower.includes('digital') && headerLower.includes('threshold')) {
+        score += 50;
+      }
+      if (headerLower.includes('probe') || headerLower.includes('degauss')) {
+        score -= 40;
+      }
+    }
+    // search_navigate → MARK:SELECTED:NEXT/PREV, not SEARCHTABle:DELete
+    if (intent.subject === 'search_navigate') {
+      if (headerLower.includes('mark:') || headerLower.includes('navigate')) {
+        score += 40;
+      }
+      if (headerLower.includes('delete') || headerLower.includes('table')) {
+        score -= 30;
+      }
+    }
+    // math_channel → MATH:DEFine or MATH:ADDNew, not MATH:STATE
+    if (intent.subject === 'math_channel') {
+      if (headerLower.includes('define') || headerLower.includes('addnew')) {
+        score += 30;
+      }
+      if (headerLower.includes(':state') && !headerLower.includes('addnew')) {
+        score -= 15;
+      }
+    }
+
+    // runt trigger → RUNT commands, not SETHold
+    if (intent.subject === 'runt') {
+      if (headerLower.includes('runt')) {
+        score += 40;
+      }
+      if (headerLower.includes('sethold') || headerLower.includes('holdtime')) {
+        score -= 30;
+      }
+    }
+    // averaging → ACQuire:NUMAVg, not horizontal record length
+    if (intent.subject === 'averaging') {
+      if (headerLower.includes('numavg') || headerLower.includes('acquire:mode')) {
+        score += 40;
+      }
+      if (headerLower.includes('horizontal') || headerLower.includes('record')) {
+        score -= 20;
+      }
+    }
+
     // bus intent → prefer TRIGger:A:BUS over SEARCH:SEARCH<x>:TRIGger:A:BUS
     if (intent.intent === 'bus') {
       if (headerLower.startsWith('trigger:') || headerLower.startsWith('trigger:{')) {
@@ -398,6 +480,8 @@ export async function searchScpi(input: SearchScpiInput): Promise<ToolResult<unk
     { pattern: /\bbadge\b.*\bstat/i, expand: 'DISPlaystat ENABle measurement badge statistics' },
     { pattern: /\bstat.*\bbadge/i, expand: 'DISPlaystat ENABle measurement badge statistics' },
     { pattern: /\bbadge/i, expand: 'DISPlaystat badge measurement display' },
+    { pattern: /\bpreamble/i, expand: 'WFMOutpre preamble waveform transfer encoding' },
+    { pattern: /\bsequence\b.*\btrigger|trigger\b.*\bsequence/i, expand: 'TRIGger:B:BY trigger sequence A B delayed' },
   ];
   let expandedQuery = q;
   for (const { pattern, expand } of QUERY_EXPANSIONS) {
@@ -514,6 +598,41 @@ export async function searchScpi(input: SearchScpiInput): Promise<ToolResult<unk
     ],
     screenshot: [
       'SAVe:IMAGe', 'SAVe:IMAGe:FILEFormat',
+    ],
+    plot: [
+      'PLOT:PLOT<x>:SOUrce<x>', 'PLOT:PLOT<x>:TYPe', 'PLOT:ADDNew', 'PLOT:DELEte',
+    ],
+    waveform_preamble: [
+      'WFMOutpre:ENCdg', 'WFMOutpre:BYT_Nr', 'WFMOutpre:BIT_Nr',
+      'WFMOutpre:XINcr', 'WFMOutpre:XZEro', 'WFMOutpre:YMUlt',
+      'WFMOutpre:YOFf', 'WFMOutpre:YZEro',
+    ],
+    trigger_sequence: [
+      'TRIGger:B:BY', 'TRIGger:B:TIMe', 'TRIGger:B:STATE',
+      'TRIGger:B:EDGE:SOUrce', 'TRIGger:B:EDGE:SLOpe',
+    ],
+    channel_on: [
+      'DISplay:GLObal:CH<x>:STATE', 'CH<x>:STATE',
+    ],
+    channel_off: [
+      'DISplay:GLObal:CH<x>:STATE', 'CH<x>:STATE',
+    ],
+    digital_threshold: [
+      'CH<x>:DIGItal:THReshold', 'CH<x>:DIGItal:MAGnivu:POSition',
+    ],
+    search_navigate: [
+      'MARK:SELECTED:NEXT', 'MARK:SELECTED:PREVious', 'MARK:CREAte',
+      'MARK:DELEte', 'SEARCH:SEARCH<x>:NAVigate',
+    ],
+    math_channel: [
+      'MATH:ADDNew', 'MATH<x>:DEFine', 'MATH:MATH<x>:DEFine',
+    ],
+    runt: [
+      'TRIGger:{A|B}:RUNT:POLarity', 'TRIGger:{A|B}:RUNT:THReshold:HIGH',
+      'TRIGger:{A|B}:RUNT:THReshold:LOW', 'TRIGger:{A|B}:RUNT:WIDth',
+    ],
+    averaging: [
+      'ACQuire:NUMAVg', 'ACQuire:MODe',
     ],
     horizontal_scale: [
       'HORizontal:SCAle', 'HORizontal:POSition', 'HORizontal:MODe',

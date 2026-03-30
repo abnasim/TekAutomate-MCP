@@ -56,8 +56,39 @@ const SUBJECT_GROUP_MAP: Array<{
   { pattern: /\btimebase\b.*\bscale\b/i, groups: ['Horizontal'], intent: 'horizontal', subject: 'horizontal_scale' },
   { pattern: /\btime\s*per\s*div/i, groups: ['Horizontal'], intent: 'horizontal', subject: 'horizontal_scale' },
 
+  // ── Channel on/off (MUST be before generic "channel" matches vertical) ──
+  { pattern: /\b(turn\s*on|enable)\s*(channel|ch\s*\d)/i, groups: ['Display', 'Vertical'], intent: 'display', subject: 'channel_on' },
+  { pattern: /\b(turn\s*off|disable)\s*(channel|ch\s*\d)/i, groups: ['Display', 'Vertical'], intent: 'display', subject: 'channel_off' },
+
+  // ── Digital channel threshold (MUST be before generic "voltage"/"threshold") ──
+  { pattern: /\bdigital\b.*\bthreshold/i, groups: ['Digital'], intent: 'digital', subject: 'digital_threshold' },
+  { pattern: /\bthreshold\b.*\bdigital/i, groups: ['Digital'], intent: 'digital', subject: 'digital_threshold' },
+
+  // ── Search/Mark navigation (MUST be before generic "search") ──
+  { pattern: /\b(next|previous|prev)\s*(event|mark|search)/i, groups: ['Search and Mark'], intent: 'search', subject: 'search_navigate' },
+  { pattern: /\bmark\s*(next|previous|prev|create|add|delete)/i, groups: ['Search and Mark'], intent: 'search', subject: 'search_navigate' },
+  { pattern: /\bnavigate\b.*\b(search|mark|event)/i, groups: ['Search and Mark'], intent: 'search', subject: 'search_navigate' },
+
+  // ── Acquisition averaging (MUST be before "mean"/"average" matches measurement) ──
+  { pattern: /\b(average|averaging)\s*(mode|acq|acquisition|\d+\s*sample)/i, groups: ['Acquisition'], intent: 'acquisition', subject: 'averaging' },
+  { pattern: /\b(acq|acquisition)\s*(average|averaging)/i, groups: ['Acquisition'], intent: 'acquisition', subject: 'averaging' },
+  { pattern: /\bnum\s*avg|numavg/i, groups: ['Acquisition'], intent: 'acquisition', subject: 'averaging' },
+
   // ── Zone/Visual trigger (MUST be before measurement patterns — "area" matches measurement) ──
   { pattern: /\b(zone\s*trigger|trigger\s*zone|trigger\s*area|enter\s*area|exit\s*area|visual\s*trigger|trigger\s*visual)\b/i, groups: ['Trigger', 'Display'], intent: 'trigger', subject: 'zone_trigger' },
+
+  // ── Plot (MUST be before "jitter"/"spectrum" matches measurement) ──
+  { pattern: /\bplot\s*(jitter|spectrum|source|trend|xy|histogram)/i, groups: ['Plot'], intent: 'display', subject: 'plot' },
+  { pattern: /\b(jitter|spectrum|trend)\s*plot/i, groups: ['Plot'], intent: 'display', subject: 'plot' },
+
+  // ── Waveform preamble / WFMOutpre (no SCPI keyword overlap) ──
+  { pattern: /\bpreamble/i, groups: ['Waveform Transfer'], intent: 'waveform', subject: 'waveform_preamble' },
+  { pattern: /\bwfmoutpre/i, groups: ['Waveform Transfer'], intent: 'waveform', subject: 'waveform_preamble' },
+
+  // ── Trigger A then B sequence (before generic trigger) ──
+  { pattern: /\btrigger\s*a\s*(then|and)\s*b/i, groups: ['Trigger'], intent: 'trigger', subject: 'trigger_sequence' },
+  { pattern: /\bsequence\s*trigger|trigger\s*sequence/i, groups: ['Trigger'], intent: 'trigger', subject: 'trigger_sequence' },
+  { pattern: /\ba\s*then\s*b\s*trigger/i, groups: ['Trigger'], intent: 'trigger', subject: 'trigger_sequence' },
 
   // ── DVM — before "RMS"/"AC"/"DC" match measurement ──
   { pattern: /\bDVM\b/i, groups: ['DVM'], intent: 'dvm', subject: 'dvm' },

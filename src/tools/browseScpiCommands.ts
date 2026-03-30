@@ -99,18 +99,30 @@ export async function browseScpiCommands(input: BrowseScpiInput): Promise<ToolRe
     const headers = GROUP_COMMANDS[resolved] || [];
     const description = GROUP_DESCRIPTIONS[resolved] || '';
 
-    // If filter is provided, narrow down
-    let filteredHeaders = headers;
-    if (filter) {
-      filteredHeaders = headers.filter(h => h.toLowerCase().includes(filter));
-    }
-
     // Get brief info for each command (header + short description + command type)
     const index = await getCommandIndex();
+
+    // If filter is provided, search against header AND shortDescription
+    // "FFT" doesn't appear in Math headers (they use SPECTral), but it's in descriptions
+    let filteredHeaders = headers;
+    if (filter) {
+      filteredHeaders = headers.filter(h => {
+        if (h.toLowerCase().includes(filter)) return true;
+        // Also check description
+        const entry = index.getByHeader(h, input.modelFamily);
+        if (entry) {
+          const desc = `${entry.shortDescription} ${entry.description}`.toLowerCase();
+          return desc.includes(filter);
+        }
+        return false;
+      });
+    }
+
     const commands = filteredHeaders.slice(0, limit).map(h => {
       const entry = index.getByHeader(h, input.modelFamily);
       return {
         header: h,
+        commandId: entry?.commandId || h,
         commandType: entry?.commandType || 'unknown',
         shortDescription: entry?.shortDescription || '',
       };
