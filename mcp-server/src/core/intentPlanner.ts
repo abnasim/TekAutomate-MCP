@@ -300,6 +300,7 @@ export interface PlannerIntent {
   save?: ParsedSaveIntent;
   recall?: ParsedRecallIntent;
   status?: ParsedStatusIntent;
+  maskTest?: boolean;
   errorCheck?: boolean;
   reset?: boolean;
   idn?: boolean;
@@ -683,6 +684,9 @@ export async function parseIntent(
   const spectrumView =
     deviceType === 'SCOPE' ? parseSpectrumViewIntent(message) : undefined;
 
+  // ── Mask test detection ──
+  const maskTest = /\bmask\s*test/i.test(message) || /\b(pass\s*fail|fail\s*count)\b/i.test(message);
+
   let save = parseSaveIntent(message, { channels });
   const recall = parseRecallIntent(message);
   let status = parseStatusIntent(message);
@@ -862,6 +866,10 @@ export async function parseIntent(
     if (rsa.triggerType !== undefined) groups.push('RSA_TRIGGER');
   }
 
+  if (maskTest) {
+    groups.push('ACQUISITION');
+  }
+
   if (save) {
     groups.push('SAVE');
     if (save.waveformSources && save.waveformSources.length > 0) groups.push('WAVEFORM_TRANSFER');
@@ -895,6 +903,7 @@ export async function parseIntent(
     save,
     recall,
     status,
+    maskTest,
     errorCheck,
     reset,
     idn,
@@ -1011,7 +1020,13 @@ export async function planIntent(
     ...(await resolveAwgCommands(index, intent.awg, sourceFile)),
     ...(await resolveSmuCommands(index, intent.smu, sourceFile)),
     ...(await resolveSpectrumViewCommands(index, intent.spectrumView, sourceFile)),
-    ...(await resolveSaveCommands(intent.save, intent.modelFamily))
+    ...(await resolveSaveCommands(intent.save, intent.modelFamily)),
+    ...(intent.maskTest ? [
+      buildSyntheticWrite('MASK:TESt:STATE ON', 'ACQUISITION'),
+      buildSyntheticWrite('MASK:COUNt:STATE ON', 'ACQUISITION'),
+      buildSyntheticWrite('ACQuire:STOPAfter SEQuence', 'ACQUISITION'),
+      buildSyntheticWrite('ACQuire:STATE RUN', 'ACQUISITION'),
+    ] : [])
   );
 
   if (intent.waitSeconds !== undefined && intent.waitSeconds > 0) {
@@ -1173,6 +1188,7 @@ function hasParsedIntentDetail(intent: PlannerIntent): boolean {
       intent.rsa ||
       intent.save ||
       intent.recall ||
+      intent.maskTest ||
       intent.status ||
       intent.errorCheck ||
       intent.reset ||
@@ -1338,18 +1354,23 @@ export async function resolveTriggerCommands(
   }
 
   if (trigger.source) {
-    const sourceHeader =
-      trigger.type === 'WIDth' ? 'TRIGger:{A|B}:PULSEWidth:SOUrce' : 'TRIGger:A:EDGE:SOUrce';
+    // Route source to the correct trigger type's source command
+    const sourceHeaderMap: Record<string, string> = {
+      'WIDth': 'TRIGger:{A|B}:PULSEWidth:SOUrce',
+      'TIMEOut': 'TRIGger:{A|B}:TIMEOut:SOUrce',
+      'RUNt': 'TRIGger:{A|B}:RUNT:SOUrce',
+      'WINdow': 'TRIGger:A:WINdow:SOUrce',
+      'TRANsition': 'TRIGger:A:TRANsition:SOUrce',
+      'LOGIc': 'TRIGger:A:LOGIc:INPut:CH<x>',
+    };
+    const sourceHeader = sourceHeaderMap[trigger.type || ''] || 'TRIGger:A:EDGE:SOUrce';
     const sourceRecord = findExactHeader(index, sourceHeader, sourceFile);
     if (sourceRecord) {
-      out.push(
-        materialize(
-          sourceRecord,
-          trigger.type === 'WIDth' ? 'TRIGger:A:PULSEWidth:SOUrce' : sourceHeader,
-          trigger.source,
-          'TRIGGER'
-        )
-      );
+      out.push(materialize(sourceRecord, sourceHeader.replace('{A|B}', 'A'), trigger.source, 'TRIGGER'));
+    } else {
+      // Fallback to EDGE source if specific type source not in corpus
+      const edgeSource = findExactHeader(index, 'TRIGger:A:EDGE:SOUrce', sourceFile);
+      if (edgeSource) out.push(materialize(edgeSource, 'TRIGger:A:EDGE:SOUrce', trigger.source, 'TRIGGER'));
     }
   }
 
@@ -1418,6 +1439,37 @@ export async function resolveTriggerCommands(
           );
         }
       }
+    }
+  }
+
+  // ── RUNT trigger: threshold HIGH/LOW ──
+  if (trigger.type === 'RUNt' || (trigger.type as string) === 'RUNT') {
+    if (trigger.levelVolts !== undefined) {
+      out.push(buildSyntheticWrite(`TRIGger:A:RUNT:THReshold:HIGH ${formatValue(trigger.levelVolts)}`, 'TRIGGER'));
+      out.push(buildSyntheticWrite(`TRIGger:A:RUNT:THReshold:LOW ${formatValue(-Math.abs(trigger.levelVolts))}`, 'TRIGGER'));
+    }
+    if (trigger.source) {
+      const runtSrc = findExactHeader(index, 'TRIGger:{A|B}:RUNT:SOUrce', sourceFile);
+      if (runtSrc) out.push(materialize(runtSrc, 'TRIGger:A:RUNT:SOUrce', trigger.source, 'TRIGGER'));
+    }
+  }
+
+  // ── WINDOW trigger: threshold HIGH/LOW ──
+  if (trigger.type === 'WINdow' || (trigger.type as string) === 'WINDOW') {
+    if (trigger.levelVolts !== undefined) {
+      out.push(buildSyntheticWrite(`TRIGger:A:WINdow:THReshold:HIGH ${formatValue(trigger.levelVolts)}`, 'TRIGGER'));
+      out.push(buildSyntheticWrite(`TRIGger:A:WINdow:THReshold:LOW ${formatValue(-Math.abs(trigger.levelVolts))}`, 'TRIGGER'));
+    }
+    if (trigger.source) {
+      out.push(buildSyntheticWrite(`TRIGger:A:WINdow:SOUrce ${trigger.source}`, 'TRIGGER'));
+    }
+  }
+
+  // ── Trigger sequence (A then B) ──
+  if (trigger.sequenceBy) {
+    out.push(buildSyntheticWrite(`TRIGger:B:BY ${trigger.sequenceBy}`, 'TRIGGER_B'));
+    if (trigger.delaySeconds !== undefined) {
+      out.push(buildSyntheticWrite(`TRIGger:B:TIMe ${trigger.delaySeconds.toExponential()}`, 'TRIGGER_B'));
     }
   }
 
@@ -2855,6 +2907,14 @@ export async function resolveSaveCommands(
       arguments: [],
       examples: [],
     });
+  }
+
+  // When waveform sources are specified, also add raw transfer setup commands
+  if (waveformExports.length > 0) {
+    out.push(buildSyntheticWrite(`DATa:SOUrce ${waveformExports[0].source}`, 'WAVEFORM_TRANSFER'));
+    out.push(buildSyntheticWrite('DATa:ENCdg SRIBinary', 'WAVEFORM_TRANSFER'));
+    out.push(buildSyntheticWrite('DATa:STARt 1', 'WAVEFORM_TRANSFER'));
+    out.push(buildSyntheticWrite(`DATa:STOP ${waveformExports.length > 0 ? '10000' : '1000'}`, 'WAVEFORM_TRANSFER'));
   }
 
   if (save.setupPath) {
@@ -4420,7 +4480,7 @@ export function parseSaveIntent(
 ): ParsedSaveIntent | undefined {
   const save: ParsedSaveIntent = {};
   const clauses = splitClauses(message);
-  const explicitSaveVerb = /\b(save|export|exported|capture|dump|download)\b/i.test(message);
+  const explicitSaveVerb = /\b(save|export|exported|capture|dump|download|transfer)\b/i.test(message);
   const waitForCompletionRequested =
     /\bafter\s+(?:it|capture|acquisition)\s+(?:finishes|finished|completes|completing|is done)\b/i.test(message) ||
     /\bwhen\s+(?:it|capture|acquisition)\s+finishes\b/i.test(message);
@@ -4428,7 +4488,7 @@ export function parseSaveIntent(
   if (SAVE_SCREENSHOT_REGEX.test(message)) save.screenshot = true;
 
   if (
-    /\b(save|export|dump|download)\b[^.!?\n\r]*\bwaveform\b/i.test(message) &&
+    /\b(save|export|dump|download|transfer)\b[^.!?\n\r]*\b(waveform|data)\b/i.test(message) &&
     context.channels.length > 0
   ) {
     save.waveformSources = context.channels.map((channel) => channel.channel);
