@@ -727,8 +727,54 @@ const MCP_EXPOSED_TOOLS = new Set([
   'discover_scpi',        // live passthrough — tree-walk undocumented commands
 ]);
 
+// Slim tek_router schema for MCP — only the params external AI needs.
+// Full schema (with CRUD params) stays available for TekAutomate's internal calls.
+const TEK_ROUTER_SLIM_PARAMS = {
+  type: 'object',
+  properties: {
+    action: {
+      type: 'string',
+      enum: ['search_exec', 'build', 'search', 'exec', 'info', 'list', 'create'],
+      description: 'Operation. Use "search_exec" for most tasks.',
+    },
+    query: {
+      type: 'string',
+      description: 'Trigger phrase (e.g. "search scpi commands") or build description.',
+    },
+    args: {
+      type: 'object',
+      description: 'Inner tool parameters. Shape auto-selects the tool: args.header→exact lookup, args.query→fuzzy search, args.commands→verify, args.group→browse.',
+    },
+    toolId: {
+      type: 'string',
+      description: 'Tool ID for exec/info actions.',
+    },
+    limit: {
+      type: 'number',
+      description: 'Max results to return.',
+    },
+    modelFamily: {
+      type: 'string',
+      description: 'Instrument model filter: MSO2, MSO4, MSO5, MSO6, DPO7, AFG, AWG.',
+    },
+    debug: {
+      type: 'boolean',
+      description: 'Include match trace details.',
+    },
+  },
+  required: ['action'],
+  additionalProperties: true,  // Accept full params silently — just don't advertise them
+};
+
 export function getMcpExposedTools() {
-  return getToolDefinitions().filter(def => MCP_EXPOSED_TOOLS.has(def.name));
+  return getToolDefinitions()
+    .filter(def => MCP_EXPOSED_TOOLS.has(def.name))
+    .map(def => {
+      if (def.name === 'tek_router') {
+        return { ...def, parameters: TEK_ROUTER_SLIM_PARAMS };
+      }
+      return def;
+    });
 }
 
 export async function runTool(name: string, args: Record<string, unknown>) {
