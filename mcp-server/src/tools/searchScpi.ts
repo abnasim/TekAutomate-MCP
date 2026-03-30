@@ -133,19 +133,42 @@ function reRankWithIntent(
       }
     }
 
-    // ── 3. Header depth penalty ──
-    // Short headers like TRIGger:A:EDGE:LEVel (4 tokens) are more likely what the user wants
-    // than SEARCH:SEARCH<x>:TRIGger:A:BUS:CPHY:DATa:VALue (8 tokens)
-    if (headerTokens.length > 6) {
-      score -= (headerTokens.length - 6) * 3;  // -3 per extra token beyond 6
+    // ── 3. Header depth/simplicity preference ──
+    // Shorter headers are usually the primary command, longer ones are sub-settings.
+    // "SAVe:WAVEform" (2 tokens) should rank above "SAVe:WAVEform:DATa:STARt" (4 tokens)
+    // "HORizontal:FASTframe:STATE" (3 tokens) above "HORizontal:FASTframe:COUNt" (3 tokens) — equal
+    // "TRIGger:A:LEVel" (3 tokens) above "TRIGger:B:RESET:EDGE:LEVel" (5 tokens)
+    if (headerTokens.length <= 3) {
+      score += 8;   // Short/primary command bonus
+    } else if (headerTokens.length <= 5) {
+      score += 0;   // Normal
+    } else {
+      score -= (headerTokens.length - 5) * 3;  // Deep nesting penalty
     }
 
-    // ── 4. Exact SCPI-style match boost ──
+    // ── 4. Prefer TRIGger:A over TRIGger:B and RESET variants ──
+    // TRIGger:A is the primary trigger, TRIGger:B is secondary, RESET is a sub-variant
+    if (intent.intent === 'trigger') {
+      if (headerLower.includes('trigger:a:') || headerLower.includes('trigger:{a|b}')) {
+        score += 8;  // Primary trigger
+      }
+      if (headerLower.includes(':reset:')) {
+        score -= 10;  // RESET sub-variant, rarely what user wants first
+      }
+    }
+
+    // ── 5. Prefer STATE/enable commands for feature queries ──
+    // "FastFrame" → user probably wants to enable/check it, not configure COUNt first
+    if (headerTokens.some(t => t === 'state' || t === 'enable')) {
+      score += 5;
+    }
+
+    // ── 6. Exact SCPI-style match boost ──
     if (queryLower.includes(':') && headerLower.includes(queryLower.replace(/\?$/, ''))) {
       score += 50;
     }
 
-    // ── 5. POWer:ADDNew specific penalty ──
+    // ── 7. POWer:ADDNew specific penalty ──
     if (headerLower === 'power:addnew' && !wantsPower) {
       score -= 40;
     }
