@@ -712,19 +712,28 @@ export class CommandIndex {
 
   constructor(entries: CommandRecord[]) {
     this.entries = entries;
-    const docs = entries.map((entry) =>
-      [
+    const docs = entries.map((entry) => {
+      // Extract distinctive words from the full description that don't appear in
+      // the header or short description. These help find commands by UI terminology
+      // (e.g. "badge" in DISPlaystat:ENABle description, "crosshair" in GRAticule).
+      const headerAndShort = `${entry.header} ${entry.shortDescription}`.toLowerCase().replace(/[^a-z]/g, ' ');
+      const commonWords = new Set(headerAndShort.split(/\s+/).filter(w => w.length > 2));
+      const descWords = (entry.description || '').toLowerCase().replace(/[^a-z]/g, ' ').split(/\s+/).filter(w => w.length > 3);
+      const uniqueDescWords = descWords.filter(w => !commonWords.has(w)).slice(0, 12).join(' ');
+
+      return [
         entry.header,
         entry.shortDescription,
         entry.shortDescription, // weight semantic intent heavier in BM25 ranking
         GROUP_DESCRIPTIONS[entry.group] || '',
         entry.description,
+        uniqueDescWords,        // extra weight for distinctive description terms
         entry.category,
         entry.tags.join(' '),
       ]
         .filter(Boolean)
-        .join(' ')
-    );
+        .join(' ');
+    });
     this.bm25 = new Bm25(docs);
     entries.forEach((entry, idx) => {
       const keys = expandHeaderKeys(entry.header);

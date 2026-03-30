@@ -547,10 +547,19 @@ export async function searchScpi(input: SearchScpiInput): Promise<ToolResult<unk
   // For intents with injected headers, force them to the top.
   // BM25 scores can be so high that additive boosts can't overcome them.
   if (injectionHeaders.length > 0) {
-    const injectedSet = new Set(injectionHeaders.map(h => h.toLowerCase()));
-    const isInjected = (cmd: CommandRecord) =>
-      injectedSet.has(cmd.header.toLowerCase()) ||
-      injectionHeaders.some(h => cmd.header.toLowerCase().startsWith(h.toLowerCase().split('<')[0]));
+    // Build set of injected headers for exact matching.
+    // Also include the resolved form (e.g. "sv:span" from "SV:SPAN")
+    const injectedSet = new Set<string>();
+    for (const h of injectionHeaders) {
+      injectedSet.add(h.toLowerCase());
+      // Add the prefix before any placeholder as a fallback
+      const stripped = h.replace(/<[^>]+>/g, '').replace(/:$/, '').toLowerCase();
+      if (stripped !== h.toLowerCase()) injectedSet.add(stripped);
+    }
+    const isInjected = (cmd: CommandRecord) => {
+      const hdr = cmd.header.toLowerCase();
+      return injectedSet.has(hdr);
+    };
     const top = reRanked.filter(isInjected);
     const rest = reRanked.filter(c => !isInjected(c));
     reRanked = [...top, ...rest];
