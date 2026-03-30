@@ -222,6 +222,120 @@ function reRankWithIntent(
       }
     }
 
+    // spectrum_view → SV:* commands
+    if (intent.subject === 'spectrum_view') {
+      if (headerLower.startsWith('sv:') || headerLower.includes(':sv:')) {
+        score += 80;
+      } else {
+        score -= 40;
+      }
+    }
+    // eye_diagram → Measurement eye/jitter commands, not RSA/audio
+    if (intent.subject === 'eye_diagram') {
+      if (headerLower.includes('measurement') || headerLower.includes('eyemask')) {
+        score += 20;
+      }
+      // Penalize RSA/audio/DPX commands
+      if (headerLower.includes('fetch:') || headerLower.includes('read:') || headerLower.includes('audio')) {
+        score -= 50;
+      }
+    }
+    // power_harmonics → POWer:* HARMONICS commands, not audio THD
+    if (intent.subject === 'power_harmonics') {
+      if (headerLower.includes('power') && headerLower.includes('harmonics')) {
+        score += 40;
+      } else if (headerLower.startsWith('power:')) {
+        score += 15;
+      }
+      if (headerLower.includes('audio') || headerLower.includes('fetch:')) {
+        score -= 50;
+      }
+    }
+
+    // power_soa → POWer:*:SOA commands
+    if (intent.subject === 'power_soa') {
+      if (headerLower.includes('soa')) {
+        score += 60;
+      } else if (headerLower.startsWith('power:')) {
+        score += 10;
+      } else {
+        score -= 30;
+      }
+    }
+    // afg → AFG:* commands, not measurement frequency
+    if (intent.subject === 'afg') {
+      if (headerLower.startsWith('afg:')) {
+        score += 80;
+      } else {
+        score -= 40;
+      }
+    }
+    // histogram_box → HIStogram:BOX commands
+    if (intent.subject === 'histogram_box') {
+      if (headerLower.includes('histogram') || headerLower.includes('hist')) {
+        score += 40;
+      } else {
+        score -= 20;
+      }
+    }
+
+    // dvm → DVM:* commands, not measurement RMS
+    if (intent.subject === 'dvm') {
+      if (headerLower.startsWith('dvm')) {
+        score += 80;
+      } else {
+        score -= 40;
+      }
+    }
+    // dphy/cphy → BUS:B<x>:DPHY/CPHY commands
+    if (intent.subject === 'dphy' || intent.subject === 'cphy') {
+      const proto = intent.subject.toUpperCase();
+      if (headerLower.includes(proto.toLowerCase())) {
+        score += 40;
+      }
+      if (headerLower.startsWith('bus:')) {
+        score += 15;
+      }
+    }
+    // rise_time → measurement commands, penalize SEARCH timeout
+    if (intent.subject === 'rise_time') {
+      if (headerLower.includes('measurement') || headerLower.includes('addmeas')) {
+        score += 20;
+      }
+      if (headerLower.startsWith('search:')) {
+        score -= 20;
+      }
+    }
+
+    // bus intent → prefer TRIGger:A:BUS over SEARCH:SEARCH<x>:TRIGger:A:BUS
+    if (intent.intent === 'bus') {
+      if (headerLower.startsWith('trigger:') || headerLower.startsWith('trigger:{')) {
+        score += 10;
+      }
+      if (headerLower.startsWith('search:search')) {
+        score -= 10;
+      }
+      if (headerLower.startsWith('bus:')) {
+        score += 15;
+      }
+    }
+
+    // waveform_transfer → WFMOutpre/DATa/CURVe commands, not trigger
+    if (intent.subject === 'waveform_transfer') {
+      if (headerLower.includes('wfmoutpre') || headerLower.includes('data:') || headerLower.startsWith('curve')) {
+        score += 40;
+      }
+      if (headerLower.includes('trigger')) {
+        score -= 30;
+      }
+    }
+    // dpm → DPM-specific measurement commands
+    if (intent.subject === 'dpm') {
+      if (headerLower.includes('dpm')) {
+        score += 30;
+      }
+    }
+
     // ── 6. Exact SCPI-style match boost ──
     if (queryLower.includes(':') && headerLower.includes(queryLower.replace(/\?$/, ''))) {
       score += 50;
@@ -230,6 +344,19 @@ function reRankWithIntent(
     // ── 7. POWer:ADDNew specific penalty ──
     if (headerLower === 'power:addnew' && !wantsPower) {
       score -= 40;
+    }
+
+    // ── 8. RSA/Audio command penalty ──
+    // RSA spectrum analyzer and audio commands pollute scope queries.
+    // Only show them when explicitly asked for RSA/audio.
+    const wantsRsa = /\b(rsa|audio|spectrum\s*anal)/i.test(queryLower);
+    if (!wantsRsa) {
+      const isRsaAudio = headerLower.startsWith('fetch:') || headerLower.startsWith('read:')
+        || headerLower.startsWith('[sense]') || headerLower.includes(':audio:')
+        || headerLower.includes(':ofdm:') || headerLower.includes(':dpx:');
+      if (isRsaAudio) {
+        score -= 60;
+      }
     }
 
     return { cmd, score };
@@ -258,6 +385,9 @@ export async function searchScpi(input: SearchScpiInput): Promise<ToolResult<unk
     { pattern: /\bbaud\s*rate/i, expand: 'BITRate baud rate' },
     { pattern: /\brecord\s*length/i, expand: 'RECOrdlength horizontal record' },
     { pattern: /\bsample\s*rate/i, expand: 'SAMPLERate sample rate horizontal' },
+    { pattern: /\barinc\s*429/i, expand: 'ARINC429A arinc bus' },
+    { pattern: /\bmil.?std.?1553|mil.?1553/i, expand: 'MIL1553B mil bus' },
+    { pattern: /\bstandard\s*dev/i, expand: 'STATIstics statistics STDDev measurement' },
   ];
   let expandedQuery = q;
   for (const { pattern, expand } of QUERY_EXPANSIONS) {
@@ -305,6 +435,65 @@ export async function searchScpi(input: SearchScpiInput): Promise<ToolResult<unk
       'VISual:ENABLE', 'VISual:AREA<x>:SHAPE', 'VISual:AREA<x>:SOUrce',
       'VISual:AREA<x>:HITType', 'VISual:AREA<x>:HEIGht', 'VISual:AREA<x>:VERTICES',
       'VISual:AREA<x>:RESET', 'VISual:AREA<x>:ROTAtion',
+    ],
+    spectrum_view: [
+      'SV:CENTERFrequency', 'SV:SPAN', 'SV:RBW', 'SV:WINDOW',
+      'SV:SPANRBWRatio', 'CH<x>:SV:STATE', 'CH<x>:SV:CENTERFrequency',
+    ],
+    eye_diagram: [
+      'MEASUrement:MEAS<x>:RESUlts:CURRentacq:MEAN?',
+      'MEASUrement:ADDMEAS', 'MEASUrement:ENABLEPjitter',
+    ],
+    power_harmonics: [
+      'POWer:POWer<x>:TYPe', 'POWer:ADDNew',
+      'POWer:POWer<x>:HARMONICS:CLASs', 'POWer:POWer<x>:HARMONICS:STANDard',
+      'POWer:POWer<x>:HARMONICS:UNITs', 'POWer:POWer<x>:HARMONICS:FUNDamental',
+    ],
+    power_soa: [
+      'POWer:POWer<x>:SOA:POINT<x>', 'POWer:POWer<x>:TYPe',
+      'POWer:ADDNew',
+    ],
+    afg: [
+      'AFG:FUNCtion', 'AFG:FREQuency', 'AFG:AMPLitude', 'AFG:OFFSet',
+      'AFG:OUTPut:STATE', 'AFG:PERIod', 'AFG:SYMMetry', 'AFG:PHASe',
+    ],
+    dvm: [
+      'DVM:MODe', 'DVM:AUTORange', 'DVM:SOUrce', 'DVM:MEASUrement:FREQuency?',
+      'DVM:MEASUrement:VALue?',
+    ],
+    dphy: [
+      'BUS:B<x>:DPHY:CLOCk:SOUrce', 'BUS:B<x>:DPHY:CLOCk:THRESHold',
+      'BUS:B<x>:DPHY:LP:THRESHold', 'BUS:B<x>:DPHY:PROTocol:TYPe',
+    ],
+    cphy: [
+      'BUS:B<x>:CPHY:A:SOUrce', 'BUS:B<x>:CPHY:A:THRESHold',
+      'BUS:B<x>:CPHY:SUBTYPe',
+    ],
+    rise_time: [
+      'MEASUrement:ADDMEAS', 'MEASUrement:MEAS<x>:TYPe',
+    ],
+    histogram_box: [
+      'HIStogram:BOX', 'HIStogram:BOXPcnt',
+      'HIStogram:DISplay', 'HIStogram:MODe',
+    ],
+    waveform_transfer: [
+      'WFMOutpre:ENCdg', 'DATa:ENCdg', 'DATa:SOUrce', 'DATa:STARt', 'DATa:STOP',
+      'CURVe', 'WFMOutpre:BYT_Nr', 'WFMOutpre:XINcr', 'WFMOutpre:YMUlt',
+    ],
+    dpm: [
+      'MEASUrement:MEAS<x>:DPM:TYPE',
+    ],
+    recall_setup: [
+      'RECAll:SETUp', 'RECAll:SESsion',
+    ],
+    recall_session: [
+      'RECAll:SESsion', 'RECAll:SETUp',
+    ],
+    recall_waveform: [
+      'RECAll:WAVEform', 'RECAll:WAVEform:FILEPath',
+    ],
+    save_waveform: [
+      'SAVe:WAVEform', 'SAVe:WAVEform:FILEFormat',
     ],
     trigger_level: [
       'TRIGger:{A|B}:LEVel:CH<x>', 'TRIGger:A:LEVel:CH<x>',

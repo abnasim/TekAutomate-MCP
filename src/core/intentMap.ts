@@ -54,6 +54,35 @@ const SUBJECT_GROUP_MAP: Array<{
   // ── Zone/Visual trigger (MUST be before measurement patterns — "area" matches measurement) ──
   { pattern: /\b(zone\s*trigger|trigger\s*zone|trigger\s*area|enter\s*area|exit\s*area|visual\s*trigger|trigger\s*visual)\b/i, groups: ['Trigger', 'Display'], intent: 'trigger', subject: 'zone_trigger' },
 
+  // ── DVM — before "RMS"/"AC"/"DC" match measurement ──
+  { pattern: /\bDVM\b/i, groups: ['DVM'], intent: 'dvm', subject: 'dvm' },
+
+  // ── DPHY / CPHY — before generic bus or IMDA patterns ──
+  { pattern: /\bDPHY\b/i, groups: ['Bus', 'Trigger'], intent: 'bus', subject: 'dphy' },
+  { pattern: /\bCPHY\b/i, groups: ['Bus', 'Trigger'], intent: 'bus', subject: 'cphy' },
+
+  // ── Compound patterns that MUST come before generic keyword matches ──
+  // These prevent generic keywords (area, frequency, position, etc.) from stealing specific intents.
+
+  // Spectrum view — before "frequency" matches measurement
+  { pattern: /\b(spectrum\s*view|spectral\s*view)\b/i, groups: ['Spectrum view'], intent: 'math', subject: 'spectrum_view' },
+  { pattern: /\bSV:/i, groups: ['Spectrum view'], intent: 'math', subject: 'spectrum_view' },
+
+  // Eye diagram / BER — before "BER" matches RSA audio
+  { pattern: /\b(eye\s*diagram|eye\s*pattern|eye\s*measurement|eye.*BER|BER.*eye)\b/i, groups: ['Measurement'], intent: 'measurement', subject: 'eye_diagram' },
+
+  // Power harmonics / THD — before "THD" matches audio distortion
+  { pattern: /\b(power\s*harmonics|harmonics\s*THD|THD\s*limit|power.*THD|harmonics.*limit)\b/i, groups: ['Power'], intent: 'power', subject: 'power_harmonics' },
+
+  // SOA / safe operating area — before "area" matches measurement area
+  { pattern: /\b(SOA|safe\s*operating\s*area)\b/i, groups: ['Power'], intent: 'power', subject: 'power_soa' },
+
+  // AFG — before "frequency"/"amplitude" match measurement
+  { pattern: /\bAFG\b/i, groups: ['AFG'], intent: 'afg', subject: 'afg' },
+
+  // Histogram box — before "horizontal position" matches horizontal
+  { pattern: /\bhistogram\s*box\b/i, groups: ['Histogram'], intent: 'display', subject: 'histogram_box' },
+
   // ── Trigger source/channel patterns (before generic channel match) ──
   { pattern: /\btrigger\b.*\bsource\b/i, groups: ['Trigger'], intent: 'trigger', subject: 'trigger_source' },
   { pattern: /\bsource\b.*\btrigger\b/i, groups: ['Trigger'], intent: 'trigger', subject: 'trigger_source' },
@@ -248,8 +277,10 @@ const SUBJECT_GROUP_MAP: Array<{
   { pattern: /\b(wbg|wide\s*band\s*gap|double\s*pulse)\b/i, groups: ['Wide Band Gap Analysis (WBG)'], intent: 'wbg', subject: 'wbg' },
 
   // ── Display ──
-  { pattern: /\b(cursor|bar|crosshair|readout)\b/i, groups: ['Cursor'], intent: 'display', subject: 'cursor' },
-  { pattern: /\b(graticule|grid|persistence|intensity|brightness)\b/i, groups: ['Display'], intent: 'display', subject: 'display' },
+  { pattern: /\b(graticule|grid\s*type|display\s*grid)\b/i, groups: ['Display'], intent: 'display', subject: 'graticule' },
+  { pattern: /\b(cursor|bar|readout)\b/i, groups: ['Cursor'], intent: 'display', subject: 'cursor' },
+  { pattern: /\b(crosshair)\b/i, groups: ['Display'], intent: 'display', subject: 'graticule' },
+  { pattern: /\b(persistence|intensity|brightness)\b/i, groups: ['Display'], intent: 'display', subject: 'display' },
   { pattern: /\b(waveview|display|screen)\b/i, groups: ['Display'], intent: 'display', subject: 'display' },
   { pattern: /\b(histogram)\b/i, groups: ['Histogram'], intent: 'display', subject: 'histogram' },
   { pattern: /\b(plot|trend)\b/i, groups: ['Plot'], intent: 'display', subject: 'plot' },
@@ -274,6 +305,7 @@ const SUBJECT_GROUP_MAP: Array<{
   { pattern: /\b(grid|graticule|intensity|brightness)\b/i, groups: ['Display'], intent: 'display', subject: 'display_general' },
 
   // ── Save / Recall ──
+  { pattern: /\b(recall\s*waveform|reference\s*waveform\s*recall|recall\s*ref|load\s*waveform|load\s*reference)\b/i, groups: ['Save and Recall'], intent: 'save', subject: 'recall_waveform' },
   { pattern: /\b(recall\s*setup|load\s*setup|setup\s*recall|load\s*.*\.tss|recall\s*.*\.tss|load\s*.*\.set)\b/i, groups: ['Save and Recall', 'File System'], intent: 'save', subject: 'recall_setup' },
   { pattern: /\b(save\s*setup|store\s*setup|setup\s*save)\b/i, groups: ['Save and Recall'], intent: 'save', subject: 'save_setup' },
   { pattern: /\b(screenshot|screen\s*capture|save\s*image|print)\b/i, groups: ['Save and Recall'], intent: 'save', subject: 'screenshot' },
