@@ -150,6 +150,49 @@ function extractDetailsBody(source: string): string | null {
   return match?.[1]?.trim() || null;
 }
 
+function collectChatKitTextCandidates(container: HTMLDivElement): string[] {
+  const candidates: string[] = [];
+  const seen = new Set<string>();
+
+  const push = (value: unknown) => {
+    const text = decodeHtmlEntities(String(value || '')).trim();
+    if (!text) return;
+    if (seen.has(text)) return;
+    seen.add(text);
+    candidates.push(text);
+  };
+
+  const pushNodeText = (root: ParentNode | ShadowRoot | null | undefined) => {
+    if (!root) return;
+    push((root as ParentNode).textContent || '');
+    const blocks = Array.from((root as ParentNode).querySelectorAll?.('pre, code, [data-message-content], article, section, div') || []);
+    blocks.forEach((el) => {
+      const text = (el as HTMLElement).innerText || el.textContent || '';
+      if (text.includes('ACTIONS_JSON') || text.includes('<details>') || text.includes('"summary"')) {
+        push(text);
+      }
+    });
+  };
+
+  pushNodeText(container);
+
+  const chatKitEl = container.querySelector('openai-chatkit');
+  if (chatKitEl) {
+    pushNodeText(chatKitEl);
+    pushNodeText(chatKitEl.shadowRoot);
+    const iframes = Array.from(chatKitEl.querySelectorAll('iframe'));
+    iframes.forEach((frame) => {
+      try {
+        pushNodeText((frame as HTMLIFrameElement).contentDocument?.body || null);
+      } catch {
+        // Cross-origin iframe content is not readable; ignore.
+      }
+    });
+  }
+
+  return candidates;
+}
+
 export function OpenAiChatKitPanel({
   apiKey,
   steps,
@@ -175,6 +218,7 @@ export function OpenAiChatKitPanel({
   autoApplyRef.current = autoApply;
   const lastContextSentRef = useRef('');
   const lastParsedJsonRef = useRef('');
+  const responseScanTimersRef = useRef<number[]>([]);
 
   const extractActionsPreview = useCallback((text: string): ParsedActionsPreview | null => {
     const rawJson =
@@ -242,15 +286,26 @@ export function OpenAiChatKitPanel({
 
   const captureActionsPreview = useCallback((text: string) => {
     const preview = extractActionsPreview(text);
-    if (!preview) return;
-    if (preview.rawJson === lastParsedJsonRef.current) return;
+    if (!preview) return false;
+    if (preview.rawJson === lastParsedJsonRef.current) return true;
     lastParsedJsonRef.current = preview.rawJson;
     setParsedPreview(preview);
     scrubRenderedActionsJson();
     if (autoApplyRef.current) {
       onActionsRef.current?.(preview.actions, preview.summary);
     }
+    return true;
   }, [extractActionsPreview, scrubRenderedActionsJson]);
+
+  const scanContainerForActions = useCallback(() => {
+    const container = containerRef.current;
+    if (!container) return false;
+    const candidates = collectChatKitTextCandidates(container);
+    for (const candidate of candidates) {
+      if (captureActionsPreview(candidate)) return true;
+    }
+    return false;
+  }, [captureActionsPreview]);
 
   // ── Session creation ──
   // Calls OpenAI ChatKit Sessions API directly from the browser.
@@ -355,25 +410,19 @@ export function OpenAiChatKitPanel({
       console.log('[ChatKit] Ready');
       setInitError(null);
       setParsedPreview(null);
+      lastParsedJsonRef.current = '';
     },
     // ── Response end — scan for ACTIONS_JSON and auto-apply ──
     onResponseEnd: () => {
-      // Wait for ChatKit to finish rendering, then scan for ACTIONS_JSON
-      setTimeout(() => {
-        const container = containerRef.current;
-        if (!container) return;
-        const chatKitEl = container.querySelector('openai-chatkit');
-        // Try every text source available
-        const text = [
-          chatKitEl?.textContent || '',
-          chatKitEl?.innerHTML || '',
-          container.textContent || '',
-          container.innerHTML || '',
-        ].join('\n');
-        console.log('[ChatKit] onResponseEnd scan, length:', text.length, 'has ACTIONS_JSON:', text.includes('ACTIONS_JSON'));
-        if (!text.includes('ACTIONS_JSON')) return;
-        captureActionsPreview(text);
-      }, 800); // Wait for render
+      responseScanTimersRef.current.forEach((timer) => window.clearTimeout(timer));
+      responseScanTimersRef.current = [];
+      [150, 600, 1200, 2200, 3500].forEach((delay) => {
+        const timer = window.setTimeout(() => {
+          const matched = scanContainerForActions();
+          console.log('[ChatKit] onResponseEnd rescan', { delay, matched });
+        }, delay);
+        responseScanTimersRef.current.push(timer);
+      });
     },
     // Client-side tool execution — same split as liveToolLoop.ts:
     // Instrument tools (send_scpi, capture_screenshot, etc.) → browser calls executor directly
@@ -529,14 +578,7 @@ export function OpenAiChatKitPanel({
       if (!allText || allText === lastProcessedRef.current) return;
       lastProcessedRef.current = allText;
       console.log('[ChatKit] DOM scan, text length:', allText.length, 'has ACTIONS_JSON:', allText.includes('ACTIONS_JSON'));
-
-      const jsonMatch =
-        allText.match(/```json\s*(\{[\s\S]*?"actions"\s*:\s*\[[\s\S]*?\})\s*```/)           // fenced ```json ... ```
-        || allText.match(/ACTIONS_JSON:\s*(\{[\s\S]*?"actions"\s*:\s*\[[\s\S]*?\][\s\S]*?\})/) // ACTIONS_JSON: { ... }
-        || allText.match(/(\{"summary"[\s\S]*?"actions"\s*:\s*\[[\s\S]*?\][\s\S]*?\})/);       // raw { "summary"... }
-      if (jsonMatch) {
-        captureActionsPreview(jsonMatch[1]);
-      }
+      scanContainerForActions();
     };
 
     const observer = new MutationObserver(() => {
@@ -549,8 +591,10 @@ export function OpenAiChatKitPanel({
     return () => {
       observer.disconnect();
       if (scanTimerRef.current) clearTimeout(scanTimerRef.current);
+      responseScanTimersRef.current.forEach((timer) => window.clearTimeout(timer));
+      responseScanTimersRef.current = [];
     };
-  }, [captureActionsPreview]);
+  }, [scanContainerForActions]);
 
   // ── Inject workflow context when steps change ──
   useEffect(() => {
