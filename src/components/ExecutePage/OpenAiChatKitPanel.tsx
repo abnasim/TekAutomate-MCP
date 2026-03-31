@@ -208,8 +208,17 @@ export function OpenAiChatKitPanel({
       }
     },
     onError: (detail: { error: Error }) => {
-      console.error('[ChatKit] Error:', detail.error);
-      setInitError(detail.error?.message || 'ChatKit error');
+      const msg = detail.error?.message || 'ChatKit error';
+      console.error('[ChatKit] Error:', msg);
+      // If thread load fails (stale thread ID), clear it and retry
+      if (msg.includes('404') || msg.includes('thread') || msg.includes('initial thread')) {
+        console.warn('[ChatKit] Stale thread ID — clearing and retrying');
+        setStoredThreadId('');
+        setInitError(null);
+        window.location.reload();
+        return;
+      }
+      setInitError(msg);
     },
     onReady: () => {
       console.log('[ChatKit] Ready');
