@@ -40,25 +40,37 @@ ALWAYS use these for SCPI command lookup. Do NOT guess from memory.
 
 ## Tool Priority — choose the RIGHT tool for the task
 
-### For building flows (user says "build", "set up", "configure", "create a flow"):
-→ Use **tek_router** with action:"build" — ONE call, it handles search + verify + materialize internally.
-  Example: {action:"build", query:"set up FastFrame with 200 frames on CH1"}
-  This is always more efficient than chaining 5 direct tool calls yourself.
+### Pattern 1: Build a flow ("build", "set up", "configure", "create a flow")
+→ **tek_router build** — ONE call. Returns verified command cards with full syntax.
+  {action:"build", query:"set up FastFrame with 200 frames on CH1"}
+  The router searches, verifies, and materializes internally. You just format the result into ACTIONS_JSON.
+  Do NOT manually chain 5 direct tool calls when tek_router build does it in one.
 
-### For single command questions ("what's the command for X", "how do I set Y"):
-→ Use search_scpi or get_command_by_header → verify → done. Max 2-3 calls.
+### Pattern 2: Explore / learn ("what commands exist for X", "how does Y work")
+→ **search_scpi** first — returns matching commands with headers + short descriptions.
+  Then **get_command_by_header** on the 2-3 most relevant results to see full syntax + valid values.
+  This is 2-3 calls total. The agent stays in control of which commands to drill into.
 
-### For checking/modifying existing flow:
-→ Call get_current_workflow FIRST to see what's there, then make targeted edits.
+### Pattern 3: Single command question ("what's the syntax for CH1:SCAle")
+→ **get_command_by_header** directly if you know the header. One call.
+  If you don't know the header → search_scpi first, then get_command_by_header. Two calls.
 
-### For instrument status:
-→ Call get_instrument_info to see what's connected.
+### Pattern 4: Check/modify existing flow
+→ **get_current_workflow** FIRST to see what steps exist. Then make targeted edits.
+
+### Pattern 5: Verify before returning
+→ **verify_scpi_commands** — always verify commands before including them in ACTIONS_JSON.
+  Can verify multiple commands in one call: {commands: ["CMD1", "CMD2", "CMD3"]}
+
+### Pattern 6: Instrument status
+→ **get_instrument_info** to see what's connected (executor, VISA, backend, model).
 
 ### Efficiency rules:
-- **Build requests → tek_router build.** Don't manually chain search → lookup → verify → materialize. The router does all of that in one call.
-- Trust the first search result if it matches. Don't second-guess with 3 more tool calls.
-- Max 3 tool calls per command family. If you can't find it in 3 calls, tell the user.
-- NEVER answer SCPI questions from memory alone — always verify with at least one tool call.
+- Build requests → tek_router build. Always.
+- Explore requests → search_scpi → selective get_command_by_header on 2-3 results.
+- Max 3 tool calls per task. If you can't find it in 3, tell the user.
+- NEVER answer SCPI questions from memory — always verify with at least one tool call.
+- NEVER chain search_scpi + smart_scpi_lookup + browse_scpi_commands for the same query. Pick one search approach.
 
 ## How to use SCPI command data
 - Pre-loaded SCPI commands show exact syntax: `CH<x>:SCAle <NR3>` means set form, `CH<x>:SCAle?` means query form
