@@ -822,3 +822,121 @@ export function buildAiSystemPrompt(opts?: {
     { mode: 'chat' },
   );
 }
+
+// ── Workstream 2: Workflow-aware Anthropic AI Chat ──────────────────────
+
+/**
+ * Build a compact workflow context string from current flow steps.
+ * Injected into the user message so the AI knows what's already in the flow.
+ */
+export function buildWorkflowContext(
+  steps: Array<{ id?: string; type: string; label?: string; params?: Record<string, unknown>; children?: unknown[] }>,
+  validationErrors?: string[],
+  selectedStepId?: string | null,
+): string {
+  if (!steps?.length) return '';
+
+  const stepLines = steps.map((s, i) => {
+    const cmd = s.params?.command || s.params?.code || s.label || s.type;
+    const marker = selectedStepId && s.id === selectedStepId ? ' ← selected' : '';
+    return `  ${i + 1}. [${s.type}] ${cmd}${marker}`;
+  });
+
+  // Cap at ~1500 chars — keep first 5 + last 5 if too many
+  let body: string;
+  if (stepLines.length > 12) {
+    body = [
+      ...stepLines.slice(0, 5),
+      `  ... (${stepLines.length - 10} more steps)`,
+      ...stepLines.slice(-5),
+    ].join('\n');
+  } else {
+    body = stepLines.join('\n');
+  }
+
+  let ctx = `## Current Workflow (${steps.length} steps)\n${body}`;
+
+  if (validationErrors?.length) {
+    ctx += `\n\nValidation errors:\n${validationErrors.map((e) => `  - ${e}`).join('\n')}`;
+  }
+
+  return ctx;
+}
+
+/**
+ * Lean system prompt for Anthropic AI Chat (flow-building mode).
+ * ~6-8K chars / 1,500-2,000 tokens — down from 28-32K in buildLiveSystemPrompt.
+ *
+ * Drops: SCPI groups reference (AI can browse via tools), tek_router examples
+ * (direct tools now), live mode rules, full tool decision tree.
+ */
+export function buildAnthropicChatPrompt(opts: {
+  modelFamily?: string;
+  backend?: string;
+  deviceDriver?: string;
+}): string {
+  const modelFamily = opts.modelFamily || 'scope';
+  const backend = opts.backend || 'pyvisa';
+
+  return [
+    '# TekAutomate AI Chat',
+    `You are a senior Tektronix test automation engineer. Help build SCPI workflows for ${modelFamily} (backend: ${backend}).`,
+    '',
+
+    '## Tools — call directly by name',
+    '- **search_scpi** — fuzzy search by feature/keyword',
+    '- **smart_scpi_lookup** — natural language ("how do I measure voltage on CH1")',
+    '- **get_command_by_header** — exact lookup when you know the header',
+    '- **browse_scpi_commands** — 3-level drill-down: groups → commands → details',
+    '- **verify_scpi_commands** — batch-verify commands before returning steps',
+    '- **get_template_examples** — find workflow templates',
+    '- **tek_router** — advanced: build workflows, materialize commands, save/learn shortcuts',
+    '',
+
+    '## Workflow',
+    '1. Search or browse → find the right commands',
+    '2. get_command_by_header → see valid values + syntax',
+    '3. verify_scpi_commands → confirm before returning',
+    '4. Return ACTIONS_JSON with verified steps',
+    '',
+
+    '## CRITICAL: Never guess SCPI commands from memory. Always look up and verify.',
+    '',
+
+    '## Chat Rules',
+    '- Keep responses focused — answer what was asked.',
+    '- Show key command(s) with syntax, brief explanation, and one example.',
+    '- Never dump raw tool results — summarize what the user needs.',
+    '- Engineer to engineer — assume they know oscilloscopes.',
+    '- End with a clear next step: "Want me to build this?" or "Which approach?"',
+    '',
+
+    '## ACTIONS_JSON Format',
+    'When the user says "build it" or asks for a flow, return:',
+    '```json',
+    '{"summary":"...","findings":[],"suggestedFixes":[],"actions":[{"type":"insert_step_after","targetStepId":null,"newStep":{"type":"group","label":"...","children":[...]}}]}',
+    '```',
+    '- Existing flow → use insert_step_after with a group. Do NOT replace_flow.',
+    '- Empty flow → use replace_flow.',
+    '',
+
+    '## Valid Step Types',
+    'connect, disconnect, write, query, sleep, error_check, comment, python, save_waveform, save_screenshot, recall, group, tm_device_command',
+    '',
+
+    '## Step Schemas',
+    'write: {"type":"write","label":"...","params":{"command":"..."}}',
+    'query: {"type":"query","label":"...","params":{"command":"...?","saveAs":"result_name"}}',
+    'group: {"type":"group","label":"...","params":{},"collapsed":false,"children":[...]}',
+    '',
+
+    '## Command Language',
+    '- Canonical mnemonics: CH<x> (CH1), B<x> (B1), MATH<x> (MATH1), MEAS<x> (MEAS1).',
+    '- Never invent aliases like CHAN1, CHANNEL1, BUS1.',
+    '- SCPI: colon-separated headers, space before args, no colon before star commands (*OPC?).',
+    '- Placeholders: <NR3>=number, CH<x>=channel, {A|B}=pick one, <Qstring>=quoted string.',
+    '',
+
+    opts.deviceDriver ? `## Instrument: ${modelFamily} (driver: ${opts.deviceDriver}, backend: ${backend})` : '',
+  ].filter(Boolean).join('\n');
+}

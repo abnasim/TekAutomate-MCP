@@ -2,7 +2,7 @@ import { useMemo, useState, useEffect, useRef } from 'react';
 import type { AiAction, AiActionParseResult } from '../../utils/aiActions';
 import { canMaterializeAiAction, parseAiActionResponse } from '../../utils/aiActions';
 import { streamMcpChat, disconnectLiveSession, resolveMcpHost, type McpChatAttachment } from '../../utils/ai/mcpClient';
-import { runLiveToolLoop, fetchLiveTools, buildLiveSystemPrompt } from '../../utils/ai/liveToolLoop';
+import { runLiveToolLoop, fetchLiveTools, buildLiveSystemPrompt, buildAnthropicChatPrompt, buildWorkflowContext } from '../../utils/ai/liveToolLoop';
 import type { ChatTurn, PredefinedAction, RagCorpus } from '../../utils/ai/types';
 import type { StepPreview } from './StepsListPreview';
 import { useAiChatContext } from './aiChatContext';
@@ -32,11 +32,8 @@ const DEFAULT_MODELS = {
  */
 // Claude AI chat uses the unified prompt from liveToolLoop.ts
 // with mode:'chat' for conversational style
-function buildAnthropicBuilderSystemPrompt(modelFamily: string, backend: string, _deviceType: string): string {
-  return buildLiveSystemPrompt(
-    { modelFamily, backend },
-    { mode: 'chat' },
-  );
+function buildAnthropicBuilderSystemPrompt(modelFamily: string, backend: string, _deviceType: string, deviceDriver?: string): string {
+  return buildAnthropicChatPrompt({ modelFamily, backend, deviceDriver });
 }
 
 function canonicalizeModelId(model: string): string {
@@ -931,6 +928,15 @@ export function useAiChat(params: {
           // Fetch slim tool surface from MCP server
           const chatTools = await fetchLiveTools();
 
+          // Build compact workflow context so AI knows what's in the flow
+          const workflowCtx = buildWorkflowContext(
+            params.steps || [],
+            params.flowContext?.validationErrors as string[] | undefined,
+            params.flowContext?.selectedStep?.id as string | undefined,
+          );
+          const baseMessage = typeof userContent === 'string' ? userContent : effectiveMessage + preContext;
+          const fullMessage = workflowCtx ? `${workflowCtx}\n\n${baseMessage}` : baseMessage;
+
           // Use the live tool loop for multi-round tool calling
           const loopResult = await runLiveToolLoop({
             provider: 'anthropic',
@@ -940,11 +946,12 @@ export function useAiChat(params: {
               params.flowContext?.modelFamily || 'scope',
               params.flowContext?.backend || 'pyvisa',
               params.flowContext?.deviceType || 'SCOPE',
+              params.flowContext?.deviceDriver,
             ),
-            userMessage: (typeof userContent === 'string' ? userContent : effectiveMessage + preContext),
-            history: state.history.slice(-12).map((h) => ({
+            userMessage: fullMessage,
+            history: state.history.slice(-8).map((h) => ({
               role: h.role as string,
-              content: String(h.content || '').slice(0, 6000),
+              content: String(h.content || '').slice(0, 3000),
             })),
             tools: chatTools,
             instrumentEndpoint: params.flowContext ? {

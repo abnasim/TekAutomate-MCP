@@ -906,34 +906,21 @@ async function handleBuild(req: RouterRequest, startedAt: number): Promise<Route
 export const TEK_ROUTER_TOOL_DEFINITION = {
   name: 'tek_router',
   description:
-    'TekAutomate SCPI gateway. Use action:"search_exec" for lookup/verify/browse. Put inner tool params inside args.\n\n' +
+    'TekAutomate SCPI power gateway. For simple search/verify/browse/lookup, prefer the direct tools ' +
+    '(search_scpi, verify_scpi_commands, browse_scpi_commands, get_command_by_header). ' +
+    'Use tek_router for advanced operations:\n\n' +
 
-    '## Examples — copy these exactly, replace values:\n\n' +
-
-    'SEARCH (fuzzy):   {"action":"search_exec","query":"search scpi commands","args":{"query":"edge trigger level"}}\n' +
-    'EXACT LOOKUP:     {"action":"search_exec","query":"get command by header","args":{"header":"TRIGger:A:LEVel:CH<x>"}}\n' +
-    'BROWSE GROUP:     {"action":"search_exec","query":"browse scpi commands","args":{"group":"Trigger"}}\n' +
-    'BROWSE+FILTER:    {"action":"search_exec","query":"browse scpi commands","args":{"group":"Measurement","filter":"jitter"}}\n' +
-    'VERIFY:           {"action":"search_exec","query":"verify scpi commands","args":{"commands":["CH1:SCAle 1.0"]}}\n' +
+    '## Actions (use tek_router for these):\n' +
     'BUILD WORKFLOW:   {"action":"build","query":"set up jitter measurement on CH1"}\n' +
+    'MATERIALIZE:      {"action":"search_exec","query":"materialize scpi command","args":{"header":"CH<x>:SCAle","commandType":"set","value":"1.0","placeholderBindings":{"CH<x>":"CH1"}}}\n' +
     'SAVE/LEARN:       {"action":"create","toolName":"Edge Trigger Setup","toolDescription":"Configure edge trigger","toolTriggers":["edge trigger","set trigger"],"toolCategory":"shortcut","toolSteps":[{"tool":"send_scpi","args":{"commands":["TRIGger:A:TYPe EDGE"]}}]}\n' +
-    'LIST GROUPS:      {"action":"search_exec","query":"list command groups","args":{}}\n' +
-    'MATERIALIZE:      {"action":"search_exec","query":"materialize scpi command","args":{"header":"CH<x>:SCAle","commandType":"set","value":"1.0","placeholderBindings":{"CH<x>":"CH1"}}}\n\n' +
+    'LIST GROUPS:      {"action":"search_exec","query":"list command groups","args":{}}\n\n' +
 
-    '## Smart routing — args shape auto-selects the right tool:\n' +
-    'args.header (with colons) → exact header lookup\n' +
-    'args.query (plain English) → fuzzy SCPI search\n' +
-    'args.commands (array) → verify commands\n' +
-    'args.group → browse that group\n' +
-    'You don\'t need exact trigger phrases. Close enough works.\n\n' +
-
-    '## Chain calls — don\'t stop at one:\n' +
-    '1. Search → find the command family\n' +
-    '2. Exact lookup → see valid values + syntax\n' +
-    '3. Verify → confirm it\'s valid\n' +
-    '4. send_scpi → execute\n\n' +
-
-    '## Groups (for BROWSE): Acquisition, Bus, Callout, Cursor, Digital, Display, Histogram, Horizontal, Mask, Math, Measurement, Miscellaneous, Plot, Power, Save and Recall, Search and Mark, Spectrum view, Trigger, Waveform Transfer, Zoom',
+    '## Recommended chain:\n' +
+    '1. search_scpi / browse_scpi_commands → find commands\n' +
+    '2. get_command_by_header → exact syntax + valid values\n' +
+    '3. verify_scpi_commands → confirm before sending\n' +
+    '4. send_scpi → execute on instrument',
   parameters: {
     type: 'object',
     properties: {
