@@ -322,8 +322,10 @@ export function OpenAiChatKitPanel({
       if (allText === lastProcessedRef.current) return;
       lastProcessedRef.current = allText;
 
-      const jsonMatch = allText.match(/```json\s*(\{[\s\S]*?"actions"\s*:\s*\[[\s\S]*?\})\s*```/)
-        || allText.match(/(\{"summary"[\s\S]*?"actions"\s*:\s*\[[\s\S]*?\][\s\S]*?\})/);
+      const jsonMatch =
+        allText.match(/```json\s*(\{[\s\S]*?"actions"\s*:\s*\[[\s\S]*?\})\s*```/)           // fenced ```json ... ```
+        || allText.match(/ACTIONS_JSON:\s*(\{[\s\S]*?"actions"\s*:\s*\[[\s\S]*?\][\s\S]*?\})/) // ACTIONS_JSON: { ... }
+        || allText.match(/(\{"summary"[\s\S]*?"actions"\s*:\s*\[[\s\S]*?\][\s\S]*?\})/);       // raw { "summary"... }
       if (jsonMatch) {
         const parsed = parseAiActionResponse(jsonMatch[1]);
         if (parsed?.actions?.length) {
