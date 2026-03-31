@@ -315,12 +315,21 @@ export function OpenAiChatKitPanel({
     if (!container) return;
 
     const scanForActions = () => {
+      // Try multiple sources — ChatKit may use shadow DOM (closed) or regular DOM
       const chatKitEl = container.querySelector('openai-chatkit');
-      const root = chatKitEl?.shadowRoot || container;
-
-      const allText = root.textContent || '';
-      if (allText === lastProcessedRef.current) return;
+      const sources = [
+        chatKitEl?.shadowRoot?.textContent,  // open shadow root
+        chatKitEl?.textContent,               // element text (includes shadow in some browsers)
+        container.textContent,                // wrapper fallback
+        // Also try iframes if ChatKit embeds one
+        ...(chatKitEl ? Array.from(chatKitEl.querySelectorAll('iframe')).map(f => {
+          try { return (f as HTMLIFrameElement).contentDocument?.body?.textContent; } catch { return null; }
+        }) : []),
+      ];
+      const allText = sources.filter(Boolean).join('\n');
+      if (!allText || allText === lastProcessedRef.current) return;
       lastProcessedRef.current = allText;
+      console.log('[ChatKit] DOM scan, text length:', allText.length, 'has ACTIONS_JSON:', allText.includes('ACTIONS_JSON'));
 
       const jsonMatch =
         allText.match(/```json\s*(\{[\s\S]*?"actions"\s*:\s*\[[\s\S]*?\})\s*```/)           // fenced ```json ... ```
