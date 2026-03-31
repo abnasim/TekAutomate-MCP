@@ -401,6 +401,7 @@ interface SignalBlock {
 const QUICK_LOAD_FILES = [
   'mso_2_4_5_6_7.json', // MSO 4/5/6/5B/6B Series - full parsing required
   'MSO_DPO_5k_7k_70K.json', // DPO/MSO 5K/7K Series - full parsing required
+  'pi_only.json', // PI-only commands (no GUI equivalent)
   'tekexpress.json', // TekExpress compliance test automation commands
   'dpojet.json', // DPOJET jitter and eye diagram analysis commands
   'afg.json', // AFG31K arbitrary function generator commands
@@ -7009,6 +7010,9 @@ if __name__ == "__main__":
       // Category filtering
       const matchesCat = selectedCategory === null || cmd.category === selectedCategory;
       if (!matchesCat) return { cmd, score: -1, matchedBy: [] as string[] };
+
+      // PI Only filter
+      if (showPopularOnly && cmd.category !== 'PI Only') return { cmd, score: -1, matchedBy: [] as string[] };
       
       // If no search query, just filter by category and compatibility
       if (!q) return { cmd, score: 1, matchedBy: ['category'] as string[] };
@@ -13222,12 +13226,12 @@ scpi.write('FILESYSTEM:DELETE "C:/TekScope/Temp/screenshot.png"')`;
                 }}
                 className={`w-full text-left px-3 py-2 text-sm rounded transition flex items-center gap-2 ${
                   showPopularOnly
-                    ? 'bg-yellow-100 dark:bg-yellow-900/50 text-yellow-700 dark:text-yellow-200 font-medium'
+                    ? 'bg-amber-100 dark:bg-amber-900/50 text-amber-700 dark:text-amber-200 font-medium'
                     : 'text-gray-600 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-700'
                 }`}
               >
-                <Star size={14} className={showPopularOnly ? 'text-yellow-500 fill-yellow-500 dark:text-yellow-400 dark:fill-yellow-400' : 'text-gray-400 dark:text-gray-500'} />
-                <span>Popular</span>
+                <Star size={14} className={showPopularOnly ? 'text-amber-500 fill-amber-500 dark:text-amber-400 dark:fill-amber-400' : 'text-gray-400 dark:text-gray-500'} />
+                <span>PI Only</span>
               </button>
             </div>
             <div className="p-2 space-y-1">
