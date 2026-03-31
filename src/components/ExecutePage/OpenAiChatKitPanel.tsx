@@ -215,6 +215,31 @@ export function OpenAiChatKitPanel({
       console.log('[ChatKit] Ready');
       setInitError(null);
     },
+    // ── Response end — scan for ACTIONS_JSON and auto-apply ──
+    onResponseEnd: () => {
+      // Wait for ChatKit to finish rendering, then scan for ACTIONS_JSON
+      setTimeout(() => {
+        const container = containerRef.current;
+        if (!container) return;
+        const chatKitEl = container.querySelector('openai-chatkit');
+        // Try every text source available
+        const text = chatKitEl?.textContent || chatKitEl?.innerHTML || container.textContent || '';
+        console.log('[ChatKit] onResponseEnd scan, length:', text.length, 'has ACTIONS_JSON:', text.includes('ACTIONS_JSON'));
+        if (!text.includes('ACTIONS_JSON')) return;
+
+        const match =
+          text.match(/ACTIONS_JSON:\s*(\{[\s\S]*?"actions"\s*:\s*\[[\s\S]*?\][\s\S]*?\})/)
+          || text.match(/```(?:json)?\s*ACTIONS_JSON:\s*(\{[\s\S]*?"actions"\s*:\s*\[[\s\S]*?\][\s\S]*?\})\s*```/)
+          || text.match(/(\{"summary"[\s\S]*?"actions"\s*:\s*\[[\s\S]*?\][\s\S]*?\})/);
+        if (match) {
+          console.log('[ChatKit] ACTIONS_JSON detected, auto-applying...');
+          const parsed = parseAiActionResponse(match[1]);
+          if (parsed?.actions?.length) {
+            onActionsRef.current?.(parsed.actions, parsed.summary);
+          }
+        }
+      }, 800); // Wait for render
+    },
     // Client-side tool execution — same split as liveToolLoop.ts:
     // Instrument tools (send_scpi, capture_screenshot, etc.) → browser calls executor directly
     // Knowledge tools (search_scpi, verify, browse, etc.) → browser calls MCP /tools/execute
