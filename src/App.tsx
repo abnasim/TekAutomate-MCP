@@ -1503,9 +1503,13 @@ function AppInner() {
     setExecutorScannedInstruments([]); // clear scanned instruments
   }, [executorEndpoint]);
 
-  // Fetch scanned instruments from executor when endpoint is set
+  // Fetch scanned instruments from executor — once per endpoint change (host:port)
+  const lastScannedEndpoint = React.useRef('');
   useEffect(() => {
     if (!executorEndpoint) return;
+    const endpointKey = `${executorEndpoint.host}:${executorEndpoint.port}`;
+    if (endpointKey === lastScannedEndpoint.current) return; // already scanned this endpoint
+    lastScannedEndpoint.current = endpointKey;
     let cancelled = false;
     const fetchScanned = async () => {
       try {
