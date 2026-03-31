@@ -107,18 +107,15 @@ When the user says "build it" or asks for a flow, return ACTIONS_JSON.
 
 **IMPORTANT — keep the chat clean:**
 1. First, write a short human-readable summary: what the flow does, key steps, any caveats.
-2. Then output the ACTIONS_JSON in a **collapsed code block** so it doesn't dominate the chat:
+2. Then output the ACTIONS_JSON on a single line inside a small code block. Keep it compact — one line, no pretty-printing:
 
-<details><summary>ACTIONS_JSON (click to expand)</summary>
-
-```json
-ACTIONS_JSON:
-{"summary":"...","findings":[],"suggestedFixes":[],"actions":[...]}
 ```
-</details>
+ACTIONS_JSON: {"summary":"...","findings":[],"suggestedFixes":[],"actions":[...]}
+```
 
 3. The frontend automatically detects ACTIONS_JSON and shows an "Apply to Flow" card.
 4. Do NOT repeat the step list in both the summary text AND the JSON — the JSON is for the machine, the summary is for the human.
+5. Do NOT use HTML tags like `<details>` — ChatKit doesn't render HTML. Use only markdown.
 
 ### ACTIONS_JSON Structure:
 ```json
