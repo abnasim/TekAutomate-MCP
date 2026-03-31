@@ -7795,142 +7795,52 @@ Keep under 120 words. No headings. Bullets only. Stay on this command. Do not de
 
   // Helper function to deduplicate parameters (used for UI display and preview generation)
   const deduplicateParams = (params: CommandParam[], command: string): CommandParam[] => {
-    const commandWords = command.split(/[:<>?]/).map((w: string) => w.toLowerCase()).filter((w: string) => w.length > 0);
-    
-    // Mnemonic parameter names that represent <x> placeholders in commands
-    const mnemonicParamNames = ['measurement', 'source', 'source_num', 'channel', 'ch', 'bus', 'b',
-      'ref', 'reference', 'meas', 'math', 'cursor', 'search', 'plot', 'zoom', 'view',
-      'plotview', 'power', 'scope', 'histogram', 'callout', 'mask', 'digital_bit',
-      'area', 'd', 'gsource', 'g', 'pg', 'pw', 'amp', 'maxg', 'output', 'mathfftview', 'reffftview',
-      'trace', 'marker', 'measview'];
+    if (!Array.isArray(params) || params.length === 0) return params;
 
-    // Check if parameter name matches a word in the command path
-    const paramNameInCommand = (paramName: string): boolean => {
-      const paramNameLower = paramName.toLowerCase();
-      return commandWords.some((word: string) => word === paramNameLower || word.includes(paramNameLower) || paramNameLower.includes(word));
-    };
-    
-    const paramsToSkip = new Set<string>();
-    
-    // 0. Handle parameters with duplicate names (same name used multiple times)
-    // This happens when JSON incorrectly merges multiple commands into one entry
-    // Example: MEASUrement:IMMed:DELay:DIREction has TWO "value" params from two different commands
-    // Strategy: Keep the first occurrence of each parameter name, skip subsequent duplicates
-    const seenParamNames = new Set<string>();
-    const duplicateIndices = new Set<number>();
-    
-    params.forEach((p: CommandParam, idx: number) => {
-      const paramNameLower = p.name.toLowerCase();
-      if (seenParamNames.has(paramNameLower)) {
-        // This is a duplicate name - mark it for removal
-        duplicateIndices.add(idx);
-      } else {
-        seenParamNames.add(paramNameLower);
-      }
-    });
-    
-    // Filter out duplicate-name parameters first
-    const paramsWithoutDuplicateNames = params.filter((_, idx) => !duplicateIndices.has(idx));
-    
-    // 1. Group enumeration parameters by their option sets (to find duplicates)
-    const optionGroups = new Map<string, CommandParam[]>();
-    paramsWithoutDuplicateNames.forEach((p: CommandParam) => {
-      if (p.options && p.options.length > 0) {
-        // Normalize placeholders in options to catch duplicates like <number> vs <NR1>
-        const normalizedOptions = p.options.map(opt => {
-          const opt_lower = opt.toLowerCase();
-          // Normalize all numeric placeholders to <number>
-          if (/<nr\d*>/.test(opt_lower) || /<nrx>/.test(opt_lower) || /<number>/.test(opt_lower)) {
-            return '<number>';
-          }
-          // Normalize string placeholders
-          if (/<qstring>/.test(opt_lower) || /<string>/.test(opt_lower)) {
-            return '<string>';
-          }
-          return opt.toUpperCase(); // Normalize to uppercase for comparison
-        });
-        const optionsKey = normalizedOptions.slice().sort().join('|');
-        if (!optionGroups.has(optionsKey)) {
-          optionGroups.set(optionsKey, []);
-        }
-        optionGroups.get(optionsKey)!.push(p);
-      }
-    });
-    
-    // For each option group with duplicates, determine which parameter to keep
-    optionGroups.forEach((groupParams, optionsKey) => {
-      if (groupParams.length > 1) {
-        const withPosition = groupParams.filter(p => (p as any).position !== undefined);
-        const notInCommand = groupParams.filter(p => !paramNameInCommand(p.name.toLowerCase()));
-        const notValue = groupParams.filter(p => p.name.toLowerCase() !== 'value');
-        
-        let preferredParam: CommandParam;
-        if (withPosition.length > 0) {
-          preferredParam = withPosition[0];
-        } else if (notInCommand.length > 0) {
-          const notInCommandAndNotValue = notInCommand.filter(p => p.name.toLowerCase() !== 'value');
-          preferredParam = notInCommandAndNotValue.length > 0 ? notInCommandAndNotValue[0] : notInCommand[0];
-        } else if (notValue.length > 0) {
-          preferredParam = notValue[0];
+    // Only remove TRUE duplicates: same name appearing more than once.
+    // Keep the first occurrence (which typically has richer data).
+    // All filtering/hiding logic belongs in the render filter, not here.
+    const seen = new Set<string>();
+    const result: CommandParam[] = [];
+
+    for (const p of params) {
+      const key = (p.name || '').toLowerCase();
+      if (!key) continue;
+      if (seen.has(key)) continue; // skip duplicate names
+      seen.add(key);
+      result.push(p);
+    }
+
+    // Also deduplicate by identical option sets — if two differently-named params
+    // have the exact same enum options, keep the one with the more descriptive name.
+    // This handles cases like both "mode" and "value" having ["ADDR7", "ADDR10"].
+    const optionSets = new Map<string, number>(); // optionsKey -> index in result
+    const indicesToRemove = new Set<number>();
+
+    for (let i = 0; i < result.length; i++) {
+      const p = result[i];
+      if (!p.options || p.options.length < 2) continue;
+      const optKey = p.options.map(o => o.toUpperCase()).sort().join('|');
+      if (optionSets.has(optKey)) {
+        // Duplicate option set — keep the one with a more specific name
+        const prevIdx = optionSets.get(optKey)!;
+        const prevName = result[prevIdx].name.toLowerCase();
+        const thisName = p.name.toLowerCase();
+        // Prefer the non-generic name (not "value", "parameter", etc.)
+        if (thisName === 'value' || thisName.startsWith('parameter')) {
+          indicesToRemove.add(i);
+        } else if (prevName === 'value' || prevName.startsWith('parameter')) {
+          indicesToRemove.add(prevIdx);
+          optionSets.set(optKey, i);
         } else {
-          preferredParam = groupParams[0];
+          // Both have specific names — keep both (they might serve different purposes)
         }
-        
-        groupParams.forEach(p => {
-          if (p !== preferredParam) {
-            paramsToSkip.add(p.name.toLowerCase());
-          }
-        });
-      }
-    });
-    
-    // 2. Deduplicate numeric parameters: if there's a "value" parameter and another numeric parameter
-    //    whose name appears in the command, they're likely duplicates
-    const valueParam = paramsWithoutDuplicateNames.find(p => p.name.toLowerCase() === 'value' && 
-                                        (p.type === 'number' || p.type === 'integer') &&
-                                        (!p.options || p.options.length === 0));
-    
-    if (valueParam && !paramsToSkip.has('value')) {
-      // Check if there's another numeric parameter whose name is in the command
-      // IMPORTANT: We need to check if such a parameter ACTUALLY EXISTS in params
-      const otherNumericParams = paramsWithoutDuplicateNames.filter(p => {
-        const pNameLower = p.name.toLowerCase();
-        return pNameLower !== 'value' &&
-               (p.type === 'number' || p.type === 'integer') &&
-               (!p.options || p.options.length === 0) &&
-               !paramsToSkip.has(pNameLower) &&
-               // Exclude mnemonic parameters like "mathfftview", "bus", "channel"
-               !mnemonicParamNames.includes(pNameLower) &&
-               !(p.description?.toLowerCase().includes('<x>')) &&
-               !(p.description?.toLowerCase().includes('where x is'));
-      });
-      
-      // Now check if any of these other numeric params has a name that appears in the command
-      const otherNumericInCommand = otherNumericParams.find(p => {
-        const pNameLower = p.name.toLowerCase();
-        // Check if this param name is part of any command word
-        // IMPORTANT: Don't match against mnemonic instances like "POSITION1" when looking for "position"
-        // Only match pure word roots without digits (e.g., "SIZE", "OFFSET", not "POSITION1")
-        return commandWords.some((word: string) => {
-          const wordLower = word.toLowerCase();
-          // If word has digits at the end, it's a mnemonic instance, skip it
-          if (/\d$/.test(wordLower)) {
-            return false;
-          }
-          // Match if param name matches the word (for commands like "BUS:B1:AUDIO:DATA:SIZE")
-          return wordLower === pNameLower || wordLower.includes(pNameLower) || pNameLower.includes(wordLower);
-        });
-      });
-      
-      if (otherNumericInCommand) {
-        // We have both "value" and another numeric param (like "Position")
-        // Skip "value" in favor of the more specific name
-        paramsToSkip.add('value');
+      } else {
+        optionSets.set(optKey, i);
       }
     }
-    
-    // Return all parameters except those marked for skipping
-    return paramsWithoutDuplicateNames.filter(p => !paramsToSkip.has(p.name.toLowerCase()));
+
+    return result.filter((_, i) => !indicesToRemove.has(i));
   };
   
   // Deduplicate parameters for preview generation
