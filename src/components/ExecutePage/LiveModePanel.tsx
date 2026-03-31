@@ -103,11 +103,11 @@ export function LiveModePanel({
         {/* Screenshot */}
         {capture ? (
           <div className="relative">
-            <div className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm dark:border-slate-800 dark:bg-slate-900">
+            <div className="overflow-hidden rounded-2xl border border-slate-200 bg-black shadow-sm dark:border-slate-800">
               <img
                 src={capture.dataUrl}
                 alt="Latest oscilloscope screenshot"
-                className="block w-full h-auto"
+                className="block w-full h-auto max-h-[calc(100vh-14rem)] object-contain"
               />
             </div>
             <div className="absolute top-2 left-2 inline-flex items-center gap-2 rounded-lg bg-black/60 px-2.5 py-1 text-[10px] text-white/80 backdrop-blur-sm">

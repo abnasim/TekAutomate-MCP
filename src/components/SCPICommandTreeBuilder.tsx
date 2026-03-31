@@ -308,22 +308,17 @@ export const SCPICommandTreeBuilder: React.FC<SCPICommandTreeBuilderProps> = ({
   const { displayName, fullPrefix, typedNumber, maxIndex, matchingCommands, afterParam, exactMatchCommand } = detected;
 
   return (
-    <div className="bg-gradient-to-r from-purple-50 to-indigo-50 border border-purple-200 rounded-lg p-3 mt-2 shadow-sm">
-      {/* Header */}
-      <div className="flex items-center gap-2 mb-2">
-        <Hash size={16} className="text-purple-600" />
-        <span className="text-sm font-semibold text-purple-900">
-          {displayName}&lt;x&gt; Index Helper
+    <div className="bg-gradient-to-r from-purple-50 to-indigo-50 dark:from-purple-900/20 dark:to-indigo-900/20 border border-purple-200 dark:border-purple-700 rounded-lg p-2 mt-2 shadow-sm">
+      {/* Header + Index selector on same row */}
+      <div className="flex items-center gap-2 flex-wrap">
+        <Hash size={14} className="text-purple-600 dark:text-purple-400" />
+        <span className="text-xs font-semibold text-purple-900 dark:text-purple-200">
+          {displayName}&lt;x&gt;
         </span>
-        <span className="text-xs text-gray-500">
-          ({matchingCommands.length} commands)
+        <span className="text-[10px] text-gray-500 dark:text-gray-400">
+          ({matchingCommands.length})
         </span>
-      </div>
-      
-      {/* Index selector */}
-      <div className="flex items-center gap-2 flex-wrap mb-2">
-        <span className="text-xs text-gray-600">Pick index:</span>
-        <div className="flex items-center gap-1 flex-wrap">
+        <div className="flex items-center gap-1 flex-wrap ml-auto">
           {Array.from({ length: maxIndex }, (_, i) => i + 1).map(n => (
             <button
               key={n}
@@ -334,10 +329,10 @@ export const SCPICommandTreeBuilder: React.FC<SCPICommandTreeBuilderProps> = ({
                 }
                 onSelectParameter(resolved, n);
               }}
-              className={`min-w-[32px] h-8 px-2 text-sm font-medium rounded-md transition-all ${
+              className={`min-w-[26px] h-6 px-1.5 text-xs font-medium rounded transition-all ${
                 typedNumber === n
                   ? 'bg-purple-600 text-white shadow-md'
-                  : 'bg-white text-purple-700 hover:bg-purple-100 border border-purple-300 hover:border-purple-400'
+                  : 'bg-white dark:bg-gray-700 text-purple-700 dark:text-purple-300 hover:bg-purple-100 dark:hover:bg-purple-800 border border-purple-300 dark:border-purple-600 hover:border-purple-400'
               }`}
             >
               {n}
@@ -383,35 +378,24 @@ export const SCPICommandTreeBuilder: React.FC<SCPICommandTreeBuilderProps> = ({
 
       {/* Next path segments (only show if no exact match) */}
       {!exactMatchCommand && subCommands.length > 0 && (
-        <div className="pt-2 border-t border-purple-200">
-          <div className="text-xs text-gray-600 mb-2">
-            Next SCPI segment suggestions (click to refine search):
-          </div>
-          <div className="flex flex-wrap gap-1 max-h-32 overflow-y-auto">
+        <div className="pt-1.5 mt-1.5 border-t border-purple-200 dark:border-purple-700">
+          <div className="flex flex-wrap gap-1 max-h-20 overflow-y-auto">
             {subCommands.map(({ name, cmd, resolvedPath }) => (
               <button
                 key={name}
                 onClick={() => {
                   onSelectParameter(resolvedPath, typedNumber || 1);
                 }}
-                className="inline-flex items-center gap-1 px-2 py-1.5 text-xs bg-white text-gray-700 hover:bg-purple-100 hover:text-purple-700 border border-gray-200 hover:border-purple-300 rounded-md transition-all"
-                title={cmd.description || `Refine search to ${displayName}<x>:${name} path`}
+                className="inline-flex items-center gap-0.5 px-1.5 py-1 text-[11px] bg-white dark:bg-gray-700 text-gray-700 dark:text-gray-300 hover:bg-purple-100 dark:hover:bg-purple-800 hover:text-purple-700 dark:hover:text-purple-200 border border-gray-200 dark:border-gray-600 hover:border-purple-300 rounded transition-all"
+                title={cmd.description || `${displayName}<x>:${name}`}
               >
-                <ChevronRight size={10} className="text-gray-400" />
+                <ChevronRight size={8} className="text-gray-400" />
                 {name}
               </button>
             ))}
           </div>
         </div>
       )}
-      
-      {/* Preview */}
-      <div className="mt-2 pt-2 border-t border-purple-200">
-        <div className="text-xs text-gray-500 mb-1">SCPI path preview:</div>
-        <code className="text-sm font-mono text-purple-700 bg-white px-2 py-1 rounded border border-purple-200 block">
-          {fullPrefix}{typedNumber || 'x'}{afterParam}
-        </code>
-      </div>
     </div>
   );
 };
