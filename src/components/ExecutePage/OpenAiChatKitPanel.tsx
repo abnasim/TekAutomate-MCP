@@ -92,6 +92,14 @@ function extractClientSecret(payload: unknown): string | null {
   return null;
 }
 
+interface ParsedActionsPreview {
+  summary: string;
+  findings: string[];
+  suggestedFixes: string[];
+  actions: AiAction[];
+  rawJson: string;
+}
+
 export function OpenAiChatKitPanel({
   apiKey,
   steps,
@@ -104,6 +112,7 @@ export function OpenAiChatKitPanel({
 }: OpenAiChatKitPanelProps) {
   const [initError, setInitError] = useState<string | null>(null);
   const [activeThreadId, setActiveThreadId] = useState<string | null>(null);
+  const [parsedPreview, setParsedPreview] = useState<ParsedActionsPreview | null>(null);
   const onActionsRef = useRef(onActionsDetected);
   onActionsRef.current = onActionsDetected;
   const stepsRef = useRef(steps);
@@ -115,6 +124,76 @@ export function OpenAiChatKitPanel({
   const autoApplyRef = useRef(autoApply);
   autoApplyRef.current = autoApply;
   const lastContextSentRef = useRef('');
+  const lastParsedJsonRef = useRef('');
+
+  const extractActionsPreview = useCallback((text: string): ParsedActionsPreview | null => {
+    const match =
+      text.match(/ACTIONS_JSON:\s*(\{[\s\S]*?"actions"\s*:\s*\[[\s\S]*?\][\s\S]*?\})/)
+      || text.match(/```(?:json)?\s*ACTIONS_JSON:\s*(\{[\s\S]*?"actions"\s*:\s*\[[\s\S]*?\][\s\S]*?\})\s*```/)
+      || text.match(/(\{"summary"[\s\S]*?"actions"\s*:\s*\[[\s\S]*?\][\s\S]*?\})/);
+    if (!match) return null;
+    const rawJson = match[1];
+    const parsed = parseAiActionResponse(rawJson);
+    if (!parsed?.actions?.length) return null;
+    return {
+      summary: parsed.summary || '',
+      findings: parsed.findings || [],
+      suggestedFixes: parsed.suggestedFixes || [],
+      actions: parsed.actions,
+      rawJson,
+    };
+  }, []);
+
+  const scrubRenderedActionsJson = useCallback(() => {
+    const container = containerRef.current;
+    if (!container) return;
+
+    const roots: Array<ParentNode | ShadowRoot> = [container];
+    const chatKitEl = container.querySelector('openai-chatkit');
+    if (chatKitEl) {
+      roots.push(chatKitEl);
+      if (chatKitEl.shadowRoot) roots.push(chatKitEl.shadowRoot);
+    }
+
+    for (const root of roots) {
+      const walker = document.createTreeWalker(root, NodeFilter.SHOW_TEXT);
+      const textNodes: Text[] = [];
+      let current = walker.nextNode();
+      while (current) {
+        if (current.nodeType === Node.TEXT_NODE) textNodes.push(current as Text);
+        current = walker.nextNode();
+      }
+
+      textNodes.forEach((node) => {
+        const value = node.nodeValue || '';
+        if (value.includes('<details><summary>ACTIONS_JSON')) {
+          node.nodeValue = value.replace(/<details><summary>ACTIONS_JSON \(click to expand\)<\/summary>/g, '').trim();
+        } else if (value.includes('</details>')) {
+          node.nodeValue = value.replace(/<\/details>/g, '').trim();
+        }
+      });
+
+      const blocks = Array.from((root as ParentNode).querySelectorAll?.('pre, code, div') || []);
+      blocks.forEach((el) => {
+        const text = (el.textContent || '').trim();
+        if (/^ACTIONS_JSON:/i.test(text) || /^{"summary":/i.test(text)) {
+          (el as HTMLElement).style.display = 'none';
+        }
+      });
+    }
+  }, []);
+
+  const captureActionsPreview = useCallback((text: string) => {
+    const preview = extractActionsPreview(text);
+    if (!preview) return;
+    if (preview.rawJson === lastParsedJsonRef.current) return;
+    lastParsedJsonRef.current = preview.rawJson;
+    setParsedPreview(preview);
+    scrubRenderedActionsJson();
+    if (autoApplyRef.current) {
+      onActionsRef.current?.(preview.actions, preview.summary);
+    }
+  }, [extractActionsPreview, scrubRenderedActionsJson]);
 
   // ── Session creation ──
   // Calls OpenAI ChatKit Sessions API directly from the browser.
@@ -218,6 +297,7 @@ export function OpenAiChatKitPanel({
     onReady: () => {
       console.log('[ChatKit] Ready');
       setInitError(null);
+      setParsedPreview(null);
     },
     // ── Response end — scan for ACTIONS_JSON and auto-apply ──
     onResponseEnd: () => {
@@ -230,22 +310,7 @@ export function OpenAiChatKitPanel({
         const text = chatKitEl?.textContent || chatKitEl?.innerHTML || container.textContent || '';
         console.log('[ChatKit] onResponseEnd scan, length:', text.length, 'has ACTIONS_JSON:', text.includes('ACTIONS_JSON'));
         if (!text.includes('ACTIONS_JSON')) return;
-
-        const match =
-          text.match(/ACTIONS_JSON:\s*(\{[\s\S]*?"actions"\s*:\s*\[[\s\S]*?\][\s\S]*?\})/)
-          || text.match(/```(?:json)?\s*ACTIONS_JSON:\s*(\{[\s\S]*?"actions"\s*:\s*\[[\s\S]*?\][\s\S]*?\})\s*```/)
-          || text.match(/(\{"summary"[\s\S]*?"actions"\s*:\s*\[[\s\S]*?\][\s\S]*?\})/);
-        if (match) {
-          const parsed = parseAiActionResponse(match[1]);
-          if (parsed?.actions?.length) {
-            if (autoApplyRef.current) {
-              console.log('[ChatKit] ACTIONS_JSON detected, auto-applying', parsed.actions.length, 'actions');
-              onActionsRef.current?.(parsed.actions, parsed.summary);
-            } else {
-              console.log('[ChatKit] ACTIONS_JSON detected, auto-apply OFF. Toggle in Settings → Advanced → ChatKit auto-apply.');
-            }
-          }
-        }
+        captureActionsPreview(text);
       }, 800); // Wait for render
     },
     // Client-side tool execution — same split as liveToolLoop.ts:
@@ -408,10 +473,7 @@ export function OpenAiChatKitPanel({
         || allText.match(/ACTIONS_JSON:\s*(\{[\s\S]*?"actions"\s*:\s*\[[\s\S]*?\][\s\S]*?\})/) // ACTIONS_JSON: { ... }
         || allText.match(/(\{"summary"[\s\S]*?"actions"\s*:\s*\[[\s\S]*?\][\s\S]*?\})/);       // raw { "summary"... }
       if (jsonMatch) {
-        const parsed = parseAiActionResponse(jsonMatch[1]);
-        if (parsed?.actions?.length) {
-          onActionsRef.current?.(parsed.actions, parsed.summary);
-        }
+        captureActionsPreview(jsonMatch[1]);
       }
     };
 
@@ -426,7 +488,7 @@ export function OpenAiChatKitPanel({
       observer.disconnect();
       if (scanTimerRef.current) clearTimeout(scanTimerRef.current);
     };
-  }, []);
+  }, [captureActionsPreview]);
 
   // ── Inject workflow context when steps change ──
   useEffect(() => {
@@ -480,6 +542,66 @@ export function OpenAiChatKitPanel({
 
   return (
     <div ref={containerRef} className={className} style={{ flex: 1, minHeight: 0, display: 'flex', flexDirection: 'column' }}>
+      {parsedPreview && (
+        <div style={{ margin: '8px 8px 0', border: '1px solid rgba(148,163,184,0.25)', borderRadius: 12, background: 'rgba(15,23,42,0.35)', overflow: 'hidden' }}>
+          <div style={{ padding: '10px 12px', borderBottom: '1px solid rgba(148,163,184,0.18)', display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12 }}>
+            <div>
+              <div style={{ fontSize: 11, fontWeight: 700, letterSpacing: '0.08em', textTransform: 'uppercase', color: '#94a3b8' }}>
+                Actions JSON
+              </div>
+              {!!parsedPreview.summary && (
+                <div style={{ marginTop: 4, fontSize: 13, lineHeight: 1.45, color: '#e2e8f0' }}>
+                  {parsedPreview.summary}
+                </div>
+              )}
+            </div>
+            <button
+              type="button"
+              onClick={() => setParsedPreview(null)}
+              style={{ fontSize: 11, padding: '4px 8px', borderRadius: 8, border: '1px solid rgba(148,163,184,0.25)', background: 'transparent', color: '#cbd5e1', cursor: 'pointer' }}
+            >
+              Hide
+            </button>
+          </div>
+          <div style={{ padding: '10px 12px', display: 'grid', gap: 8 }}>
+            <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+              <span style={{ fontSize: 11, padding: '2px 8px', borderRadius: 999, background: 'rgba(6,182,212,0.14)', color: '#67e8f9' }}>
+                {parsedPreview.actions.length} {parsedPreview.actions.length === 1 ? 'change' : 'changes'}
+              </span>
+              {!!parsedPreview.findings.length && (
+                <span style={{ fontSize: 11, padding: '2px 8px', borderRadius: 999, background: 'rgba(245,158,11,0.14)', color: '#fcd34d' }}>
+                  {parsedPreview.findings.length} finding{parsedPreview.findings.length === 1 ? '' : 's'}
+                </span>
+              )}
+              {!!parsedPreview.suggestedFixes.length && (
+                <span style={{ fontSize: 11, padding: '2px 8px', borderRadius: 999, background: 'rgba(16,185,129,0.14)', color: '#86efac' }}>
+                  {parsedPreview.suggestedFixes.length} suggestion{parsedPreview.suggestedFixes.length === 1 ? '' : 's'}
+                </span>
+              )}
+            </div>
+            <div style={{ display: 'grid', gap: 4 }}>
+              {parsedPreview.actions.slice(0, 6).map((action, index) => (
+                <div key={`${action.id || 'action'}-${index}`} style={{ fontSize: 12, lineHeight: 1.45, color: '#cbd5e1' }}>
+                  - {action.action_type.replace(/_/g, ' ')}
+                </div>
+              ))}
+              {parsedPreview.actions.length > 6 && (
+                <div style={{ fontSize: 11, color: '#94a3b8' }}>
+                  + {parsedPreview.actions.length - 6} more
+                </div>
+              )}
+            </div>
+            <details style={{ border: '1px solid rgba(148,163,184,0.18)', borderRadius: 10, overflow: 'hidden', background: 'rgba(2,6,23,0.5)' }}>
+              <summary style={{ cursor: 'pointer', padding: '8px 10px', fontSize: 11, fontWeight: 700, letterSpacing: '0.06em', textTransform: 'uppercase', color: '#94a3b8' }}>
+                Raw JSON
+              </summary>
+              <pre style={{ margin: 0, padding: 12, overflowX: 'auto', fontSize: 11, lineHeight: 1.45, color: '#e2e8f0', borderTop: '1px solid rgba(148,163,184,0.18)' }}>
+                <code>{parsedPreview.rawJson}</code>
+              </pre>
+            </details>
+          </div>
+        </div>
+      )}
       <ChatKit control={chatkit.control} style={{ width: '100%', height: '100%' }} />
     </div>
   );
