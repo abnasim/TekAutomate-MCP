@@ -22,7 +22,16 @@ import type { StepPreview } from './StepsListPreview';
 // ── Storage keys ──
 const CHATKIT_WORKFLOW_ID_KEY = 'tekautomate.chatkit.workflow_id';
 const CHATKIT_THREAD_KEY = 'tekautomate.chatkit.thread_id';
+const CHATKIT_SERVER_URL_KEY = 'tekautomate.chatkit.server_url';
 const DEFAULT_WORKFLOW_ID = 'wf_69cb9085f72c8190ae05b360552d6987032b7c148cd57c24';
+
+function getChatKitServerUrl(): string {
+  try {
+    return localStorage.getItem(CHATKIT_SERVER_URL_KEY) || '';
+  } catch {
+    return '';
+  }
+}
 
 interface OpenAiChatKitPanelProps {
   apiKey: string;
@@ -197,8 +206,15 @@ export function OpenAiChatKitPanel({
   );
 
   // ── ChatKit hook ──
+  // Self-hosted mode: use apiURL pointing to our ChatKit server (has widgets, HiddenContextItem)
+  // Hosted mode: use getClientSecret via MCP server session endpoint
+  const selfHostedUrl = getChatKitServerUrl();
+  const apiConfig = selfHostedUrl
+    ? { url: `${selfHostedUrl.replace(/\/$/, '')}/chatkit` } as any
+    : { getClientSecret };
+
   const chatkit = useChatKit({
-    api: { getClientSecret },
+    api: apiConfig,
     // Don't restore threads from localStorage — ChatKit manages thread history
     // internally via its built-in history UI. Storing thread IDs causes stale
     // 404s when threads expire or get deleted on OpenAI's side.
