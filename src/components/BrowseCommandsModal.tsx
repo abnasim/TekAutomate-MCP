@@ -329,7 +329,7 @@ export const BrowseCommandsModal: React.FC<BrowseCommandsModalProps> = ({
 
     observer.observe(sentinel);
     return () => observer.disconnect();
-  }, [hasMore, filtered.length]);
+  }, [hasMore]);
   
   // Trigger search animation when browser opens
   useEffect(() => {
@@ -534,7 +534,9 @@ export const BrowseCommandsModal: React.FC<BrowseCommandsModalProps> = ({
               commands={selectedCat ? commands.filter(cmd => cmd.category === selectedCat) : commands}
               searchQuery={search}
               onSelectParameter={(resolved, index) => {
-                setSearch(normalizeIndexedQueryToTemplate(resolved));
+                // Keep the resolved form (e.g. "CH1") so the user sees their selection.
+                // The search filter already handles matching against <x> templates.
+                setSearch(resolved);
                 setVisibleCount(50);
               }}
             />

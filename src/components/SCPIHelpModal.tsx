@@ -104,6 +104,7 @@ interface SCPIHelpModalProps {
   editableParameters?: EditableParameter[];
   manualEntry?: ManualCommandEntry;
   params?: CommandParam[];
+  onNavigateToCommand?: (scpiCommand: string) => void;
 }
 
 export const SCPIHelpModal: React.FC<SCPIHelpModalProps> = ({
@@ -114,6 +115,7 @@ export const SCPIHelpModal: React.FC<SCPIHelpModalProps> = ({
   editableParameters = [],
   manualEntry,
   params = [],
+  onNavigateToCommand,
 }) => {
   if (!isOpen) return null;
 
@@ -538,7 +540,8 @@ export const SCPIHelpModal: React.FC<SCPIHelpModalProps> = ({
                 {manualEntry.relatedCommands.map((cmd, i) => (
                   <code
                     key={i}
-                    className="px-3 py-1 bg-gray-100 dark:bg-gray-700 text-gray-700 dark:text-gray-200 rounded border border-gray-300 dark:border-gray-600 text-sm font-mono hover:bg-gray-200 dark:hover:bg-gray-600 transition cursor-pointer"
+                    onClick={() => onNavigateToCommand?.(cmd)}
+                    className="px-3 py-1 bg-gray-100 dark:bg-gray-700 text-gray-700 dark:text-gray-200 rounded border border-gray-300 dark:border-gray-600 text-sm font-mono hover:bg-blue-100 dark:hover:bg-blue-900/40 hover:text-blue-700 dark:hover:text-blue-300 hover:border-blue-400 dark:hover:border-blue-600 transition cursor-pointer"
                   >
                     {cmd}
                   </code>

@@ -10172,9 +10172,7 @@ Keep under 120 words. No headings. Bullets only. Stay on this command. Do not de
                           </button>
                         </div>
                       </div>
-                      <p className="mt-1 text-[10px] text-gray-500 dark:text-gray-400">
-                        Tip: <span className="font-mono">.set</span> = setup only, <span className="font-mono">.tss</span> = full session.
-                      </p>
+                      {/* Tip removed — was taking up space and rarely relevant */}
 
                       {/* Trigger Type Selector for TRIGger:{A|B}:... commands */}
                       {(() => {
@@ -15838,6 +15836,14 @@ Instructions:
               editableParameters={editableParameters}
               manualEntry={manualEntry}
               params={params}
+              onNavigateToCommand={(relatedCmd) => {
+                if (selectedStepData?.params) {
+                  const cleaned = relatedCmd.replace(/\?$/, '').trim();
+                  updateSelectedStepParam('command', cleaned.endsWith('?') ? cleaned : cleaned);
+                  setShowSCPIHelp(false);
+                  setTimeout(() => setShowSCPIHelp(true), 100);
+                }
+              }}
             />
           );
         } catch (e) {
@@ -15858,6 +15864,13 @@ Instructions:
               parsedSCPI={parsedSCPI}
               editableParameters={editableParameters}
               params={selectedStepData.params.cmdParams || []}
+              onNavigateToCommand={(relatedCmd) => {
+                if (selectedStepData?.params) {
+                  updateSelectedStepParam('command', relatedCmd.replace(/\?$/, '').trim());
+                  setShowSCPIHelp(false);
+                  setTimeout(() => setShowSCPIHelp(true), 100);
+                }
+              }}
             />
           );
         }
