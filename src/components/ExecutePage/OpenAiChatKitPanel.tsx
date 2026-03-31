@@ -128,7 +128,7 @@ export function OpenAiChatKitPanel({
             'OpenAI-Beta': 'chatkit_beta=v1',
           },
           body: JSON.stringify({
-            workflow_id: workflowId,
+            workflow: { id: workflowId },
             user: 'tekautomate-user',
           }),
         });
