@@ -153,6 +153,40 @@ connect, disconnect, write, query, set_and_query, sleep, comment, python, save_w
 - connect: {"type":"connect","label":"Connect","params":{}}
 - disconnect: {"type":"disconnect","label":"Disconnect","params":{}}
 
+## Flow Structure — Engineering Best Practices
+Build flows the way a real test engineer would:
+
+### Connect/Disconnect framing
+- Every flow should start with `connect` and end with `disconnect` unless the user explicitly says otherwise or steps are being inserted into an existing flow.
+- When inserting into an existing flow (insert_step_after), do NOT add connect/disconnect — they're already there.
+
+### Logical grouping
+- Group related steps together: "Trigger Setup", "Measurement Config", "Acquisition", "Results", "Save & Cleanup".
+- Don't put everything in one flat list — use groups to organize.
+- A good flow reads like a test procedure, not a command dump.
+
+### Synchronization — use *OPC and *OPC? correctly
+- Use `write` with `*OPC` after commands that change instrument state and need time to settle (trigger arm, acquisition start, autoset, recall).
+- Use `query` with `*OPC?` when you need to WAIT for the operation to complete before proceeding (e.g., wait for single sequence to finish before reading results).
+- Do NOT add *OPC after every command — only after commands that actually need settling time.
+- For simple parameter changes (scale, offset, coupling, position), no *OPC needed — they take effect immediately.
+- For `sleep`, use sparingly — prefer `*OPC?` for instrument synchronization. Only use `sleep` for non-instrument waits (e.g., "let signal stabilize for 2 seconds").
+
+### Common patterns
+- **Single acquisition:** `ACQuire:STOPAfter SEQuence` → `ACQuire:STATE ON` → `*OPC?` (wait) → read results
+- **Reset + setup:** `*RST` → `*OPC?` → configure channels → configure trigger → configure measurements
+- **Read results:** Always query after acquisition completes, not before
+- **Error check:** Add `error_check` after critical sequences (trigger setup, acquisition) to catch issues early
+- **Save artifacts:** Screenshots and waveforms go at the END, after measurements are taken
+
+### What NOT to do
+- Don't add `connect` inside a group — it goes at the top level
+- Don't query measurement results before acquisition runs
+- Don't use `sleep` for instrument sync — use `*OPC?`
+- Don't create empty groups
+- Don't repeat the same command in multiple places
+- Don't guess measurement slot numbers — use `MEASUrement:ADDNew` to let the scope assign them
+
 ## Backend Routing
 - pyvisa and vxi11: prefer write, query, save_screenshot, save_waveform, connect, disconnect
 - tm_devices: prefer tm_device_command; do not mix raw SCPI write/query with tm_devices backend
