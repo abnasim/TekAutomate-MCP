@@ -219,6 +219,45 @@ export function OpenAiChatKitPanel({
     // Instrument tools (send_scpi, capture_screenshot, etc.) → browser calls executor directly
     // Knowledge tools (search_scpi, verify, browse, etc.) → browser calls MCP /tools/execute
     onClientTool: async ({ name, params }: { name: string; params: Record<string, unknown> }) => {
+      // ── Client-only tool: get_current_workflow ──
+      // Returns current flow state directly from the browser — no MCP needed.
+      // Agent calls this to see what steps exist, selected step, validation errors.
+      if (name === 'get_current_workflow') {
+        const steps = stepsRef.current || [];
+        const fc = flowContextRef.current;
+        const stepSummary = steps.map((s: any, i: number) => {
+          const cmd = s.params?.command || s.params?.code || s.label || s.type;
+          return { index: i + 1, type: s.type, label: s.label || s.type, command: cmd, id: s.id };
+        });
+        return {
+          stepCount: steps.length,
+          steps: stepSummary,
+          selectedStep: fc?.selectedStep?.id || null,
+          validationErrors: fc?.validationErrors || [],
+          backend: fc?.backend || 'pyvisa',
+          modelFamily: fc?.modelFamily || 'unknown',
+          deviceDriver: fc?.deviceDriver || null,
+          isEmpty: steps.length === 0,
+        };
+      }
+
+      // ── Client-only tool: get_instrument_info ──
+      // Returns current instrument connection details from the browser.
+      if (name === 'get_instrument_info') {
+        const ep = instrumentEndpointRef.current;
+        const fc = flowContextRef.current;
+        return {
+          connected: !!ep?.executorUrl,
+          executorUrl: ep?.executorUrl || null,
+          visaResource: ep?.visaResource || null,
+          backend: ep?.backend || fc?.backend || 'pyvisa',
+          modelFamily: fc?.modelFamily || 'unknown',
+          deviceDriver: fc?.deviceDriver || null,
+          liveMode: ep?.liveMode || false,
+        };
+      }
+
+      // ── MCP + executor tools ──
       try {
         const result = await executeMcpTool(
           name,

@@ -29,14 +29,19 @@ ALWAYS use these for SCPI command lookup. Do NOT guess from memory.
   Materialize: {action:"search_exec", query:"materialize scpi command", args:{header:"CH<x>:SCAle", commandType:"set", value:"1.0", placeholderBindings:{"CH<x>":"CH1"}}}
   Save/Learn:  {action:"create", toolName:"Edge Trigger Setup", toolDescription:"...", toolTriggers:["edge trigger"], toolCategory:"shortcut", toolSteps:[...]}
 
+### Workspace tools (executed by the web app, not MCP):
+- **get_current_workflow** — returns the current flow steps, selected step, validation errors, backend, model. Call this FIRST when the user asks to check, fix, or modify their existing flow. No arguments needed.
+- **get_instrument_info** — returns current instrument connection (executorUrl, visaResource, backend, model). Call when you need to know what's connected.
+
 ### Instrument tools (executed by the web app, not MCP):
 - **send_scpi** — send commands to live instrument: {commands: ["*IDN?", "CH1:SCAle 1.0"]}
 - **capture_screenshot** — capture scope display: {analyze: true}
 - **discover_scpi** — probe for undocumented commands (slow, last resort)
 
 ## Tool Priority
-1. search_scpi / browse_scpi_commands — FIRST for any SCPI command question
-2. get_command_by_header — when you know the header, get exact syntax + valid values
+1. get_current_workflow — FIRST when user asks about their existing flow, wants to check/fix/modify it
+2. search_scpi / browse_scpi_commands — for any SCPI command question
+3. get_command_by_header — when you know the header, get exact syntax + valid values
 3. verify_scpi_commands — ALWAYS verify before returning commands to user
 4. tek_router — for build/materialize/save operations
 5. NEVER answer SCPI questions from memory alone — always verify with tools
