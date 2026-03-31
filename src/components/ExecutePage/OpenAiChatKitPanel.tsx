@@ -27,6 +27,7 @@ const DEFAULT_WORKFLOW_ID = 'wf_69cb9085f72c8190ae05b360552d6987032b7c148cd57c24
 interface OpenAiChatKitPanelProps {
   apiKey: string;
   steps: StepPreview[];
+  autoApply?: boolean;
   flowContext?: {
     backend?: string;
     modelFamily?: string;
@@ -94,6 +95,7 @@ function extractClientSecret(payload: unknown): string | null {
 export function OpenAiChatKitPanel({
   apiKey,
   steps,
+  autoApply = false,
   flowContext,
   instrumentEndpoint,
   onActionsDetected,
@@ -110,6 +112,8 @@ export function OpenAiChatKitPanel({
   flowContextRef.current = flowContext;
   const instrumentEndpointRef = useRef(instrumentEndpoint);
   instrumentEndpointRef.current = instrumentEndpoint;
+  const autoApplyRef = useRef(autoApply);
+  autoApplyRef.current = autoApply;
   const lastContextSentRef = useRef('');
 
   // ── Session creation ──
@@ -232,10 +236,14 @@ export function OpenAiChatKitPanel({
           || text.match(/```(?:json)?\s*ACTIONS_JSON:\s*(\{[\s\S]*?"actions"\s*:\s*\[[\s\S]*?\][\s\S]*?\})\s*```/)
           || text.match(/(\{"summary"[\s\S]*?"actions"\s*:\s*\[[\s\S]*?\][\s\S]*?\})/);
         if (match) {
-          console.log('[ChatKit] ACTIONS_JSON detected, auto-applying...');
           const parsed = parseAiActionResponse(match[1]);
           if (parsed?.actions?.length) {
-            onActionsRef.current?.(parsed.actions, parsed.summary);
+            if (autoApplyRef.current) {
+              console.log('[ChatKit] ACTIONS_JSON detected, auto-applying', parsed.actions.length, 'actions');
+              onActionsRef.current?.(parsed.actions, parsed.summary);
+            } else {
+              console.log('[ChatKit] ACTIONS_JSON detected, auto-apply OFF. Toggle in Settings → Advanced → ChatKit auto-apply.');
+            }
           }
         }
       }, 800); // Wait for render

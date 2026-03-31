@@ -147,6 +147,10 @@ export function AiChatPanel({
   const [chatKitWorkflowId, setChatKitWorkflowId] = useState(() => {
     try { return localStorage.getItem(CHATKIT_WORKFLOW_ID_KEY) || CHATKIT_DEFAULT_WORKFLOW; } catch { return CHATKIT_DEFAULT_WORKFLOW; }
   });
+  const CHATKIT_AUTO_APPLY_KEY = 'tekautomate.chatkit.auto_apply';
+  const [chatKitAutoApply, setChatKitAutoApply] = useState(() => {
+    try { return localStorage.getItem(CHATKIT_AUTO_APPLY_KEY) === 'true'; } catch { return false; }
+  });
   const prevStepsRef = useRef(steps);
   const messagesContainerRef = useRef<HTMLDivElement>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
@@ -1583,6 +1587,33 @@ export function AiChatPanel({
                   Set to enable ChatKit for OpenAI AI Chat mode. Create in Agent Builder.
                 </p>
               </label>
+              <label
+                className="flex items-center justify-between gap-2 text-[10px] text-slate-500 dark:text-white/50"
+                title="Auto-apply ACTIONS_JSON from ChatKit without confirmation"
+              >
+                <span>ChatKit auto-apply</span>
+                <button
+                  type="button"
+                  role="switch"
+                  aria-checked={chatKitAutoApply}
+                  onClick={() => {
+                    const next = !chatKitAutoApply;
+                    setChatKitAutoApply(next);
+                    try { localStorage.setItem(CHATKIT_AUTO_APPLY_KEY, String(next)); } catch {}
+                  }}
+                  className={`relative h-4 w-8 rounded-full transition-colors ${
+                    chatKitAutoApply
+                      ? 'bg-cyan-500'
+                      : 'bg-slate-300 dark:bg-white/20'
+                  }`}
+                >
+                  <span
+                    className={`absolute top-0.5 left-0.5 h-3 w-3 rounded-full bg-white transition-transform ${
+                      chatKitAutoApply ? 'translate-x-4' : ''
+                    }`}
+                  />
+                </button>
+              </label>
               <label className="block">
                 <span className="text-[10px] text-slate-500 dark:text-white/50">Executor output</span>
                 <select
@@ -1665,6 +1696,7 @@ export function AiChatPanel({
           <OpenAiChatKitPanel
             apiKey={state.openaiApiKey || state.apiKey}
             steps={steps}
+            autoApply={chatKitAutoApply}
             flowContext={flowContext}
             instrumentEndpoint={instrumentEndpoint}
             onActionsDetected={(actions, summary) => {
