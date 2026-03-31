@@ -1587,33 +1587,6 @@ export function AiChatPanel({
                   Set to enable ChatKit for OpenAI AI Chat mode. Create in Agent Builder.
                 </p>
               </label>
-              <label
-                className="flex items-center justify-between gap-2 text-[10px] text-slate-500 dark:text-white/50"
-                title="Auto-apply ACTIONS_JSON from ChatKit without confirmation"
-              >
-                <span>ChatKit auto-apply</span>
-                <button
-                  type="button"
-                  role="switch"
-                  aria-checked={chatKitAutoApply}
-                  onClick={() => {
-                    const next = !chatKitAutoApply;
-                    setChatKitAutoApply(next);
-                    try { localStorage.setItem(CHATKIT_AUTO_APPLY_KEY, String(next)); } catch {}
-                  }}
-                  className={`relative h-4 w-8 rounded-full transition-colors ${
-                    chatKitAutoApply
-                      ? 'bg-cyan-500'
-                      : 'bg-slate-300 dark:bg-white/20'
-                  }`}
-                >
-                  <span
-                    className={`absolute top-0.5 left-0.5 h-3 w-3 rounded-full bg-white transition-transform ${
-                      chatKitAutoApply ? 'translate-x-4' : ''
-                    }`}
-                  />
-                </button>
-              </label>
               <label className="block">
                 <span className="text-[10px] text-slate-500 dark:text-white/50">Executor output</span>
                 <select
@@ -1652,41 +1625,42 @@ export function AiChatPanel({
 
         </div>
       )}
-      <div className="px-2 py-1 border-b border-slate-100 dark:border-white/5">
+      <div className="px-3 py-1 border-b border-slate-100 dark:border-white/5 flex items-center justify-between">
         {!mcpStatus.available && (
-          <div className="mb-1 rounded-lg bg-amber-50 text-amber-800 border border-amber-200 dark:bg-amber-900/30 dark:text-amber-200 dark:border-amber-700 px-2 py-1 text-[10px]">
-            MCP not reachable. {mcpStatus.message || 'Check MCP host and try again.'}
+          <div className="rounded bg-amber-50 text-amber-800 border border-amber-200 dark:bg-amber-900/30 dark:text-amber-200 dark:border-amber-700 px-2 py-0.5 text-[9px] mr-2">
+            MCP offline
           </div>
         )}
-        <div className="flex items-center justify-between">
-          <div className="flex items-center gap-2">
+        <div className="flex items-center gap-2">
+          <span className="text-[9px] font-semibold uppercase tracking-widest text-slate-400 dark:text-white/30">
+            Quick Actions
+          </span>
+          {useChatKitEmbed && (
             <button
               type="button"
-              onClick={() => setQuickActionsCollapsed((v) => !v)}
-              className="text-[9px] font-semibold uppercase tracking-widest text-slate-400 dark:text-white/30 hover:text-slate-600 dark:hover:text-white/60"
+              onClick={() => {
+                const next = !chatKitAutoApply;
+                setChatKitAutoApply(next);
+                try { localStorage.setItem(CHATKIT_AUTO_APPLY_KEY, String(next)); } catch {}
+              }}
+              className={`text-[9px] px-1.5 py-0.5 rounded-full font-medium transition-colors ${
+                chatKitAutoApply
+                  ? 'bg-cyan-500/20 text-cyan-400 border border-cyan-500/40'
+                  : 'bg-slate-500/10 text-slate-500 dark:text-white/40 border border-slate-300/30 dark:border-white/10'
+              }`}
+              title="Auto-apply ACTIONS_JSON from ChatKit"
             >
-              {quickActionsCollapsed ? '▸ Actions' : '▾ Actions'}
+              {chatKitAutoApply ? '⚡ Auto' : 'Auto'}
             </button>
-            {useChatKitEmbed && (
-              <button
-                type="button"
-                onClick={() => {
-                  const next = !chatKitAutoApply;
-                  setChatKitAutoApply(next);
-                  try { localStorage.setItem(CHATKIT_AUTO_APPLY_KEY, String(next)); } catch {}
-                }}
-                className={`text-[9px] px-1.5 py-0.5 rounded-full font-medium transition-colors ${
-                  chatKitAutoApply
-                    ? 'bg-cyan-500/20 text-cyan-400 border border-cyan-500/40'
-                    : 'bg-slate-500/10 text-slate-500 dark:text-white/40 border border-slate-300/30 dark:border-white/10'
-                }`}
-                title="Auto-apply ACTIONS_JSON from ChatKit"
-              >
-                {chatKitAutoApply ? '⚡ Auto-apply ON' : 'Auto-apply'}
-              </button>
             )}
-          </div>
         </div>
+        <button
+          type="button"
+          onClick={() => setQuickActionsCollapsed((v) => !v)}
+          className="text-[9px] px-1.5 py-0.5 rounded border border-slate-200 dark:border-white/10 text-slate-500 dark:text-white/50 hover:text-slate-700 dark:hover:text-white/80"
+        >
+          {quickActionsCollapsed ? 'Show' : 'Hide'}
+        </button>
         {!quickActionsCollapsed && (
           <div className="grid grid-cols-2 gap-1.5">
             {quickActions.map((qa) => (
