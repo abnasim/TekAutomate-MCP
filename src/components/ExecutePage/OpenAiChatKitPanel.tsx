@@ -142,6 +142,14 @@ function findBalancedJsonFromMarker(source: string, marker = 'ACTIONS_JSON:'): s
   return null;
 }
 
+function extractDetailsBody(source: string): string | null {
+  const raw = decodeHtmlEntities(String(source || ''));
+  const match =
+    raw.match(/<details>\s*<summary>[\s\S]*?<\/summary>\s*([\s\S]*?)<\/details>/i) ||
+    raw.match(/&lt;details&gt;\s*&lt;summary&gt;[\s\S]*?&lt;\/summary&gt;\s*([\s\S]*?)&lt;\/details&gt;/i);
+  return match?.[1]?.trim() || null;
+}
+
 export function OpenAiChatKitPanel({
   apiKey,
   steps,
@@ -170,6 +178,10 @@ export function OpenAiChatKitPanel({
 
   const extractActionsPreview = useCallback((text: string): ParsedActionsPreview | null => {
     const rawJson =
+      (() => {
+        const detailsBody = extractDetailsBody(text);
+        return detailsBody ? findBalancedJsonFromMarker(detailsBody, 'ACTIONS_JSON:') : null;
+      })() ||
       findBalancedJsonFromMarker(text, 'ACTIONS_JSON:')
       || findBalancedJsonFromMarker(text, 'actions_json:')
       || (() => {
