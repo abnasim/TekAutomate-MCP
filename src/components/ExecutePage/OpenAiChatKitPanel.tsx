@@ -16,7 +16,7 @@ import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { ChatKit, useChatKit } from '@openai/chatkit-react';
 import { parseAiActionResponse, type AiAction } from '../../utils/aiActions';
 import { resolveMcpHost } from '../../utils/ai/mcpClient';
-import { buildWorkflowContext } from '../../utils/ai/liveToolLoop';
+import { buildWorkflowContext, executeMcpTool } from '../../utils/ai/liveToolLoop';
 import type { StepPreview } from './StepsListPreview';
 
 // ── Storage keys ──
@@ -34,6 +34,12 @@ interface OpenAiChatKitPanelProps {
     validationErrors?: unknown[];
     selectedStep?: { id?: string };
   };
+  instrumentEndpoint?: {
+    executorUrl: string;
+    visaResource: string;
+    backend: string;
+    liveMode?: boolean;
+  } | null;
   onActionsDetected?: (actions: AiAction[], summary?: string) => void;
   onThreadChange?: (threadId: string) => void;
   className?: string;
@@ -89,6 +95,7 @@ export function OpenAiChatKitPanel({
   apiKey,
   steps,
   flowContext,
+  instrumentEndpoint,
   onActionsDetected,
   onThreadChange,
   className,
@@ -101,6 +108,8 @@ export function OpenAiChatKitPanel({
   stepsRef.current = steps;
   const flowContextRef = useRef(flowContext);
   flowContextRef.current = flowContext;
+  const instrumentEndpointRef = useRef(instrumentEndpoint);
+  instrumentEndpointRef.current = instrumentEndpoint;
   const lastContextSentRef = useRef('');
 
   // ── Session creation ──
@@ -206,20 +215,18 @@ export function OpenAiChatKitPanel({
       console.log('[ChatKit] Ready');
       setInitError(null);
     },
-    // Client-side tool execution — for MCP tools registered as client tools in Agent Builder
+    // Client-side tool execution — same split as liveToolLoop.ts:
+    // Instrument tools (send_scpi, capture_screenshot, etc.) → browser calls executor directly
+    // Knowledge tools (search_scpi, verify, browse, etc.) → browser calls MCP /tools/execute
     onClientTool: async ({ name, params }: { name: string; params: Record<string, unknown> }) => {
       try {
-        const mcpHost = resolveMcpHost();
-        const res = await fetch(`${mcpHost.replace(/\/$/, '')}/tools/execute`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ name, args: params }),
-        });
-        if (!res.ok) {
-          const errText = await res.text();
-          return { error: `Tool ${name} failed: ${errText}` };
-        }
-        return await res.json();
+        const result = await executeMcpTool(
+          name,
+          params,
+          instrumentEndpointRef.current || undefined,
+          { modelFamily: flowContextRef.current?.modelFamily, deviceDriver: flowContextRef.current?.deviceDriver },
+        );
+        return result as Record<string, unknown>;
       } catch (err) {
         return { error: err instanceof Error ? err.message : 'Tool execution failed' };
       }

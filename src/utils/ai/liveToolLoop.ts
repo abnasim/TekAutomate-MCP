@@ -53,7 +53,7 @@ export interface LiveToolLoopResult {
 
 // ── Tool Execution ──
 
-const EXECUTOR_TOOLS = new Set([
+export const EXECUTOR_TOOLS = new Set([
   'send_scpi', 'capture_screenshot', 'get_instrument_state',
   'probe_command', 'get_visa_resources', 'get_environment',
 ]);
@@ -107,7 +107,7 @@ async function verifyScpiCommands(
  * Knowledge/search tools go through MCP server (/tools/execute).
  * This means live mode works even when MCP is hosted — browser reaches executor directly.
  */
-async function executeMcpTool(
+export async function executeMcpTool(
   toolName: string,
   args: Record<string, unknown>,
   instrumentEndpoint?: LiveToolLoopParams['instrumentEndpoint'],

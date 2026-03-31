@@ -1666,6 +1666,7 @@ export function AiChatPanel({
             apiKey={state.openaiApiKey || state.apiKey}
             steps={steps}
             flowContext={flowContext}
+            instrumentEndpoint={instrumentEndpoint}
             onActionsDetected={(actions, summary) => {
               if (actions.length && onApplyAiActions) {
                 void onApplyAiActions(actions);
