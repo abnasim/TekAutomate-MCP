@@ -8,6 +8,7 @@ import type { MicroToolResult } from './toolRegistry';
 import { materializeTmDevicesCall } from '../tools/materializeTmDevicesCall';
 import { searchTmDevices } from '../tools/searchTmDevices';
 import { verifyScpiCommands } from '../tools/verifyScpiCommands';
+import { getRagIndexes } from './ragIndex';
 
 export interface BuildRequest {
   query: string;
@@ -1691,6 +1692,34 @@ export async function executeBuild(request: BuildRequest): Promise<MicroToolResu
     // Keep raw ACTIONS_JSON if post-check fails.
   }
 
+  // ── RAG enrichment — attach relevant knowledge chunks ──
+  // Gives the AI additional context (app notes, best practices, error guides)
+  // alongside the verified command cards.
+  let ragChunks: Array<{ title: string; body: string; source?: string; corpus?: string }> = [];
+  try {
+    const rag = getRagIndexes();
+    if (rag) {
+      const queryWords = new Set(request.query.toLowerCase().split(/\s+/).filter(w => w.length > 2));
+      // Search SCPI corpus + app_logic for relevant context
+      const scpiChunks = rag.search('scpi', request.query, 5) as Array<{ title: string; body: string; source?: string }>;
+      const appChunks = rag.search('app_logic', request.query, 3) as Array<{ title: string; body: string; source?: string }>;
+      const allChunks = [...scpiChunks, ...appChunks];
+
+      // Filter: keep chunks whose title overlaps with query words
+      ragChunks = allChunks
+        .filter(c => {
+          const titleWords = (c.title || '').toLowerCase().split(/\s+/);
+          return titleWords.some(w => queryWords.has(w));
+        })
+        .slice(0, 3)
+        .map(c => ({
+          title: c.title,
+          body: String(c.body || '').slice(0, 300),
+          source: c.source,
+        }));
+    }
+  } catch { /* RAG is non-fatal */ }
+
   return {
     ok: true,
     warnings: warnings.length ? Array.from(new Set(warnings)) : undefined,
@@ -1702,6 +1731,7 @@ export async function executeBuild(request: BuildRequest): Promise<MicroToolResu
       totalSteps: groupedSteps.length,
       phases: phaseOrder,
       commandCards: verifiedCommands.map((command) => buildCommandCard(command.record)),
+      ...(ragChunks.length ? { knowledgeContext: ragChunks } : {}),
       durationMs: Date.now() - startedAt,
     }, providerMatchDebug),
     text,
