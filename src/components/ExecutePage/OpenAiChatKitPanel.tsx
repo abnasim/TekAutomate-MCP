@@ -72,12 +72,14 @@ export function OpenAiChatKitPanel({
   className,
 }: OpenAiChatKitPanelProps) {
   const [initError, setInitError] = useState<string | null>(null);
+  const [activeThreadId, setActiveThreadId] = useState<string | null>(null);
   const onActionsRef = useRef(onActionsDetected);
   onActionsRef.current = onActionsDetected;
   const stepsRef = useRef(steps);
   stepsRef.current = steps;
   const flowContextRef = useRef(flowContext);
   flowContextRef.current = flowContext;
+  const lastContextSentRef = useRef('');
 
   // ── Session creation ──
   // Calls OpenAI ChatKit Sessions API directly from the browser.
@@ -159,6 +161,7 @@ export function OpenAiChatKitPanel({
     api: { getClientSecret },
     initialThread: getStoredThreadId() || null,
     onThreadChange: (detail: { threadId: string | null }) => {
+      setActiveThreadId(detail.threadId ?? null);
       if (detail.threadId) {
         setStoredThreadId(detail.threadId);
         onThreadChange?.(detail.threadId);
@@ -246,6 +249,7 @@ export function OpenAiChatKitPanel({
 
   // ── Inject workflow context when steps change ──
   useEffect(() => {
+    if (!activeThreadId) return;
     if (!stepsRef.current?.length) return;
 
     const ctx = buildWorkflowContext(
@@ -254,13 +258,18 @@ export function OpenAiChatKitPanel({
       flowContextRef.current?.selectedStep?.id,
     );
 
-    if (ctx && chatkit.sendCustomAction) {
-      void chatkit.sendCustomAction({
-        type: 'workflow_context_update',
-        payload: { context: ctx },
-      });
-    }
-  }, [chatkit, steps]);
+    const contextKey = ctx ? JSON.stringify(ctx) : '';
+    if (!ctx || contextKey === lastContextSentRef.current || !chatkit.sendCustomAction) return;
+
+    void chatkit.sendCustomAction({
+      type: 'workflow_context_update',
+      payload: { context: ctx },
+    }).then(() => {
+      lastContextSentRef.current = contextKey;
+    }).catch((err) => {
+      console.warn('[ChatKit] workflow_context_update failed:', err);
+    });
+  }, [activeThreadId, chatkit, steps]);
 
   // ── Error state ──
   if (initError) {
