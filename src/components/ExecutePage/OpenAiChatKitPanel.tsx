@@ -215,6 +215,45 @@ export function OpenAiChatKitPanel({
       console.log('[ChatKit] Ready');
       setInitError(null);
     },
+    // ── Widget action handler — replaces MutationObserver for ACTIONS_JSON ──
+    // When user clicks "Apply to Flow" on the widget, we receive the actions directly.
+    onAction: (detail: { type: string; payload?: Record<string, unknown> }) => {
+      console.log('[ChatKit] Widget action:', detail.type, detail.payload);
+      if (detail.type === 'flow.apply' && detail.payload?.actions) {
+        const rawActions = detail.payload.actions;
+        const actions = Array.isArray(rawActions) ? rawActions : [];
+        if (actions.length) {
+          // Parse through our standard sanitizer to normalize action format
+          const parsed = parseAiActionResponse(JSON.stringify({
+            actions,
+            summary: typeof detail.payload.summary === 'string' ? detail.payload.summary : '',
+          }));
+          if (parsed?.actions?.length) {
+            onActionsRef.current?.(parsed.actions, parsed.summary);
+          } else {
+            // Fallback: pass raw actions directly
+            onActionsRef.current?.(actions as AiAction[], String(detail.payload.summary || ''));
+          }
+        }
+      } else if (detail.type === 'flow.addStep' && detail.payload?.command) {
+        // Single step add from SCPI result widget
+        const step = {
+          type: 'insert_step_after' as const,
+          action_type: 'insert_step_after' as const,
+          targetStepId: null,
+          payload: {
+            newStep: {
+              type: 'write',
+              label: String(detail.payload.command),
+              params: { command: String(detail.payload.command) },
+            },
+          },
+        };
+        onActionsRef.current?.([step as unknown as AiAction]);
+      } else if (detail.type === 'flow.dismiss') {
+        console.log('[ChatKit] User dismissed flow actions');
+      }
+    },
     // Client-side tool execution — same split as liveToolLoop.ts:
     // Instrument tools (send_scpi, capture_screenshot, etc.) → browser calls executor directly
     // Knowledge tools (search_scpi, verify, browse, etc.) → browser calls MCP /tools/execute
@@ -245,7 +284,10 @@ export function OpenAiChatKitPanel({
     },
   });
 
-  // ── DOM observer for ACTIONS_JSON extraction ──
+  // ── DOM observer for ACTIONS_JSON extraction (FALLBACK) ──
+  // Primary path: onAction handler receives structured data from widgets.
+  // This observer is a fallback for when the agent returns raw ACTIONS_JSON
+  // in text instead of a widget (e.g., if widget output isn't configured).
   const containerRef = useRef<HTMLDivElement>(null);
   const lastProcessedRef = useRef('');
   const scanTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
