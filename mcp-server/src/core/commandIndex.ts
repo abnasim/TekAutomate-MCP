@@ -70,6 +70,7 @@ const DEFAULT_COMMAND_FILES = [
   'dpojet.json',
   'tekexpress.json',
   'rsa.json',
+  'pi_only.json',
 ];
 
 const SOURCE_FILE_FAMILY_HINTS: Record<string, string[]> = {
@@ -77,6 +78,7 @@ const SOURCE_FILE_FAMILY_HINTS: Record<string, string[]> = {
   'mso_manual_overrides.json': ['MSO4', 'MSO5', 'MSO6', 'MSO7'],
   'MSO_DPO_5k_7k_70K.json': ['MSO5000', 'DPO5000', 'DPO7000', 'DPO70000'],
   'legacy_scope_manual_overrides.json': ['MSO5000', 'DPO5000', 'DPO7000', 'DPO70000'],
+  'pi_only.json': ['MSO4', 'MSO5', 'MSO6', 'MSO44', 'MSO46', 'MSO54', 'MSO56', 'MSO58', 'MSO64', 'MSO66', 'MSO68', 'DPO7000', 'DPO70000'],
   'afg.json': ['AFG'],
   'awg.json': ['AWG'],
   'smu.json': ['SMU'],
