@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef, lazy, Suspense } from 'react';
+import React, { useState, useEffect, useRef, Suspense } from 'react';
 import { Bot, KeyRound, Loader2, Paperclip, Play, Send, Settings, Sparkles, Terminal, X } from 'lucide-react';
 import { parseAiActionResponse, type AiAction } from '../../utils/aiActions';
 import type { ExecutionAuditReport } from '../../utils/executionAudit';
@@ -14,9 +14,7 @@ import {
   setStoredMcpHost,
   type McpChatAttachment,
 } from '../../utils/ai/mcpClient';
-
-// Lazy-load ChatKit panel — only loaded when OpenAI AI Chat mode is active
-const OpenAiChatKitPanel = lazy(() => import('./OpenAiChatKitPanel'));
+import { OpenAiChatKitPanel } from './OpenAiChatKitPanel';
 
 interface AiChatPanelProps {
   steps: StepPreview[];
@@ -1664,7 +1662,6 @@ export function AiChatPanel({
       </div>
 
       {useChatKitEmbed ? (
-        <Suspense fallback={<div className="flex-1 flex items-center justify-center text-xs text-slate-400">Loading ChatKit...</div>}>
           <OpenAiChatKitPanel
             apiKey={state.openaiApiKey || state.apiKey}
             steps={steps}
@@ -1677,7 +1674,6 @@ export function AiChatPanel({
             }}
             className="flex-1 min-h-0"
           />
-        </Suspense>
       ) : (
       <>
       <div ref={messagesContainerRef} className="flex-1 min-h-0 overflow-auto py-2 space-y-0.5">

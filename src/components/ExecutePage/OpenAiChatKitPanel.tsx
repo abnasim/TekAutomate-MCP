@@ -12,7 +12,7 @@
  *   - Domain allowlisted in OpenAI org settings
  */
 
-import React, { useCallback, useEffect, useRef } from 'react';
+import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { ChatKit, useChatKit } from '@openai/chatkit-react';
 import { parseAiActionResponse, type AiAction } from '../../utils/aiActions';
 import { resolveMcpHost } from '../../utils/ai/mcpClient';
@@ -71,6 +71,7 @@ export function OpenAiChatKitPanel({
   onThreadChange,
   className,
 }: OpenAiChatKitPanelProps) {
+  const [initError, setInitError] = useState<string | null>(null);
   const onActionsRef = useRef(onActionsDetected);
   onActionsRef.current = onActionsDetected;
   const stepsRef = useRef(steps);
@@ -79,70 +80,99 @@ export function OpenAiChatKitPanel({
   flowContextRef.current = flowContext;
 
   // ── Session creation ──
-  // Calls our MCP server's /chatkit/session endpoint which proxies to OpenAI
+  // Calls OpenAI ChatKit Sessions API directly from the browser.
+  // The user's API key is used — no MCP proxy needed for session creation.
   const getClientSecret = useCallback(
     async (_currentSecret: string | null): Promise<string> => {
       const workflowId = getWorkflowId();
       if (!workflowId) {
-        throw new Error(
-          'ChatKit workflow ID not configured. Set it in AI Chat settings (localStorage key: tekautomate.chatkit.workflow_id).',
-        );
+        const msg = 'ChatKit workflow ID not configured.';
+        setInitError(msg);
+        throw new Error(msg);
+      }
+      if (!apiKey) {
+        const msg = 'OpenAI API key is required for ChatKit.';
+        setInitError(msg);
+        throw new Error(msg);
       }
 
-      const mcpHost = resolveMcpHost();
-      const res = await fetch(`${mcpHost.replace(/\/$/, '')}/chatkit/session`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          apiKey,
-          workflowId,
-          userId: 'tekautomate-user',
-        }),
-      });
-      if (!res.ok) {
-        const err = await res.text();
-        throw new Error(`ChatKit session failed: ${err}`);
+      try {
+        // Try MCP server first (if available — handles session creation server-side)
+        const mcpHost = resolveMcpHost();
+        const res = await fetch(`${mcpHost.replace(/\/$/, '')}/chatkit/session`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ apiKey, workflowId, userId: 'tekautomate-user' }),
+        });
+        if (res.ok) {
+          const data = (await res.json()) as { clientSecret?: string };
+          if (data.clientSecret) {
+            setInitError(null);
+            return data.clientSecret;
+          }
+        }
+      } catch {
+        // MCP server not reachable — fall through to direct API call
+        console.warn('[ChatKit] MCP server unreachable for session, trying direct API...');
       }
-      const data = (await res.json()) as { clientSecret?: string };
-      if (!data.clientSecret) {
-        throw new Error('ChatKit session returned no client_secret.');
+
+      // Direct call to OpenAI ChatKit Sessions API
+      try {
+        const res = await fetch('https://api.openai.com/v1/chatkit/sessions', {
+          method: 'POST',
+          headers: {
+            'Authorization': `Bearer ${apiKey}`,
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({
+            workflow_id: workflowId,
+            user: 'tekautomate-user',
+          }),
+        });
+        if (!res.ok) {
+          const errText = await res.text();
+          const msg = `ChatKit session failed (${res.status}): ${errText}`;
+          console.error('[ChatKit]', msg);
+          setInitError(msg);
+          throw new Error(msg);
+        }
+        const data = (await res.json()) as { client_secret?: { value?: string }; id?: string };
+        const secret = data.client_secret?.value;
+        if (!secret) {
+          const msg = 'ChatKit session returned no client_secret.';
+          setInitError(msg);
+          throw new Error(msg);
+        }
+        setInitError(null);
+        return secret;
+      } catch (err) {
+        const msg = err instanceof Error ? err.message : 'ChatKit session creation failed';
+        setInitError(msg);
+        throw err;
       }
-      return data.clientSecret;
     },
     [apiKey],
   );
 
-  // ── Response interception — parse ACTIONS_JSON from assistant messages ──
-  const handleResponseEnd = useCallback(() => {
-    // ChatKit doesn't give us the response text directly in onResponseEnd.
-    // We rely on DOM scraping or the thread's last message to extract ACTIONS_JSON.
-    // For now, we use a MutationObserver approach in the effect below.
-  }, []);
-
-  // ── Thread change — persist conversation ID ──
-  const handleThreadChange = useCallback(
-    (threadId: string) => {
-      setStoredThreadId(threadId);
-      onThreadChange?.(threadId);
-    },
-    [onThreadChange],
-  );
-
   // ── ChatKit hook ──
-  // useChatKit returns { control, sendUserMessage, setThreadId, sendCustomAction, ... }
   const chatkit = useChatKit({
     api: { getClientSecret },
     initialThread: getStoredThreadId() || null,
-    onResponseEnd: handleResponseEnd,
     onThreadChange: (detail: { threadId: string | null }) => {
       if (detail.threadId) {
         setStoredThreadId(detail.threadId);
         onThreadChange?.(detail.threadId);
       }
     },
-    // Client-side tool execution — ChatKit invokes this when the agent calls
-    // a tool marked as "client tool". For MCP tools connected via Option B
-    // (function definitions in Agent Builder), we execute them against the MCP server.
+    onError: (detail: { error: Error }) => {
+      console.error('[ChatKit] Error:', detail.error);
+      setInitError(detail.error?.message || 'ChatKit error');
+    },
+    onReady: () => {
+      console.log('[ChatKit] Ready');
+      setInitError(null);
+    },
+    // Client-side tool execution — for MCP tools registered as client tools in Agent Builder
     onClientTool: async ({ name, params }: { name: string; params: Record<string, unknown> }) => {
       try {
         const mcpHost = resolveMcpHost();
@@ -175,8 +205,6 @@ export function OpenAiChatKitPanel({
   });
 
   // ── DOM observer for ACTIONS_JSON extraction ──
-  // ChatKit doesn't expose raw message text in events (confirmed by API docs).
-  // We watch for DOM changes and scan for ACTIONS_JSON blocks in rendered content.
   const containerRef = useRef<HTMLDivElement>(null);
   const lastProcessedRef = useRef('');
   const scanTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -193,7 +221,6 @@ export function OpenAiChatKitPanel({
       if (allText === lastProcessedRef.current) return;
       lastProcessedRef.current = allText;
 
-      // Match ACTIONS_JSON — both fenced and raw
       const jsonMatch = allText.match(/```json\s*(\{[\s\S]*?"actions"\s*:\s*\[[\s\S]*?\})\s*```/)
         || allText.match(/(\{"summary"[\s\S]*?"actions"\s*:\s*\[[\s\S]*?\][\s\S]*?\})/);
       if (jsonMatch) {
@@ -205,7 +232,6 @@ export function OpenAiChatKitPanel({
     };
 
     const observer = new MutationObserver(() => {
-      // Debounce to batch rapid DOM updates during streaming
       if (scanTimerRef.current) clearTimeout(scanTimerRef.current);
       scanTimerRef.current = setTimeout(scanForActions, 500);
     });
@@ -219,7 +245,6 @@ export function OpenAiChatKitPanel({
   }, []);
 
   // ── Inject workflow context when steps change ──
-  // Send as a custom action so the agent receives updated context
   useEffect(() => {
     if (!stepsRef.current?.length) return;
 
@@ -236,6 +261,32 @@ export function OpenAiChatKitPanel({
       });
     }
   }, [chatkit, steps]);
+
+  // ── Error state ──
+  if (initError) {
+    return (
+      <div className={className} style={{ flex: 1, minHeight: 0, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', padding: '2rem' }}>
+        <div style={{ maxWidth: 400, textAlign: 'center' }}>
+          <div style={{ fontSize: 14, fontWeight: 600, color: '#ef4444', marginBottom: 8 }}>
+            ChatKit failed to load
+          </div>
+          <div style={{ fontSize: 12, color: '#94a3b8', marginBottom: 16, wordBreak: 'break-word' }}>
+            {initError}
+          </div>
+          <div style={{ fontSize: 11, color: '#64748b' }}>
+            Check: API key is valid, workflow is published, domain is allowlisted in OpenAI org settings.
+          </div>
+          <button
+            type="button"
+            onClick={() => { setInitError(null); window.location.reload(); }}
+            style={{ marginTop: 12, fontSize: 11, padding: '4px 12px', borderRadius: 6, border: '1px solid #475569', color: '#cbd5e1', background: 'transparent', cursor: 'pointer' }}
+          >
+            Retry
+          </button>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div ref={containerRef} className={className} style={{ flex: 1, minHeight: 0, display: 'flex', flexDirection: 'column' }}>
