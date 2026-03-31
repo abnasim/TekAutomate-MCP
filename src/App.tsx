@@ -495,12 +495,12 @@ const STEP_PALETTE = [
   { type: 'tm_device_command' as StepType, label: 'tm_devices Command', icon: Zap, color: 'bg-purple-100 dark:bg-purple-900/50 text-purple-700 dark:text-purple-200' },
   { type: 'recall' as StepType, label: 'Recall', icon: FolderInput, color: 'bg-orange-100 dark:bg-orange-900/50 text-orange-700 dark:text-orange-200' },
   { type: 'sleep' as StepType, label: 'Sleep', icon: Timer, color: 'bg-yellow-100 dark:bg-yellow-900/50 text-yellow-700 dark:text-yellow-200' },
-  { type: 'python' as StepType, label: 'Python', icon: Code2, color: 'bg-slate-100 dark:bg-slate-600 dark:border dark:border-slate-500 text-slate-700 dark:text-slate-100' },
-  { type: 'comment' as StepType, label: 'Comment', icon: MessageSquare, color: 'bg-cyan-100 dark:bg-cyan-900/40 dark:border dark:border-cyan-700 text-cyan-700 dark:text-cyan-200' },
+  { type: 'python' as StepType, label: 'Python', icon: Code2, color: 'bg-slate-100 dark:bg-slate-800/60 text-slate-700 dark:text-slate-200' },
+  { type: 'comment' as StepType, label: 'Comment', icon: MessageSquare, color: 'bg-cyan-100 dark:bg-cyan-900/50 text-cyan-700 dark:text-cyan-200' },
   { type: 'save_waveform' as StepType, label: 'Save Waveform', icon: HardDriveDownload, color: 'bg-indigo-100 dark:bg-indigo-900/50 text-indigo-700 dark:text-indigo-200' },
   { type: 'save_screenshot' as StepType, label: 'Save Screenshot', icon: Camera, color: 'bg-pink-100 dark:bg-pink-900/50 text-pink-700 dark:text-pink-200' },
   { type: 'error_check' as StepType, label: 'Error Check', icon: ShieldAlert, color: 'bg-orange-100 dark:bg-orange-900/50 text-orange-700 dark:text-orange-200' },
-  { type: 'group' as StepType, label: 'Group', icon: FolderOpen, color: 'bg-sky-100 dark:bg-sky-900/35 dark:border dark:border-sky-700 text-sky-700 dark:text-sky-200' }
+  { type: 'group' as StepType, label: 'Group', icon: FolderOpen, color: 'bg-sky-100 dark:bg-sky-900/50 text-sky-700 dark:text-sky-200' }
 ];
 
 /* ===================== Layout View Helpers ===================== */
@@ -12960,14 +12960,14 @@ scpi.write('FILESYSTEM:DELETE "C:/TekScope/Temp/screenshot.png"')`;
                   
                   {/* Connect Step Properties */}
                   {selectedStepData.type === 'connect' && (
-                    <div className="mt-4 pt-4 border-t border-gray-200 space-y-5">
+                    <div className="mt-4 pt-4 border-t border-gray-200 dark:border-gray-700 space-y-5">
                       <div>
-                        <label className="block text-sm font-semibold text-gray-700 mb-3">Instrument(s) to Connect</label>
-                        <div className="border border-gray-300 rounded-lg bg-white max-h-48 overflow-y-auto p-3 space-y-2 shadow-sm">
+                        <label className="block text-sm font-semibold text-gray-700 dark:text-gray-300 mb-3">Instrument(s) to Connect</label>
+                        <div className="border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 max-h-48 overflow-y-auto p-3 space-y-2 shadow-sm">
                           {devices.filter(d => d.enabled).map((device) => {
                             const isSelected = selectedStepData.params?.instrumentIds?.includes(device.id) || selectedStepData.params?.instrumentId === device.id;
                             return (
-                              <label key={device.id} className="flex items-center gap-3 cursor-pointer hover:bg-blue-50 p-2.5 rounded-lg transition-colors border border-transparent hover:border-blue-200">
+                              <label key={device.id} className="flex items-center gap-3 cursor-pointer hover:bg-blue-50 dark:hover:bg-blue-900/30 p-2.5 rounded-lg transition-colors border border-transparent hover:border-blue-200 dark:hover:border-blue-700">
                                 <input
                                   type="checkbox"
                                   checked={isSelected}
@@ -13033,12 +13033,12 @@ scpi.write('FILESYSTEM:DELETE "C:/TekScope/Temp/screenshot.png"')`;
                             );
                           })}
                         </div>
-                        <p className="text-xs text-gray-500 mt-2.5 ml-1">
+                        <p className="text-xs text-gray-500 dark:text-gray-400 mt-2.5 ml-1">
                           Select one or more instruments to connect.
                         </p>
                       </div>
 
-                      <div className="pt-3 border-t border-gray-200">
+                      <div className="pt-3 border-t border-gray-200 dark:border-gray-700">
                         <label className="flex items-center gap-3 cursor-pointer group">
                           <input
                             type="checkbox"
@@ -13052,10 +13052,10 @@ scpi.write('FILESYSTEM:DELETE "C:/TekScope/Temp/screenshot.png"')`;
                             className="w-4 h-4 text-blue-600 border-gray-300 rounded focus:ring-2 focus:ring-blue-500 focus:ring-offset-0 cursor-pointer"
                           />
                           <div className="flex-1">
-                            <span className="text-sm font-semibold text-gray-700 block group-hover:text-blue-600 transition-colors">
+                            <span className="text-sm font-semibold text-gray-700 dark:text-gray-300 block group-hover:text-blue-600 dark:group-hover:text-blue-400 transition-colors">
                               Print IDN after connection
                             </span>
-                            <p className="text-xs text-gray-500 mt-1">
+                            <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">
                               Query and print *IDN? after connecting to verify the connection
                             </p>
                           </div>
