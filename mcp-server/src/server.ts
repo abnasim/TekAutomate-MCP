@@ -1051,7 +1051,7 @@ function filterTools(q) {
             'OpenAI-Beta': 'chatkit_beta=v1',
           },
           body: JSON.stringify({
-            workflow_id: workflowId,
+            workflow: { id: workflowId },
             user: userId,
           }),
         });
@@ -1060,10 +1060,17 @@ function filterTools(q) {
           sendJson(res, sessionRes.status, { ok: false, error: `ChatKit session creation failed: ${errText}` });
           return;
         }
-        const sessionData = await sessionRes.json() as { client_secret?: { value?: string }; id?: string };
+        const sessionData = await sessionRes.json() as {
+          client_secret?: string | { value?: string };
+          clientSecret?: string;
+          id?: string;
+        };
+        const clientSecret = typeof sessionData.client_secret === 'string'
+          ? sessionData.client_secret
+          : sessionData.client_secret?.value || sessionData.clientSecret || '';
         sendJson(res, 200, {
           ok: true,
-          clientSecret: sessionData.client_secret?.value || '',
+          clientSecret,
           sessionId: sessionData.id || '',
         });
       } catch (err) {
