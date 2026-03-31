@@ -261,7 +261,7 @@ export async function createServer(port = 8787): Promise<http.Server> {
     startupState = 'starting';
     startupError = null;
     const startInit = Date.now();
-    console.log('[SERVER] Initializing all indexes in background...');
+    console.log('[SERVER] Initializing all indexes...');
 
     const initTasks: Promise<unknown>[] = [
       initCommandIndex(),
@@ -292,24 +292,22 @@ export async function createServer(port = 8787): Promise<http.Server> {
       throw error;
     }
 
-    console.log(`[SERVER] Background startup initialized ${names.join(', ')} in ${Date.now() - startInit}ms`);
+    console.log(`✅ All indexes initialized in ${Date.now() - startInit}ms`);
 
     if (!routerDisabled) {
       try {
-        const report = await (async () => {
-          const commandIndex = await getCommandIndex();
-          const ragIndexes = await getRagIndexes();
-          const templates = (await getTemplateIndex()).all().map((doc) => ({
-            id: doc.id,
-            name: doc.name,
-            description: doc.description,
-            backend: 'template',
-            deviceType: 'workflow',
-            tags: [],
-            steps: doc.steps,
-          }));
-          return bootRouter({ commandIndex, ragIndexes, templates });
-        })();
+        const commandIndex = await getCommandIndex();
+        const ragIndexes = await getRagIndexes();
+        const templates = (await getTemplateIndex()).all().map((doc) => ({
+          id: doc.id,
+          name: doc.name,
+          description: doc.description,
+          backend: 'template',
+          deviceType: 'workflow',
+          tags: [],
+          steps: doc.steps,
+        }));
+        const report = await bootRouter({ commandIndex, ragIndexes, templates });
         console.log(`[MCP:router] ${report.total} tools in ${report.durationMs}ms`);
       } catch (error) {
         startupState = 'error';
@@ -455,13 +453,6 @@ header p{color:#94a3b8;margin-top:0.25rem}
 .setup-card h4{color:#60a5fa;margin-bottom:0.5rem;font-size:0.95rem}
 .setup-card pre{background:#0f172a;padding:0.75rem;border-radius:6px;font-size:0.75rem;overflow-x:auto;color:#a5b4fc;border:1px solid #1e293b}
 .setup-card .label{font-size:0.7rem;color:#94a3b8;text-transform:uppercase;letter-spacing:0.05em;margin-bottom:0.25rem}
-.usage-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(320px,1fr));gap:1rem}
-.usage-card{background:#1e293b;border:1px solid #334155;border-radius:8px;padding:1.25rem}
-.usage-card h4{color:#60a5fa;margin-bottom:0.35rem;font-size:0.95rem;font-family:monospace}
-.usage-card p{color:#94a3b8;font-size:0.85rem;margin-bottom:0.65rem}
-.usage-card ul{margin:0 0 0.75rem 1rem;color:#cbd5e1;font-size:0.82rem}
-.usage-card li{margin-bottom:0.3rem}
-.usage-card pre{white-space:pre-wrap;word-break:break-word;background:#0f172a;padding:0.75rem;border-radius:6px;font-size:0.74rem;color:#a5b4fc;border:1px solid #334155}
 .endpoints{display:grid;gap:0.5rem}
 .endpoint{background:#1e293b;border:1px solid #334155;border-radius:6px;padding:0.75rem 1rem;display:flex;gap:1rem;align-items:center}
 .endpoint .method{font-weight:700;font-size:0.75rem;padding:2px 8px;border-radius:4px;min-width:50px;text-align:center}
@@ -601,83 +592,6 @@ Config file locations:
 </div>
 
 <div class="section">
-  <h2>How To Use The MCP Tools</h2>
-  <p style="color:#94a3b8;font-size:0.85rem;margin-bottom:1rem">The exposed MCP surface is intentionally small. Use <code>tek_router</code> as the main gateway, and use the live tools only when you need direct scope interaction.</p>
-  <div class="usage-grid">
-    <div class="usage-card">
-      <h4>tek_router</h4>
-      <p>Main orchestration gateway to the larger internal tool graph. Best for search, exact header lookup, browse, verify, build, and examples.</p>
-      <ul>
-        <li>Exact header known: use <code>search_exec</code> + <code>get command by header</code></li>
-        <li>Need to find a command: use <code>search_exec</code> + <code>search scpi commands</code></li>
-        <li>Need to explore a feature area: use <code>search_exec</code> + <code>browse scpi commands</code></li>
-        <li>Need syntax verification: use <code>search_exec</code> + <code>verify scpi commands</code></li>
-      </ul>
-      <pre>{
-  "tool": "tek_router",
-  "args": {
-    "action": "search_exec",
-    "query": "search scpi commands",
-    "args": {
-      "query": "edge trigger level",
-      "modelFamily": "MSO6"
-    }
-  }
-}</pre>
-    </div>
-    <div class="usage-card">
-      <h4>smart_scpi_lookup</h4>
-      <p>Best first choice for fuzzy natural-language SCPI discovery. It usually outperforms raw keyword search for ambiguous prompts.</p>
-      <ul>
-        <li>Use when the user says what they want in plain English</li>
-        <li>Include <code>modelFamily</code> whenever known</li>
-        <li>Good for trigger, measurement, display, bus, math, and save/recall questions</li>
-      </ul>
-      <pre>{
-  "tool": "smart_scpi_lookup",
-  "args": {
-    "query": "callout text underline",
-    "modelFamily": "MSO6"
-  }
-}</pre>
-    </div>
-    <div class="usage-card">
-      <h4>send_scpi</h4>
-      <p>Use only for live instrument execution after the command has been found or verified. Requires a connected executor/instrument context.</p>
-      <pre>{
-  "tool": "send_scpi",
-  "args": {
-    "commands": ["ACQuire:MODE?"],
-    "liveMode": true
-  }
-}</pre>
-    </div>
-    <div class="usage-card">
-      <h4>capture_screenshot</h4>
-      <p>Grabs the current scope display. Use <code>analyze: true</code> only when you want the image returned for AI analysis.</p>
-      <pre>{
-  "tool": "capture_screenshot",
-  "args": {
-    "liveMode": true,
-    "analyze": false
-  }
-}</pre>
-    </div>
-    <div class="usage-card">
-      <h4>discover_scpi</h4>
-      <p>Read-only live probing for undocumented or mode-specific command paths. Best when search/lookup cannot find the command.</p>
-      <pre>{
-  "tool": "discover_scpi",
-  "args": {
-    "basePath": "TRIGger:A:LEVel",
-    "liveMode": true
-  }
-}</pre>
-    </div>
-  </div>
-</div>
-
-<div class="section">
   <h2>Tools (${toolDefs.length})</h2>
   <input id="search" placeholder="Filter tools..." oninput="filterTools(this.value)" />
   ${toolCards}
@@ -721,10 +635,9 @@ function filterTools(q) {
       res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Accept, Mcp-Session-Id');
       res.setHeader('Access-Control-Expose-Headers', 'Mcp-Session-Id');
 
-      const transportSessionId = req.headers['mcp-session-id'] as string | undefined;
-      console.log(
-        `[MCP] transport method=${req.method} session=${transportSessionId || 'none'} accept=${req.headers['accept'] || 'none'} content-type=${req.headers['content-type'] || 'none'}`
-      );
+      // Debug logging — capture what different MCP clients send
+      const sessionId = req.headers['mcp-session-id'] as string | undefined;
+      console.log(`[MCP] transport method=${req.method} session=${sessionId || 'none'} accept=${req.headers['accept'] || 'none'} content-type=${req.headers['content-type'] || 'none'}`);
 
       if (req.method === 'POST' || req.method === 'GET' || req.method === 'DELETE') {
         try {
@@ -1109,6 +1022,55 @@ function filterTools(q) {
       return;
     }
 
+    // ── ChatKit session endpoint ──
+    // Creates a ChatKit session via the OpenAI API, returns client_secret for frontend.
+    if (req.method === 'POST' && req.url === '/chatkit/session') {
+      try {
+        const body = (await readJsonBody(req)) as {
+          apiKey?: string;
+          workflowId?: string;
+          userId?: string;
+        };
+        const apiKey = String(body?.apiKey || process.env.OPENAI_API_KEY || '').trim();
+        const workflowId = String(body?.workflowId || process.env.CHATKIT_WORKFLOW_ID || '').trim();
+        const userId = String(body?.userId || 'tekautomate-user').trim();
+        if (!apiKey) {
+          sendJson(res, 400, { ok: false, error: 'Missing apiKey (or set OPENAI_API_KEY env var).' });
+          return;
+        }
+        if (!workflowId) {
+          sendJson(res, 400, { ok: false, error: 'Missing workflowId (or set CHATKIT_WORKFLOW_ID env var).' });
+          return;
+        }
+        // Call OpenAI ChatKit Sessions API
+        const sessionRes = await fetch('https://api.openai.com/v1/chatkit/sessions', {
+          method: 'POST',
+          headers: {
+            'Authorization': `Bearer ${apiKey}`,
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({
+            workflow_id: workflowId,
+            user: userId,
+          }),
+        });
+        if (!sessionRes.ok) {
+          const errText = await sessionRes.text();
+          sendJson(res, sessionRes.status, { ok: false, error: `ChatKit session creation failed: ${errText}` });
+          return;
+        }
+        const sessionData = await sessionRes.json() as { client_secret?: { value?: string }; id?: string };
+        sendJson(res, 200, {
+          ok: true,
+          clientSecret: sessionData.client_secret?.value || '',
+          sessionId: sessionData.id || '',
+        });
+      } catch (err) {
+        sendJson(res, 500, { ok: false, error: err instanceof Error ? err.message : 'ChatKit session error' });
+      }
+      return;
+    }
+
     if (req.method === 'POST' && req.url === '/ai/key-test') {
       try {
         const body = (await readJsonBody(req)) as {
@@ -1278,4 +1240,3 @@ function filterTools(q) {
   });
   return server;
 }
-
