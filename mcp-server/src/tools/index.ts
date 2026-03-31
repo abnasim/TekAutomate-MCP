@@ -721,10 +721,19 @@ export function getToolDefinitions() {
 // smart_scpi_lookup stays internal — used by MCP-only deterministic planner.
 // Everything else is routed internally via tek_router's search_exec action.
 const MCP_EXPOSED_TOOLS = new Set([
-  'tek_router',           // gateway — routes to 21,000+ internal tools
-  'send_scpi',            // live passthrough — send commands to instrument
-  'capture_screenshot',   // live passthrough — scope screenshot
-  'discover_scpi',        // live passthrough — tree-walk undocumented commands
+  // Gateway — advanced routing, build, save/learn, materialize, batch ops
+  'tek_router',
+  // Direct knowledge tools — simple flat schemas, easy for AI
+  'search_scpi',             // { query: "edge trigger", limit?: 10 }
+  'smart_scpi_lookup',       // { query: "how do I measure voltage on CH1" }
+  'verify_scpi_commands',    // { commands: ["CH1:SCAle 1.0"] }
+  'browse_scpi_commands',    // { group?: "Trigger", filter?: "edge" }
+  'get_command_by_header',   // { header: "TRIGger:A:EDGE:SOUrce" }
+  'get_template_examples',   // { query: "jitter measurement" }
+  // Live instrument tools
+  'send_scpi',
+  'capture_screenshot',
+  'discover_scpi',
 ]);
 
 // Slim tek_router schema for MCP — only the params external AI needs.
