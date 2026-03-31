@@ -1022,6 +1022,55 @@ function filterTools(q) {
       return;
     }
 
+    // ── ChatKit session endpoint ──
+    // Creates a ChatKit session via the OpenAI API, returns client_secret for frontend.
+    if (req.method === 'POST' && req.url === '/chatkit/session') {
+      try {
+        const body = (await readJsonBody(req)) as {
+          apiKey?: string;
+          workflowId?: string;
+          userId?: string;
+        };
+        const apiKey = String(body?.apiKey || process.env.OPENAI_API_KEY || '').trim();
+        const workflowId = String(body?.workflowId || process.env.CHATKIT_WORKFLOW_ID || '').trim();
+        const userId = String(body?.userId || 'tekautomate-user').trim();
+        if (!apiKey) {
+          sendJson(res, 400, { ok: false, error: 'Missing apiKey (or set OPENAI_API_KEY env var).' });
+          return;
+        }
+        if (!workflowId) {
+          sendJson(res, 400, { ok: false, error: 'Missing workflowId (or set CHATKIT_WORKFLOW_ID env var).' });
+          return;
+        }
+        // Call OpenAI ChatKit Sessions API
+        const sessionRes = await fetch('https://api.openai.com/v1/chatkit/sessions', {
+          method: 'POST',
+          headers: {
+            'Authorization': `Bearer ${apiKey}`,
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({
+            workflow_id: workflowId,
+            user: userId,
+          }),
+        });
+        if (!sessionRes.ok) {
+          const errText = await sessionRes.text();
+          sendJson(res, sessionRes.status, { ok: false, error: `ChatKit session creation failed: ${errText}` });
+          return;
+        }
+        const sessionData = await sessionRes.json() as { client_secret?: { value?: string }; id?: string };
+        sendJson(res, 200, {
+          ok: true,
+          clientSecret: sessionData.client_secret?.value || '',
+          sessionId: sessionData.id || '',
+        });
+      } catch (err) {
+        sendJson(res, 500, { ok: false, error: err instanceof Error ? err.message : 'ChatKit session error' });
+      }
+      return;
+    }
+
     if (req.method === 'POST' && req.url === '/ai/key-test') {
       try {
         const body = (await readJsonBody(req)) as {

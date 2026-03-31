@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, lazy, Suspense } from 'react';
 import { Bot, KeyRound, Loader2, Paperclip, Play, Send, Settings, Sparkles, Terminal, X } from 'lucide-react';
 import { parseAiActionResponse, type AiAction } from '../../utils/aiActions';
 import type { ExecutionAuditReport } from '../../utils/executionAudit';
@@ -14,6 +14,9 @@ import {
   setStoredMcpHost,
   type McpChatAttachment,
 } from '../../utils/ai/mcpClient';
+
+// Lazy-load ChatKit panel — only loaded when OpenAI AI Chat mode is active
+const OpenAiChatKitPanel = lazy(() => import('./OpenAiChatKitPanel'));
 
 interface AiChatPanelProps {
   steps: StepPreview[];
@@ -141,6 +144,11 @@ export function AiChatPanel({
     }
   });
   const [transientUiNow, setTransientUiNow] = useState(() => Date.now());
+  const CHATKIT_WORKFLOW_ID_KEY = 'tekautomate.chatkit.workflow_id';
+  const CHATKIT_DEFAULT_WORKFLOW = 'wf_69cb9085f72c8190ae05b360552d6987032b7c148cd57c24';
+  const [chatKitWorkflowId, setChatKitWorkflowId] = useState(() => {
+    try { return localStorage.getItem(CHATKIT_WORKFLOW_ID_KEY) || CHATKIT_DEFAULT_WORKFLOW; } catch { return CHATKIT_DEFAULT_WORKFLOW; }
+  });
   const prevStepsRef = useRef(steps);
   const messagesContainerRef = useRef<HTMLDivElement>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
@@ -369,6 +377,9 @@ export function AiChatPanel({
     : state.tekMode === 'live'
       ? 'Live — instrument copilot'
       : 'AI — conversational assistant';
+
+  // Show ChatKit when: OpenAI provider + AI Chat mode + workflow ID configured
+  const useChatKitEmbed = state.tekMode === 'ai' && state.provider === 'openai' && chatKitWorkflowId.trim().length > 0;
 
   const interactionSummary = state.tekMode === 'mcp'
     ? 'Search commands, build flows, validate SCPI. No AI calls.'
@@ -1557,6 +1568,24 @@ export function AiChatPanel({
                 )}
               </label>
               <label className="block">
+                <span className="text-[10px] text-slate-500 dark:text-white/50">ChatKit Workflow ID</span>
+                <div className="mt-1 flex gap-1.5">
+                  <input
+                    type="text"
+                    value={chatKitWorkflowId}
+                    onChange={(e) => {
+                      setChatKitWorkflowId(e.target.value);
+                      try { localStorage.setItem(CHATKIT_WORKFLOW_ID_KEY, e.target.value); } catch {}
+                    }}
+                    className="flex-1 rounded-lg border border-slate-200 dark:border-white/10 bg-slate-50 dark:bg-white/5 px-2 py-1.5 text-xs text-slate-700 dark:text-white/80 placeholder-slate-300 dark:placeholder-white/20 focus:outline-none focus:border-violet-500/50"
+                    placeholder="wf_... (from Agent Builder)"
+                  />
+                </div>
+                <p className="mt-0.5 text-[9px] text-slate-400 dark:text-white/30">
+                  Set to enable ChatKit for OpenAI AI Chat mode. Create in Agent Builder.
+                </p>
+              </label>
+              <label className="block">
                 <span className="text-[10px] text-slate-500 dark:text-white/50">Executor output</span>
                 <select
                   value={instrumentOutputMode}
@@ -1634,6 +1663,23 @@ export function AiChatPanel({
         )}
       </div>
 
+      {useChatKitEmbed ? (
+        <Suspense fallback={<div className="flex-1 flex items-center justify-center text-xs text-slate-400">Loading ChatKit...</div>}>
+          <OpenAiChatKitPanel
+            apiKey={state.openaiApiKey || state.apiKey}
+            steps={steps}
+            flowContext={flowContext}
+            onActionsDetected={(actions, summary) => {
+              if (actions.length && onApplyAiActions) {
+                void onApplyAiActions(actions);
+                showApplyStatus(summary || `Applied ${actions.length} action(s) from ChatKit.`);
+              }
+            }}
+            className="flex-1 min-h-0"
+          />
+        </Suspense>
+      ) : (
+      <>
       <div ref={messagesContainerRef} className="flex-1 min-h-0 overflow-auto py-2 space-y-0.5">
         {state.history.length === 0 ? (
           <div className="mx-3 rounded-xl border border-slate-200 dark:border-white/10 bg-slate-50 dark:bg-white/5 p-3 text-xs text-slate-400 dark:text-white/40">
@@ -1965,6 +2011,8 @@ export function AiChatPanel({
           </div>
         )}
       </div>
+      </>
+      )}
 
       <div
         className="absolute top-0 right-0 w-1 h-full cursor-col-resize hover:bg-violet-500/40 transition-colors z-10"

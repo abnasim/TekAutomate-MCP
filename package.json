@@ -11,6 +11,7 @@
     "@blockly/plugin-workspace-search": "^10.1.7",
     "@blockly/theme-modern": "^7.0.4",
     "@blockly/toolbox-search": "^3.1.8",
+    "@openai/chatkit-react": "^1.5.0",
     "@codemirror/commands": "^6.10.1",
     "@codemirror/lang-python": "^6.2.1",
     "@codemirror/state": "^6.5.4",
