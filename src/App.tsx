@@ -15839,7 +15839,7 @@ Instructions:
               onNavigateToCommand={(relatedCmd) => {
                 if (selectedStepData?.params) {
                   const cleaned = relatedCmd.replace(/\?$/, '').trim();
-                  updateSelectedStepParam('command', cleaned.endsWith('?') ? cleaned : cleaned);
+                  updateStep(selectedStepData.id, { params: { ...selectedStepData.params, command: cleaned } });
                   setShowSCPIHelp(false);
                   setTimeout(() => setShowSCPIHelp(true), 100);
                 }
@@ -15866,7 +15866,7 @@ Instructions:
               params={selectedStepData.params.cmdParams || []}
               onNavigateToCommand={(relatedCmd) => {
                 if (selectedStepData?.params) {
-                  updateSelectedStepParam('command', relatedCmd.replace(/\?$/, '').trim());
+                  updateStep(selectedStepData.id, { params: { ...selectedStepData.params, command: relatedCmd.replace(/\?$/, '').trim() } });
                   setShowSCPIHelp(false);
                   setTimeout(() => setShowSCPIHelp(true), 100);
                 }
