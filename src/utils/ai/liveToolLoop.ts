@@ -149,10 +149,11 @@ async function executeMcpTool(
       payload.timeout_ms = hasSlowCommand ? 15000 : 3000;
     }
 
-    // Script timeout: 15s for screenshot/slow ops, 8s for simple SCPI
-    const isSlowAction = toolName === 'capture_screenshot' || toolName === 'discover_scpi'
+    // Script timeout: screenshots can take significantly longer than plain SCPI.
+    const isScreenshotAction = toolName === 'capture_screenshot';
+    const isSlowAction = isScreenshotAction || toolName === 'discover_scpi'
       || (toolName === 'send_scpi' && payload.timeout_ms && Number(payload.timeout_ms) > 10000);
-    const scriptTimeout = isSlowAction ? 15 : 8;
+    const scriptTimeout = isScreenshotAction ? 45 : (isSlowAction ? 15 : 8);
 
     const res = await fetch(`${execUrl}/run`, {
       method: 'POST',

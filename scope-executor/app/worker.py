@@ -51,6 +51,7 @@ _capture_locks: dict[str, threading.Lock] = {}
 _visa_locks: dict[str, threading.Lock] = {}  # Per-VISA resource lock — prevents send_scpi + screenshot race
 _recent_capture_results: dict[str, tuple[float, dict]] = {}
 _recent_capture_errors: dict[str, tuple[float, str]] = {}
+_DEFAULT_CAPTURE_TIMEOUT_MS = 45000
 
 
 def _visa_lock_for(visa: str) -> threading.Lock:
@@ -160,6 +161,23 @@ def _capture_lock_for(visa: str) -> threading.Lock:
         return lock
 
 
+def _capture_timeout_ms(job: dict) -> int:
+    """Resolve a practical screenshot timeout from job fields."""
+    timeout_ms = job.get("timeout_ms")
+    if timeout_ms is not None:
+        try:
+            return max(15000, min(int(timeout_ms), 120000))
+        except Exception:
+            pass
+    timeout_sec = job.get("timeout_sec")
+    if timeout_sec is not None:
+        try:
+            return max(15000, min(int(timeout_sec) * 1000, 120000))
+        except Exception:
+            pass
+    return _DEFAULT_CAPTURE_TIMEOUT_MS
+
+
 def _get_scope_session(visa: str):
     with _session_lock:
         session = _scope_sessions.get(visa)
@@ -224,6 +242,7 @@ def _close_all_sessions():
 def _handle_capture_screenshot(job: dict) -> dict:
     visa = job.get("visa")
     scope_type = job.get("scope_type") or "modern"
+    capture_timeout_ms = _capture_timeout_ms(job)
     if not isinstance(visa, str) or not visa:
         raise RuntimeError("capture_screenshot requires visa")
 
@@ -246,7 +265,7 @@ def _handle_capture_screenshot(job: dict) -> dict:
                 except Exception:
                     _reset_socket_session(visa)
                     sock = _get_socket_session(visa)
-                sock.set_timeout(5)  # screenshot commands are instant
+                sock.set_timeout(capture_timeout_ms / 1000.0)
                 data = sock.fetch_screen("temp_screenshot.png")
             else:
                 try:
@@ -256,7 +275,7 @@ def _handle_capture_screenshot(job: dict) -> dict:
                     _reset_resource_manager()
                     scpi = _get_scope_session(visa)
 
-                scpi.timeout = 5000
+                scpi.timeout = capture_timeout_ms
                 scpi.write_termination = "\n"
                 scpi.read_termination = None
 
@@ -265,16 +284,20 @@ def _handle_capture_screenshot(job: dict) -> dict:
                     scpi.write('HARDCOPY:FORMAT PNG')
                     scpi.write('HARDCOPY:FILENAME "C:/TekScope/Temp/screenshot.png"')
                     scpi.write('HARDCOPY START')
-                    time.sleep(0.5)
+                    if str(scpi.query('*OPC?')).strip() != '1':
+                        raise RuntimeError("HARDCOPY START did not complete")
                     scpi.write('FILESYSTEM:READFILE "C:/TekScope/Temp/screenshot.png"')
                     data = scpi.read_raw()
                     scpi.write('FILESYSTEM:DELETE "C:/TekScope/Temp/screenshot.png"')
+                    scpi.query('*OPC?')
                 else:
                     scpi.write('SAVE:IMAGE "C:/Temp/screenshot.png"')
-                    time.sleep(0.5)
+                    if str(scpi.query('*OPC?')).strip() != '1':
+                        raise RuntimeError("SAVE:IMAGE did not complete")
                     scpi.write('FILESYSTEM:READFILE "C:/Temp/screenshot.png"')
                     data = scpi.read_raw()
                     scpi.write('FILESYSTEM:DELETE "C:/Temp/screenshot.png"')
+                    scpi.query('*OPC?')
 
             import base64
 
