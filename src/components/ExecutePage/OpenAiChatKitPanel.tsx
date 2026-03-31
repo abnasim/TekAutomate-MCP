@@ -123,7 +123,9 @@ export function OpenAiChatKitPanel({
       try {
         // Try MCP server first (if available — handles session creation server-side)
         const mcpHost = resolveMcpHost();
-        const res = await fetch(`${mcpHost.replace(/\/$/, '')}/chatkit/session`, {
+        const sessionUrl = `${mcpHost.replace(/\/$/, '')}/chatkit/session`;
+        console.log('[ChatKit] Creating session via:', sessionUrl);
+        const res = await fetch(sessionUrl, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ apiKey, workflowId, userId: 'tekautomate-user' }),
@@ -136,12 +138,14 @@ export function OpenAiChatKitPanel({
             return secret;
           }
         }
-      } catch {
+        console.warn('[ChatKit] MCP session returned non-ok:', res.status, await res.clone().text().catch(() => ''));
+      } catch (mcpErr) {
         // MCP server not reachable — fall through to direct API call
-        console.warn('[ChatKit] MCP server unreachable for session, trying direct API...');
+        console.warn('[ChatKit] MCP server unreachable for session:', mcpErr);
       }
 
-      // Direct call to OpenAI ChatKit Sessions API
+      // Direct call to OpenAI ChatKit Sessions API (fallback — may be CORS-blocked)
+      console.log('[ChatKit] Trying direct OpenAI API fallback...');
       try {
         const res = await fetch('https://api.openai.com/v1/chatkit/sessions', {
           method: 'POST',
