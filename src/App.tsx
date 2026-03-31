@@ -11420,7 +11420,7 @@ Keep under 120 words. No headings. Bullets only. Stay on this command. Do not de
                                       pattern="^#[0-9A-Fa-f]{6}$"
                                     />
                                   </div>
-                                ) : param.type === 'string' || param.type === 'text' ? (
+                                ) : param.type === 'string' || param.type === 'text' || param.type === 'quoted_string' ? (
                                   <input
                                     type="text"
                                     placeholder={defaultValue ? `e.g. "${defaultValue}"` : 'Enter text value'}
