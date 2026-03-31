@@ -100,6 +100,48 @@ interface ParsedActionsPreview {
   rawJson: string;
 }
 
+function decodeHtmlEntities(text: string): string {
+  if (typeof document === 'undefined') return text;
+  const textarea = document.createElement('textarea');
+  textarea.innerHTML = text;
+  return textarea.value;
+}
+
+function findBalancedJsonFromMarker(source: string, marker = 'ACTIONS_JSON:'): string | null {
+  const raw = decodeHtmlEntities(String(source || ''));
+  const markerIndex = raw.indexOf(marker);
+  if (markerIndex === -1) return null;
+  const jsonStart = raw.indexOf('{', markerIndex + marker.length);
+  if (jsonStart === -1) return null;
+
+  let depth = 0;
+  let inString = false;
+  let escaped = false;
+
+  for (let i = jsonStart; i < raw.length; i += 1) {
+    const ch = raw[i];
+    if (inString) {
+      if (escaped) escaped = false;
+      else if (ch === '\\') escaped = true;
+      else if (ch === '"') inString = false;
+      continue;
+    }
+    if (ch === '"') {
+      inString = true;
+      continue;
+    }
+    if (ch === '{') depth += 1;
+    else if (ch === '}') {
+      depth -= 1;
+      if (depth === 0) {
+        return raw.slice(jsonStart, i + 1);
+      }
+    }
+  }
+
+  return null;
+}
+
 export function OpenAiChatKitPanel({
   apiKey,
   steps,
@@ -127,12 +169,15 @@ export function OpenAiChatKitPanel({
   const lastParsedJsonRef = useRef('');
 
   const extractActionsPreview = useCallback((text: string): ParsedActionsPreview | null => {
-    const match =
-      text.match(/ACTIONS_JSON:\s*(\{[\s\S]*?"actions"\s*:\s*\[[\s\S]*?\][\s\S]*?\})/)
-      || text.match(/```(?:json)?\s*ACTIONS_JSON:\s*(\{[\s\S]*?"actions"\s*:\s*\[[\s\S]*?\][\s\S]*?\})\s*```/)
-      || text.match(/(\{"summary"[\s\S]*?"actions"\s*:\s*\[[\s\S]*?\][\s\S]*?\})/);
-    if (!match) return null;
-    const rawJson = match[1];
+    const rawJson =
+      findBalancedJsonFromMarker(text, 'ACTIONS_JSON:')
+      || findBalancedJsonFromMarker(text, 'actions_json:')
+      || (() => {
+        const trimmed = decodeHtmlEntities(String(text || '')).trim();
+        if (!trimmed.startsWith('{')) return null;
+        return trimmed;
+      })();
+    if (!rawJson) return null;
     const parsed = parseAiActionResponse(rawJson);
     if (!parsed?.actions?.length) return null;
     return {
@@ -175,8 +220,8 @@ export function OpenAiChatKitPanel({
 
       const blocks = Array.from((root as ParentNode).querySelectorAll?.('pre, code, div') || []);
       blocks.forEach((el) => {
-        const text = (el.textContent || '').trim();
-        if (/^ACTIONS_JSON:/i.test(text) || /^{"summary":/i.test(text)) {
+        const text = decodeHtmlEntities((el.textContent || '').trim());
+        if (/^ACTIONS_JSON:/i.test(text) || /^{"summary":/i.test(text) || text.includes('<details><summary>ACTIONS_JSON')) {
           (el as HTMLElement).style.display = 'none';
         }
       });
@@ -307,7 +352,12 @@ export function OpenAiChatKitPanel({
         if (!container) return;
         const chatKitEl = container.querySelector('openai-chatkit');
         // Try every text source available
-        const text = chatKitEl?.textContent || chatKitEl?.innerHTML || container.textContent || '';
+        const text = [
+          chatKitEl?.textContent || '',
+          chatKitEl?.innerHTML || '',
+          container.textContent || '',
+          container.innerHTML || '',
+        ].join('\n');
         console.log('[ChatKit] onResponseEnd scan, length:', text.length, 'has ACTIONS_JSON:', text.includes('ACTIONS_JSON'));
         if (!text.includes('ACTIONS_JSON')) return;
         captureActionsPreview(text);
