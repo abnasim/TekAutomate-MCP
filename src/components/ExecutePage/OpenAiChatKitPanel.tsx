@@ -63,6 +63,28 @@ function setStoredThreadId(id: string): void {
   }
 }
 
+function extractClientSecret(payload: unknown): string | null {
+  if (!payload || typeof payload !== 'object') return null;
+
+  const record = payload as Record<string, unknown>;
+  const candidates = [
+    record.client_secret,
+    record.clientSecret,
+    typeof record.session === 'object' && record.session ? (record.session as Record<string, unknown>).client_secret : undefined,
+    typeof record.session === 'object' && record.session ? (record.session as Record<string, unknown>).clientSecret : undefined,
+  ];
+
+  for (const candidate of candidates) {
+    if (typeof candidate === 'string' && candidate) return candidate;
+    if (candidate && typeof candidate === 'object') {
+      const value = (candidate as Record<string, unknown>).value;
+      if (typeof value === 'string' && value) return value;
+    }
+  }
+
+  return null;
+}
+
 export function OpenAiChatKitPanel({
   apiKey,
   steps,
@@ -107,10 +129,11 @@ export function OpenAiChatKitPanel({
           body: JSON.stringify({ apiKey, workflowId, userId: 'tekautomate-user' }),
         });
         if (res.ok) {
-          const data = (await res.json()) as { clientSecret?: string };
-          if (data.clientSecret) {
+          const data = await res.json();
+          const secret = extractClientSecret(data);
+          if (secret) {
             setInitError(null);
-            return data.clientSecret;
+            return secret;
           }
         }
       } catch {
@@ -139,10 +162,13 @@ export function OpenAiChatKitPanel({
           setInitError(msg);
           throw new Error(msg);
         }
-        const data = (await res.json()) as { client_secret?: { value?: string }; id?: string };
-        const secret = data.client_secret?.value;
+        const data = await res.json();
+        const secret = extractClientSecret(data);
         if (!secret) {
-          const msg = 'ChatKit session returned no client_secret.';
+          const keys = data && typeof data === 'object'
+            ? Object.keys(data as Record<string, unknown>).join(', ') || '(none)'
+            : '(non-object response)';
+          const msg = `ChatKit session returned no client_secret. Response keys: ${keys}`;
           setInitError(msg);
           throw new Error(msg);
         }
