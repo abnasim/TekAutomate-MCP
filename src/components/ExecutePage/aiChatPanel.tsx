@@ -1668,6 +1668,7 @@ export function AiChatPanel({
       )}
       {useChatKitEmbed ? (
           <OpenAiChatKitPanel
+            key={`chatkit-${state.tekMode}-${activeChatKitWorkflowId}-${activeChatKitUserId}`}
             apiKey={state.openaiApiKey || state.apiKey}
             steps={steps}
             workflowId={activeChatKitWorkflowId}
