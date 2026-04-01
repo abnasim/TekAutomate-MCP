@@ -99,7 +99,7 @@ interface ParsedActionsPreview {
   suggestedFixes: string[];
   actions: AiAction[];
   rawJson: string;
-  source?: 'text' | 'tool';
+  source?: 'text' | 'tool' | 'mcp';
 }
 
 function decodeHtmlEntities(text: string): string {
@@ -217,6 +217,40 @@ function collectStringCandidatesDeep(value: unknown, seen = new Set<unknown>()):
   return Object.values(record).flatMap((item) => collectStringCandidatesDeep(item, seen));
 }
 
+function buildRuntimeWorkflowPayload(
+  steps: StepPreview[],
+  flowContext?: OpenAiChatKitPanelProps['flowContext'],
+) {
+  return {
+    stepCount: steps.length,
+    steps: steps.map((s: any, i: number) => {
+      const cmd = s.params?.command || s.params?.code || s.label || s.type;
+      return { index: i + 1, type: s.type, label: s.label || s.type, command: cmd, id: s.id };
+    }),
+    selectedStep: flowContext?.selectedStep?.id || null,
+    validationErrors: flowContext?.validationErrors || [],
+    backend: flowContext?.backend || 'pyvisa',
+    modelFamily: flowContext?.modelFamily || 'unknown',
+    deviceDriver: flowContext?.deviceDriver || null,
+    isEmpty: steps.length === 0,
+  };
+}
+
+function buildRuntimeInstrumentPayload(
+  instrumentEndpoint?: OpenAiChatKitPanelProps['instrumentEndpoint'] | null,
+  flowContext?: OpenAiChatKitPanelProps['flowContext'],
+) {
+  return {
+    connected: !!instrumentEndpoint?.executorUrl,
+    executorUrl: instrumentEndpoint?.executorUrl || null,
+    visaResource: instrumentEndpoint?.visaResource || null,
+    backend: instrumentEndpoint?.backend || flowContext?.backend || 'pyvisa',
+    modelFamily: flowContext?.modelFamily || 'unknown',
+    deviceDriver: flowContext?.deviceDriver || null,
+    liveMode: instrumentEndpoint?.liveMode || false,
+  };
+}
+
 export function OpenAiChatKitPanel({
   apiKey,
   steps,
@@ -245,6 +279,8 @@ export function OpenAiChatKitPanel({
   const lastContextSentRef = useRef('');
   const lastParsedJsonRef = useRef('');
   const responseScanTimersRef = useRef<number[]>([]);
+  const seenProposalIdRef = useRef('');
+  const proposalSessionStartedAtRef = useRef(Date.now());
 
   const setStructuredProposal = useCallback((
     proposal: {
@@ -375,6 +411,51 @@ export function OpenAiChatKitPanel({
     }
     return false;
   }, [captureActionsPreview]);
+
+  const fetchLatestStagedProposal = useCallback(async () => {
+    const mcpHost = resolveMcpHost();
+    if (!mcpHost) return false;
+    try {
+      const res = await fetch(`${mcpHost.replace(/\/$/, '')}/workflow-proposals/latest`);
+      if (!res.ok) return false;
+      const json = await res.json() as {
+        ok?: boolean;
+        proposal?: {
+          id?: string;
+          createdAt?: string;
+          summary?: string;
+          findings?: unknown[];
+          suggestedFixes?: unknown[];
+          actions?: unknown[];
+        } | null;
+      };
+      const proposal = json?.proposal;
+      if (!proposal?.id || !proposal?.createdAt) return false;
+      if (proposal.id === seenProposalIdRef.current) return false;
+      const createdAtMs = Date.parse(String(proposal.createdAt));
+      if (Number.isFinite(createdAtMs) && createdAtMs < proposalSessionStartedAtRef.current) return false;
+
+      const accepted = setStructuredProposal({
+        summary: proposal.summary,
+        findings: Array.isArray(proposal.findings) ? proposal.findings : [],
+        suggestedFixes: Array.isArray(proposal.suggestedFixes) ? proposal.suggestedFixes : [],
+        actions: Array.isArray(proposal.actions) ? proposal.actions : [],
+        rawJson: JSON.stringify({
+          summary: proposal.summary || '',
+          findings: Array.isArray(proposal.findings) ? proposal.findings : [],
+          suggestedFixes: Array.isArray(proposal.suggestedFixes) ? proposal.suggestedFixes : [],
+          actions: Array.isArray(proposal.actions) ? proposal.actions : [],
+        }),
+      });
+      if (accepted) {
+        seenProposalIdRef.current = proposal.id;
+        return true;
+      }
+      return false;
+    } catch {
+      return false;
+    }
+  }, [setStructuredProposal]);
 
   const handleWidgetAction = useCallback(async (
     action: { type: string; payload?: Record<string, unknown> },
@@ -534,6 +615,8 @@ export function OpenAiChatKitPanel({
       setInitError(null);
       setParsedPreview(null);
       lastParsedJsonRef.current = '';
+      seenProposalIdRef.current = '';
+      proposalSessionStartedAtRef.current = Date.now();
     },
     // ── Response end — scan for ACTIONS_JSON and auto-apply ──
     onResponseEnd: () => {
@@ -542,7 +625,9 @@ export function OpenAiChatKitPanel({
       [150, 600, 1200, 2200, 3500].forEach((delay) => {
         const timer = window.setTimeout(() => {
           const matched = scanContainerForActions();
-          console.log('[ChatKit] onResponseEnd rescan', { delay, matched });
+          void fetchLatestStagedProposal().then((proposalMatched) => {
+            console.log('[ChatKit] onResponseEnd rescan', { delay, matched, proposalMatched });
+          });
         }, delay);
         responseScanTimersRef.current.push(timer);
       });
@@ -566,38 +651,13 @@ export function OpenAiChatKitPanel({
       // Returns current flow state directly from the browser — no MCP needed.
       // Agent calls this to see what steps exist, selected step, validation errors.
       if (name === 'get_current_workflow') {
-        const steps = stepsRef.current || [];
-        const fc = flowContextRef.current;
-        const stepSummary = steps.map((s: any, i: number) => {
-          const cmd = s.params?.command || s.params?.code || s.label || s.type;
-          return { index: i + 1, type: s.type, label: s.label || s.type, command: cmd, id: s.id };
-        });
-        return {
-          stepCount: steps.length,
-          steps: stepSummary,
-          selectedStep: fc?.selectedStep?.id || null,
-          validationErrors: fc?.validationErrors || [],
-          backend: fc?.backend || 'pyvisa',
-          modelFamily: fc?.modelFamily || 'unknown',
-          deviceDriver: fc?.deviceDriver || null,
-          isEmpty: steps.length === 0,
-        };
+        return buildRuntimeWorkflowPayload(stepsRef.current || [], flowContextRef.current);
       }
 
       // ── Client-only tool: get_instrument_info ──
       // Returns current instrument connection details from the browser.
       if (name === 'get_instrument_info') {
-        const ep = instrumentEndpointRef.current;
-        const fc = flowContextRef.current;
-        return {
-          connected: !!ep?.executorUrl,
-          executorUrl: ep?.executorUrl || null,
-          visaResource: ep?.visaResource || null,
-          backend: ep?.backend || fc?.backend || 'pyvisa',
-          modelFamily: fc?.modelFamily || 'unknown',
-          deviceDriver: fc?.deviceDriver || null,
-          liveMode: ep?.liveMode || false,
-        };
+        return buildRuntimeInstrumentPayload(instrumentEndpointRef.current, flowContextRef.current);
       }
 
       // ── Client-only tool: get_run_log ──
@@ -735,7 +795,26 @@ export function OpenAiChatKitPanel({
       responseScanTimersRef.current.forEach((timer) => window.clearTimeout(timer));
       responseScanTimersRef.current = [];
     };
-  }, [scanContainerForActions]);
+  }, [fetchLatestStagedProposal, scanContainerForActions]);
+
+  useEffect(() => {
+    const mcpHost = resolveMcpHost();
+    if (!mcpHost) return;
+
+    const payload = {
+      workflow: buildRuntimeWorkflowPayload(stepsRef.current || [], flowContextRef.current),
+      instrument: buildRuntimeInstrumentPayload(instrumentEndpointRef.current, flowContextRef.current),
+      runLog: String(runLog || ''),
+    };
+
+    void fetch(`${mcpHost.replace(/\/$/, '')}/runtime-context`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload),
+    }).catch((error) => {
+      console.warn('[ChatKit] Failed to sync runtime context:', error);
+    });
+  }, [steps, flowContext, instrumentEndpoint, runLog, activeThreadId]);
 
   // ── Inject workflow context when steps change ──
   useEffect(() => {

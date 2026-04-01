@@ -7,6 +7,8 @@ import { initTemplateIndex } from './core/templateIndex';
 import { runToolLoop } from './core/toolLoop';
 import { getToolDefinitions, getMcpExposedTools, runTool } from './tools/index';
 import type { McpChatRequest } from './core/schemas';
+import { getLastWorkflowProposal } from './tools/stageWorkflowProposal';
+import { getRuntimeContextState, updateRuntimeContext } from './tools/runtimeContextStore';
 import { bootRouter, createReloadProvidersHandler, createRouterHandler, getRouterHealth } from './core/routerIntegration';
 import { getCommandIndex } from './core/commandIndex';
 import { getRagIndexes } from './core/ragIndex';
@@ -737,6 +739,31 @@ function filterTools(q) {
 
     if (req.method === 'GET' && req.url === '/ai/debug/last') {
       sendJson(res, 200, { ok: true, debug: lastAiDebug });
+      return;
+    }
+
+    if (req.method === 'GET' && req.url === '/workflow-proposals/latest') {
+      sendJson(res, 200, { ok: true, proposal: getLastWorkflowProposal() });
+      return;
+    }
+
+    if (req.method === 'GET' && req.url === '/runtime-context/latest') {
+      sendJson(res, 200, { ok: true, context: getRuntimeContextState() });
+      return;
+    }
+
+    if (req.method === 'POST' && req.url === '/runtime-context') {
+      try {
+        const body = await readJsonBody(req);
+        const context = updateRuntimeContext({
+          workflow: body.workflow,
+          instrument: body.instrument,
+          runLog: body.runLog,
+        });
+        sendJson(res, 200, { ok: true, context });
+      } catch (err) {
+        sendJson(res, 400, { ok: false, error: err instanceof Error ? err.message : String(err) });
+      }
       return;
     }
 
