@@ -835,14 +835,23 @@ export function OpenAiChatKitPanel({
     // UI customization
     theme: chatKitTheme,
     composer: {
-      placeholder: 'Ask about measurements, debugging, scope setup...',
+      placeholder: isLiveMode
+        ? 'Tell TekAutomate Live what to do with the scope...'
+        : 'Ask about measurements, debugging, scope setup...',
     },
     startScreen: {
-      greeting: 'TekAutomate AI Chat — ask about SCPI, measurements, workflows, or runtime failures.',
-      prompts: [
-        { label: 'Check my flow', prompt: 'Review the current workflow and suggest improvements.' },
-        { label: 'Build a measurement', prompt: 'Build a frequency and amplitude measurement workflow for CH1.' },
-      ],
+      greeting: isLiveMode
+        ? 'TekAutomate Live Copilot — control the scope, inspect the screen, and verify changes in real time.'
+        : 'TekAutomate AI Chat — ask about SCPI, measurements, workflows, or runtime failures.',
+      prompts: isLiveMode
+        ? [
+            { label: 'Check instruments', prompt: 'Check the connected instrument and tell me what scope is online right now.' },
+            { label: 'Capture screen', prompt: 'Capture a fresh screenshot and tell me what the scope is showing.' },
+          ]
+        : [
+            { label: 'Check my flow', prompt: 'Review the current workflow and suggest improvements.' },
+            { label: 'Build a measurement', prompt: 'Build a frequency and amplitude measurement workflow for CH1.' },
+          ],
     },
     widgets: {
       onAction: async (action) => {
