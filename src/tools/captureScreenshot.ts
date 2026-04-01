@@ -19,7 +19,7 @@ export async function captureScreenshot(input: Input): Promise<ToolResult<Record
     const bridged = await dispatchLiveActionThroughTekAutomate(
       'capture_screenshot',
       input as unknown as Record<string, unknown>,
-      60_000,
+      90_000,
     );
     return {
       ok: bridged.ok,

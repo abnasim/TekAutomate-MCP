@@ -16,6 +16,35 @@ interface Input {
   _bypassVerifyGate?: boolean;
 }
 
+function splitScpiCommandString(command: string): string[] {
+  const text = String(command || '');
+  if (!text.includes(';')) return [text];
+
+  const parts: string[] = [];
+  let current = '';
+  let inQuotes = false;
+
+  for (let i = 0; i < text.length; i += 1) {
+    const ch = text[i];
+    if (ch === '"') {
+      inQuotes = !inQuotes;
+      current += ch;
+      continue;
+    }
+    if (ch === ';' && !inQuotes) {
+      const trimmed = current.trim();
+      if (trimmed) parts.push(trimmed);
+      current = '';
+      continue;
+    }
+    current += ch;
+  }
+
+  const trimmed = current.trim();
+  if (trimmed) parts.push(trimmed);
+  return parts.length ? parts : [text];
+}
+
 /**
  * Server-side SCPI verify gate.
  * Uses getByHeader() for fast local lookup (~1ms per command).
@@ -80,9 +109,7 @@ export async function sendScpi(input: Input): Promise<ToolResult<Record<string, 
 
   // ── Normalize commands — split semicolon-concatenated strings ──
   // OpenAI sometimes sends "*IDN?; CH1:SCAle?" as one string instead of separate array items.
-  input.commands = input.commands.flatMap(cmd =>
-    String(cmd).includes(';') ? String(cmd).split(';').map(s => s.trim()).filter(Boolean) : [cmd]
-  );
+  input.commands = input.commands.flatMap(cmd => splitScpiCommandString(String(cmd)));
 
   // ── SCPI Verify Gate (server-side) ──
   // Bypass for discover_scpi (probing mode) or when explicitly bypassed.
