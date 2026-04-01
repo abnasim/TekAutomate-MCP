@@ -58,30 +58,38 @@ export interface ExecutePageProps {
 }
 
 interface WorkflowProposalState extends ParsedActionsPreview {
+  id: string;
   receivedAt: number;
+  workspaceRevisionAtReceipt: number;
+  appliedAtRevision?: number;
 }
 
-const EXECUTE_PAGE_PROPOSAL_STORAGE = 'tekautomate.execute.latest_proposal';
+const EXECUTE_PAGE_PROPOSAL_STORAGE = 'tekautomate.execute.proposal.history';
 const EXECUTE_PAGE_TAB_STORAGE = 'tekautomate.execute.center_tab';
 
-function loadStoredWorkflowProposal(): WorkflowProposalState | null {
-  if (typeof window === 'undefined') return null;
+function loadStoredWorkflowProposals(): WorkflowProposalState[] {
+  if (typeof window === 'undefined') return [];
   try {
     const raw = window.localStorage.getItem(EXECUTE_PAGE_PROPOSAL_STORAGE);
-    if (!raw) return null;
-    const parsed = JSON.parse(raw) as WorkflowProposalState;
-    if (!parsed || typeof parsed !== 'object' || !Array.isArray(parsed.actions)) return null;
-    return {
-      summary: typeof parsed.summary === 'string' ? parsed.summary : '',
-      findings: Array.isArray(parsed.findings) ? parsed.findings.map(String) : [],
-      suggestedFixes: Array.isArray(parsed.suggestedFixes) ? parsed.suggestedFixes.map(String) : [],
-      actions: parsed.actions,
-      rawJson: typeof parsed.rawJson === 'string' ? parsed.rawJson : '',
-      source: parsed.source,
-      receivedAt: typeof parsed.receivedAt === 'number' ? parsed.receivedAt : Date.now(),
-    };
+    if (!raw) return [];
+    const parsed = JSON.parse(raw) as WorkflowProposalState[];
+    if (!Array.isArray(parsed)) return [];
+    return parsed
+      .filter((item) => item && typeof item === 'object' && Array.isArray(item.actions))
+      .map((item) => ({
+        id: typeof item.id === 'string' && item.id ? item.id : `proposal_${typeof item.receivedAt === 'number' ? item.receivedAt : Date.now()}`,
+        summary: typeof item.summary === 'string' ? item.summary : '',
+        findings: Array.isArray(item.findings) ? item.findings.map(String) : [],
+        suggestedFixes: Array.isArray(item.suggestedFixes) ? item.suggestedFixes.map(String) : [],
+        actions: item.actions,
+        rawJson: typeof item.rawJson === 'string' ? item.rawJson : '',
+        source: item.source,
+        receivedAt: typeof item.receivedAt === 'number' ? item.receivedAt : Date.now(),
+        workspaceRevisionAtReceipt: typeof item.workspaceRevisionAtReceipt === 'number' ? item.workspaceRevisionAtReceipt : 0,
+        appliedAtRevision: typeof item.appliedAtRevision === 'number' ? item.appliedAtRevision : undefined,
+      }));
   } catch {
-    return null;
+    return [];
   }
 }
 
@@ -150,9 +158,16 @@ function ExecutePageContent({
   const [editorCode, setEditorCode] = useState('');
   const [aiCheckResult, setAiCheckResult] = useState('');
   const [aiCheckLoading, setAiCheckLoading] = useState(false);
-  const [workflowProposal, setWorkflowProposal] = useState<WorkflowProposalState | null>(() => loadStoredWorkflowProposal());
+  const [proposalHistory, setProposalHistory] = useState<WorkflowProposalState[]>(() => loadStoredWorkflowProposals());
+  const [activeProposalId, setActiveProposalId] = useState<string | null>(() => loadStoredWorkflowProposals()[0]?.id || null);
   const [applyingProposal, setApplyingProposal] = useState(false);
   const [proposalStatus, setProposalStatus] = useState<string | null>(null);
+  const [workspaceRevision, setWorkspaceRevision] = useState(0);
+  const [pendingReapplyProposalId, setPendingReapplyProposalId] = useState<string | null>(null);
+  const workflowProposal = useMemo(
+    () => proposalHistory.find((proposal) => proposal.id === activeProposalId) || proposalHistory[0] || null,
+    [activeProposalId, proposalHistory]
+  );
   void onBack;
 
   useEffect(() => {
@@ -171,15 +186,15 @@ function ExecutePageContent({
   useEffect(() => {
     if (typeof window === 'undefined') return;
     try {
-      if (workflowProposal) {
-        window.localStorage.setItem(EXECUTE_PAGE_PROPOSAL_STORAGE, JSON.stringify(workflowProposal));
+      if (proposalHistory.length) {
+        window.localStorage.setItem(EXECUTE_PAGE_PROPOSAL_STORAGE, JSON.stringify(proposalHistory));
       } else {
         window.localStorage.removeItem(EXECUTE_PAGE_PROPOSAL_STORAGE);
       }
     } catch {
       // Ignore storage failures.
     }
-  }, [workflowProposal]);
+  }, [proposalHistory]);
 
   const runLogLines = useMemo(
     () => (runLog || 'Logs will appear here when you run the flow.').split(/\r?\n/),
@@ -202,28 +217,50 @@ function ExecutePageContent({
 
   const handleProposalDetected = useCallback((proposal: ParsedActionsPreview | null) => {
     if (!proposal) {
-      setWorkflowProposal(null);
       setProposalStatus(null);
       return;
     }
-    setWorkflowProposal({ ...proposal, receivedAt: Date.now() });
+    const existingMatch = proposalHistory.find((item) => item.rawJson === proposal.rawJson);
+    const nextProposal: WorkflowProposalState = {
+      ...proposal,
+      id: existingMatch?.id || `proposal_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`,
+      receivedAt: Date.now(),
+      workspaceRevisionAtReceipt: workspaceRevision,
+      appliedAtRevision: existingMatch?.appliedAtRevision,
+    };
+    setProposalHistory((current) => {
+      const deduped = current.filter((item) => item.rawJson !== nextProposal.rawJson);
+      return [nextProposal, ...deduped].slice(0, 20);
+    });
+    setActiveProposalId(nextProposal.id);
     setProposalStatus(null);
     setCenterTab('proposals');
-  }, []);
+  }, [proposalHistory, workspaceRevision]);
 
-  const handleApplyProposal = useCallback(async () => {
-    if (!workflowProposal?.actions?.length || !onApplyAiActions) return;
+  const applyProposalNow = useCallback(async (proposal: WorkflowProposalState) => {
+    if (!proposal?.actions?.length || !onApplyAiActions) return;
+    setPendingReapplyProposalId(null);
     setApplyingProposal(true);
     setProposalStatus(null);
     try {
-      const normalizedActions = normalizeAiActions(workflowProposal.actions as unknown[]);
+      const normalizedActions = normalizeAiActions(proposal.actions as unknown[]);
       if (!normalizedActions.length) {
         setProposalStatus('Proposal actions could not be normalized into valid TekAutomate actions.');
         return;
       }
       const result = await onApplyAiActions(normalizedActions as AiAction[]);
       if (result.changed && result.applied > 0) {
-        setProposalStatus(workflowProposal.summary || `Applied ${result.applied} action(s).`);
+        const nextRevision = workspaceRevision + 1;
+        setProposalStatus(proposal.summary || `Applied ${result.applied} action(s).`);
+        setWorkspaceRevision(nextRevision);
+        setProposalHistory((current) =>
+          current.map((item) =>
+            item.id === proposal.id
+              ? { ...item, appliedAtRevision: nextRevision }
+              : item
+          )
+        );
+        setCenterTab('steps');
       } else {
         setProposalStatus('No flow changes were applied. The proposal already matches the current flow.');
       }
@@ -232,13 +269,28 @@ function ExecutePageContent({
     } finally {
       setApplyingProposal(false);
     }
-  }, [flowContext?.backend, flowContext?.deviceDriver, flowContext?.modelFamily, flowContext?.selectedStep?.id, onApplyAiActions, steps, workflowProposal]);
+  }, [onApplyAiActions, workspaceRevision]);
+
+  const handleApplyProposal = useCallback(async () => {
+    if (!workflowProposal?.actions?.length || !onApplyAiActions) return;
+    if (typeof workflowProposal.appliedAtRevision === 'number') {
+      setPendingReapplyProposalId(workflowProposal.id);
+      return;
+    }
+    await applyProposalNow(workflowProposal);
+  }, [applyProposalNow, onApplyAiActions, workflowProposal]);
+
+  const pendingReapplyProposal = useMemo(
+    () => proposalHistory.find((proposal) => proposal.id === pendingReapplyProposalId) || null,
+    [pendingReapplyProposalId, proposalHistory]
+  );
 
   return (
     <div className="h-full flex flex-col bg-slate-100 text-slate-900 dark:bg-slate-950 dark:text-white">
       <div className="flex-1 min-h-0 flex">
         <AiChatPanel
           steps={steps}
+          workspaceRevision={workspaceRevision}
           runLog={runLog}
           code={code}
           executionSource={executionSource}
@@ -383,6 +435,43 @@ function ExecutePageContent({
                         </div>
                       )}
                     </div>
+
+                    {proposalHistory.length > 1 && (
+                      <div className="rounded-xl border border-slate-200 bg-white p-3 shadow-sm dark:border-slate-800 dark:bg-slate-900">
+                        <div className="text-sm font-semibold text-slate-900 dark:text-white">Proposal History</div>
+                        <div className="mt-3 space-y-2">
+                          {proposalHistory.map((proposal, index) => (
+                            <button
+                              key={proposal.id}
+                              type="button"
+                              onClick={() => setActiveProposalId(proposal.id)}
+                              className={`w-full rounded-lg border px-3 py-2 text-left transition ${
+                                proposal.id === workflowProposal.id
+                                  ? 'border-cyan-400 bg-cyan-50 dark:border-cyan-500/50 dark:bg-cyan-950/20'
+                                  : 'border-slate-200 bg-slate-50 hover:bg-slate-100 dark:border-slate-700 dark:bg-slate-800/60 dark:hover:bg-slate-800'
+                              }`}
+                            >
+                              <div className="flex items-center justify-between gap-3">
+                                <div className="min-w-0">
+                                  <div className="truncate text-sm font-medium text-slate-900 dark:text-white">
+                                    {index === 0 ? 'Latest' : `Previous ${index}`}:
+                                    {' '}
+                                    {proposal.summary || 'Untitled workflow proposal'}
+                                  </div>
+                                  <div className="mt-1 text-xs text-slate-500 dark:text-slate-400">
+                                    {proposal.actions.length} actions
+                                    {typeof proposal.appliedAtRevision === 'number' ? ' • applied' : ''}
+                                  </div>
+                                </div>
+                                <div className="text-xs text-slate-400 dark:text-slate-500">
+                                  {proposal.id === workflowProposal.id ? 'Open' : 'View'}
+                                </div>
+                              </div>
+                            </button>
+                          ))}
+                        </div>
+                      </div>
+                    )}
 
                     <div className="grid gap-4 lg:grid-cols-2">
                       <div className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm dark:border-slate-800 dark:bg-slate-900">
@@ -663,6 +752,37 @@ function ExecutePageContent({
                   Done
                 </button>
               </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {pendingReapplyProposal && (
+        <div className="fixed inset-0 z-[60] flex items-center justify-center bg-slate-950/45 p-4 backdrop-blur-sm">
+          <div className="w-full max-w-md rounded-2xl border border-slate-200 bg-white p-5 shadow-2xl dark:border-slate-700 dark:bg-slate-900">
+            <div className="text-lg font-semibold text-slate-900 dark:text-white">Apply Again?</div>
+            <p className="mt-2 text-sm leading-6 text-slate-600 dark:text-slate-300">
+              This proposal was already applied to the current workspace. Applying it again may stack duplicate steps.
+            </p>
+            <p className="mt-2 text-sm leading-6 text-slate-600 dark:text-slate-300">
+              Do you want to apply it again anyway?
+            </p>
+            <div className="mt-5 flex items-center justify-end gap-3">
+              <button
+                type="button"
+                onClick={() => setPendingReapplyProposalId(null)}
+                className="rounded-lg border border-slate-300 px-4 py-2 text-sm font-medium text-slate-700 hover:bg-slate-100 dark:border-slate-600 dark:text-slate-200 dark:hover:bg-slate-800"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                onClick={() => { void applyProposalNow(pendingReapplyProposal); }}
+                className="inline-flex items-center gap-2 rounded-lg border border-emerald-400/40 bg-emerald-500/15 px-4 py-2 text-sm font-semibold text-emerald-700 hover:bg-emerald-500/20 dark:border-emerald-500/40 dark:text-emerald-300"
+              >
+                <Sparkles size={16} />
+                Apply Again
+              </button>
             </div>
           </div>
         </div>

@@ -52,6 +52,7 @@ interface AiChatPanelProps {
   onWorkflowProposal?: (proposal: ParsedActionsPreview | null) => void;
   onLiveScreenshot?: (screenshot: { dataUrl: string; mimeType: string; sizeBytes: number; capturedAt: string }) => void;
   onRun?: () => void;
+  workspaceRevision?: number;
 }
 
 const MAX_ATTACHMENT_COUNT = 6;
@@ -117,6 +118,7 @@ export function AiChatPanel({
   onWorkflowProposal,
   onLiveScreenshot,
   onRun,
+  workspaceRevision,
 }: AiChatPanelProps) {
   const TRANSIENT_HINT_MS = 5500;
   const TRANSIENT_FADE_MS = 900;
@@ -1640,6 +1642,7 @@ export function AiChatPanel({
           <OpenAiChatKitPanel
             apiKey={state.openaiApiKey || state.apiKey}
             steps={steps}
+            workspaceRevision={workspaceRevision}
             runLog={runLog}
             autoApply={false}
             flowContext={flowContext}

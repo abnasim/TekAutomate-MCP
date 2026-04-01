@@ -27,6 +27,7 @@ const DEFAULT_WORKFLOW_ID = 'wf_69cb9085f72c8190ae05b360552d6987032b7c148cd57c24
 interface OpenAiChatKitPanelProps {
   apiKey: string;
   steps: StepPreview[];
+  workspaceRevision?: number;
   runLog?: string;
   autoApply?: boolean;
   flowContext?: {
@@ -255,6 +256,7 @@ function buildRuntimeInstrumentPayload(
 export function OpenAiChatKitPanel({
   apiKey,
   steps,
+  workspaceRevision,
   runLog,
   autoApply = false,
   flowContext,
@@ -810,7 +812,7 @@ export function OpenAiChatKitPanel({
     }).catch((error) => {
       console.warn('[ChatKit] Failed to sync runtime context:', error);
     });
-  }, [steps, flowContext, instrumentEndpoint, runLog, activeThreadId]);
+  }, [steps, flowContext, instrumentEndpoint, runLog, activeThreadId, workspaceRevision]);
 
   // ── Inject workflow context when steps change ──
   useEffect(() => {
@@ -834,7 +836,14 @@ export function OpenAiChatKitPanel({
     }).catch((err) => {
       console.warn('[ChatKit] workflow_context_update failed:', err);
     });
-  }, [activeThreadId, chatkit, steps]);
+  }, [activeThreadId, chatkit, steps, workspaceRevision]);
+
+  useEffect(() => {
+    if ((workspaceRevision ?? 0) < 1) return;
+    seenProposalIdRef.current = '';
+    proposalSessionStartedAtRef.current = Date.now();
+    lastParsedJsonRef.current = '';
+  }, [workspaceRevision]);
 
   // ── Error state ──
   if (initError) {
