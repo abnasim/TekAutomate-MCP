@@ -24,6 +24,11 @@ const CHATKIT_WORKFLOW_ID_KEY = 'tekautomate.chatkit.workflow_id';
 const CHATKIT_THREAD_KEY = 'tekautomate.chatkit.thread_id';
 const DEFAULT_WORKFLOW_ID = 'wf_69cb9085f72c8190ae05b360552d6987032b7c148cd57c24';
 
+function readCurrentTheme(): 'dark' | 'light' {
+  if (typeof document === 'undefined') return 'light';
+  return document.documentElement.classList.contains('dark') ? 'dark' : 'light';
+}
+
 interface OpenAiChatKitPanelProps {
   apiKey: string;
   steps: StepPreview[];
@@ -268,6 +273,7 @@ export function OpenAiChatKitPanel({
 }: OpenAiChatKitPanelProps) {
   const [initError, setInitError] = useState<string | null>(null);
   const [activeThreadId, setActiveThreadId] = useState<string | null>(null);
+  const [chatKitTheme, setChatKitTheme] = useState<'dark' | 'light'>(() => readCurrentTheme());
   const onActionsRef = useRef(onActionsDetected);
   onActionsRef.current = onActionsDetected;
   const onProposalDetectedRef = useRef(onProposalDetected);
@@ -285,6 +291,28 @@ export function OpenAiChatKitPanel({
   const responseScanTimersRef = useRef<number[]>([]);
   const seenProposalIdRef = useRef('');
   const proposalSessionStartedAtRef = useRef(Date.now());
+
+  useEffect(() => {
+    if (typeof document === 'undefined') return;
+    const syncTheme = () => setChatKitTheme(readCurrentTheme());
+    syncTheme();
+
+    const root = document.documentElement;
+    const observer = new MutationObserver(syncTheme);
+    observer.observe(root, {
+      attributes: true,
+      attributeFilter: ['class', 'style'],
+    });
+
+    window.addEventListener('focus', syncTheme);
+    window.addEventListener('pageshow', syncTheme);
+
+    return () => {
+      observer.disconnect();
+      window.removeEventListener('focus', syncTheme);
+      window.removeEventListener('pageshow', syncTheme);
+    };
+  }, []);
 
   const setStructuredProposal = useCallback((
     proposal: {
@@ -706,7 +734,7 @@ export function OpenAiChatKitPanel({
       }
     },
     // UI customization
-    theme: typeof document !== 'undefined' && document.documentElement.classList.contains('dark') ? 'dark' : 'light',
+    theme: chatKitTheme,
     composer: {
       placeholder: 'Ask about measurements, debugging, scope setup...',
     },
@@ -874,7 +902,7 @@ export function OpenAiChatKitPanel({
   return (
     <div ref={containerRef} className={className} style={{ flex: 1, minHeight: 0, display: 'flex', flexDirection: 'column', position: 'relative' }}>
       <div style={{ position: 'relative', zIndex: 1, flex: 1, minHeight: 0 }}>
-        <ChatKit control={chatkit.control} style={{ width: '100%', height: '100%' }} />
+        <ChatKit key={chatKitTheme} control={chatkit.control} style={{ width: '100%', height: '100%' }} />
       </div>
     </div>
   );
