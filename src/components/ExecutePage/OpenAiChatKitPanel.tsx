@@ -99,6 +99,7 @@ interface ParsedActionsPreview {
   suggestedFixes: string[];
   actions: AiAction[];
   rawJson: string;
+  source?: 'text' | 'tool';
 }
 
 function decodeHtmlEntities(text: string): string {
@@ -245,6 +246,47 @@ export function OpenAiChatKitPanel({
   const lastParsedJsonRef = useRef('');
   const responseScanTimersRef = useRef<number[]>([]);
 
+  const setStructuredProposal = useCallback((
+    proposal: {
+      summary?: string;
+      findings?: unknown[];
+      suggestedFixes?: unknown[];
+      actions?: unknown[];
+      rawJson?: string;
+    },
+  ) => {
+    const parsed = parseAiActionResponse(JSON.stringify({
+      summary: typeof proposal.summary === 'string' ? proposal.summary : '',
+      findings: Array.isArray(proposal.findings) ? proposal.findings : [],
+      suggestedFixes: Array.isArray(proposal.suggestedFixes) ? proposal.suggestedFixes : [],
+      actions: Array.isArray(proposal.actions) ? proposal.actions : [],
+    }));
+    if (!parsed?.actions?.length) return false;
+
+    const preview: ParsedActionsPreview = {
+      summary: cleanSummaryText(parsed.summary || ''),
+      findings: parsed.findings || [],
+      suggestedFixes: parsed.suggestedFixes || [],
+      actions: parsed.actions,
+      rawJson: proposal.rawJson || JSON.stringify({
+        summary: parsed.summary || '',
+        findings: parsed.findings || [],
+        suggestedFixes: parsed.suggestedFixes || [],
+        actions: parsed.actions,
+      }),
+      source: 'tool',
+    };
+
+    const fingerprint = `${preview.summary}\n${preview.rawJson}`;
+    if (fingerprint === lastParsedJsonRef.current) return true;
+    lastParsedJsonRef.current = fingerprint;
+    setParsedPreview(preview);
+    if (autoApplyRef.current) {
+      onActionsRef.current?.(preview.actions, preview.summary);
+    }
+    return true;
+  }, []);
+
   const extractActionsPreview = useCallback((text: string): ParsedActionsPreview | null => {
     const rawJson =
       (() => {
@@ -267,6 +309,7 @@ export function OpenAiChatKitPanel({
       suggestedFixes: parsed.suggestedFixes || [],
       actions: parsed.actions,
       rawJson,
+      source: 'text',
     };
   }, []);
 
@@ -312,8 +355,9 @@ export function OpenAiChatKitPanel({
   const captureActionsPreview = useCallback((text: string) => {
     const preview = extractActionsPreview(text);
     if (!preview) return false;
-    if (preview.rawJson === lastParsedJsonRef.current) return true;
-    lastParsedJsonRef.current = preview.rawJson;
+    const fingerprint = `${preview.summary}\n${preview.rawJson}`;
+    if (fingerprint === lastParsedJsonRef.current) return true;
+    lastParsedJsonRef.current = fingerprint;
     setParsedPreview(preview);
     scrubRenderedActionsJson();
     if (autoApplyRef.current) {
@@ -571,6 +615,25 @@ export function OpenAiChatKitPanel({
         };
       }
 
+      // ── Client-only tool: propose_workflow_actions ──
+      // Primary structured proposal path for ChatKit.
+      // The agent should call this instead of emitting raw ACTIONS_JSON in transcript text.
+      if (name === 'propose_workflow_actions') {
+        const accepted = setStructuredProposal({
+          summary: typeof params.summary === 'string' ? params.summary : '',
+          findings: Array.isArray(params.findings) ? params.findings : [],
+          suggestedFixes: Array.isArray(params.suggestedFixes) ? params.suggestedFixes : [],
+          actions: Array.isArray(params.actions) ? params.actions : [],
+        });
+        return {
+          ok: accepted,
+          appliedUi: accepted,
+          message: accepted
+            ? 'TekAutomate captured the workflow proposal and showed Apply to Flow.'
+            : 'Proposal was ignored because no valid actions were provided.',
+        };
+      }
+
       // ── MCP + executor tools ──
       try {
         const result = await executeMcpTool(
@@ -590,7 +653,7 @@ export function OpenAiChatKitPanel({
       placeholder: 'Ask about measurements, debugging, scope setup...',
     },
     startScreen: {
-      greeting: 'TekAutomate AI Chat — ask about SCPI, measurements, or say "build it" for a workflow.',
+      greeting: 'TekAutomate AI Chat — ask about SCPI, measurements, workflows, or runtime failures.',
       prompts: [
         { label: 'Check my flow', prompt: 'Review the current workflow and suggest improvements.' },
         { label: 'Build a measurement', prompt: 'Build a frequency and amplitude measurement workflow for CH1.' },
@@ -731,7 +794,7 @@ export function OpenAiChatKitPanel({
           <div style={{ padding: '10px 12px', borderBottom: '1px solid rgba(148,163,184,0.18)', display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12 }}>
             <div>
               <div style={{ fontSize: 11, fontWeight: 700, letterSpacing: '0.08em', textTransform: 'uppercase', color: '#94a3b8' }}>
-                Actions JSON
+                {parsedPreview.source === 'tool' ? 'Workflow Proposal' : 'Actions JSON'}
               </div>
               {!!parsedPreview.summary && (
                 <div style={{ marginTop: 4, fontSize: 13, lineHeight: 1.45, color: '#e2e8f0' }}>
