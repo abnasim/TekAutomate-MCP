@@ -107,6 +107,13 @@ function decodeHtmlEntities(text: string): string {
   return textarea.value;
 }
 
+function cleanSummaryText(text: string): string {
+  return decodeHtmlEntities(String(text || ''))
+    .replace(/\s+/g, ' ')
+    .replace(/\s+([,.;:!?])/g, '$1')
+    .trim();
+}
+
 function findBalancedJsonFromMarker(source: string, marker = 'ACTIONS_JSON:'): string | null {
   const raw = decodeHtmlEntities(String(source || ''));
   const markerIndex = raw.indexOf(marker);
@@ -193,6 +200,21 @@ function collectChatKitTextCandidates(container: HTMLDivElement): string[] {
   return candidates;
 }
 
+function collectStringCandidatesDeep(value: unknown, seen = new Set<unknown>()): string[] {
+  if (value == null) return [];
+  if (typeof value === 'string') return [value];
+  if (typeof value !== 'object') return [];
+  if (seen.has(value)) return [];
+  seen.add(value);
+
+  if (Array.isArray(value)) {
+    return value.flatMap((item) => collectStringCandidatesDeep(item, seen));
+  }
+
+  const record = value as Record<string, unknown>;
+  return Object.values(record).flatMap((item) => collectStringCandidatesDeep(item, seen));
+}
+
 export function OpenAiChatKitPanel({
   apiKey,
   steps,
@@ -206,6 +228,7 @@ export function OpenAiChatKitPanel({
   const [initError, setInitError] = useState<string | null>(null);
   const [activeThreadId, setActiveThreadId] = useState<string | null>(null);
   const [parsedPreview, setParsedPreview] = useState<ParsedActionsPreview | null>(null);
+  const [applyingPreview, setApplyingPreview] = useState(false);
   const onActionsRef = useRef(onActionsDetected);
   onActionsRef.current = onActionsDetected;
   const stepsRef = useRef(steps);
@@ -237,7 +260,7 @@ export function OpenAiChatKitPanel({
     const parsed = parseAiActionResponse(rawJson);
     if (!parsed?.actions?.length) return null;
     return {
-      summary: parsed.summary || '',
+      summary: cleanSummaryText(parsed.summary || ''),
       findings: parsed.findings || [],
       suggestedFixes: parsed.suggestedFixes || [],
       actions: parsed.actions,
@@ -306,6 +329,60 @@ export function OpenAiChatKitPanel({
     }
     return false;
   }, [captureActionsPreview]);
+
+  const handleWidgetAction = useCallback(async (
+    action: { type: string; payload?: Record<string, unknown> },
+  ) => {
+    console.log('[ChatKit] Widget action:', action.type, action.payload);
+
+    if (action.type === 'flow.apply' && action.payload?.actions) {
+      const rawActions = action.payload.actions;
+      const actions = Array.isArray(rawActions) ? rawActions : [];
+      if (actions.length) {
+        const parsed = parseAiActionResponse(JSON.stringify({
+          actions,
+          summary: typeof action.payload.summary === 'string' ? action.payload.summary : '',
+        }));
+        if (parsed?.actions?.length) {
+          onActionsRef.current?.(parsed.actions, parsed.summary);
+        } else {
+          onActionsRef.current?.(actions as AiAction[], String(action.payload.summary || ''));
+        }
+      }
+      return;
+    }
+
+    if (action.type === 'flow.addStep' && action.payload?.command) {
+      const step = {
+        type: 'insert_step_after' as const,
+        action_type: 'insert_step_after' as const,
+        targetStepId: null,
+        payload: {
+          newStep: {
+            type: 'write',
+            label: String(action.payload.command),
+            params: { command: String(action.payload.command) },
+          },
+        },
+      };
+      onActionsRef.current?.([step as unknown as AiAction]);
+      return;
+    }
+
+    if (action.type === 'flow.dismiss') {
+      console.log('[ChatKit] User dismissed flow actions');
+    }
+  }, []);
+
+  const applyParsedPreview = useCallback(async () => {
+    if (!parsedPreview?.actions?.length) return;
+    setApplyingPreview(true);
+    try {
+      await Promise.resolve(onActionsRef.current?.(parsedPreview.actions, parsedPreview.summary));
+    } finally {
+      setApplyingPreview(false);
+    }
+  }, [parsedPreview]);
 
   // ── Session creation ──
   // Calls OpenAI ChatKit Sessions API directly from the browser.
@@ -424,6 +501,17 @@ export function OpenAiChatKitPanel({
         responseScanTimersRef.current.push(timer);
       });
     },
+    onLog: (detail: { name?: string; data?: Record<string, unknown> }) => {
+      const strings = collectStringCandidatesDeep(detail?.data);
+      for (const text of strings) {
+        if (!text.includes('ACTIONS_JSON') && !text.includes('"actions"') && !text.includes('"summary"')) continue;
+        const matched = captureActionsPreview(text);
+        if (matched) {
+          console.log('[ChatKit] Parsed actions from log event:', detail?.name || '(unnamed)');
+          break;
+        }
+      }
+    },
     // Client-side tool execution — same split as liveToolLoop.ts:
     // Instrument tools (send_scpi, capture_screenshot, etc.) → browser calls executor directly
     // Knowledge tools (search_scpi, verify, browse, etc.) → browser calls MCP /tools/execute
@@ -491,6 +579,11 @@ export function OpenAiChatKitPanel({
         { label: 'Build a measurement', prompt: 'Build a frequency and amplitude measurement workflow for CH1.' },
       ],
     },
+    widgets: {
+      onAction: async (action) => {
+        await handleWidgetAction(action);
+      },
+    },
   });
 
   // ── Widget action handler — replaces MutationObserver for ACTIONS_JSON ──
@@ -503,39 +596,7 @@ export function OpenAiChatKitPanel({
     const handleAction = (e: Event) => {
       const detail = (e as CustomEvent).detail as { type?: string; payload?: Record<string, unknown> } | undefined;
       if (!detail?.type) return;
-      console.log('[ChatKit] Widget action:', detail.type, detail.payload);
-
-      if (detail.type === 'flow.apply' && detail.payload?.actions) {
-        const rawActions = detail.payload.actions;
-        const actions = Array.isArray(rawActions) ? rawActions : [];
-        if (actions.length) {
-          const parsed = parseAiActionResponse(JSON.stringify({
-            actions,
-            summary: typeof detail.payload.summary === 'string' ? detail.payload.summary : '',
-          }));
-          if (parsed?.actions?.length) {
-            onActionsRef.current?.(parsed.actions, parsed.summary);
-          } else {
-            onActionsRef.current?.(actions as AiAction[], String(detail.payload.summary || ''));
-          }
-        }
-      } else if (detail.type === 'flow.addStep' && detail.payload?.command) {
-        const step = {
-          type: 'insert_step_after' as const,
-          action_type: 'insert_step_after' as const,
-          targetStepId: null,
-          payload: {
-            newStep: {
-              type: 'write',
-              label: String(detail.payload.command),
-              params: { command: String(detail.payload.command) },
-            },
-          },
-        };
-        onActionsRef.current?.([step as unknown as AiAction]);
-      } else if (detail.type === 'flow.dismiss') {
-        console.log('[ChatKit] User dismissed flow actions');
-      }
+      void handleWidgetAction({ type: detail.type, payload: detail.payload });
     };
 
     // Listen on the container — ChatKit widget actions bubble up as CustomEvents
@@ -548,7 +609,7 @@ export function OpenAiChatKitPanel({
       container.removeEventListener('chatkit.action', handleAction);
       if (chatKitEl) chatKitEl.removeEventListener('chatkit.action', handleAction);
     };
-  }, []);
+  }, [handleWidgetAction]);
 
   // ── DOM observer for ACTIONS_JSON extraction (FALLBACK) ──
   // Primary path: onAction handler above receives structured data from widgets.
@@ -657,17 +718,29 @@ export function OpenAiChatKitPanel({
               </div>
               {!!parsedPreview.summary && (
                 <div style={{ marginTop: 4, fontSize: 13, lineHeight: 1.45, color: '#e2e8f0' }}>
-                  {parsedPreview.summary}
+                  {cleanSummaryText(parsedPreview.summary)}
                 </div>
               )}
             </div>
-            <button
-              type="button"
-              onClick={() => setParsedPreview(null)}
-              style={{ fontSize: 11, padding: '4px 8px', borderRadius: 8, border: '1px solid rgba(148,163,184,0.25)', background: 'transparent', color: '#cbd5e1', cursor: 'pointer' }}
-            >
-              Hide
-            </button>
+            <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+              {!!parsedPreview.actions.length && !autoApplyRef.current && (
+                <button
+                  type="button"
+                  onClick={() => { void applyParsedPreview(); }}
+                  disabled={applyingPreview}
+                  style={{ fontSize: 11, padding: '6px 10px', borderRadius: 8, border: '1px solid rgba(34,197,94,0.45)', background: applyingPreview ? 'rgba(34,197,94,0.12)' : 'rgba(34,197,94,0.18)', color: '#bbf7d0', cursor: applyingPreview ? 'default' : 'pointer', fontWeight: 700 }}
+                >
+                  {applyingPreview ? 'Applying...' : 'Apply to Flow'}
+                </button>
+              )}
+              <button
+                type="button"
+                onClick={() => setParsedPreview(null)}
+                style={{ fontSize: 11, padding: '4px 8px', borderRadius: 8, border: '1px solid rgba(148,163,184,0.25)', background: 'transparent', color: '#cbd5e1', cursor: 'pointer' }}
+              >
+                Hide
+              </button>
+            </div>
           </div>
           <div style={{ padding: '10px 12px', display: 'grid', gap: 8 }}>
             <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
