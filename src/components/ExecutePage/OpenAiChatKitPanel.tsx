@@ -323,6 +323,145 @@ function buildRuntimeInstrumentPayload(
   };
 }
 
+function normalizeScpiText(value: unknown): string {
+  return String(value || '').replace(/^["']|["']$/g, '').trim();
+}
+
+function extractScpiResponseTexts(result: unknown): string[] {
+  if (!result) return [];
+  if (typeof result === 'string') return [normalizeScpiText(result)].filter(Boolean);
+  if (Array.isArray(result)) {
+    return result.flatMap((item) => extractScpiResponseTexts(item));
+  }
+  if (typeof result !== 'object') return [];
+
+  const record = result as Record<string, unknown>;
+  const collected: string[] = [];
+  const push = (value: unknown) => {
+    const text = normalizeScpiText(value);
+    if (text) collected.push(text);
+  };
+
+  if (Array.isArray(record.responses)) {
+    (record.responses as unknown[]).forEach((entry) => {
+      if (entry && typeof entry === 'object') {
+        const responseRecord = entry as Record<string, unknown>;
+        push(responseRecord.response);
+        push(responseRecord.output);
+        push(responseRecord.stdout);
+        push(responseRecord.combinedOutput);
+      } else {
+        push(entry);
+      }
+    });
+  }
+
+  push(record.stdout);
+  push(record.output);
+  push(record.combinedOutput);
+  push(record.response);
+
+  return collected.filter(Boolean);
+}
+
+function parseBandwidthFromOpt(optText: string): string | null {
+  const normalized = normalizeScpiText(optText);
+  if (!normalized) return null;
+  const mhzMatch = normalized.match(/(\d+(?:\.\d+)?)\s*MHz/i);
+  if (mhzMatch) return `${mhzMatch[1]} MHz`;
+  const ghzMatch = normalized.match(/(\d+(?:\.\d+)?)\s*GHz/i);
+  if (ghzMatch) return `${ghzMatch[1]} GHz`;
+  return null;
+}
+
+function deriveModelMetadata(modelText: string): {
+  deviceDriver: string | null;
+  modelFamily: string | null;
+  channelCount: string | null;
+} {
+  const model = normalizeScpiText(modelText).toUpperCase();
+  if (!model) {
+    return { deviceDriver: null, modelFamily: null, channelCount: null };
+  }
+
+  const exact = model.match(/^([A-Z]+)(\d)(\d)([A-Z]*)$/);
+  if (exact) {
+    const [, prefix, familyDigit, channelDigit] = exact;
+    return {
+      deviceDriver: model,
+      modelFamily: `${prefix}${familyDigit}`,
+      channelCount: channelDigit,
+    };
+  }
+
+  const familyOnly = model.match(/^([A-Z]+)(\d)([A-Z]*)$/);
+  if (familyOnly) {
+    const [, prefix, familyDigit] = familyOnly;
+    return {
+      deviceDriver: model,
+      modelFamily: `${prefix}${familyDigit}`,
+      channelCount: null,
+    };
+  }
+
+  return {
+    deviceDriver: model,
+    modelFamily: null,
+    channelCount: null,
+  };
+}
+
+async function buildLiveInstrumentInfoPayload(
+  instrumentEndpoint?: OpenAiChatKitPanelProps['instrumentEndpoint'] | null,
+  flowContext?: OpenAiChatKitPanelProps['flowContext'],
+  isLiveMode?: boolean,
+): Promise<Record<string, unknown>> {
+  const base = buildRuntimeInstrumentPayload(instrumentEndpoint, flowContext, isLiveMode);
+  if (!base.connected || !instrumentEndpoint?.executorUrl) return base;
+
+  try {
+    const queryResult = await executeMcpTool(
+      'send_scpi',
+      {
+        commands: ['*IDN?', '*OPT?'],
+        timeout_ms: 5000,
+      },
+      instrumentEndpoint || undefined,
+      { modelFamily: flowContext?.modelFamily, deviceDriver: flowContext?.deviceDriver },
+    );
+
+    const responses = extractScpiResponseTexts(queryResult);
+    const idn = responses.find((text) => text.includes(',') || /^TEK/i.test(text)) || '';
+    const opt = responses.find((text) => /MHz|GHz/i.test(text) && text !== idn) || responses[1] || '';
+
+    const idnParts = idn.split(',').map((part) => part.trim()).filter(Boolean);
+    const manufacturer = idnParts[0] || null;
+    const model = idnParts[1] || flowContext?.deviceDriver || '';
+    const serial = idnParts[2] || null;
+    const firmware = idnParts[3] || null;
+    const derived = deriveModelMetadata(model);
+    const bandwidth = parseBandwidthFromOpt(opt);
+
+    return {
+      ...base,
+      manufacturer,
+      serial,
+      firmware,
+      idn,
+      options: opt || null,
+      deviceDriver: derived.deviceDriver || base.deviceDriver,
+      modelFamily: derived.modelFamily || base.modelFamily,
+      channelCount: derived.channelCount,
+      bandwidth,
+    };
+  } catch (error) {
+    return {
+      ...base,
+      warnings: [error instanceof Error ? error.message : 'Failed to query instrument identity.'],
+    };
+  }
+}
+
 function buildLiveSessionPayload(
   threadId: string | null,
   workflowId?: string,
@@ -782,7 +921,7 @@ export function OpenAiChatKitPanel({
       // ── Client-only tool: get_instrument_info ──
       // Returns current instrument connection details from the browser.
       if (name === 'get_instrument_info') {
-        return buildRuntimeInstrumentPayload(instrumentEndpointRef.current, flowContextRef.current, isLiveMode);
+        return await buildLiveInstrumentInfoPayload(instrumentEndpointRef.current, flowContextRef.current, isLiveMode);
       }
 
       // ── Client-only tool: get_run_log ──
