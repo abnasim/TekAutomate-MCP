@@ -904,34 +904,43 @@ export function buildWorkflowContext(
 ): string {
   if (!steps?.length) return '';
 
-  const stepLines = steps.map((s, i) => {
-    const cmd = s.params?.command || s.params?.code || s.label || s.type;
-    const marker = selectedStepId && s.id === selectedStepId ? ' ← selected' : '';
-    return `  ${i + 1}. [${s.type}] ${cmd}${marker}`;
-  });
+  const recursiveStepLines: string[] = [];
+  const walk = (
+    nodes: Array<{ id?: string; type: string; label?: string; params?: Record<string, unknown>; children?: unknown[] }>,
+    prefix = '',
+  ) => {
+    nodes.forEach((s, i) => {
+      const indexPath = prefix ? `${prefix}.${i + 1}` : `${i + 1}`;
+      const cmd = s.params?.command || s.params?.code || s.label || s.type;
+      const marker = selectedStepId && s.id === selectedStepId ? ' <- selected' : '';
+      recursiveStepLines.push(`  ${indexPath}. [${s.type}] ${cmd}${marker}`);
+      const children = Array.isArray(s.children)
+        ? (s.children as Array<{ id?: string; type: string; label?: string; params?: Record<string, unknown>; children?: unknown[] }>)
+        : [];
+      if (children.length) walk(children, indexPath);
+    });
+  };
+  walk(steps);
 
-  // Cap at ~1500 chars — keep first 5 + last 5 if too many
-  let body: string;
-  if (stepLines.length > 12) {
-    body = [
-      ...stepLines.slice(0, 5),
-      `  ... (${stepLines.length - 10} more steps)`,
-      ...stepLines.slice(-5),
+  let recursiveBody: string;
+  if (recursiveStepLines.length > 12) {
+    recursiveBody = [
+      ...recursiveStepLines.slice(0, 5),
+      `  ... (${recursiveStepLines.length - 10} more steps)`,
+      ...recursiveStepLines.slice(-5),
     ].join('\n');
   } else {
-    body = stepLines.join('\n');
+    recursiveBody = recursiveStepLines.join('\n');
   }
 
-  let ctx = `## Current Workflow (${steps.length} steps)\n${body}`;
-
+  let recursiveCtx = `## Current Workflow (${recursiveStepLines.length} steps)\n${recursiveBody}`;
   if (validationErrors?.length) {
-    ctx += `\n\nValidation errors:\n${validationErrors.map((e) => `  - ${e}`).join('\n')}`;
+    recursiveCtx += `\n\nValidation errors:\n${(validationErrors ?? []).map((e) => `  - ${e}`).join('\n')}`;
   }
-
-  return ctx;
+  return recursiveCtx;
 }
 
-/**
+/***
  * Lean system prompt for Anthropic AI Chat (flow-building mode).
  * ~6-8K chars / 1,500-2,000 tokens — down from 28-32K in buildLiveSystemPrompt.
  *

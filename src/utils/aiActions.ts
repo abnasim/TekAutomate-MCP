@@ -639,6 +639,11 @@ export function applyAiActionsToSteps<T extends StepLike>(steps: T[], actions: A
     };
   };
 
+  const reserveNestedChildIds = (children: StepLike[] | undefined): StepLike[] | undefined => {
+    if (!Array.isArray(children)) return children;
+    return children.map((child) => reserveInsertedIds(child));
+  };
+
   const resolveTargetId = (target: string): string => insertedIdMap.get(target) || target;
 
   rebuildAssignedIds();
@@ -870,7 +875,6 @@ export function applyAiActionsToSteps<T extends StepLike>(steps: T[], actions: A
         break;
       }
       case 'insert_step_after': {
-        ensureBaselineConnectDisconnect();
         let candidate: Record<string, unknown> | undefined =
           action.payload?.new_step && typeof action.payload.new_step === 'object'
             ? (action.payload.new_step as Record<string, unknown>)
@@ -879,6 +883,7 @@ export function applyAiActionsToSteps<T extends StepLike>(steps: T[], actions: A
               : (action.payload as Record<string, unknown> | undefined);
         const normalizedStep = normalizeStepCandidate(candidate, 'comment');
         if (!normalizedStep) break;
+        ensureBaselineConnectDisconnect();
         const groupedStep = reserveInsertedIds(maybeAutoGroupCompoundCommandStep(normalizedStep));
         const target = resolveTargetId(String(action.target_step_id || ''));
         if (!target) {
@@ -974,13 +979,19 @@ export function applyAiActionsToSteps<T extends StepLike>(steps: T[], actions: A
             // Prevent accidental replacement of existing python snippets unless explicitly allowed.
             return false;
           }
+          const normalizedReplacement = normalizeStepCandidate(
+            { ...newStep, type: nextType, id: target },
+            arrRef[idx].type,
+          );
+          if (!normalizedReplacement) return false;
           const nextParamsBase =
-            newStep.params && typeof newStep.params === 'object'
-              ? (newStep.params as Record<string, unknown>)
+            normalizedReplacement.params && typeof normalizedReplacement.params === 'object'
+              ? (normalizedReplacement.params as Record<string, unknown>)
               : {};
           let nextParams: Record<string, unknown> = { ...(arrRef[idx].params || {}), ...nextParamsBase };
           if (nextType === 'write') {
             const cmd = (typeof nextParams.command === 'string' && nextParams.command)
+              || (typeof normalizedReplacement.params?.command === 'string' && normalizedReplacement.params.command)
               || (typeof newStep.command === 'string' && newStep.command)
               || (typeof newStep.scpi === 'string' && newStep.scpi)
               || (typeof nextParams.scpi === 'string' && String(nextParams.scpi))
@@ -1016,20 +1027,10 @@ export function applyAiActionsToSteps<T extends StepLike>(steps: T[], actions: A
           arrRef[idx] = {
             id: target,
             type: nextType,
-            label: String(newStep.label || arrRef[idx].label),
+            label: String(normalizedReplacement.label || arrRef[idx].label),
             params: nextParams,
-            children: Array.isArray(newStep.children)
-              ? (newStep.children as unknown[]).filter(Boolean).map((c, i) => {
-                  const child = c as Record<string, unknown>;
-                  return {
-                    id: String(child.id || safeRandomId(`ai_child_${i}`)),
-                    type: String(child.type || 'comment'),
-                    label: String(child.label || child.type || 'Step'),
-                    params: (child.params && typeof child.params === 'object'
-                      ? (child.params as Record<string, unknown>)
-                      : {}),
-                  } as StepLike;
-                })
+            children: Array.isArray(normalizedReplacement.children)
+              ? reserveNestedChildIds(normalizedReplacement.children)
               : arrRef[idx].children,
           };
           return true;

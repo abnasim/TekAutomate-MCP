@@ -228,12 +228,54 @@ function buildRuntimeWorkflowPayload(
   steps: StepPreview[],
   flowContext?: OpenAiChatKitPanelProps['flowContext'],
 ) {
+  const serializeStep = (step: StepPreview, indexPath: string): Record<string, unknown> => {
+    const command =
+      (step as any).params?.command ||
+      (step as any).params?.code ||
+      step.label ||
+      step.type;
+    const children = Array.isArray((step as any).children)
+      ? ((step as any).children as StepPreview[]).map((child, idx) => serializeStep(child, `${indexPath}.${idx + 1}`))
+      : [];
+    return {
+      indexPath,
+      id: step.id,
+      type: step.type,
+      label: step.label || step.type,
+      command,
+      params: (step as any).params || {},
+      childCount: children.length,
+      children,
+    };
+  };
+
+  const flattenSteps = (items: Record<string, unknown>[]): Array<Record<string, unknown>> => {
+    const flat: Array<Record<string, unknown>> = [];
+    const walk = (nodes: Record<string, unknown>[]) => {
+      nodes.forEach((node) => {
+        flat.push({
+          indexPath: node.indexPath,
+          id: node.id,
+          type: node.type,
+          label: node.label,
+          command: node.command,
+          childCount: node.childCount,
+        });
+        const children = Array.isArray(node.children) ? (node.children as Record<string, unknown>[]) : [];
+        if (children.length) walk(children);
+      });
+    };
+    walk(items);
+    return flat;
+  };
+
+  const tree = steps.map((s, i) => serializeStep(s, `${i + 1}`));
+  const flatSteps = flattenSteps(tree);
   return {
-    stepCount: steps.length,
-    steps: steps.map((s: any, i: number) => {
-      const cmd = s.params?.command || s.params?.code || s.label || s.type;
-      return { index: i + 1, type: s.type, label: s.label || s.type, command: cmd, id: s.id };
-    }),
+    stepCount: flatSteps.length,
+    topLevelStepCount: steps.length,
+    steps: tree,
+    flatSteps,
     selectedStep: flowContext?.selectedStep?.id || null,
     validationErrors: flowContext?.validationErrors || [],
     backend: flowContext?.backend || 'pyvisa',
