@@ -35,6 +35,7 @@ interface OpenAiChatKitPanelProps {
   workflowId?: string;
   threadStorageKey?: string;
   userId?: string;
+  historyEnabled?: boolean;
   workspaceRevision?: number;
   runLog?: string;
   autoApply?: boolean;
@@ -304,12 +305,30 @@ function buildRuntimeInstrumentPayload(
   };
 }
 
+function buildLiveSessionPayload(
+  threadId: string | null,
+  workflowId?: string,
+  userId?: string,
+) {
+  const normalizedThreadId = String(threadId || '').trim();
+  if (!normalizedThreadId) return null;
+  const resolvedWorkflowId = getWorkflowId(workflowId);
+  const resolvedUserId = userId?.trim() || 'tekautomate-user';
+  return {
+    sessionKey: `chatkit:${resolvedWorkflowId}:${resolvedUserId}:${normalizedThreadId}`,
+    threadId: normalizedThreadId,
+    workflowId: resolvedWorkflowId,
+    userId: resolvedUserId,
+  };
+}
+
 export function OpenAiChatKitPanel({
   apiKey,
   steps,
   workflowId,
   threadStorageKey,
   userId,
+  historyEnabled = true,
   workspaceRevision,
   runLog,
   autoApply = false,
@@ -670,6 +689,11 @@ export function OpenAiChatKitPanel({
   // ── ChatKit hook ──
   const chatkit = useChatKit({
     api: { getClientSecret },
+    history: {
+      enabled: historyEnabled,
+      showDelete: historyEnabled,
+      showRename: historyEnabled,
+    },
     // Don't restore threads from localStorage — ChatKit manages thread history
     // internally via its built-in history UI. Storing thread IDs causes stale
     // 404s when threads expire or get deleted on OpenAI's side.
@@ -881,6 +905,7 @@ export function OpenAiChatKitPanel({
       workflow: buildRuntimeWorkflowPayload(stepsRef.current || [], flowContextRef.current),
       instrument: buildRuntimeInstrumentPayload(instrumentEndpointRef.current, flowContextRef.current),
       runLog: String(runLog || ''),
+      liveSession: buildLiveSessionPayload(activeThreadId, workflowId, userId),
     };
 
     void fetch(`${mcpHost.replace(/\/$/, '')}/runtime-context`, {
@@ -890,7 +915,83 @@ export function OpenAiChatKitPanel({
     }).catch((error) => {
       console.warn('[ChatKit] Failed to sync runtime context:', error);
     });
-  }, [steps, flowContext, instrumentEndpoint, runLog, activeThreadId, workspaceRevision]);
+  }, [steps, flowContext, instrumentEndpoint, runLog, activeThreadId, workspaceRevision, workflowId, userId]);
+
+  useEffect(() => {
+    const mcpHost = resolveMcpHost();
+    const liveSession = buildLiveSessionPayload(activeThreadId, workflowId, userId);
+    if (!mcpHost || !liveSession) return;
+    if (!instrumentEndpoint?.liveMode || !instrumentEndpoint?.executorUrl) return;
+
+    let cancelled = false;
+
+    const loop = async () => {
+      while (!cancelled) {
+        let currentAction: { id: string; toolName: string; args?: Record<string, unknown> } | null = null;
+        try {
+          const nextRes = await fetch(
+            `${mcpHost.replace(/\/$/, '')}/live-actions/next?sessionKey=${encodeURIComponent(liveSession.sessionKey)}&timeoutMs=20000`,
+          );
+          if (!nextRes.ok) {
+            await new Promise((resolve) => window.setTimeout(resolve, 1500));
+            continue;
+          }
+          const nextJson = (await nextRes.json()) as {
+            ok?: boolean;
+            action?: { id: string; toolName: string; args?: Record<string, unknown> } | null;
+          };
+          currentAction = nextJson.action || null;
+          if (!currentAction?.id || !currentAction.toolName) {
+            continue;
+          }
+
+          const result = await executeMcpTool(
+            currentAction.toolName,
+            currentAction.args || {},
+            instrumentEndpointRef.current || undefined,
+            {
+              modelFamily: flowContextRef.current?.modelFamily,
+              deviceDriver: flowContextRef.current?.deviceDriver,
+            },
+          );
+
+          await fetch(`${mcpHost.replace(/\/$/, '')}/live-actions/result`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              id: currentAction.id,
+              sessionKey: liveSession.sessionKey,
+              ok: true,
+              result,
+            }),
+          });
+        } catch (error) {
+          if (currentAction?.id) {
+            try {
+              await fetch(`${mcpHost.replace(/\/$/, '')}/live-actions/result`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                  id: currentAction.id,
+                  sessionKey: liveSession.sessionKey,
+                  ok: false,
+                  error: error instanceof Error ? error.message : 'Live action execution failed.',
+                }),
+              });
+            } catch {
+              // Ignore secondary reporting failures.
+            }
+          }
+          await new Promise((resolve) => window.setTimeout(resolve, 1200));
+        }
+      }
+    };
+
+    void loop();
+    return () => {
+      cancelled = true;
+    };
+  }, [activeThreadId, instrumentEndpoint?.executorUrl, instrumentEndpoint?.liveMode, userId, workflowId, flowContext?.deviceDriver, flowContext?.modelFamily]);
 
   // ── Inject workflow context when steps change ──
   useEffect(() => {

@@ -97,13 +97,14 @@ Use these only for live instrument actions.
 For clear build, edit, fix, or apply requests:
 1. Call `get_current_workflow` only if the existing flow matters.
 2. Call `get_instrument_info` only if live backend/model context matters.
-3. Use lookup tools only as needed:
+3. Prefer MCP/runtime/SCPI tools over local file search. Use MCP workflow/runtime context and SCPI lookup tools first; inspect repository files only when MCP tools cannot answer the question.
+4. Use lookup tools only as needed:
    - `get_command_by_header` when you know the exact command family
    - `search_scpi` when you need to find commands by feature
    - `verify_scpi_commands` only before you propose executable workflow steps
-4. Build the workflow proposal yourself.
-5. Reply with 1-2 short human-readable sentences.
-6. Call `stage_workflow_proposal` with your exact `summary`, `findings`, `suggestedFixes`, and non-empty `actions`.
+5. Build the workflow proposal yourself.
+6. Reply with 1-2 short human-readable sentences.
+7. Call `stage_workflow_proposal` with your exact `summary`, `findings`, `suggestedFixes`, and non-empty `actions`.
 
 This should usually be 1-3 tool calls total.
 
@@ -129,6 +130,7 @@ For "what is the syntax for X" or "what command does Y":
 - Do not narrate your search process or internal tool reasoning in the visible answer.
 - Do not use 5 tool calls for a simple workflow request when 1-3 calls will do.
 - Do not answer exact SCPI syntax from memory.
+- Do not prefer repository file inspection over MCP/runtime/SCPI tools when those tools can answer the question.
 - Do not call `prepare_flow_actions` during drafting.
 - Do not dump raw proposal JSON into the visible transcript when `stage_workflow_proposal` is available.
 - Do not use `stage_workflow_proposal` as a note, summary, or reminder tool.

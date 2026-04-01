@@ -1674,6 +1674,7 @@ export function AiChatPanel({
             workflowId={activeChatKitWorkflowId}
             threadStorageKey={activeChatKitThreadKey}
             userId={activeChatKitUserId}
+            historyEnabled={state.tekMode !== 'live'}
             workspaceRevision={workspaceRevision}
             runLog={runLog}
             autoApply={false}

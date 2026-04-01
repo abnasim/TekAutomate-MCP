@@ -9,6 +9,7 @@ import { getToolDefinitions, getMcpExposedTools, runTool } from './tools/index';
 import type { McpChatRequest } from './core/schemas';
 import { getLastWorkflowProposal } from './tools/stageWorkflowProposal';
 import { getRuntimeContextState, updateRuntimeContext } from './tools/runtimeContextStore';
+import { completeLiveAction, getPendingLiveActionCount, waitForNextLiveAction } from './tools/liveActionBridge';
 import { bootRouter, createReloadProvidersHandler, createRouterHandler, getRouterHealth } from './core/routerIntegration';
 import { getCommandIndex } from './core/commandIndex';
 import { getRagIndexes } from './core/ragIndex';
@@ -759,8 +760,47 @@ function filterTools(q) {
           workflow: body.workflow,
           instrument: body.instrument,
           runLog: body.runLog,
+          liveSession: body.liveSession,
         });
         sendJson(res, 200, { ok: true, context });
+      } catch (err) {
+        sendJson(res, 400, { ok: false, error: err instanceof Error ? err.message : String(err) });
+      }
+      return;
+    }
+
+    if (req.method === 'GET' && req.url?.startsWith('/live-actions/next')) {
+      try {
+        const requestUrl = new URL(req.url, `http://${req.headers.host || 'localhost'}`);
+        const sessionKey = requestUrl.searchParams.get('sessionKey') || '';
+        const timeoutMs = Number(requestUrl.searchParams.get('timeoutMs') || '25000');
+        const action = await waitForNextLiveAction(sessionKey, Number.isFinite(timeoutMs) ? timeoutMs : 25000);
+        sendJson(res, 200, {
+          ok: true,
+          action,
+          pendingCount: getPendingLiveActionCount(sessionKey),
+        });
+      } catch (err) {
+        sendJson(res, 400, { ok: false, error: err instanceof Error ? err.message : String(err) });
+      }
+      return;
+    }
+
+    if (req.method === 'POST' && req.url === '/live-actions/result') {
+      try {
+        const body = await readJsonBody(req);
+        const accepted = completeLiveAction({
+          id: String(body.id || ''),
+          sessionKey: typeof body.sessionKey === 'string' ? body.sessionKey : null,
+          ok: body.ok !== false,
+          result: body.result,
+          error: typeof body.error === 'string' ? body.error : undefined,
+        });
+        sendJson(res, accepted ? 200 : 404, {
+          ok: accepted,
+          id: String(body.id || ''),
+          error: accepted ? undefined : 'Live action not found.',
+        });
       } catch (err) {
         sendJson(res, 400, { ok: false, error: err instanceof Error ? err.message : String(err) });
       }
