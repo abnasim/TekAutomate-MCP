@@ -34,6 +34,7 @@ interface OpenAiChatKitPanelProps {
   apiKey: string;
   steps: StepPreview[];
   workflowId?: string;
+  isLiveMode?: boolean;
   threadStorageKey?: string;
   userId?: string;
   historyEnabled?: boolean;
@@ -308,6 +309,7 @@ function buildRuntimeWorkflowPayload(
 function buildRuntimeInstrumentPayload(
   instrumentEndpoint?: OpenAiChatKitPanelProps['instrumentEndpoint'] | null,
   flowContext?: OpenAiChatKitPanelProps['flowContext'],
+  isLiveMode?: boolean,
 ) {
   return {
     connected: !!instrumentEndpoint?.executorUrl,
@@ -316,7 +318,7 @@ function buildRuntimeInstrumentPayload(
     backend: instrumentEndpoint?.backend || flowContext?.backend || 'pyvisa',
     modelFamily: flowContext?.modelFamily || 'unknown',
     deviceDriver: flowContext?.deviceDriver || null,
-    liveMode: instrumentEndpoint?.liveMode || false,
+    liveMode: Boolean(isLiveMode || instrumentEndpoint?.liveMode),
   };
 }
 
@@ -340,6 +342,7 @@ export function OpenAiChatKitPanel({
   apiKey,
   steps,
   workflowId,
+  isLiveMode = false,
   threadStorageKey,
   userId,
   historyEnabled = true,
@@ -771,7 +774,7 @@ export function OpenAiChatKitPanel({
       // ── Client-only tool: get_instrument_info ──
       // Returns current instrument connection details from the browser.
       if (name === 'get_instrument_info') {
-        return buildRuntimeInstrumentPayload(instrumentEndpointRef.current, flowContextRef.current);
+        return buildRuntimeInstrumentPayload(instrumentEndpointRef.current, flowContextRef.current, isLiveMode);
       }
 
       // ── Client-only tool: get_run_log ──
@@ -917,9 +920,9 @@ export function OpenAiChatKitPanel({
 
     const payload = {
       workflow: buildRuntimeWorkflowPayload(stepsRef.current || [], flowContextRef.current),
-      instrument: buildRuntimeInstrumentPayload(instrumentEndpointRef.current, flowContextRef.current),
+      instrument: buildRuntimeInstrumentPayload(instrumentEndpointRef.current, flowContextRef.current, isLiveMode),
       runLog: String(runLog || ''),
-      liveSession: buildLiveSessionPayload(activeThreadId, workflowId, userId),
+      liveSession: isLiveMode ? buildLiveSessionPayload(activeThreadId, workflowId, userId) : null,
     };
 
     void fetch(`${mcpHost.replace(/\/$/, '')}/runtime-context`, {
@@ -929,13 +932,14 @@ export function OpenAiChatKitPanel({
     }).catch((error) => {
       console.warn('[ChatKit] Failed to sync runtime context:', error);
     });
-  }, [steps, flowContext, instrumentEndpoint, runLog, activeThreadId, workspaceRevision, workflowId, userId]);
+  }, [steps, flowContext, instrumentEndpoint, runLog, activeThreadId, workspaceRevision, workflowId, userId, isLiveMode]);
 
   useEffect(() => {
     const mcpHost = resolveMcpHost();
+    if (!isLiveMode) return;
     const liveSession = buildLiveSessionPayload(activeThreadId, workflowId, userId);
     if (!mcpHost || !liveSession) return;
-    if (!instrumentEndpoint?.liveMode || !instrumentEndpoint?.executorUrl) return;
+    if (!instrumentEndpoint?.executorUrl) return;
 
     let cancelled = false;
 
@@ -1005,7 +1009,7 @@ export function OpenAiChatKitPanel({
     return () => {
       cancelled = true;
     };
-  }, [activeThreadId, instrumentEndpoint?.executorUrl, instrumentEndpoint?.liveMode, userId, workflowId, flowContext?.deviceDriver, flowContext?.modelFamily]);
+  }, [activeThreadId, instrumentEndpoint?.executorUrl, userId, workflowId, flowContext?.deviceDriver, flowContext?.modelFamily, isLiveMode]);
 
   // ── Inject workflow context when steps change ──
   useEffect(() => {

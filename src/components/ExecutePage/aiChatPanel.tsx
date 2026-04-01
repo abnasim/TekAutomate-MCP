@@ -1672,6 +1672,7 @@ export function AiChatPanel({
             apiKey={state.openaiApiKey || state.apiKey}
             steps={steps}
             workflowId={activeChatKitWorkflowId}
+            isLiveMode={state.tekMode === 'live'}
             threadStorageKey={activeChatKitThreadKey}
             userId={activeChatKitUserId}
             historyEnabled={state.tekMode !== 'live'}
