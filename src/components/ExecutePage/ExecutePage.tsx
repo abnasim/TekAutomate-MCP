@@ -1,5 +1,5 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
-import { Code, Terminal, Copy, Pencil, Sparkles, Play, RotateCcw, RotateCw } from 'lucide-react';
+import { Code, Terminal, Copy, Pencil, Sparkles, Play, RotateCcw, RotateCw, Trash2 } from 'lucide-react';
 import { streamMcpChat } from '../../utils/ai/mcpClient';
 import { StepsListPreview } from './StepsListPreview';
 import type { StepPreview } from './StepsListPreview';
@@ -135,6 +135,61 @@ function getRunLogLineClass(line: string): string {
   return 'text-slate-700 dark:text-slate-200';
 }
 
+function describeProposalAction(action: AiAction): { title: string; detail?: string } {
+  const payload = (action.payload || {}) as Record<string, unknown>;
+  const targetId = typeof action.target_step_id === 'string' ? action.target_step_id : '';
+
+  if (action.action_type === 'replace_step') {
+    const newStep =
+      payload.new_step && typeof payload.new_step === 'object'
+        ? (payload.new_step as Record<string, unknown>)
+        : null;
+    const label = typeof newStep?.label === 'string' ? newStep.label : typeof newStep?.type === 'string' ? newStep.type : 'step';
+    return { title: `Replace step ${targetId || '(selected step)'}`, detail: `with ${label}` };
+  }
+
+  if (action.action_type === 'insert_step_after') {
+    const newStep =
+      payload.new_step && typeof payload.new_step === 'object'
+        ? (payload.new_step as Record<string, unknown>)
+        : payload.newStep && typeof payload.newStep === 'object'
+          ? (payload.newStep as Record<string, unknown>)
+          : null;
+    const label = typeof newStep?.label === 'string' ? newStep.label : typeof newStep?.type === 'string' ? newStep.type : 'step';
+    return { title: `Insert after ${targetId || 'end of flow'}`, detail: label };
+  }
+
+  if (action.action_type === 'remove_step') {
+    return { title: `Remove step ${targetId || '(unknown target)'}` };
+  }
+
+  if (action.action_type === 'set_step_param') {
+    const param = typeof payload.param === 'string' ? payload.param : 'parameter';
+    const value = Object.prototype.hasOwnProperty.call(payload, 'value') ? JSON.stringify(payload.value) : '';
+    return { title: `Update ${param} on ${targetId || '(unknown target)'}`, detail: value || undefined };
+  }
+
+  if (action.action_type === 'replace_flow') {
+    const steps = Array.isArray(payload.steps) ? payload.steps : [];
+    return { title: 'Replace entire flow', detail: `${steps.length} top-level step${steps.length === 1 ? '' : 's'}` };
+  }
+
+  if (action.action_type === 'move_step') {
+    const groupId = typeof payload.target_group_id === 'string' ? payload.target_group_id : '';
+    return { title: `Move step ${targetId || '(unknown target)'}`, detail: `into ${groupId || 'target group'}` };
+  }
+
+  if (action.action_type === 'add_error_check_after_step') {
+    return { title: `Add error check after ${targetId || '(unknown target)'}` };
+  }
+
+  if (action.action_type === 'replace_sleep_with_opc_query') {
+    return { title: `Replace sleep on ${targetId || '(unknown target)'}`, detail: 'with *OPC? wait' };
+  }
+
+  return { title: String(action.action_type).replace(/_/g, ' ') };
+}
+
 function ExecutePageContent({
   executionSource,
   setExecutionSource,
@@ -234,6 +289,16 @@ function ExecutePageContent({
     setCopiedLog(true);
     setTimeout(() => setCopiedLog(false), 2000);
   };
+
+  const clearProposalHistory = useCallback(() => {
+    setProposalHistory([]);
+    setActiveProposalId(null);
+    setPendingReapplyProposalId(null);
+    setProposalStatus(null);
+    if (centerTab === 'proposals') {
+      setCenterTab(executionSource);
+    }
+  }, [centerTab, executionSource]);
 
   const applyProposalNow = useCallback(async (proposal: WorkflowProposalState) => {
     if (!proposal?.actions?.length || !onApplyAiActions) return;
@@ -409,6 +474,15 @@ function ExecutePageContent({
               </button>
               <button
                 type="button"
+                onClick={clearProposalHistory}
+                disabled={!proposalHistory.length}
+                className="inline-flex h-9 w-9 items-center justify-center rounded-lg border border-slate-200 bg-white text-slate-600 hover:bg-slate-100 disabled:cursor-not-allowed disabled:opacity-40 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-200 dark:hover:bg-slate-800"
+                title="Clear proposal history"
+              >
+                <Trash2 size={16} />
+              </button>
+              <button
+                type="button"
                 onClick={onUndo}
                 disabled={!canUndo}
                 className="inline-flex h-9 w-9 items-center justify-center rounded-lg border border-slate-200 bg-white text-slate-600 hover:bg-slate-100 disabled:cursor-not-allowed disabled:opacity-40 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-200 dark:hover:bg-slate-800"
@@ -477,6 +551,34 @@ function ExecutePageContent({
                       )}
                     </div>
 
+                    <div className="grid gap-4 lg:grid-cols-2">
+                      <div className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm dark:border-slate-800 dark:bg-slate-900">
+                        <div className="text-sm font-semibold text-slate-900 dark:text-white">Findings</div>
+                        <div className="mt-3 space-y-2">
+                          {workflowProposal.findings.length ? workflowProposal.findings.map((item, index) => (
+                            <div key={`proposal-finding-${index}`} className="rounded-lg bg-amber-50 px-3 py-2 text-sm text-amber-900 dark:bg-amber-950/40 dark:text-amber-200">
+                              {item}
+                            </div>
+                          )) : (
+                            <div className="text-sm text-slate-500 dark:text-slate-400">No findings were included.</div>
+                          )}
+                        </div>
+                      </div>
+
+                      <div className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm dark:border-slate-800 dark:bg-slate-900">
+                        <div className="text-sm font-semibold text-slate-900 dark:text-white">Suggested Fixes</div>
+                        <div className="mt-3 space-y-2">
+                          {workflowProposal.suggestedFixes.length ? workflowProposal.suggestedFixes.map((item, index) => (
+                            <div key={`proposal-suggestion-${index}`} className="rounded-lg bg-emerald-50 px-3 py-2 text-sm text-emerald-900 dark:bg-emerald-950/40 dark:text-emerald-200">
+                              {item}
+                            </div>
+                          )) : (
+                            <div className="text-sm text-slate-500 dark:text-slate-400">No suggestions were included.</div>
+                          )}
+                        </div>
+                      </div>
+                    </div>
+
                     {proposalHistory.length > 1 && (
                       <div className="rounded-xl border border-slate-200 bg-white p-3 shadow-sm dark:border-slate-800 dark:bg-slate-900">
                         <div className="text-sm font-semibold text-slate-900 dark:text-white">Proposal History</div>
@@ -514,42 +616,24 @@ function ExecutePageContent({
                       </div>
                     )}
 
-                    <div className="grid gap-4 lg:grid-cols-2">
-                      <div className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm dark:border-slate-800 dark:bg-slate-900">
-                        <div className="text-sm font-semibold text-slate-900 dark:text-white">Findings</div>
-                        <div className="mt-3 space-y-2">
-                          {workflowProposal.findings.length ? workflowProposal.findings.map((item, index) => (
-                            <div key={`proposal-finding-${index}`} className="rounded-lg bg-amber-50 px-3 py-2 text-sm text-amber-900 dark:bg-amber-950/40 dark:text-amber-200">
-                              {item}
-                            </div>
-                          )) : (
-                            <div className="text-sm text-slate-500 dark:text-slate-400">No findings were included.</div>
-                          )}
-                        </div>
-                      </div>
-
-                      <div className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm dark:border-slate-800 dark:bg-slate-900">
-                        <div className="text-sm font-semibold text-slate-900 dark:text-white">Suggested Fixes</div>
-                        <div className="mt-3 space-y-2">
-                          {workflowProposal.suggestedFixes.length ? workflowProposal.suggestedFixes.map((item, index) => (
-                            <div key={`proposal-suggestion-${index}`} className="rounded-lg bg-emerald-50 px-3 py-2 text-sm text-emerald-900 dark:bg-emerald-950/40 dark:text-emerald-200">
-                              {item}
-                            </div>
-                          )) : (
-                            <div className="text-sm text-slate-500 dark:text-slate-400">No suggestions were included.</div>
-                          )}
-                        </div>
-                      </div>
-                    </div>
-
                     <div className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm dark:border-slate-800 dark:bg-slate-900">
                       <div className="text-sm font-semibold text-slate-900 dark:text-white">Action Log</div>
                       <div className="mt-3 space-y-2">
-                        {workflowProposal.actions.map((action, index) => (
-                          <div key={`${action.id || 'proposal-action'}-${index}`} className="rounded-lg border border-slate-200 px-3 py-2 text-sm text-slate-700 dark:border-slate-700 dark:text-slate-200">
-                            {index + 1}. {action.action_type.replace(/_/g, ' ')}
-                          </div>
-                        ))}
+                        {workflowProposal.actions.map((action, index) => {
+                          const description = describeProposalAction(action);
+                          return (
+                            <div key={`${action.id || 'proposal-action'}-${index}`} className="rounded-lg border border-slate-200 px-3 py-2 dark:border-slate-700">
+                              <div className="text-sm font-medium text-slate-800 dark:text-slate-100">
+                                {index + 1}. {description.title}
+                              </div>
+                              {description.detail ? (
+                                <div className="mt-1 text-xs text-slate-500 dark:text-slate-400">
+                                  {description.detail}
+                                </div>
+                              ) : null}
+                            </div>
+                          );
+                        })}
                       </div>
                     </div>
 
