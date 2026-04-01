@@ -37,8 +37,15 @@ export function shouldBridgeToTekAutomate(input: {
   liveMode?: unknown;
 }): boolean {
   const runtime = getRuntimeContextState();
-  const hasExecutor = typeof input.executorUrl === 'string' && input.executorUrl.trim().length > 0;
-  return !hasExecutor && runtime.instrument.connected && runtime.instrument.liveMode && runtime.liveSession.sessionKey != null;
+  const requestedLiveMode =
+    typeof input.liveMode === 'boolean'
+      ? input.liveMode
+      : runtime.instrument.liveMode;
+  return Boolean(
+    requestedLiveMode
+      && runtime.instrument.connected
+      && runtime.liveSession.sessionKey
+  );
 }
 
 export async function dispatchLiveActionThroughTekAutomate(
@@ -54,4 +61,3 @@ export async function dispatchLiveActionThroughTekAutomate(
     timeoutMs,
   });
 }
-
