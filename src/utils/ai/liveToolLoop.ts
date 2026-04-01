@@ -35,6 +35,7 @@ export interface LiveToolLoopParams {
     outputMode?: 'clean' | 'verbose';
   };
   flowContext?: {
+    backend?: string;
     modelFamily?: string;
     deviceDriver?: string;
   };
@@ -196,6 +197,57 @@ export async function executeMcpTool(
   const json = await res.json() as { ok: boolean; result: unknown; error?: string };
   if (!json.ok) throw new Error(json.error || 'Tool execution failed');
   return json.result;
+}
+
+export async function prepareFlowActionsViaMcp(params: {
+  summary?: string;
+  findings?: string[];
+  suggestedFixes?: string[];
+  actions: Record<string, unknown>[];
+  currentWorkflow?: Array<Record<string, unknown>>;
+  selectedStepId?: string | null;
+  flowContext?: {
+    backend?: string;
+    modelFamily?: string;
+    deviceDriver?: string;
+  };
+}): Promise<{
+  ok: boolean;
+  summary: string;
+  actions: Record<string, unknown>[];
+  warnings: string[];
+  errors: string[];
+  applyMode?: string;
+}> {
+  const result = await executeMcpTool(
+    'prepare_flow_actions',
+    {
+      summary: params.summary || '',
+      findings: params.findings || [],
+      suggestedFixes: params.suggestedFixes || [],
+      actions: params.actions,
+      currentWorkflow: params.currentWorkflow || [],
+      selectedStepId: params.selectedStepId || null,
+      backend: params.flowContext?.backend,
+      modelFamily: params.flowContext?.modelFamily,
+    },
+    undefined,
+    params.flowContext
+  );
+
+  const record = result && typeof result === 'object' ? (result as Record<string, unknown>) : {};
+  const data = record.data && typeof record.data === 'object'
+    ? (record.data as Record<string, unknown>)
+    : record;
+
+  return {
+    ok: data.ok !== false,
+    summary: String(data.summary || params.summary || ''),
+    actions: Array.isArray(data.actions) ? (data.actions as Record<string, unknown>[]) : [],
+    warnings: Array.isArray(data.warnings) ? data.warnings.map((item) => String(item)) : [],
+    errors: Array.isArray(data.errors) ? data.errors.map((item) => String(item)) : [],
+    applyMode: typeof data.applyMode === 'string' ? data.applyMode : undefined,
+  };
 }
 
 // ── Anthropic Direct Loop ──
@@ -563,6 +615,7 @@ export async function runLiveToolLoop(params: LiveToolLoopParams): Promise<LiveT
 // Everything else is routed internally via tek_router.
 const MCP_SLIM_TOOLS = new Set([
   'tek_router',
+  'build_or_edit_workflow',
   'send_scpi',
   'capture_screenshot',
   'discover_scpi',
@@ -615,6 +668,9 @@ export function buildLiveSystemPrompt(instrument?: {
     'You have 5 tools. Use them — do NOT guess SCPI commands from memory.',
     '',
     '### Tool Decision Tree',
+    '0. **Need to build, edit, or fix a workflow?** -> build_or_edit_workflow',
+    '   {request:"build a frequency and amplitude measurement workflow for CH1"}',
+    '   Use this for straightforward workflow requests instead of narrating multi-step search/verify reasoning.',
     '1. **Know the exact SCPI header?** → tek_router: "get command by header"',
     '   {action:"search_exec", query:"get command by header", args:{header:"PLOT:PLOT<x>:TYPe"}}',
     '2. **Need to find a command?** → tek_router: "search scpi commands"',

@@ -25,6 +25,8 @@ import { validateDeviceContext } from './validateDeviceContext';
 import { verifyScpiCommands } from './verifyScpiCommands';
 import { browseScpiCommands } from './browseScpiCommands';
 import { discoverScpi } from './discoverScpi';
+import { buildOrEditWorkflow } from './buildOrEditWorkflow';
+import { prepareFlowActions } from './prepareFlowActions';
 import { GROUP_NAMES, COMMAND_GROUPS } from '../core/commandGroups';
 import { TEK_ROUTER_TOOL_DEFINITION } from '../core/toolRouter';
 
@@ -80,6 +82,8 @@ export const TOOL_HANDLERS = {
   verify_scpi_commands: verifyScpiCommands,
   browse_scpi_commands: browseScpiCommands,
   search_tm_devices: searchTmDevices,
+  build_or_edit_workflow: buildOrEditWorkflow,
+  prepare_flow_actions: prepareFlowActions,
   retrieve_rag_chunks: retrieveRagChunks,
   search_known_failures: searchKnownFailures,
   get_template_examples: getTemplateExamples,
@@ -311,6 +315,82 @@ export function getToolDefinitions() {
           limit: { type: 'number', description: 'Max results to return (default 10).' },
         },
         required: ['query'],
+        additionalProperties: false,
+      },
+    },
+    {
+      name: 'build_or_edit_workflow',
+      description:
+        'Build or edit a TekAutomate workflow in one smart call. ' +
+        'Use this for straightforward build/change/fix requests instead of chaining search, lookup, and verify tools manually. ' +
+        'Pass currentWorkflow and selectedStepId when editing an existing flow so MCP can target the right step(s).',
+      parameters: {
+        type: 'object',
+        properties: {
+          request: { type: 'string', description: 'User request in plain English.' },
+          currentWorkflow: {
+            type: 'array',
+            items: { type: 'object', additionalProperties: true },
+            description: 'Optional current workflow steps when editing an existing flow.',
+          },
+          selectedStepId: {
+            type: ['string', 'null'],
+            description: 'Optional selected step ID to bias targeted edits.',
+          },
+          buildNew: {
+            type: 'boolean',
+            description: 'Optional explicit build mode. True for fresh flow, false for incremental edits.',
+          },
+          instrumentInfo: {
+            type: 'object',
+            description: 'Optional instrument/backend context.',
+            properties: {
+              backend: { type: 'string' },
+              modelFamily: { type: 'string' },
+              deviceType: { type: 'string' },
+              deviceDriver: { type: 'string' },
+              alias: { type: 'string' },
+              instrumentMap: {
+                type: 'array',
+                items: { type: 'object', additionalProperties: true },
+              },
+            },
+            additionalProperties: true,
+          },
+        },
+        required: ['request'],
+        additionalProperties: false,
+      },
+    },
+    {
+      name: 'prepare_flow_actions',
+      description:
+        'Validate, normalize, and target ACTIONS_JSON before the frontend applies it. ' +
+        'Use this right before Apply to Flow or auto-apply.',
+      parameters: {
+        type: 'object',
+        properties: {
+          summary: { type: 'string', description: 'Optional short human summary for the proposal.' },
+          findings: { type: 'array', items: { type: 'string' }, description: 'Optional findings list.' },
+          suggestedFixes: { type: 'array', items: { type: 'string' }, description: 'Optional suggestions list.' },
+          actions: {
+            type: 'array',
+            items: { type: 'object', additionalProperties: true },
+            description: 'Proposed actions from ACTIONS_JSON.',
+          },
+          currentWorkflow: {
+            type: 'array',
+            items: { type: 'object', additionalProperties: true },
+            description: 'Current workflow steps for validation and targeting.',
+          },
+          selectedStepId: {
+            type: ['string', 'null'],
+            description: 'Currently selected step ID, used as a fallback target for incremental inserts.',
+          },
+          backend: { type: 'string', description: 'Optional backend hint.' },
+          modelFamily: { type: 'string', description: 'Optional model family hint.' },
+        },
+        required: ['actions'],
         additionalProperties: false,
       },
     },
@@ -723,6 +803,7 @@ export function getToolDefinitions() {
 const MCP_EXPOSED_TOOLS = new Set([
   // Gateway — advanced routing, build, save/learn, materialize, batch ops
   'tek_router',
+  'build_or_edit_workflow',
   // Direct knowledge tools — simple flat schemas, easy for AI
   'search_scpi',             // { query: "edge trigger", limit?: 10 }
   'smart_scpi_lookup',       // { query: "how do I measure voltage on CH1" }

@@ -15,6 +15,7 @@ import {
   type McpChatAttachment,
 } from '../../utils/ai/mcpClient';
 import { OpenAiChatKitPanel } from './OpenAiChatKitPanel';
+import { prepareFlowActionsViaMcp } from '../../utils/ai/liveToolLoop';
 
 interface AiChatPanelProps {
   steps: StepPreview[];
@@ -31,6 +32,8 @@ interface AiChatPanelProps {
     deviceDriver?: string;
     visaBackend?: string;
     alias?: string;
+    validationErrors?: string[];
+    selectedStep?: StepPreview | null;
     instrumentMap?: Array<{
       alias: string;
       backend: string;
@@ -163,6 +166,43 @@ export function AiChatPanel({
   const showApplyStatus = (message: string) => {
     setApplyStatus(message);
     setApplyStatusAt(Date.now());
+  };
+
+  const prepareAndApplyAiActions = async (
+    actions: AiAction[],
+    summary?: string,
+    findings?: string[],
+    suggestedFixes?: string[]
+  ): Promise<string> => {
+    if (!actions.length) return 'No actions to apply.';
+    if (!onApplyAiActions) return 'Apply action handler is unavailable in this view.';
+
+    const prepared = await prepareFlowActionsViaMcp({
+      summary,
+      findings,
+      suggestedFixes,
+      actions: actions as unknown as Record<string, unknown>[],
+      currentWorkflow: steps as unknown as Array<Record<string, unknown>>,
+      selectedStepId: flowContext?.selectedStep?.id || null,
+      flowContext: {
+        backend: flowContext?.backend,
+        modelFamily: flowContext?.modelFamily,
+        deviceDriver: flowContext?.deviceDriver,
+      },
+    });
+
+    if (prepared.errors.length) {
+      return prepared.errors[0];
+    }
+    if (!prepared.actions.length) {
+      return 'Prepared actions were empty, so nothing was applied.';
+    }
+
+    const result = await onApplyAiActions(prepared.actions as unknown as AiAction[]);
+    if (result.changed && result.applied > 0) {
+      return summary || `Applied ${result.applied} action(s).`;
+    }
+    return 'No flow changes were applied. The prepared actions did not change the current flow.';
   };
 
   const downloadPythonSnippet = (codeText: string) => {
@@ -872,7 +912,7 @@ export function AiChatPanel({
                         type="button"
                         onClick={() => {
                           const queryCmd = card.query!.replace(/\s*<[^>]+>/g, '').trim();
-                          void onApplyAiActions?.([{
+                          void prepareAndApplyAiActions([{
                             id: `scpi-q-${idx}-${Date.now()}`,
                             action_type: 'insert_step_after',
                             target_step_id: undefined,
@@ -881,8 +921,9 @@ export function AiChatPanel({
                             payload: {
                               newStep: { type: 'query', label: card.header + '?', params: { command: queryCmd, saveAs: 'result' } },
                             },
-                          }]);
-                          showApplyStatus(`Added query: ${card.header}`);
+                          }]).then(showApplyStatus).catch((err) => {
+                            showApplyStatus(err instanceof Error ? err.message : 'Failed to add query.');
+                          });
                         }}
                         className="rounded-md border border-cyan-200 dark:border-cyan-800 bg-cyan-50 dark:bg-cyan-950/30 px-2 py-1 text-[10px] font-medium text-cyan-700 dark:text-cyan-300 hover:bg-cyan-100 dark:hover:bg-cyan-900/40 transition-colors"
                       >
@@ -893,7 +934,7 @@ export function AiChatPanel({
                       <button
                         type="button"
                         onClick={() => {
-                          void onApplyAiActions?.([{
+                          void prepareAndApplyAiActions([{
                             id: `scpi-w-${idx}-${Date.now()}`,
                             action_type: 'insert_step_after',
                             target_step_id: undefined,
@@ -902,8 +943,9 @@ export function AiChatPanel({
                             payload: {
                               newStep: { type: 'write', label: card.header, params: { command: card.example } },
                             },
-                          }]);
-                          showApplyStatus(`Added write: ${card.header}`);
+                          }]).then(showApplyStatus).catch((err) => {
+                            showApplyStatus(err instanceof Error ? err.message : 'Failed to add write.');
+                          });
                         }}
                         className="rounded-md border border-violet-200 dark:border-violet-800 bg-violet-50 dark:bg-violet-950/30 px-2 py-1 text-[10px] font-medium text-violet-700 dark:text-violet-300 hover:bg-violet-100 dark:hover:bg-violet-900/40 transition-colors"
                       >
@@ -1691,9 +1733,12 @@ export function AiChatPanel({
             flowContext={flowContext}
             instrumentEndpoint={instrumentEndpoint}
             onActionsDetected={(actions, summary) => {
-              if (actions.length && onApplyAiActions) {
-                void onApplyAiActions(actions);
-                showApplyStatus(summary || `Applied ${actions.length} action(s) from ChatKit.`);
+              if (actions.length) {
+                void prepareAndApplyAiActions(actions, summary)
+                  .then(showApplyStatus)
+                  .catch((err) => {
+                    showApplyStatus(err instanceof Error ? err.message : 'Failed to apply ChatKit actions.');
+                  });
               }
             }}
             className="flex-1 min-h-0"

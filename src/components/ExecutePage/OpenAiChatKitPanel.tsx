@@ -33,7 +33,7 @@ interface OpenAiChatKitPanelProps {
     modelFamily?: string;
     deviceDriver?: string;
     validationErrors?: unknown[];
-    selectedStep?: { id?: string };
+    selectedStep?: { id?: string } | null;
   };
   instrumentEndpoint?: {
     executorUrl: string;
