@@ -66,6 +66,7 @@ interface WorkflowProposalState extends ParsedActionsPreview {
 
 const EXECUTE_PAGE_PROPOSAL_STORAGE = 'tekautomate.execute.proposal.history';
 const EXECUTE_PAGE_TAB_STORAGE = 'tekautomate.execute.center_tab';
+const EXECUTE_PAGE_AUTO_APPLY_STORAGE = 'tekautomate.execute.proposals.auto_apply';
 
 function loadStoredWorkflowProposals(): WorkflowProposalState[] {
   if (typeof window === 'undefined') return [];
@@ -102,6 +103,15 @@ function loadStoredCenterTab(defaultTab: ExecutionSource): ExecutionSource | 'pr
       : defaultTab;
   } catch {
     return defaultTab;
+  }
+}
+
+function loadStoredAutoApply(): boolean {
+  if (typeof window === 'undefined') return false;
+  try {
+    return window.localStorage.getItem(EXECUTE_PAGE_AUTO_APPLY_STORAGE) === 'true';
+  } catch {
+    return false;
   }
 }
 
@@ -164,6 +174,7 @@ function ExecutePageContent({
   const [proposalStatus, setProposalStatus] = useState<string | null>(null);
   const [workspaceRevision, setWorkspaceRevision] = useState(0);
   const [pendingReapplyProposalId, setPendingReapplyProposalId] = useState<string | null>(null);
+  const [autoApplyProposals, setAutoApplyProposals] = useState<boolean>(() => loadStoredAutoApply());
   const workflowProposal = useMemo(
     () => proposalHistory.find((proposal) => proposal.id === activeProposalId) || proposalHistory[0] || null,
     [activeProposalId, proposalHistory]
@@ -196,6 +207,15 @@ function ExecutePageContent({
     }
   }, [proposalHistory]);
 
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    try {
+      window.localStorage.setItem(EXECUTE_PAGE_AUTO_APPLY_STORAGE, autoApplyProposals ? 'true' : 'false');
+    } catch {
+      // Ignore storage failures.
+    }
+  }, [autoApplyProposals]);
+
   const runLogLines = useMemo(
     () => (runLog || 'Logs will appear here when you run the flow.').split(/\r?\n/),
     [runLog]
@@ -214,28 +234,6 @@ function ExecutePageContent({
     setCopiedLog(true);
     setTimeout(() => setCopiedLog(false), 2000);
   };
-
-  const handleProposalDetected = useCallback((proposal: ParsedActionsPreview | null) => {
-    if (!proposal) {
-      setProposalStatus(null);
-      return;
-    }
-    const existingMatch = proposalHistory.find((item) => item.rawJson === proposal.rawJson);
-    const nextProposal: WorkflowProposalState = {
-      ...proposal,
-      id: existingMatch?.id || `proposal_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`,
-      receivedAt: Date.now(),
-      workspaceRevisionAtReceipt: workspaceRevision,
-      appliedAtRevision: existingMatch?.appliedAtRevision,
-    };
-    setProposalHistory((current) => {
-      const deduped = current.filter((item) => item.rawJson !== nextProposal.rawJson);
-      return [nextProposal, ...deduped].slice(0, 20);
-    });
-    setActiveProposalId(nextProposal.id);
-    setProposalStatus(null);
-    setCenterTab('proposals');
-  }, [proposalHistory, workspaceRevision]);
 
   const applyProposalNow = useCallback(async (proposal: WorkflowProposalState) => {
     if (!proposal?.actions?.length || !onApplyAiActions) return;
@@ -270,6 +268,36 @@ function ExecutePageContent({
       setApplyingProposal(false);
     }
   }, [onApplyAiActions, workspaceRevision]);
+
+  const handleProposalDetected = useCallback((proposal: ParsedActionsPreview | null) => {
+    if (!proposal) {
+      setProposalStatus(null);
+      return;
+    }
+    const existingMatch = proposalHistory.find((item) => item.rawJson === proposal.rawJson);
+    const nextProposal: WorkflowProposalState = {
+      ...proposal,
+      id: existingMatch?.id || `proposal_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`,
+      receivedAt: Date.now(),
+      workspaceRevisionAtReceipt: workspaceRevision,
+      appliedAtRevision: existingMatch?.appliedAtRevision,
+    };
+    setProposalHistory((current) => {
+      const deduped = current.filter((item) => item.rawJson !== nextProposal.rawJson);
+      return [nextProposal, ...deduped].slice(0, 20);
+    });
+    setActiveProposalId(nextProposal.id);
+    setProposalStatus(null);
+    if (autoApplyProposals && onApplyAiActions) {
+      if (typeof existingMatch?.appliedAtRevision === 'number') {
+        setProposalStatus('This proposal was already applied, so auto-apply skipped it to avoid stacking duplicate steps.');
+        return;
+      }
+      void applyProposalNow(nextProposal);
+      return;
+    }
+    setCenterTab('proposals');
+  }, [applyProposalNow, autoApplyProposals, onApplyAiActions, proposalHistory, workspaceRevision]);
 
   const handleApplyProposal = useCallback(async () => {
     if (!workflowProposal?.actions?.length || !onApplyAiActions) return;
@@ -366,6 +394,19 @@ function ExecutePageContent({
               </button>
             </div>
             <div className="flex items-center gap-2 py-2">
+              <button
+                type="button"
+                onClick={() => setAutoApplyProposals((value) => !value)}
+                className={`inline-flex items-center gap-2 rounded-full border px-3 py-1.5 text-xs font-semibold transition ${
+                  autoApplyProposals
+                    ? 'border-cyan-400/50 bg-cyan-500/15 text-cyan-700 dark:border-cyan-500/50 dark:text-cyan-300'
+                    : 'border-slate-200 bg-white text-slate-600 hover:bg-slate-100 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-300 dark:hover:bg-slate-800'
+                }`}
+                title={autoApplyProposals ? 'Auto-apply new proposals is on' : 'Auto-apply new proposals is off'}
+              >
+                <Sparkles size={14} />
+                Auto Apply
+              </button>
               <button
                 type="button"
                 onClick={onUndo}
