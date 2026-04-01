@@ -1,6 +1,6 @@
-import React, { useMemo, useState } from 'react';
-import { Code, Terminal, Copy, Pencil, Sparkles } from 'lucide-react';
-import { streamMcpChat, resolveMcpHost } from '../../utils/ai/mcpClient';
+import React, { useCallback, useEffect, useMemo, useState } from 'react';
+import { Code, Terminal, Copy, Pencil, Sparkles, Play, RotateCcw, RotateCw } from 'lucide-react';
+import { streamMcpChat } from '../../utils/ai/mcpClient';
 import { StepsListPreview } from './StepsListPreview';
 import type { StepPreview } from './StepsListPreview';
 import { PythonCodeEditor } from '../PythonCodeEditor';
@@ -8,6 +8,8 @@ import type { AiAction } from '../../utils/aiActions';
 import type { ExecutionAuditReport } from '../../utils/executionAudit';
 import { AiChatProvider } from './aiChatContext';
 import { AiChatPanel } from './aiChatPanel';
+import { prepareFlowActionsViaMcp } from '../../utils/ai/liveToolLoop';
+import type { ParsedActionsPreview } from './OpenAiChatKitPanel';
 
 export type ExecutionSource = 'steps' | 'blockly' | 'live';
 
@@ -30,6 +32,8 @@ export interface ExecutePageProps {
     deviceDriver?: string;
     visaBackend?: string;
     alias?: string;
+    validationErrors?: string[];
+    selectedStep?: StepPreview | null;
     instrumentMap?: Array<{
       alias: string;
       backend: string;
@@ -41,6 +45,10 @@ export interface ExecutePageProps {
     }>;
   };
   onRun: () => void;
+  onUndo?: () => void;
+  onRedo?: () => void;
+  canUndo?: boolean;
+  canRedo?: boolean;
   onBack: () => void;
   lastAuditReport?: ExecutionAuditReport | null;
   onClearRunLog?: () => void;
@@ -48,6 +56,10 @@ export interface ExecutePageProps {
   onLiveScreenshot?: (screenshot: { dataUrl: string; mimeType: string; sizeBytes: number; capturedAt: string }) => void;
   blocklyContent: React.ReactNode;
   liveModeContent: React.ReactNode;
+}
+
+interface WorkflowProposalState extends ParsedActionsPreview {
+  receivedAt: number;
 }
 
 function getRunLogLineClass(line: string): string {
@@ -82,6 +94,10 @@ function ExecutePageContent({
   chatContextAttachments,
   flowContext,
   onRun,
+  onUndo,
+  onRedo,
+  canUndo = false,
+  canRedo = false,
   onBack,
   lastAuditReport,
   onClearRunLog,
@@ -90,6 +106,7 @@ function ExecutePageContent({
   blocklyContent,
   liveModeContent,
 }: ExecutePageProps) {
+  const [centerTab, setCenterTab] = useState<ExecutionSource | 'proposals'>(executionSource);
   const [rightTab, setRightTab] = useState<'code' | 'logs'>('logs');
   const [rightPanelOpen, setRightPanelOpen] = useState(true);
   const [copied, setCopied] = useState(false);
@@ -98,9 +115,14 @@ function ExecutePageContent({
   const [editorCode, setEditorCode] = useState('');
   const [aiCheckResult, setAiCheckResult] = useState('');
   const [aiCheckLoading, setAiCheckLoading] = useState(false);
-  // Intentionally unused in this compact layout; execution controls are handled elsewhere.
-  void onRun;
+  const [workflowProposal, setWorkflowProposal] = useState<WorkflowProposalState | null>(null);
+  const [applyingProposal, setApplyingProposal] = useState(false);
+  const [proposalStatus, setProposalStatus] = useState<string | null>(null);
   void onBack;
+
+  useEffect(() => {
+    setCenterTab(executionSource);
+  }, [executionSource]);
 
   const runLogLines = useMemo(
     () => (runLog || 'Logs will appear here when you run the flow.').split(/\r?\n/),
@@ -121,6 +143,56 @@ function ExecutePageContent({
     setTimeout(() => setCopiedLog(false), 2000);
   };
 
+  const handleProposalDetected = useCallback((proposal: ParsedActionsPreview | null) => {
+    if (!proposal) {
+      setWorkflowProposal(null);
+      setProposalStatus(null);
+      return;
+    }
+    setWorkflowProposal({ ...proposal, receivedAt: Date.now() });
+    setProposalStatus(null);
+    setCenterTab('proposals');
+  }, []);
+
+  const handleApplyProposal = useCallback(async () => {
+    if (!workflowProposal?.actions?.length || !onApplyAiActions) return;
+    setApplyingProposal(true);
+    setProposalStatus(null);
+    try {
+      const prepared = await prepareFlowActionsViaMcp({
+        summary: workflowProposal.summary,
+        findings: workflowProposal.findings,
+        suggestedFixes: workflowProposal.suggestedFixes,
+        actions: workflowProposal.actions as unknown as Record<string, unknown>[],
+        currentWorkflow: steps as unknown as Array<Record<string, unknown>>,
+        selectedStepId: flowContext?.selectedStep?.id || null,
+        flowContext: {
+          backend: flowContext?.backend,
+          modelFamily: flowContext?.modelFamily,
+          deviceDriver: flowContext?.deviceDriver,
+        },
+      });
+      if (prepared.errors.length) {
+        setProposalStatus(prepared.errors[0]);
+        return;
+      }
+      if (!prepared.actions.length) {
+        setProposalStatus('Prepared actions were empty, so nothing was applied.');
+        return;
+      }
+      const result = await onApplyAiActions(prepared.actions as unknown as AiAction[]);
+      if (result.changed && result.applied > 0) {
+        setProposalStatus(workflowProposal.summary || `Applied ${result.applied} action(s).`);
+      } else {
+        setProposalStatus('No flow changes were applied. The prepared actions did not change the current flow.');
+      }
+    } catch (err) {
+      setProposalStatus(err instanceof Error ? err.message : 'Failed to apply workflow proposal.');
+    } finally {
+      setApplyingProposal(false);
+    }
+  }, [flowContext?.backend, flowContext?.deviceDriver, flowContext?.modelFamily, flowContext?.selectedStep?.id, onApplyAiActions, steps, workflowProposal]);
+
   return (
     <div className="h-full flex flex-col bg-slate-100 text-slate-900 dark:bg-slate-950 dark:text-white">
       <div className="flex-1 min-h-0 flex">
@@ -135,45 +207,196 @@ function ExecutePageContent({
           instrumentEndpoint={instrumentEndpoint}
           contextAttachments={chatContextAttachments}
           onApplyAiActions={onApplyAiActions}
+          onWorkflowProposal={handleProposalDetected}
           onLiveScreenshot={onLiveScreenshot}
           onRun={onRun}
         />
 
         <main className="flex-1 flex flex-col min-w-0 bg-slate-100 dark:bg-slate-950">
-          <div className="flex border-b border-slate-200 dark:border-slate-800/50">
-            <button
-              onClick={() => setExecutionSource('steps')}
-              className={`px-4 py-3 text-sm font-medium ${
-                executionSource === 'steps'
-                  ? 'border-b-2 border-purple-500 text-slate-900 bg-slate-200/70 dark:text-white dark:bg-slate-800/30'
-                  : 'text-slate-500 hover:text-slate-900 dark:text-slate-400 dark:hover:text-white'
-              }`}
-            >
-              Steps
-            </button>
-            <button
-              onClick={() => setExecutionSource('blockly')}
-              className={`px-4 py-3 text-sm font-medium ${
-                executionSource === 'blockly'
-                  ? 'border-b-2 border-purple-500 text-slate-900 bg-slate-200/70 dark:text-white dark:bg-slate-800/30'
-                  : 'text-slate-500 hover:text-slate-900 dark:text-slate-400 dark:hover:text-white'
-              }`}
-            >
-              Blockly
-            </button>
-            <button
-              onClick={() => setExecutionSource('live')}
-              className={`px-4 py-3 text-sm font-medium ${
-                executionSource === 'live'
-                  ? 'border-b-2 border-purple-500 text-slate-900 bg-slate-200/70 dark:text-white dark:bg-slate-800/30'
-                  : 'text-slate-500 hover:text-slate-900 dark:text-slate-400 dark:hover:text-white'
-              }`}
-            >
-              Live
-            </button>
+          <div className="flex items-center justify-between gap-4 border-b border-slate-200 dark:border-slate-800/50 px-2">
+            <div className="flex min-w-0">
+              <button
+                onClick={() => {
+                  setExecutionSource('steps');
+                  setCenterTab('steps');
+                }}
+                className={`px-4 py-3 text-sm font-medium ${
+                  centerTab === 'steps'
+                    ? 'border-b-2 border-purple-500 text-slate-900 bg-slate-200/70 dark:text-white dark:bg-slate-800/30'
+                    : 'text-slate-500 hover:text-slate-900 dark:text-slate-400 dark:hover:text-white'
+                }`}
+              >
+                Steps
+              </button>
+              <button
+                onClick={() => {
+                  setExecutionSource('blockly');
+                  setCenterTab('blockly');
+                }}
+                className={`px-4 py-3 text-sm font-medium ${
+                  centerTab === 'blockly'
+                    ? 'border-b-2 border-purple-500 text-slate-900 bg-slate-200/70 dark:text-white dark:bg-slate-800/30'
+                    : 'text-slate-500 hover:text-slate-900 dark:text-slate-400 dark:hover:text-white'
+                }`}
+              >
+                Blockly
+              </button>
+              <button
+                onClick={() => {
+                  setExecutionSource('live');
+                  setCenterTab('live');
+                }}
+                className={`px-4 py-3 text-sm font-medium ${
+                  centerTab === 'live'
+                    ? 'border-b-2 border-purple-500 text-slate-900 bg-slate-200/70 dark:text-white dark:bg-slate-800/30'
+                    : 'text-slate-500 hover:text-slate-900 dark:text-slate-400 dark:hover:text-white'
+                }`}
+              >
+                Live
+              </button>
+              <button
+                onClick={() => setCenterTab('proposals')}
+                className={`px-4 py-3 text-sm font-medium ${
+                  centerTab === 'proposals'
+                    ? 'border-b-2 border-purple-500 text-slate-900 bg-slate-200/70 dark:text-white dark:bg-slate-800/30'
+                    : 'text-slate-500 hover:text-slate-900 dark:text-slate-400 dark:hover:text-white'
+                }`}
+              >
+                <span className="inline-flex items-center gap-2">
+                  Proposals
+                  {workflowProposal?.actions?.length ? (
+                    <span className="rounded-full bg-cyan-500/15 px-2 py-0.5 text-[10px] font-semibold text-cyan-700 dark:text-cyan-300">
+                      {workflowProposal.actions.length}
+                    </span>
+                  ) : null}
+                </span>
+              </button>
+            </div>
+            <div className="flex items-center gap-2 py-2">
+              <button
+                type="button"
+                onClick={onUndo}
+                disabled={!canUndo}
+                className="inline-flex h-9 w-9 items-center justify-center rounded-lg border border-slate-200 bg-white text-slate-600 hover:bg-slate-100 disabled:cursor-not-allowed disabled:opacity-40 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-200 dark:hover:bg-slate-800"
+                title="Undo"
+              >
+                <RotateCcw size={16} />
+              </button>
+              <button
+                type="button"
+                onClick={onRedo}
+                disabled={!canRedo}
+                className="inline-flex h-9 w-9 items-center justify-center rounded-lg border border-slate-200 bg-white text-slate-600 hover:bg-slate-100 disabled:cursor-not-allowed disabled:opacity-40 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-200 dark:hover:bg-slate-800"
+                title="Redo"
+              >
+                <RotateCw size={16} />
+              </button>
+              <button
+                type="button"
+                onClick={() => { void handleApplyProposal(); }}
+                disabled={!workflowProposal?.actions?.length || applyingProposal || !onApplyAiActions}
+                className="inline-flex items-center gap-2 rounded-lg border border-emerald-400/40 bg-emerald-500/15 px-3 py-2 text-sm font-semibold text-emerald-700 hover:bg-emerald-500/20 disabled:cursor-not-allowed disabled:opacity-40 dark:border-emerald-500/40 dark:text-emerald-300"
+                title="Apply the latest workflow proposal"
+              >
+                <Sparkles size={16} />
+                {applyingProposal ? 'Applying...' : 'Apply'}
+              </button>
+              <button
+                type="button"
+                onClick={onRun}
+                disabled={runStatus === 'running' || runStatus === 'connecting'}
+                className="inline-flex items-center gap-2 rounded-lg bg-gradient-to-r from-violet-600 to-cyan-600 px-3 py-2 text-sm font-semibold text-white disabled:cursor-not-allowed disabled:opacity-40"
+                title="Run on scope"
+              >
+                <Play size={16} />
+                {runStatus === 'running' || runStatus === 'connecting' ? 'Running...' : 'Run on Scope'}
+              </button>
+            </div>
           </div>
           <div className="flex-1 min-h-0 overflow-hidden">
-            {executionSource === 'steps' ? (
+            {centerTab === 'proposals' ? (
+              <div className="h-full overflow-auto bg-slate-100/70 p-4 dark:bg-slate-950/60">
+                {workflowProposal ? (
+                  <div className="mx-auto flex max-w-4xl flex-col gap-4">
+                    <div className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm dark:border-slate-800 dark:bg-slate-900">
+                      <div className="text-[11px] font-semibold uppercase tracking-[0.16em] text-slate-500 dark:text-slate-400">
+                        Latest Workflow Proposal
+                      </div>
+                      <div className="mt-2 text-lg font-semibold text-slate-900 dark:text-white">
+                        {workflowProposal.summary || 'Untitled workflow proposal'}
+                      </div>
+                      <div className="mt-3 flex flex-wrap gap-2">
+                        <span className="rounded-full bg-cyan-500/15 px-3 py-1 text-xs font-semibold text-cyan-700 dark:text-cyan-300">
+                          {workflowProposal.actions.length} {workflowProposal.actions.length === 1 ? 'change' : 'changes'}
+                        </span>
+                        <span className="rounded-full bg-amber-500/15 px-3 py-1 text-xs font-semibold text-amber-700 dark:text-amber-300">
+                          {workflowProposal.findings.length} findings
+                        </span>
+                        <span className="rounded-full bg-emerald-500/15 px-3 py-1 text-xs font-semibold text-emerald-700 dark:text-emerald-300">
+                          {workflowProposal.suggestedFixes.length} suggestions
+                        </span>
+                      </div>
+                      {proposalStatus && (
+                        <div className="mt-4 rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-sm text-slate-700 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-200">
+                          {proposalStatus}
+                        </div>
+                      )}
+                    </div>
+
+                    <div className="grid gap-4 lg:grid-cols-2">
+                      <div className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm dark:border-slate-800 dark:bg-slate-900">
+                        <div className="text-sm font-semibold text-slate-900 dark:text-white">Findings</div>
+                        <div className="mt-3 space-y-2">
+                          {workflowProposal.findings.length ? workflowProposal.findings.map((item, index) => (
+                            <div key={`proposal-finding-${index}`} className="rounded-lg bg-amber-50 px-3 py-2 text-sm text-amber-900 dark:bg-amber-950/40 dark:text-amber-200">
+                              {item}
+                            </div>
+                          )) : (
+                            <div className="text-sm text-slate-500 dark:text-slate-400">No findings were included.</div>
+                          )}
+                        </div>
+                      </div>
+
+                      <div className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm dark:border-slate-800 dark:bg-slate-900">
+                        <div className="text-sm font-semibold text-slate-900 dark:text-white">Suggested Fixes</div>
+                        <div className="mt-3 space-y-2">
+                          {workflowProposal.suggestedFixes.length ? workflowProposal.suggestedFixes.map((item, index) => (
+                            <div key={`proposal-suggestion-${index}`} className="rounded-lg bg-emerald-50 px-3 py-2 text-sm text-emerald-900 dark:bg-emerald-950/40 dark:text-emerald-200">
+                              {item}
+                            </div>
+                          )) : (
+                            <div className="text-sm text-slate-500 dark:text-slate-400">No suggestions were included.</div>
+                          )}
+                        </div>
+                      </div>
+                    </div>
+
+                    <div className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm dark:border-slate-800 dark:bg-slate-900">
+                      <div className="text-sm font-semibold text-slate-900 dark:text-white">Action Log</div>
+                      <div className="mt-3 space-y-2">
+                        {workflowProposal.actions.map((action, index) => (
+                          <div key={`${action.id || 'proposal-action'}-${index}`} className="rounded-lg border border-slate-200 px-3 py-2 text-sm text-slate-700 dark:border-slate-700 dark:text-slate-200">
+                            {index + 1}. {action.action_type.replace(/_/g, ' ')}
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+
+                    <div className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm dark:border-slate-800 dark:bg-slate-900">
+                      <div className="text-sm font-semibold text-slate-900 dark:text-white">Raw Payload</div>
+                      <pre className="mt-3 overflow-x-auto rounded-lg bg-slate-950 p-4 text-xs leading-6 text-slate-100">
+                        <code>{workflowProposal.rawJson}</code>
+                      </pre>
+                    </div>
+                  </div>
+                ) : (
+                  <div className="flex h-full flex-col items-center justify-center p-8 text-center text-slate-500 dark:text-slate-400">
+                    <p className="text-sm">No workflow proposals yet.</p>
+                    <p className="mt-2 text-xs">When MCP stages a proposal, it will appear here with findings, suggestions, and the raw payload.</p>
+                  </div>
+                )}
+              </div>
+            ) : executionSource === 'steps' ? (
               <StepsListPreview steps={steps} />
             ) : executionSource === 'blockly' ? (
               <div className="h-full text-slate-900 dark:text-slate-100">{blocklyContent}</div>

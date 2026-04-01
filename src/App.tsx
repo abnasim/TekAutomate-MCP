@@ -9512,6 +9512,10 @@ Keep under 120 words. No headings. Bullets only. Stay on this command. Do not de
               })(),
             }}
             onRun={() => runOnScope(true)}
+            onUndo={undo}
+            onRedo={redo}
+            canUndo={past.length > 0}
+            canRedo={future.length > 0}
             lastAuditReport={lastExecutionAudit}
             onClearRunLog={() => setRunWindowLog('')}
             onApplyAiActions={applyAiActionsAndRerun}

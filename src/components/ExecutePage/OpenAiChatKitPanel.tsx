@@ -43,6 +43,7 @@ interface OpenAiChatKitPanelProps {
     liveMode?: boolean;
   } | null;
   onActionsDetected?: (actions: AiAction[], summary?: string) => void | Promise<unknown>;
+  onProposalDetected?: (proposal: ParsedActionsPreview | null) => void;
   onThreadChange?: (threadId: string) => void;
   className?: string;
 }
@@ -93,7 +94,7 @@ function extractClientSecret(payload: unknown): string | null {
   return null;
 }
 
-interface ParsedActionsPreview {
+export interface ParsedActionsPreview {
   summary: string;
   findings: string[];
   suggestedFixes: string[];
@@ -259,15 +260,16 @@ export function OpenAiChatKitPanel({
   flowContext,
   instrumentEndpoint,
   onActionsDetected,
+  onProposalDetected,
   onThreadChange,
   className,
 }: OpenAiChatKitPanelProps) {
   const [initError, setInitError] = useState<string | null>(null);
   const [activeThreadId, setActiveThreadId] = useState<string | null>(null);
-  const [parsedPreview, setParsedPreview] = useState<ParsedActionsPreview | null>(null);
-  const [applyingPreview, setApplyingPreview] = useState(false);
   const onActionsRef = useRef(onActionsDetected);
   onActionsRef.current = onActionsDetected;
+  const onProposalDetectedRef = useRef(onProposalDetected);
+  onProposalDetectedRef.current = onProposalDetected;
   const stepsRef = useRef(steps);
   stepsRef.current = steps;
   const flowContextRef = useRef(flowContext);
@@ -316,7 +318,7 @@ export function OpenAiChatKitPanel({
     const fingerprint = `${preview.summary}\n${preview.rawJson}`;
     if (fingerprint === lastParsedJsonRef.current) return true;
     lastParsedJsonRef.current = fingerprint;
-    setParsedPreview(preview);
+    onProposalDetectedRef.current?.(preview);
     if (autoApplyRef.current) {
       onActionsRef.current?.(preview.actions, preview.summary);
     }
@@ -394,7 +396,7 @@ export function OpenAiChatKitPanel({
     const fingerprint = `${preview.summary}\n${preview.rawJson}`;
     if (fingerprint === lastParsedJsonRef.current) return true;
     lastParsedJsonRef.current = fingerprint;
-    setParsedPreview(preview);
+    onProposalDetectedRef.current?.(preview);
     scrubRenderedActionsJson();
     if (autoApplyRef.current) {
       onActionsRef.current?.(preview.actions, preview.summary);
@@ -501,18 +503,6 @@ export function OpenAiChatKitPanel({
     }
   }, []);
 
-  const applyParsedPreview = useCallback(async () => {
-    if (!parsedPreview?.actions?.length) return;
-    setApplyingPreview(true);
-    try {
-      await Promise.resolve(onActionsRef.current?.(parsedPreview.actions, parsedPreview.summary));
-    } catch (err) {
-      console.error('[ChatKit] Failed to apply parsed preview:', err);
-    } finally {
-      setApplyingPreview(false);
-    }
-  }, [parsedPreview]);
-
   // ── Session creation ──
   // Calls OpenAI ChatKit Sessions API directly from the browser.
   // The user's API key is used — no MCP proxy needed for session creation.
@@ -615,7 +605,7 @@ export function OpenAiChatKitPanel({
     onReady: () => {
       console.log('[ChatKit] Ready');
       setInitError(null);
-      setParsedPreview(null);
+      onProposalDetectedRef.current?.(null);
       lastParsedJsonRef.current = '';
       seenProposalIdRef.current = '';
       proposalSessionStartedAtRef.current = Date.now();
@@ -691,7 +681,7 @@ export function OpenAiChatKitPanel({
           ok: accepted,
           appliedUi: accepted,
           message: accepted
-            ? 'TekAutomate captured the workflow proposal and showed Apply to Flow.'
+            ? 'TekAutomate captured the workflow proposal.'
             : 'Proposal was ignored because no valid actions were provided.',
         };
       }
@@ -870,78 +860,6 @@ export function OpenAiChatKitPanel({
 
   return (
     <div ref={containerRef} className={className} style={{ flex: 1, minHeight: 0, display: 'flex', flexDirection: 'column', position: 'relative' }}>
-      {parsedPreview && (
-        <div style={{ position: 'relative', zIndex: 3, pointerEvents: 'auto', margin: '8px 8px 0', border: '1px solid rgba(148,163,184,0.25)', borderRadius: 12, background: 'rgba(15,23,42,0.35)', overflow: 'hidden' }}>
-          <div style={{ padding: '10px 12px', borderBottom: '1px solid rgba(148,163,184,0.18)', display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12 }}>
-            <div>
-              <div style={{ fontSize: 11, fontWeight: 700, letterSpacing: '0.08em', textTransform: 'uppercase', color: '#94a3b8' }}>
-                {parsedPreview.source === 'tool' ? 'Workflow Proposal' : 'Actions JSON'}
-              </div>
-              {!!parsedPreview.summary && (
-                <div style={{ marginTop: 4, fontSize: 13, lineHeight: 1.45, color: '#e2e8f0' }}>
-                  {cleanSummaryText(parsedPreview.summary)}
-                </div>
-              )}
-            </div>
-            <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
-              {!!parsedPreview.actions.length && !autoApplyRef.current && (
-                <button
-                  type="button"
-                  onClick={() => { void applyParsedPreview(); }}
-                  disabled={applyingPreview}
-                  style={{ position: 'relative', zIndex: 4, pointerEvents: 'auto', fontSize: 11, padding: '6px 10px', borderRadius: 8, border: '1px solid rgba(34,197,94,0.45)', background: applyingPreview ? 'rgba(34,197,94,0.12)' : 'rgba(34,197,94,0.18)', color: '#bbf7d0', cursor: applyingPreview ? 'default' : 'pointer', fontWeight: 700 }}
-                >
-                  {applyingPreview ? 'Applying...' : 'Apply to Flow'}
-                </button>
-              )}
-              <button
-                type="button"
-                onClick={() => setParsedPreview(null)}
-                style={{ fontSize: 11, padding: '4px 8px', borderRadius: 8, border: '1px solid rgba(148,163,184,0.25)', background: 'transparent', color: '#cbd5e1', cursor: 'pointer' }}
-              >
-                Hide
-              </button>
-            </div>
-          </div>
-          <div style={{ padding: '10px 12px', display: 'grid', gap: 8 }}>
-            <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
-              <span style={{ fontSize: 11, padding: '2px 8px', borderRadius: 999, background: 'rgba(6,182,212,0.14)', color: '#67e8f9' }}>
-                {parsedPreview.actions.length} {parsedPreview.actions.length === 1 ? 'change' : 'changes'}
-              </span>
-              {!!parsedPreview.findings.length && (
-                <span style={{ fontSize: 11, padding: '2px 8px', borderRadius: 999, background: 'rgba(245,158,11,0.14)', color: '#fcd34d' }}>
-                  {parsedPreview.findings.length} finding{parsedPreview.findings.length === 1 ? '' : 's'}
-                </span>
-              )}
-              {!!parsedPreview.suggestedFixes.length && (
-                <span style={{ fontSize: 11, padding: '2px 8px', borderRadius: 999, background: 'rgba(16,185,129,0.14)', color: '#86efac' }}>
-                  {parsedPreview.suggestedFixes.length} suggestion{parsedPreview.suggestedFixes.length === 1 ? '' : 's'}
-                </span>
-              )}
-            </div>
-            <div style={{ display: 'grid', gap: 4 }}>
-              {parsedPreview.actions.slice(0, 6).map((action, index) => (
-                <div key={`${action.id || 'action'}-${index}`} style={{ fontSize: 12, lineHeight: 1.45, color: '#cbd5e1' }}>
-                  - {action.action_type.replace(/_/g, ' ')}
-                </div>
-              ))}
-              {parsedPreview.actions.length > 6 && (
-                <div style={{ fontSize: 11, color: '#94a3b8' }}>
-                  + {parsedPreview.actions.length - 6} more
-                </div>
-              )}
-            </div>
-            <details style={{ border: '1px solid rgba(148,163,184,0.18)', borderRadius: 10, overflow: 'hidden', background: 'rgba(2,6,23,0.5)' }}>
-              <summary style={{ cursor: 'pointer', padding: '8px 10px', fontSize: 11, fontWeight: 700, letterSpacing: '0.06em', textTransform: 'uppercase', color: '#94a3b8' }}>
-                Raw JSON
-              </summary>
-              <pre style={{ margin: 0, padding: 12, overflowX: 'auto', fontSize: 11, lineHeight: 1.45, color: '#e2e8f0', borderTop: '1px solid rgba(148,163,184,0.18)' }}>
-                <code>{parsedPreview.rawJson}</code>
-              </pre>
-            </details>
-          </div>
-        </div>
-      )}
       <div style={{ position: 'relative', zIndex: 1, flex: 1, minHeight: 0 }}>
         <ChatKit control={chatkit.control} style={{ width: '100%', height: '100%' }} />
       </div>

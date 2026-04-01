@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef, Suspense, useCallback } from 'react';
-import { Bot, KeyRound, Loader2, Paperclip, Play, Send, Settings, Sparkles, Terminal, X } from 'lucide-react';
+import { Bot, KeyRound, Loader2, Paperclip, Send, Settings, Terminal, X } from 'lucide-react';
 import { parseAiActionResponse, type AiAction } from '../../utils/aiActions';
 import type { ExecutionAuditReport } from '../../utils/executionAudit';
 import type { StepPreview } from './StepsListPreview';
@@ -14,7 +14,7 @@ import {
   setStoredMcpHost,
   type McpChatAttachment,
 } from '../../utils/ai/mcpClient';
-import { OpenAiChatKitPanel } from './OpenAiChatKitPanel';
+import { OpenAiChatKitPanel, type ParsedActionsPreview } from './OpenAiChatKitPanel';
 import { prepareFlowActionsViaMcp } from '../../utils/ai/liveToolLoop';
 
 interface AiChatPanelProps {
@@ -50,6 +50,7 @@ interface AiChatPanelProps {
   contextAttachments?: McpChatAttachment[];
   lastAuditReport?: ExecutionAuditReport | null;
   onApplyAiActions?: (actions: AiAction[]) => Promise<{ applied: number; rerunStarted: boolean; changed: boolean }>;
+  onWorkflowProposal?: (proposal: ParsedActionsPreview | null) => void;
   onLiveScreenshot?: (screenshot: { dataUrl: string; mimeType: string; sizeBytes: number; capturedAt: string }) => void;
   onRun?: () => void;
 }
@@ -114,6 +115,7 @@ export function AiChatPanel({
   contextAttachments = [],
   lastAuditReport,
   onApplyAiActions,
+  onWorkflowProposal,
   onLiveScreenshot,
   onRun,
 }: AiChatPanelProps) {
@@ -129,7 +131,6 @@ export function AiChatPanel({
   const [applyStatus, setApplyStatus] = useState<string | null>(null);
   const [applyStatusAt, setApplyStatusAt] = useState<number | null>(null);
   const [applyingTurnIndex, setApplyingTurnIndex] = useState<number | null>(null);
-  const [quickActionsCollapsed, setQuickActionsCollapsed] = useState(true);
   const [testingKey, setTestingKey] = useState(false);
   const [testKeyStatus, setTestKeyStatus] = useState<string | null>(null);
   const [panelWidth, setPanelWidth] = useState(560);
@@ -149,10 +150,6 @@ export function AiChatPanel({
   const CHATKIT_DEFAULT_WORKFLOW = 'wf_69cb9085f72c8190ae05b360552d6987032b7c148cd57c24';
   const [chatKitWorkflowId, setChatKitWorkflowId] = useState(() => {
     try { return localStorage.getItem(CHATKIT_WORKFLOW_ID_KEY) || CHATKIT_DEFAULT_WORKFLOW; } catch { return CHATKIT_DEFAULT_WORKFLOW; }
-  });
-  const CHATKIT_AUTO_APPLY_KEY = 'tekautomate.chatkit.auto_apply';
-  const [chatKitAutoApply, setChatKitAutoApply] = useState(() => {
-    try { return localStorage.getItem(CHATKIT_AUTO_APPLY_KEY) === 'true'; } catch { return false; }
   });
   const prevStepsRef = useRef(steps);
   const messagesContainerRef = useRef<HTMLDivElement>(null);
@@ -224,7 +221,6 @@ export function AiChatPanel({
   const {
     state,
     providerModels,
-    quickActions,
     sendUserMessage,
     applyActionsFromTurn,
     clearChat,
@@ -1140,7 +1136,6 @@ export function AiChatPanel({
       showApplyStatus('Live mode requires an executor connection. Connect to a scope in the Live tab first.');
       return;
     }
-    setQuickActionsCollapsed(true);
     setInput('');
     setAttachmentError(null);
     const message = next || 'Use attached files as context.';
@@ -1433,20 +1428,6 @@ export function AiChatPanel({
             </div>
         </div>
         <div className="flex items-center gap-2">
-          {state.tekMode !== 'live' && (
-          <button
-            type="button"
-            onClick={onRun}
-            disabled={!onRun || runStatus === 'running' || runStatus === 'connecting'}
-            className="text-[10px] px-2 py-1 rounded bg-gradient-to-r from-violet-600 to-cyan-600 text-white disabled:opacity-40"
-            title="Run current flow on scope"
-          >
-            <span className="inline-flex items-center gap-1">
-              <Play size={10} />
-              {runStatus === 'running' || runStatus === 'connecting' ? 'Running...' : 'Run on scope'}
-            </span>
-          </button>
-          )}
           {executionSource !== 'live' && (
           <div className="hidden sm:flex items-center rounded-full border border-slate-200 dark:border-white/10 bg-white/80 dark:bg-white/5 p-0.5">
             <button
@@ -1673,73 +1654,16 @@ export function AiChatPanel({
 
         </div>
       )}
-      <div className="px-3 py-1 border-b border-slate-100 dark:border-white/5 flex items-center justify-between">
-        {!mcpStatus.available && (
-          <div className="rounded bg-amber-50 text-amber-800 border border-amber-200 dark:bg-amber-900/30 dark:text-amber-200 dark:border-amber-700 px-2 py-0.5 text-[9px] mr-2">
-            MCP offline
-          </div>
-        )}
-        <div className="flex items-center gap-2">
-          <span className="text-[9px] font-semibold uppercase tracking-widest text-slate-400 dark:text-white/30">
-            Quick Actions
-          </span>
-          {useChatKitEmbed && (
-            <button
-              type="button"
-              onClick={() => {
-                const next = !chatKitAutoApply;
-                setChatKitAutoApply(next);
-                try { localStorage.setItem(CHATKIT_AUTO_APPLY_KEY, String(next)); } catch {}
-              }}
-              className={`text-[9px] px-1.5 py-0.5 rounded-full font-medium transition-colors ${
-                chatKitAutoApply
-                  ? 'bg-cyan-500/20 text-cyan-400 border border-cyan-500/40'
-                  : 'bg-slate-500/10 text-slate-500 dark:text-white/40 border border-slate-300/30 dark:border-white/10'
-              }`}
-              title="Auto-apply ACTIONS_JSON from ChatKit"
-            >
-              {chatKitAutoApply ? '⚡ Auto' : 'Auto'}
-            </button>
-            )}
-        </div>
-        <button
-          type="button"
-          onClick={() => setQuickActionsCollapsed((v) => !v)}
-          className="text-[9px] px-1.5 py-0.5 rounded border border-slate-200 dark:border-white/10 text-slate-500 dark:text-white/50 hover:text-slate-700 dark:hover:text-white/80"
-        >
-          {quickActionsCollapsed ? 'Show' : 'Hide'}
-        </button>
-        {!quickActionsCollapsed && (
-          <div className="grid grid-cols-2 gap-1.5">
-            {quickActions.map((qa) => (
-              <button
-                key={qa.id}
-                type="button"
-                onClick={() => {
-                  setQuickActionsCollapsed(true);
-                  setInput(qa.promptTemplate);
-                  setTimeout(() => textareaRef.current?.focus(), 0);
-                }}
-                disabled={state.isLoading}
-                className="flex min-h-[34px] items-center gap-1.5 px-2 py-1.5 rounded-lg bg-slate-100 dark:bg-white/5 hover:bg-slate-200 dark:hover:bg-white/10 text-slate-600 dark:text-white/70 hover:text-slate-900 dark:hover:text-white text-[11px] font-medium transition-colors text-left disabled:opacity-40"
-              >
-                <Sparkles size={10} className="text-violet-400 flex-shrink-0" />
-                <span className="line-clamp-1 leading-tight">{qa.label}</span>
-              </button>
-            ))}
-          </div>
-        )}
-      </div>
-
       {useChatKitEmbed ? (
           <OpenAiChatKitPanel
             apiKey={state.openaiApiKey || state.apiKey}
             steps={steps}
             runLog={runLog}
-            autoApply={chatKitAutoApply}
+            autoApply={false}
             flowContext={flowContext}
             instrumentEndpoint={instrumentEndpoint}
             onActionsDetected={handleChatKitActionsDetected}
+            onProposalDetected={onWorkflowProposal}
             className="flex-1 min-h-0"
           />
       ) : (
@@ -1961,7 +1885,6 @@ export function AiChatPanel({
               ref={textareaRef}
               value={input}
               onChange={(e) => setInput(e.target.value)}
-              onFocus={() => setQuickActionsCollapsed(true)}
               onPaste={(e) => {
                 const items = e.clipboardData?.items;
                 if (!items) return;
