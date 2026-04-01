@@ -42,6 +42,23 @@ export async function stageWorkflowProposal(
   input: StageWorkflowProposalInput
 ): Promise<ToolResult<Record<string, unknown>>> {
   const actions = Array.isArray(input.actions) ? input.actions : [];
+  if (actions.length === 0) {
+    return {
+      ok: false,
+      data: {
+        ok: false,
+        error:
+          'stage_workflow_proposal requires a non-empty actions array. ' +
+          'Copy build_or_edit_workflow.data.actions directly into this tool call.',
+        actionCount: 0,
+      },
+      sourceMeta: [],
+      warnings: [
+        'Proposal was not staged because no actions were provided.',
+      ],
+    };
+  }
+
   const proposal: StagedWorkflowProposal = {
     id: createProposalId(),
     createdAt: new Date().toISOString(),
