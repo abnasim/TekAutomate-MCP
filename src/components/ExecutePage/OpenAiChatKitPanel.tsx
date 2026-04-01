@@ -34,6 +34,7 @@ interface OpenAiChatKitPanelProps {
   steps: StepPreview[];
   workflowId?: string;
   threadStorageKey?: string;
+  userId?: string;
   workspaceRevision?: number;
   runLog?: string;
   autoApply?: boolean;
@@ -308,6 +309,7 @@ export function OpenAiChatKitPanel({
   steps,
   workflowId,
   threadStorageKey,
+  userId,
   workspaceRevision,
   runLog,
   autoApply = false,
@@ -586,6 +588,7 @@ export function OpenAiChatKitPanel({
   const getClientSecret = useCallback(
     async (_currentSecret: string | null): Promise<string> => {
       const resolvedWorkflowId = getWorkflowId(workflowId);
+      const resolvedUserId = userId?.trim() || 'tekautomate-user';
       if (!resolvedWorkflowId) {
         const msg = 'ChatKit workflow ID not configured.';
         setInitError(msg);
@@ -605,7 +608,7 @@ export function OpenAiChatKitPanel({
         const res = await fetch(sessionUrl, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ apiKey, workflowId: resolvedWorkflowId, userId: 'tekautomate-user' }),
+          body: JSON.stringify({ apiKey, workflowId: resolvedWorkflowId, userId: resolvedUserId }),
         });
         if (res.ok) {
           const data = await res.json();
@@ -633,7 +636,7 @@ export function OpenAiChatKitPanel({
           },
           body: JSON.stringify({
             workflow: { id: resolvedWorkflowId },
-            user: 'tekautomate-user',
+            user: resolvedUserId,
           }),
         });
         if (!res.ok) {
@@ -661,7 +664,7 @@ export function OpenAiChatKitPanel({
         throw err;
       }
     },
-    [apiKey, workflowId],
+    [apiKey, userId, workflowId],
   );
 
   // ── ChatKit hook ──

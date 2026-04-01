@@ -160,6 +160,8 @@ export function AiChatPanel({
   const CHATKIT_WORKFLOW_ID_KEY = 'tekautomate.chatkit.workflow_id';
   const CHATKIT_LIVE_WORKFLOW_ID = 'wf_69ccc162bc34819089705162201bc4b80128ecc0657c5932';
   const CHATKIT_LIVE_THREAD_KEY = 'tekautomate.chatkit.thread_id.live';
+  const CHATKIT_DEFAULT_USER_ID = 'tekautomate-user';
+  const CHATKIT_LIVE_USER_ID = 'tekautomate-live';
   const CHATKIT_DEFAULT_WORKFLOW = 'wf_69cb9085f72c8190ae05b360552d6987032b7c148cd57c24';
   const [chatKitWorkflowId, setChatKitWorkflowId] = useState(() => {
     try { return localStorage.getItem(CHATKIT_WORKFLOW_ID_KEY) || CHATKIT_DEFAULT_WORKFLOW; } catch { return CHATKIT_DEFAULT_WORKFLOW; }
@@ -425,6 +427,9 @@ export function AiChatPanel({
   const activeChatKitThreadKey = state.tekMode === 'live'
     ? CHATKIT_LIVE_THREAD_KEY
     : undefined;
+  const activeChatKitUserId = state.tekMode === 'live'
+    ? CHATKIT_LIVE_USER_ID
+    : CHATKIT_DEFAULT_USER_ID;
   const useChatKitEmbed =
     state.provider === 'openai'
     && (state.tekMode === 'ai' || state.tekMode === 'live')
@@ -1667,6 +1672,7 @@ export function AiChatPanel({
             steps={steps}
             workflowId={activeChatKitWorkflowId}
             threadStorageKey={activeChatKitThreadKey}
+            userId={activeChatKitUserId}
             workspaceRevision={workspaceRevision}
             runLog={runLog}
             autoApply={false}
