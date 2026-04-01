@@ -185,7 +185,20 @@ def _get_scope_session(visa: str):
         if session is not None:
             try:
                 _ = session.session
-                return session
+                old_timeout = getattr(session, "timeout", 5000)
+                old_write_term = getattr(session, "write_termination", None)
+                old_read_term = getattr(session, "read_termination", None)
+                session.timeout = 3000
+                session.write_termination = "\n"
+                session.read_termination = "\n"
+                try:
+                    resp = str(session.query("*IDN?")).strip()
+                    if resp:
+                        return session
+                finally:
+                    session.timeout = old_timeout
+                    session.write_termination = old_write_term
+                    session.read_termination = old_read_term
             except Exception:
                 try:
                     session.close()
@@ -201,6 +214,10 @@ def _get_scope_session(visa: str):
             _reset_resource_manager()
             rm = _resource_manager_instance()
             session = rm.open_resource(visa)
+        try:
+            session.clear()
+        except Exception:
+            pass
         _scope_sessions[visa] = session
         return session
 
