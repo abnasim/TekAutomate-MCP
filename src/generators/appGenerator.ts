@@ -267,10 +267,18 @@ export function genStepsClassic(
       if (ctx.enablePrintMessages) out += `${ind}print("Saving screenshot to ${fn}")\n`;
       if (method === 'pc_transfer') {
         out += `${ind}scpi.write('SAVE:IMAGE "C:/Temp/screen.png"')\n`;
-        out += `${ind}scpi.query("*OPC?")\n`;
-        out += `${ind}scpi.write('FILESYSTEM:READFILE "C:/Temp/screen.png"')\n`;
-        out += `${ind}data = scpi.read_raw()\n`;
+        out += `${ind}if str(scpi.query("*OPC?")).strip() != '1':\n`;
+        out += `${ind}    raise RuntimeError('SAVE:IMAGE did not complete')\n`;
+        out += `${ind}_old_timeout = scpi.timeout\n`;
+        out += `${ind}try:\n`;
+        out += `${ind}    scpi.timeout = 30000\n`;
+        out += `${ind}    scpi.write('FILESYSTEM:READFILE "C:/Temp/screen.png"')\n`;
+        out += `${ind}    data = scpi.read_raw()\n`;
+        out += `${ind}finally:\n`;
+        out += `${ind}    scpi.timeout = _old_timeout\n`;
         out += `${ind}pathlib.Path(${JSON.stringify(fn)}).write_bytes(data)\n`;
+        out += `${ind}scpi.write('FILESYSTEM:DELETE "C:/Temp/screen.png"')\n`;
+        out += `${ind}scpi.query("*OPC?")\n`;
       } else {
         out += `${ind}scpi.write('SAVE:IMAGE "${fn}"')\n`;
         out += `${ind}scpi.query("*OPC?")\n`;

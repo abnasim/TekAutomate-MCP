@@ -1361,19 +1361,23 @@ pythonGenerator.forBlock['save_screenshot'] = function(block) {
     // Capture and save image on scope
     code += `${device}.write('SAVE:IMAGE:COMPOSITION NORMAL')\n`;
     code += `${device}.write(f'SAVE:IMAGE "{_ss_scope_temp}"')\n`;
-    code += `time.sleep(1.0)  # Wait for save to complete (file operation)\n`;
+    code += `if str(${device}.query('*OPC?')).strip() != '1':\n`;
+    code += `    raise RuntimeError('SAVE:IMAGE did not complete')\n`;
     
     // Transfer file from scope to PC
     code += `_old_timeout = ${device}.timeout\n`;
-    code += `${device}.timeout = 30000  # 30 seconds for file transfer\n`;
-    code += `${device}.write(f'FILESYSTEM:READFILE "{_ss_scope_temp}"')\n`;
-    code += `_ss_data = ${device}.read_raw()\n`;
-    code += `${device}.timeout = _old_timeout  # Restore original timeout\n`;
+    code += `try:\n`;
+    code += `    ${device}.timeout = 30000  # 30 seconds for file transfer\n`;
+    code += `    ${device}.write(f'FILESYSTEM:READFILE "{_ss_scope_temp}"')\n`;
+    code += `    _ss_data = ${device}.read_raw()\n`;
+    code += `finally:\n`;
+    code += `    ${device}.timeout = _old_timeout  # Restore original timeout\n`;
     code += `with open(_ss_local, 'wb') as f:\n`;
     code += `    f.write(_ss_data)\n`;
     
     // Delete temp file from scope
     code += `${device}.write(f'FILESYSTEM:DELETE "{_ss_scope_temp}"')\n`;
+    code += `${device}.query('*OPC?')\n`;
     code += `print(f"Saved screenshot to {_ss_local}")\n`;
     
   } else {
@@ -1411,19 +1415,23 @@ pythonGenerator.forBlock['save_screenshot'] = function(block) {
     code += `${device}.write('HARDCOPY:FORMAT ${format.toUpperCase()}')\n`;
     code += `${device}.write(f'HARDCOPY:FILENAME "{_ss_scope_temp}"')\n`;
     code += `${device}.write('HARDCOPY START')\n`;
-    code += `time.sleep(1.0)  # Wait for hardcopy to complete (file operation)\n`;
+    code += `if str(${device}.query('*OPC?')).strip() != '1':\n`;
+    code += `    raise RuntimeError('HARDCOPY START did not complete')\n`;
     
     // Transfer file from scope to PC
     code += `_old_timeout = ${device}.timeout\n`;
-    code += `${device}.timeout = 30000  # 30 seconds for file transfer\n`;
-    code += `${device}.write(f'FILESYSTEM:READFILE "{_ss_scope_temp}"')\n`;
-    code += `_ss_data = ${device}.read_raw()\n`;
-    code += `${device}.timeout = _old_timeout  # Restore original timeout\n`;
+    code += `try:\n`;
+    code += `    ${device}.timeout = 30000  # 30 seconds for file transfer\n`;
+    code += `    ${device}.write(f'FILESYSTEM:READFILE "{_ss_scope_temp}"')\n`;
+    code += `    _ss_data = ${device}.read_raw()\n`;
+    code += `finally:\n`;
+    code += `    ${device}.timeout = _old_timeout  # Restore original timeout\n`;
     code += `with open(_ss_local, 'wb') as f:\n`;
     code += `    f.write(_ss_data)\n`;
     
     // Delete temp file from scope
     code += `${device}.write(f'FILESYSTEM:DELETE "{_ss_scope_temp}"')\n`;
+    code += `${device}.query('*OPC?')\n`;
     code += `print(f"Saved screenshot to {_ss_local}")\n`;
   }
   

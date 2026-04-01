@@ -4529,15 +4529,19 @@ ${waveformHelper}
             out += `${indent}except:\n`;
             out += `${indent}    pass  # Directory may already exist\n`;
             out += `${indent}${devRef}.write('SAVE:IMAGE:COMPOSITION NORMAL')\n`;
-            out += `${indent}${devRef}.write('SAVE:IMAGE "/Temp/screenshot.png"')\n`;
-            out += `${indent}time.sleep(1.0)  # Wait for save to complete (per screenshot docs)\n`;
+            out += `${indent}${devRef}.write('SAVE:IMAGE "C:/Temp/screenshot.png"')\n`;
+            out += `${indent}if str(${devRef}.query('*OPC?')).strip() != '1':\n`;
+            out += `${indent}    raise RuntimeError('SAVE:IMAGE did not complete')\n`;
             out += `${indent}old_timeout = ${devRef}.timeout\n`;
-            out += `${indent}${devRef}.timeout = 30000\n`;
-            out += `${indent}${devRef}.write('FILESYSTEM:READFILE "/Temp/screenshot.png"')\n`;
-            out += `${indent}data = ${devRef}.read_raw()\n`;
-            out += `${indent}${devRef}.timeout = old_timeout\n`;
+            out += `${indent}try:\n`;
+            out += `${indent}    ${devRef}.timeout = 30000\n`;
+            out += `${indent}    ${devRef}.write('FILESYSTEM:READFILE "C:/Temp/screenshot.png"')\n`;
+            out += `${indent}    data = ${devRef}.read_raw()\n`;
+            out += `${indent}finally:\n`;
+            out += `${indent}    ${devRef}.timeout = old_timeout\n`;
             out += `${indent}pathlib.Path(${JSON.stringify('./screenshots/' + fn)}).write_bytes(data)\n`;
-            out += `${indent}${devRef}.write('FILESYSTEM:DELETE "/Temp/screenshot.png"')\n`;
+            out += `${indent}${devRef}.write('FILESYSTEM:DELETE "C:/Temp/screenshot.png"')\n`;
+            out += `${indent}${devRef}.query('*OPC?')\n`;
             out += `${indent}print(f"Screenshot saved to ./screenshots/${fn}")\n`;
           } else {
             // Legacy 5k/7k/70k series - uses HARDCOPY
@@ -4555,14 +4559,18 @@ ${waveformHelper}
             out += `${indent}${devRef}.write('HARDCOPY:FORMAT PNG')\n`;
             out += `${indent}${devRef}.write('HARDCOPY:FILENAME "C:/TekScope/Temp/screenshot.png"')\n`;
             out += `${indent}${devRef}.write('HARDCOPY START')\n`;
-            out += `${indent}time.sleep(1.0)  # Wait for hardcopy to complete (per screenshot docs)\n`;
+            out += `${indent}if str(${devRef}.query('*OPC?')).strip() != '1':\n`;
+            out += `${indent}    raise RuntimeError('HARDCOPY START did not complete')\n`;
             out += `${indent}old_timeout = ${devRef}.timeout\n`;
-            out += `${indent}${devRef}.timeout = 30000\n`;
-            out += `${indent}${devRef}.write('FILESYSTEM:READFILE "C:/TekScope/Temp/screenshot.png"')\n`;
-            out += `${indent}data = ${devRef}.read_raw()\n`;
-            out += `${indent}${devRef}.timeout = old_timeout\n`;
+            out += `${indent}try:\n`;
+            out += `${indent}    ${devRef}.timeout = 30000\n`;
+            out += `${indent}    ${devRef}.write('FILESYSTEM:READFILE "C:/TekScope/Temp/screenshot.png"')\n`;
+            out += `${indent}    data = ${devRef}.read_raw()\n`;
+            out += `${indent}finally:\n`;
+            out += `${indent}    ${devRef}.timeout = old_timeout\n`;
             out += `${indent}pathlib.Path(${JSON.stringify('./screenshots/' + fn)}).write_bytes(data)\n`;
             out += `${indent}${devRef}.write('FILESYSTEM:DELETE "C:/TekScope/Temp/screenshot.png"')\n`;
+            out += `${indent}${devRef}.query('*OPC?')\n`;
             out += `${indent}print(f"Screenshot saved to ./screenshots/${fn}")\n`;
           }
         } else if (s.type === 'recall') {
@@ -5347,22 +5355,36 @@ def wait_opc(inst, timeout_ms=120000, poll_ms=250):
             out += `${ind}scpi.write('HARDCOPY:FORMAT PNG')\n`;
             out += `${ind}scpi.write('HARDCOPY:FILENAME "C:/TekScope/Temp/screenshot.png"')\n`;
             out += `${ind}scpi.write('HARDCOPY START')\n`;
-            out += `${ind}time.sleep(1.0)\n`;
-            out += `${ind}scpi.write('FILESYSTEM:READFILE "C:/TekScope/Temp/screenshot.png"')\n`;
-            out += `${ind}data = scpi.read_raw()\n`;
+            out += `${ind}if str(scpi.query('*OPC?')).strip() != '1':\n`;
+            out += `${ind}    raise RuntimeError('HARDCOPY START did not complete')\n`;
+            out += `${ind}_old_timeout = scpi.timeout\n`;
+            out += `${ind}try:\n`;
+            out += `${ind}    scpi.timeout = 30000\n`;
+            out += `${ind}    scpi.write('FILESYSTEM:READFILE "C:/TekScope/Temp/screenshot.png"')\n`;
+            out += `${ind}    data = scpi.read_raw()\n`;
+            out += `${ind}finally:\n`;
+            out += `${ind}    scpi.timeout = _old_timeout\n`;
             out += `${ind}pathlib.Path(${JSON.stringify('./screenshots/' + fn)}).write_bytes(data)\n`;
             out += `${ind}log_cmd('FILESYSTEM:READFILE', data)\n`;
             out += `${ind}scpi.write('FILESYSTEM:DELETE "C:/TekScope/Temp/screenshot.png"')\n`;
+            out += `${ind}scpi.query('*OPC?')\n`;
           } else {
             out += `${ind}# Modern screenshot path via SAVE:IMAGE\n`;
             out += `${ind}scpi.write('SAVE:IMAGE:COMPOSITION NORMAL')\n`;
-            out += `${ind}scpi.write('SAVE:IMAGE "/Temp/screenshot.png"')\n`;
-            out += `${ind}time.sleep(1.0)\n`;
-            out += `${ind}scpi.write('FILESYSTEM:READFILE "/Temp/screenshot.png"')\n`;
-            out += `${ind}data = scpi.read_raw()\n`;
+            out += `${ind}scpi.write('SAVE:IMAGE "C:/Temp/screenshot.png"')\n`;
+            out += `${ind}if str(scpi.query('*OPC?')).strip() != '1':\n`;
+            out += `${ind}    raise RuntimeError('SAVE:IMAGE did not complete')\n`;
+            out += `${ind}_old_timeout = scpi.timeout\n`;
+            out += `${ind}try:\n`;
+            out += `${ind}    scpi.timeout = 30000\n`;
+            out += `${ind}    scpi.write('FILESYSTEM:READFILE "C:/Temp/screenshot.png"')\n`;
+            out += `${ind}    data = scpi.read_raw()\n`;
+            out += `${ind}finally:\n`;
+            out += `${ind}    scpi.timeout = _old_timeout\n`;
             out += `${ind}pathlib.Path(${JSON.stringify('./screenshots/' + fn)}).write_bytes(data)\n`;
             out += `${ind}log_cmd('FILESYSTEM:READFILE', data)\n`;
-            out += `${ind}scpi.write('FILESYSTEM:DELETE "/Temp/screenshot.png"')\n`;
+            out += `${ind}scpi.write('FILESYSTEM:DELETE "C:/Temp/screenshot.png"')\n`;
+            out += `${ind}scpi.query('*OPC?')\n`;
           }
           out += `${ind}print("  Screenshot saved: ./screenshots/${fn}")\n`;
           continue;
@@ -12807,22 +12829,26 @@ sock.close()`;
 # SAVE:IMAGE generates the screenshot on scope
 # FILESYSTEM:READFILE + read_raw() downloads PNG bytes to PC
 scpi.write('SAVE:IMAGE "C:/Temp/screenshot.png"')
-time.sleep(1.0)
+if str(scpi.query('*OPC?')).strip() != '1':
+    raise RuntimeError('SAVE:IMAGE did not complete')
 scpi.write('FILESYSTEM:READFILE "C:/Temp/screenshot.png"')
 data = scpi.read_raw()
 pathlib.Path("./screenshots/${fn}").write_bytes(data)
-scpi.write('FILESYSTEM:DELETE "C:/Temp/screenshot.png"')`;
+scpi.write('FILESYSTEM:DELETE "C:/Temp/screenshot.png"')
+scpi.query('*OPC?')`;
                     } else {
                       code = `# Legacy 5k/7k/70k series
 scpi.write('HARDCOPY:PORT FILE')
 scpi.write('HARDCOPY:FORMAT PNG')
 scpi.write('HARDCOPY:FILENAME "C:/TekScope/Temp/screenshot.png"')
 scpi.write('HARDCOPY START')
-time.sleep(1.0)
+if str(scpi.query('*OPC?')).strip() != '1':
+    raise RuntimeError('HARDCOPY START did not complete')
 scpi.write('FILESYSTEM:READFILE "C:/TekScope/Temp/screenshot.png"')
 data = scpi.read_raw()
 pathlib.Path("./screenshots/${fn}").write_bytes(data)
-scpi.write('FILESYSTEM:DELETE "C:/TekScope/Temp/screenshot.png"')`;
+scpi.write('FILESYSTEM:DELETE "C:/TekScope/Temp/screenshot.png"')
+scpi.query('*OPC?')`;
                     }
                     
                     return (
