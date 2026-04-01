@@ -54,6 +54,7 @@ interface OpenAiChatKitPanelProps {
     backend: string;
     liveMode?: boolean;
   } | null;
+  onLiveScreenshot?: (screenshot: { dataUrl: string; mimeType: string; sizeBytes: number; capturedAt: string }) => void;
   onActionsDetected?: (actions: AiAction[], summary?: string) => void | Promise<unknown>;
   onProposalDetected?: (proposal: ParsedActionsPreview | null) => void;
   onThreadChange?: (threadId: string) => void;
@@ -351,6 +352,7 @@ export function OpenAiChatKitPanel({
   autoApply = false,
   flowContext,
   instrumentEndpoint,
+  onLiveScreenshot,
   onActionsDetected,
   onProposalDetected,
   onThreadChange,
@@ -369,6 +371,8 @@ export function OpenAiChatKitPanel({
   flowContextRef.current = flowContext;
   const instrumentEndpointRef = useRef(instrumentEndpoint);
   instrumentEndpointRef.current = instrumentEndpoint;
+  const onLiveScreenshotRef = useRef(onLiveScreenshot);
+  onLiveScreenshotRef.current = onLiveScreenshot;
   const autoApplyRef = useRef(autoApply);
   autoApplyRef.current = autoApply;
   const lastContextSentRef = useRef('');
@@ -506,6 +510,7 @@ export function OpenAiChatKitPanel({
   }, []);
 
   const captureActionsPreview = useCallback((text: string) => {
+    if (isLiveMode) return false;
     const preview = extractActionsPreview(text);
     if (!preview) return false;
     const fingerprint = `${preview.summary}\n${preview.rawJson}`;
@@ -530,6 +535,7 @@ export function OpenAiChatKitPanel({
   }, [captureActionsPreview]);
 
   const fetchLatestStagedProposal = useCallback(async () => {
+    if (isLiveMode) return false;
     const mcpHost = resolveMcpHost();
     if (!mcpHost) return false;
     try {
@@ -616,7 +622,7 @@ export function OpenAiChatKitPanel({
     if (action.type === 'flow.dismiss') {
       console.log('[ChatKit] User dismissed flow actions');
     }
-  }, []);
+  }, [isLiveMode]);
 
   // ── Session creation ──
   // Calls OpenAI ChatKit Sessions API directly from the browser.
@@ -737,6 +743,7 @@ export function OpenAiChatKitPanel({
     },
     // ── Response end — scan for ACTIONS_JSON and auto-apply ──
     onResponseEnd: () => {
+      if (isLiveMode) return;
       responseScanTimersRef.current.forEach((timer) => window.clearTimeout(timer));
       responseScanTimersRef.current = [];
       [150, 600, 1200, 2200, 3500].forEach((delay) => {
@@ -750,6 +757,7 @@ export function OpenAiChatKitPanel({
       });
     },
     onLog: (detail: { name?: string; data?: Record<string, unknown> }) => {
+      if (isLiveMode) return;
       const strings = collectStringCandidatesDeep(detail?.data);
       for (const text of strings) {
         if (!text.includes('ACTIONS_JSON') && !text.includes('"actions"') && !text.includes('"summary"')) continue;
@@ -912,7 +920,7 @@ export function OpenAiChatKitPanel({
       responseScanTimersRef.current.forEach((timer) => window.clearTimeout(timer));
       responseScanTimersRef.current = [];
     };
-  }, [fetchLatestStagedProposal, scanContainerForActions]);
+  }, [fetchLatestStagedProposal, scanContainerForActions, isLiveMode]);
 
   useEffect(() => {
     const mcpHost = resolveMcpHost();
@@ -972,6 +980,20 @@ export function OpenAiChatKitPanel({
               deviceDriver: flowContextRef.current?.deviceDriver,
             },
           );
+
+          if (currentAction.toolName === 'capture_screenshot') {
+            const screenshotResult = result as Record<string, unknown>;
+            const base64 = typeof screenshotResult.base64 === 'string' ? screenshotResult.base64 : '';
+            const mimeType = typeof screenshotResult.mimeType === 'string' ? screenshotResult.mimeType : 'image/png';
+            if (base64) {
+              onLiveScreenshotRef.current?.({
+                dataUrl: `data:${mimeType};base64,${base64}`,
+                mimeType,
+                sizeBytes: Math.floor((base64.length * 3) / 4),
+                capturedAt: new Date().toISOString(),
+              });
+            }
+          }
 
           await fetch(`${mcpHost.replace(/\/$/, '')}/live-actions/result`, {
             method: 'POST',

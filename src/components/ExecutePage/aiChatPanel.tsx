@@ -1683,6 +1683,7 @@ export function AiChatPanel({
             instrumentEndpoint={instrumentEndpoint}
             onActionsDetected={handleChatKitActionsDetected}
             onProposalDetected={onWorkflowProposal}
+            onLiveScreenshot={onLiveScreenshot}
             className="flex-1 min-h-0"
           />
       ) : (
