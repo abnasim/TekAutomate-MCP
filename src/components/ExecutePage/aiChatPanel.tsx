@@ -1729,6 +1729,7 @@ export function AiChatPanel({
           <OpenAiChatKitPanel
             apiKey={state.openaiApiKey || state.apiKey}
             steps={steps}
+            runLog={runLog}
             autoApply={chatKitAutoApply}
             flowContext={flowContext}
             instrumentEndpoint={instrumentEndpoint}

@@ -27,6 +27,7 @@ const DEFAULT_WORKFLOW_ID = 'wf_69cb9085f72c8190ae05b360552d6987032b7c148cd57c24
 interface OpenAiChatKitPanelProps {
   apiKey: string;
   steps: StepPreview[];
+  runLog?: string;
   autoApply?: boolean;
   flowContext?: {
     backend?: string;
@@ -218,6 +219,7 @@ function collectStringCandidatesDeep(value: unknown, seen = new Set<unknown>()):
 export function OpenAiChatKitPanel({
   apiKey,
   steps,
+  runLog,
   autoApply = false,
   flowContext,
   instrumentEndpoint,
@@ -551,6 +553,21 @@ export function OpenAiChatKitPanel({
           modelFamily: fc?.modelFamily || 'unknown',
           deviceDriver: fc?.deviceDriver || null,
           liveMode: ep?.liveMode || false,
+        };
+      }
+
+      // ── Client-only tool: get_run_log ──
+      // Returns the latest local execution log tail from the browser.
+      if (name === 'get_run_log') {
+        const raw = String(runLog || '');
+        const lines = raw.split(/\r?\n/).filter(Boolean);
+        const tailLines = lines.slice(-60);
+        return {
+          hasLogs: tailLines.length > 0,
+          lineCount: lines.length,
+          tailLineCount: tailLines.length,
+          logTail: tailLines.join('\n'),
+          lastLine: tailLines.length ? tailLines[tailLines.length - 1] : '',
         };
       }
 
