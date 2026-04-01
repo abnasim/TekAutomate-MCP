@@ -27,6 +27,7 @@ import { browseScpiCommands } from './browseScpiCommands';
 import { discoverScpi } from './discoverScpi';
 import { buildOrEditWorkflow } from './buildOrEditWorkflow';
 import { prepareFlowActions } from './prepareFlowActions';
+import { reviewRunLog } from './reviewRunLog';
 import { GROUP_NAMES, COMMAND_GROUPS } from '../core/commandGroups';
 import { TEK_ROUTER_TOOL_DEFINITION } from '../core/toolRouter';
 
@@ -84,6 +85,7 @@ export const TOOL_HANDLERS = {
   search_tm_devices: searchTmDevices,
   build_or_edit_workflow: buildOrEditWorkflow,
   prepare_flow_actions: prepareFlowActions,
+  review_run_log: reviewRunLog,
   retrieve_rag_chunks: retrieveRagChunks,
   search_known_failures: searchKnownFailures,
   get_template_examples: getTemplateExamples,
@@ -391,6 +393,39 @@ export function getToolDefinitions() {
           modelFamily: { type: 'string', description: 'Optional model family hint.' },
         },
         required: ['actions'],
+        additionalProperties: false,
+      },
+    },
+    {
+      name: 'review_run_log',
+      description:
+        'Review the latest execution log and return a compact runtime diagnosis with evidence and remediation guidance. ' +
+        'Use this for failed runs, timeouts, screenshot-transfer issues, and runtime debugging before proposing workflow changes.',
+      parameters: {
+        type: 'object',
+        properties: {
+          runLog: {
+            type: 'string',
+            description: 'Latest execution log text from TekAutomate.',
+          },
+          auditOutput: {
+            type: 'string',
+            description: 'Optional execution audit summary or report excerpt.',
+          },
+          currentWorkflow: {
+            type: 'array',
+            items: { type: 'object', additionalProperties: true },
+            description: 'Optional current workflow steps for context.',
+          },
+          selectedStepId: {
+            type: ['string', 'null'],
+            description: 'Optional selected step hint.',
+          },
+          backend: { type: 'string', description: 'Optional backend hint.' },
+          modelFamily: { type: 'string', description: 'Optional model family hint.' },
+          request: { type: 'string', description: 'Optional user request or debugging goal.' },
+        },
+        required: ['runLog'],
         additionalProperties: false,
       },
     },
