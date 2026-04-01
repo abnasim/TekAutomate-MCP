@@ -22,6 +22,7 @@ import type { StepPreview } from './StepsListPreview';
 // ── Storage keys ──
 const CHATKIT_WORKFLOW_ID_KEY = 'tekautomate.chatkit.workflow_id';
 const CHATKIT_THREAD_KEY = 'tekautomate.chatkit.thread_id';
+const CHATKIT_LIVE_SESSION_KEY = 'tekautomate.chatkit.live_session_key';
 const DEFAULT_WORKFLOW_ID = 'wf_69cb9085f72c8190ae05b360552d6987032b7c148cd57c24';
 
 function readCurrentTheme(): 'dark' | 'light' {
@@ -80,6 +81,20 @@ function setStoredThreadId(id: string, threadStorageKey?: string): void {
     localStorage.setItem(threadStorageKey || CHATKIT_THREAD_KEY, id);
   } catch {
     // Ignore storage errors
+  }
+}
+
+function getOrCreateLiveSessionKey(workflowId?: string, userId?: string): string {
+  const resolvedWorkflowId = getWorkflowId(workflowId);
+  const resolvedUserId = userId?.trim() || 'tekautomate-user';
+  try {
+    const existing = localStorage.getItem(CHATKIT_LIVE_SESSION_KEY);
+    if (existing && existing.trim()) return existing.trim();
+    const created = `chatkit:${resolvedWorkflowId}:${resolvedUserId}:live-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+    localStorage.setItem(CHATKIT_LIVE_SESSION_KEY, created);
+    return created;
+  } catch {
+    return `chatkit:${resolvedWorkflowId}:${resolvedUserId}:live-fallback`;
   }
 }
 
@@ -310,12 +325,11 @@ function buildLiveSessionPayload(
   workflowId?: string,
   userId?: string,
 ) {
-  const normalizedThreadId = String(threadId || '').trim();
-  if (!normalizedThreadId) return null;
   const resolvedWorkflowId = getWorkflowId(workflowId);
   const resolvedUserId = userId?.trim() || 'tekautomate-user';
+  const normalizedThreadId = String(threadId || '').trim() || null;
   return {
-    sessionKey: `chatkit:${resolvedWorkflowId}:${resolvedUserId}:${normalizedThreadId}`,
+    sessionKey: getOrCreateLiveSessionKey(workflowId, userId),
     threadId: normalizedThreadId,
     workflowId: resolvedWorkflowId,
     userId: resolvedUserId,
