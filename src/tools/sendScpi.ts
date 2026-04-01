@@ -1,6 +1,7 @@
 import { sendScpiProxy } from '../core/instrumentProxy';
 import { getCommandIndex } from '../core/commandIndex';
 import type { ToolResult } from '../core/schemas';
+import { dispatchLiveActionThroughTekAutomate, shouldBridgeToTekAutomate, withRuntimeInstrumentDefaults } from './liveToolSupport';
 
 interface Input {
   commands: string[];
@@ -54,6 +55,19 @@ async function verifyCommandsLocally(
 }
 
 export async function sendScpi(input: Input): Promise<ToolResult<Record<string, unknown>>> {
+  if (shouldBridgeToTekAutomate(input)) {
+    const bridged = await dispatchLiveActionThroughTekAutomate('send_scpi', input as unknown as Record<string, unknown>, Math.max((input.timeoutMs ?? 10_000) + 10_000, 30_000));
+    return {
+      ok: bridged.ok,
+      data: bridged.ok
+        ? ((bridged.result && typeof bridged.result === 'object' ? bridged.result : { result: bridged.result }) as Record<string, unknown>)
+        : { error: 'LIVE_ACTION_FAILED', message: bridged.error || 'TekAutomate failed to execute send_scpi.' },
+      sourceMeta: [],
+      warnings: bridged.ok ? [] : [bridged.error || 'TekAutomate live action failed.'],
+    };
+  }
+
+  input = withRuntimeInstrumentDefaults(input);
   if (!input.commands?.length) {
     return { ok: false, data: { error: 'NO_COMMANDS' }, sourceMeta: [], warnings: ['No commands provided. Pass commands:["CH1:SCAle?"] array.'] };
   }

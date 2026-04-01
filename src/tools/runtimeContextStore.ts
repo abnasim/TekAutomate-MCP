@@ -35,11 +35,19 @@ export interface RuntimeRunLogInfo {
   lastLine: string;
 }
 
+export interface RuntimeLiveSessionInfo {
+  sessionKey: string | null;
+  threadId: string | null;
+  workflowId: string | null;
+  userId: string | null;
+}
+
 interface RuntimeContextState {
   updatedAt: string;
   workflow: RuntimeWorkflowContext;
   instrument: RuntimeInstrumentInfo;
   runLog: RuntimeRunLogInfo;
+  liveSession: RuntimeLiveSessionInfo;
 }
 
 const DEFAULT_WORKFLOW: RuntimeWorkflowContext = {
@@ -71,11 +79,19 @@ const DEFAULT_RUN_LOG: RuntimeRunLogInfo = {
   lastLine: '',
 };
 
+const DEFAULT_LIVE_SESSION: RuntimeLiveSessionInfo = {
+  sessionKey: null,
+  threadId: null,
+  workflowId: null,
+  userId: null,
+};
+
 let runtimeContextState: RuntimeContextState = {
   updatedAt: new Date(0).toISOString(),
   workflow: DEFAULT_WORKFLOW,
   instrument: DEFAULT_INSTRUMENT,
   runLog: DEFAULT_RUN_LOG,
+  liveSession: DEFAULT_LIVE_SESSION,
 };
 
 function toStringList(value: unknown): string[] {
@@ -117,6 +133,7 @@ export function updateRuntimeContext(input: {
   workflow?: unknown;
   instrument?: unknown;
   runLog?: unknown;
+  liveSession?: unknown;
 }) {
   if (input.workflow && typeof input.workflow === 'object') {
     const workflow = input.workflow as Record<string, unknown>;
@@ -150,6 +167,16 @@ export function updateRuntimeContext(input: {
     runtimeContextState.runLog = normalizeRunLog(input.runLog);
   }
 
+  if (input.liveSession && typeof input.liveSession === 'object') {
+    const liveSession = input.liveSession as Record<string, unknown>;
+    runtimeContextState.liveSession = {
+      sessionKey: typeof liveSession.sessionKey === 'string' && liveSession.sessionKey ? liveSession.sessionKey : null,
+      threadId: typeof liveSession.threadId === 'string' && liveSession.threadId ? liveSession.threadId : null,
+      workflowId: typeof liveSession.workflowId === 'string' && liveSession.workflowId ? liveSession.workflowId : null,
+      userId: typeof liveSession.userId === 'string' && liveSession.userId ? liveSession.userId : null,
+    };
+  }
+
   runtimeContextState.updatedAt = new Date().toISOString();
   return getRuntimeContextState();
 }
@@ -164,6 +191,7 @@ export function getRuntimeContextState(): RuntimeContextState {
     },
     instrument: { ...runtimeContextState.instrument },
     runLog: { ...runtimeContextState.runLog },
+    liveSession: { ...runtimeContextState.liveSession },
   };
 }
 
@@ -177,4 +205,8 @@ export function getInstrumentInfoState(): RuntimeInstrumentInfo {
 
 export function getRunLogState(): RuntimeRunLogInfo {
   return getRuntimeContextState().runLog;
+}
+
+export function getLiveSessionState(): RuntimeLiveSessionInfo {
+  return getRuntimeContextState().liveSession;
 }
