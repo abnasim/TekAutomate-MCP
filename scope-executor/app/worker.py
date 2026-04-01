@@ -233,6 +233,22 @@ def _reset_scope_session(visa: str):
                 pass
 
 
+def _open_fresh_scope_session(visa: str):
+    """Open a fresh PyVISA scope session for one-off SCPI work."""
+    rm = _resource_manager_instance()
+    try:
+        session = rm.open_resource(visa)
+    except Exception:
+        _reset_resource_manager()
+        rm = _resource_manager_instance()
+        session = rm.open_resource(visa)
+    try:
+        session.clear()
+    except Exception:
+        pass
+    return session
+
+
 def _close_all_sessions():
     global _resource_manager
     with _session_lock:
@@ -358,82 +374,94 @@ def _handle_send_scpi(job: dict) -> dict:
     if not isinstance(commands, list) or not all(isinstance(cmd, str) for cmd in commands):
         raise RuntimeError("send_scpi requires string commands")
 
-    # Use raw SocketInstr for SOCKET resources — more reliable for Tek scopes
     use_socket = _is_socket_resource(visa)
 
     if use_socket:
         scpi = _get_socket_session(visa)
-        scpi.set_timeout(timeout_ms / 1000.0)  # socket timeout is in seconds
+        scpi.set_timeout(timeout_ms / 1000.0)
+        close_scpi = False
     else:
-        scpi = _get_scope_session(visa)
+        scpi = _open_fresh_scope_session(visa)
         scpi.timeout = timeout_ms
         scpi.write_termination = "\n"
         scpi.read_termination = "\n"
+        close_scpi = True
 
     if verbose:
-        _emit({"log": "scpi", "level": "info", "msg": f"[SCPI] Sending {len(commands)} command(s) to {visa} (timeout={timeout_ms}ms) [{'socket' if use_socket else 'visa'}]"})
+        transport = "socket" if use_socket else "visa-fresh"
+        _emit({"log": "scpi", "level": "info", "msg": f"[SCPI] Sending {len(commands)} command(s) to {visa} (timeout={timeout_ms}ms) [{transport}]"})
 
     started = time.time()
     responses = []
     session_reset = False
-    for cmd in commands:
-        cmd_started = time.time()
-        ok = True
-        error = None
-        response = "OK"
+    try:
+        for cmd in commands:
+            cmd_started = time.time()
+            ok = True
+            error = None
+            response = "OK"
 
-        if verbose:
-            _emit({"log": "scpi", "level": "send", "msg": f"[SCPI TX] {cmd}"})
+            if verbose:
+                _emit({"log": "scpi", "level": "send", "msg": f"[SCPI TX] {cmd}"})
 
-        try:
-            if cmd.strip().endswith("?"):
-                response = str(scpi.query(cmd)).strip()
-            else:
-                scpi.write(cmd)
-        except Exception as exc:
-            if not session_reset:
-                session_reset = True
-                try:
-                    if use_socket:
-                        _reset_socket_session(visa)
-                        scpi = _get_socket_session(visa)
-                        scpi.set_timeout(timeout_ms / 1000.0)
-                    else:
-                        _reset_scope_session(visa)
-                        _reset_resource_manager()
-                        scpi = _get_scope_session(visa)
-                        scpi.timeout = timeout_ms
-                        scpi.write_termination = "\n"
-                        scpi.read_termination = "\n"
-                    if cmd.strip().endswith("?"):
-                        response = str(scpi.query(cmd)).strip()
-                    else:
-                        scpi.write(cmd)
-                except Exception as retry_exc:
+            try:
+                if cmd.strip().endswith("?"):
+                    response = str(scpi.query(cmd)).strip()
+                else:
+                    scpi.write(cmd)
+            except Exception as exc:
+                if not session_reset:
+                    session_reset = True
+                    try:
+                        if use_socket:
+                            _reset_socket_session(visa)
+                            scpi = _get_socket_session(visa)
+                            scpi.set_timeout(timeout_ms / 1000.0)
+                        else:
+                            try:
+                                scpi.close()
+                            except Exception:
+                                pass
+                            _reset_resource_manager()
+                            scpi = _open_fresh_scope_session(visa)
+                            scpi.timeout = timeout_ms
+                            scpi.write_termination = "\n"
+                            scpi.read_termination = "\n"
+                        if cmd.strip().endswith("?"):
+                            response = str(scpi.query(cmd)).strip()
+                        else:
+                            scpi.write(cmd)
+                    except Exception as retry_exc:
+                        ok = False
+                        response = ""
+                        error = f"Retry failed: {retry_exc}"
+                else:
                     ok = False
                     response = ""
-                    error = f"Retry failed: {retry_exc}"
-            else:
-                ok = False
-                response = ""
-                error = str(exc)
-        elapsed_ms = round((time.time() - cmd_started) * 1000, 1)
+                    error = str(exc)
+            elapsed_ms = round((time.time() - cmd_started) * 1000, 1)
 
-        if verbose:
-            if ok:
-                _emit({"log": "scpi", "level": "recv", "msg": f"[SCPI RX] {cmd} → {response} ({elapsed_ms}ms)"})
-            else:
-                _emit({"log": "scpi", "level": "error", "msg": f"[SCPI ERR] {cmd} → {error} ({elapsed_ms}ms)"})
+            if verbose:
+                if ok:
+                    _emit({"log": "scpi", "level": "recv", "msg": f"[SCPI RX] {cmd} -> {response} ({elapsed_ms}ms)"})
+                else:
+                    _emit({"log": "scpi", "level": "error", "msg": f"[SCPI ERR] {cmd} -> {error} ({elapsed_ms}ms)"})
 
-        responses.append(
-            {
-                "command": cmd,
-                "response": response,
-                "ok": ok,
-                "error": error,
-                "timeMs": elapsed_ms,
-            }
-        )
+            responses.append(
+                {
+                    "command": cmd,
+                    "response": response,
+                    "ok": ok,
+                    "error": error,
+                    "timeMs": elapsed_ms,
+                }
+            )
+    finally:
+        if close_scpi:
+            try:
+                scpi.close()
+            except Exception:
+                pass
 
     total_ms = round((time.time() - started) * 1000, 1)
 
@@ -446,7 +474,6 @@ def _handle_send_scpi(job: dict) -> dict:
         "responses": responses,
         "totalTimeMs": total_ms,
     }
-
 
 def _run_python_job(job_id: str, code: str, visa: str | None):
     ns: dict = {"__name__": "__main__"}
