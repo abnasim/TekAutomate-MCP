@@ -42,7 +42,7 @@ interface OpenAiChatKitPanelProps {
     backend: string;
     liveMode?: boolean;
   } | null;
-  onActionsDetected?: (actions: AiAction[], summary?: string) => void;
+  onActionsDetected?: (actions: AiAction[], summary?: string) => void | Promise<unknown>;
   onThreadChange?: (threadId: string) => void;
   className?: string;
 }
@@ -310,7 +310,7 @@ export function OpenAiChatKitPanel({
         suggestedFixes: parsed.suggestedFixes || [],
         actions: parsed.actions,
       }),
-      source: 'tool',
+      source: proposal.rawJson ? 'mcp' : 'tool',
     };
 
     const fingerprint = `${preview.summary}\n${preview.rawJson}`;
@@ -506,6 +506,8 @@ export function OpenAiChatKitPanel({
     setApplyingPreview(true);
     try {
       await Promise.resolve(onActionsRef.current?.(parsedPreview.actions, parsedPreview.summary));
+    } catch (err) {
+      console.error('[ChatKit] Failed to apply parsed preview:', err);
     } finally {
       setApplyingPreview(false);
     }
@@ -867,9 +869,9 @@ export function OpenAiChatKitPanel({
   }
 
   return (
-    <div ref={containerRef} className={className} style={{ flex: 1, minHeight: 0, display: 'flex', flexDirection: 'column' }}>
+    <div ref={containerRef} className={className} style={{ flex: 1, minHeight: 0, display: 'flex', flexDirection: 'column', position: 'relative' }}>
       {parsedPreview && (
-        <div style={{ margin: '8px 8px 0', border: '1px solid rgba(148,163,184,0.25)', borderRadius: 12, background: 'rgba(15,23,42,0.35)', overflow: 'hidden' }}>
+        <div style={{ position: 'relative', zIndex: 3, pointerEvents: 'auto', margin: '8px 8px 0', border: '1px solid rgba(148,163,184,0.25)', borderRadius: 12, background: 'rgba(15,23,42,0.35)', overflow: 'hidden' }}>
           <div style={{ padding: '10px 12px', borderBottom: '1px solid rgba(148,163,184,0.18)', display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12 }}>
             <div>
               <div style={{ fontSize: 11, fontWeight: 700, letterSpacing: '0.08em', textTransform: 'uppercase', color: '#94a3b8' }}>
@@ -887,7 +889,7 @@ export function OpenAiChatKitPanel({
                   type="button"
                   onClick={() => { void applyParsedPreview(); }}
                   disabled={applyingPreview}
-                  style={{ fontSize: 11, padding: '6px 10px', borderRadius: 8, border: '1px solid rgba(34,197,94,0.45)', background: applyingPreview ? 'rgba(34,197,94,0.12)' : 'rgba(34,197,94,0.18)', color: '#bbf7d0', cursor: applyingPreview ? 'default' : 'pointer', fontWeight: 700 }}
+                  style={{ position: 'relative', zIndex: 4, pointerEvents: 'auto', fontSize: 11, padding: '6px 10px', borderRadius: 8, border: '1px solid rgba(34,197,94,0.45)', background: applyingPreview ? 'rgba(34,197,94,0.12)' : 'rgba(34,197,94,0.18)', color: '#bbf7d0', cursor: applyingPreview ? 'default' : 'pointer', fontWeight: 700 }}
                 >
                   {applyingPreview ? 'Applying...' : 'Apply to Flow'}
                 </button>
@@ -940,7 +942,9 @@ export function OpenAiChatKitPanel({
           </div>
         </div>
       )}
-      <ChatKit control={chatkit.control} style={{ width: '100%', height: '100%' }} />
+      <div style={{ position: 'relative', zIndex: 1, flex: 1, minHeight: 0 }}>
+        <ChatKit control={chatkit.control} style={{ width: '100%', height: '100%' }} />
+      </div>
     </div>
   );
 }

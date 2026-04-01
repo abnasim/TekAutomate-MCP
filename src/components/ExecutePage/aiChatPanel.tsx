@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef, Suspense } from 'react';
+import React, { useState, useEffect, useRef, Suspense, useCallback } from 'react';
 import { Bot, KeyRound, Loader2, Paperclip, Play, Send, Settings, Sparkles, Terminal, X } from 'lucide-react';
 import { parseAiActionResponse, type AiAction } from '../../utils/aiActions';
 import type { ExecutionAuditReport } from '../../utils/executionAudit';
@@ -168,7 +168,7 @@ export function AiChatPanel({
     setApplyStatusAt(Date.now());
   };
 
-  const prepareAndApplyAiActions = async (
+  const prepareAndApplyAiActions = useCallback(async (
     actions: AiAction[],
     summary?: string,
     findings?: string[],
@@ -203,7 +203,13 @@ export function AiChatPanel({
       return summary || `Applied ${result.applied} action(s).`;
     }
     return 'No flow changes were applied. The prepared actions did not change the current flow.';
-  };
+  }, [flowContext?.backend, flowContext?.deviceDriver, flowContext?.modelFamily, flowContext?.selectedStep?.id, onApplyAiActions, steps]);
+
+  const handleChatKitActionsDetected = useCallback(async (actions: AiAction[], summary?: string) => {
+    if (!actions.length) return;
+    const message = await prepareAndApplyAiActions(actions, summary);
+    showApplyStatus(message);
+  }, [prepareAndApplyAiActions]);
 
   const downloadPythonSnippet = (codeText: string) => {
     const timestamp = new Date().toISOString().replace(/[:.]/g, '-');
@@ -1733,15 +1739,7 @@ export function AiChatPanel({
             autoApply={chatKitAutoApply}
             flowContext={flowContext}
             instrumentEndpoint={instrumentEndpoint}
-            onActionsDetected={(actions, summary) => {
-              if (actions.length) {
-                void prepareAndApplyAiActions(actions, summary)
-                  .then(showApplyStatus)
-                  .catch((err) => {
-                    showApplyStatus(err instanceof Error ? err.message : 'Failed to apply ChatKit actions.');
-                  });
-              }
-            }}
+            onActionsDetected={handleChatKitActionsDetected}
             className="flex-1 min-h-0"
           />
       ) : (
