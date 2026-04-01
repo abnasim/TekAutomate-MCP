@@ -333,7 +333,8 @@ export function getToolDefinitions() {
       description:
         'Build or edit a TekAutomate workflow in one smart call. ' +
         'Use this for straightforward build/change/fix requests instead of chaining search, lookup, and verify tools manually. ' +
-        'Pass currentWorkflow and selectedStepId when editing an existing flow so MCP can target the right step(s).',
+        'Pass currentWorkflow and selectedStepId when editing an existing flow so MCP can target the right step(s). ' +
+        'Read the returned data.actions field and pass it through unchanged to stage_workflow_proposal when you want TekAutomate to show Apply to Flow.',
       parameters: {
         type: 'object',
         properties: {
@@ -477,7 +478,9 @@ export function getToolDefinitions() {
       name: 'stage_workflow_proposal',
       description:
         'Stage a structured workflow proposal for TekAutomate UI. ' +
-        'Use this after build_or_edit_workflow or runtime diagnosis when you want TekAutomate to show Apply to Flow outside ChatKit.',
+        'Use this after build_or_edit_workflow or runtime diagnosis when you want TekAutomate to show Apply to Flow outside ChatKit. ' +
+        'Copy build_or_edit_workflow.data.summary/findings/suggestedFixes/actions directly into this tool call. ' +
+        'Do not summarize or omit the actions array. This tool rejects empty actions.',
       parameters: {
         type: 'object',
         properties: {
@@ -487,7 +490,9 @@ export function getToolDefinitions() {
           actions: {
             type: 'array',
             items: { type: 'object', additionalProperties: true },
-            description: 'Workflow actions for TekAutomate to apply later.',
+            description:
+              'Workflow actions for TekAutomate to apply later. ' +
+              'Must be the non-empty actions array returned by build_or_edit_workflow.data.actions.',
           },
         },
         required: ['actions'],
