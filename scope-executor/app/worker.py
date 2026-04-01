@@ -52,6 +52,7 @@ _visa_locks: dict[str, threading.Lock] = {}  # Per-VISA resource lock — preven
 _recent_capture_results: dict[str, tuple[float, dict]] = {}
 _recent_capture_errors: dict[str, tuple[float, str]] = {}
 _DEFAULT_CAPTURE_TIMEOUT_MS = 45000
+_BUSY_CAPTURE_CACHE_MAX_AGE_SEC = 10.0
 
 
 def _visa_lock_for(visa: str) -> threading.Lock:
@@ -317,6 +318,19 @@ def _handle_capture_screenshot(job: dict) -> dict:
             raise
 
 
+def _get_recent_capture_result(visa: str, max_age_sec: float = _BUSY_CAPTURE_CACHE_MAX_AGE_SEC) -> dict | None:
+    recent = _recent_capture_results.get(visa)
+    if not recent:
+        return None
+    timestamp, result = recent
+    if time.time() - timestamp > max_age_sec:
+        return None
+    reused = dict(result)
+    reused["cached"] = True
+    reused["busySkipped"] = True
+    return reused
+
+
 def _handle_send_scpi(job: dict) -> dict:
     visa = job.get("visa")
     commands = job.get("commands")
@@ -500,9 +514,27 @@ def _run_job(job: dict):
             _emit({"id": job_id, "done": True, "ok": True, "exit_code": 0, "error": None, "result_data": {"disconnected": visa}})
             return
         if action == "capture_screenshot":
-            # Per-VISA lock prevents race with concurrent send_scpi on same instrument
-            with _visa_lock_for(visa):
+            lock = _visa_lock_for(visa)
+            if not lock.acquire(blocking=False):
+                cached = _get_recent_capture_result(visa)
+                if cached is not None:
+                    _emit({"id": job_id, "done": True, "ok": True, "exit_code": 0, "error": None, "result_data": cached})
+                    return
+                _emit(
+                    {
+                        "id": job_id,
+                        "done": True,
+                        "ok": False,
+                        "exit_code": 1,
+                        "error": "capture_screenshot skipped because instrument is busy with another action",
+                        "result_data": None,
+                    }
+                )
+                return
+            try:
                 result = _handle_capture_screenshot(job)
+            finally:
+                lock.release()
             _emit({"id": job_id, "done": True, "ok": True, "exit_code": 0, "error": None, "result_data": result})
             if not keep_alive and visa:
                 if _is_socket_resource(visa):
