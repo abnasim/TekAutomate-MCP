@@ -59,6 +59,35 @@ export const EXECUTOR_TOOLS = new Set([
   'probe_command', 'get_visa_resources', 'get_environment',
 ]);
 
+function splitScpiCommandString(command: string): string[] {
+  const text = String(command || '');
+  if (!text.includes(';')) return [text];
+
+  const parts: string[] = [];
+  let current = '';
+  let inQuotes = false;
+
+  for (let i = 0; i < text.length; i += 1) {
+    const ch = text[i];
+    if (ch === '"') {
+      inQuotes = !inQuotes;
+      current += ch;
+      continue;
+    }
+    if (ch === ';' && !inQuotes) {
+      const trimmed = current.trim();
+      if (trimmed) parts.push(trimmed);
+      current = '';
+      continue;
+    }
+    current += ch;
+  }
+
+  const trimmed = current.trim();
+  if (trimmed) parts.push(trimmed);
+  return parts.length ? parts : [text];
+}
+
 /**
  * Verify SCPI commands against the command index before sending to the instrument.
  * Bypasses verification for star commands (*IDN?, *RST, etc.) which are universal.
@@ -132,7 +161,7 @@ export async function executeMcpTool(
     // Split them so the executor handles each command individually.
     if (toolName === 'send_scpi' && Array.isArray(payload.commands)) {
       payload.commands = (payload.commands as string[]).flatMap(cmd =>
-        String(cmd).includes(';') ? String(cmd).split(';').map(s => s.trim()).filter(Boolean) : [cmd]
+        splitScpiCommandString(String(cmd))
       );
     }
     // Default per-command timeout for live mode: 5s for simple commands.
@@ -154,7 +183,7 @@ export async function executeMcpTool(
     const isScreenshotAction = toolName === 'capture_screenshot';
     const isSlowAction = isScreenshotAction || toolName === 'discover_scpi'
       || (toolName === 'send_scpi' && payload.timeout_ms && Number(payload.timeout_ms) > 10000);
-    const scriptTimeout = isScreenshotAction ? 45 : (isSlowAction ? 15 : 8);
+    const scriptTimeout = isScreenshotAction ? 75 : (isSlowAction ? 20 : 8);
 
     const res = await fetch(`${execUrl}/run`, {
       method: 'POST',
@@ -781,6 +810,8 @@ export function buildLiveSystemPrompt(instrument?: {
       '- If told "wrong command": look up the correct one via tek_router, don\'t re-analyze the screenshot.',
       '',
       '### Execution',
+      '- SESSION STARTUP: on the first live request in a session, call get_instrument_info, then send_scpi("*IDN?") to ground yourself before making assumptions about the scope.',
+      '- Treat get_instrument_info as a hint and *IDN? as live proof of the connected scope when identity matters.',
       '- BATCH tool calls: call send_scpi AND capture_screenshot in the SAME response when possible.',
       '  Don\'t waste a round-trip just to take a screenshot — include it alongside your commands.',
       '- Pack ALL related SCPI commands into ONE send_scpi call. Don\'t send them one at a time.',
@@ -788,20 +819,28 @@ export function buildLiveSystemPrompt(instrument?: {
       '- Unknown commands → tek_router search → send_scpi. Two calls max.',
       '- Don\'t know the right command? Search it. Don\'t guess. Don\'t send wrong commands twice.',
       '- Before adding measurements: MEASUrement:LIST? to check what exists.',
+      '- For direct requests like trigger setup, decode setup, zoom, measurements, or "fix clipping": use MCP lookup tools immediately, act, then verify. Do NOT spend turns brainstorming in text.',
       '',
       '### Verification — confirm you fulfilled the request',
       '- When the user asks you to DO something (add cursor, add measurement, change setting, add callout, etc.):',
       '  1. Send the SCPI commands',
-      '  2. capture_screenshot(analyze:true) to see the result',
-      '  3. Check: did the thing the user asked for actually appear/change on screen?',
-      '  4. If YES → report success briefly. If NO → say "Didn\'t work" and try a different approach.',
+      '  2. Query back the changed setting when a query exists',
+      '  3. capture_screenshot(analyze:true) when display state matters',
+      '  4. Check: did the thing the user asked for actually appear/change on screen?',
+      '  5. If YES → report success briefly. If NO → say "Didn\'t work" and try a different approach.',
+      '- RULE: After any SCPI write that changes acquisition, trigger, measurement, zoom, decode, or display config, you MUST query back the setting to confirm it took effect whenever a query exists.',
+      '- Example: after sending TRIGger:A:EDGE:LEVel 1.5, send TRIGger:A:EDGE:LEVel? and verify the response.',
       '- Do NOT claim success based on SCPI "OK" alone. The scope can silently reject commands.',
       '- If the user says "I don\'t see it" or "try again" → take a fresh screenshot, see what\'s actually there, and try differently.',
+      '- If a measurement reads 9.9E37 or similar invalid sentinel values, treat it as "no valid measurement" and check channel enable, signal presence, and trigger/acquisition state.',
+      '- If the screenshot shows a flat line, check whether the channel is enabled, the vertical scale is reasonable, and the probe/signal is actually present.',
+      '- After changing trigger settings, reacquire before trusting measurement or screenshot results.',
       '',
       '### Restrictions',
       '- NEVER use discover_scpi for normal tasks. It is a last resort for truly unknown commands.',
       '- NEVER retry the same failed command. Try a different approach or search for the right one.',
       '- NEVER repeat yourself. If user says "try again" → try something DIFFERENT, not the same thing.',
+      '- NEVER write long thinking text, option comparisons, or speculation when MCP tools can answer the exact command path faster.',
       '',
     );
   }
