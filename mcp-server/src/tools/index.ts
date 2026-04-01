@@ -908,8 +908,6 @@ export function getToolDefinitions() {
 const MCP_EXPOSED_TOOLS = new Set([
   // Gateway — advanced routing, build, save/learn, materialize, batch ops
   'tek_router',
-  'build_or_edit_workflow',
-  'review_run_log',
   'stage_workflow_proposal',
   'get_current_workflow',
   'get_instrument_info',
