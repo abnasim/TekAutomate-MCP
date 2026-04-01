@@ -28,6 +28,10 @@ import { discoverScpi } from './discoverScpi';
 import { buildOrEditWorkflow } from './buildOrEditWorkflow';
 import { prepareFlowActions } from './prepareFlowActions';
 import { reviewRunLog } from './reviewRunLog';
+import { stageWorkflowProposal } from './stageWorkflowProposal';
+import { getCurrentWorkflow } from './getCurrentWorkflow';
+import { getInstrumentInfo } from './getInstrumentInfo';
+import { getRunLog } from './getRunLog';
 import { GROUP_NAMES, COMMAND_GROUPS } from '../core/commandGroups';
 import { TEK_ROUTER_TOOL_DEFINITION } from '../core/toolRouter';
 
@@ -86,6 +90,10 @@ export const TOOL_HANDLERS = {
   build_or_edit_workflow: buildOrEditWorkflow,
   prepare_flow_actions: prepareFlowActions,
   review_run_log: reviewRunLog,
+  stage_workflow_proposal: stageWorkflowProposal,
+  get_current_workflow: getCurrentWorkflow,
+  get_instrument_info: getInstrumentInfo,
+  get_run_log: getRunLog,
   retrieve_rag_chunks: retrieveRagChunks,
   search_known_failures: searchKnownFailures,
   get_template_examples: getTemplateExamples,
@@ -365,6 +373,42 @@ export function getToolDefinitions() {
       },
     },
     {
+      name: 'get_current_workflow',
+      description:
+        'Return the latest current TekAutomate workflow state mirrored from the browser. ' +
+        'Use this to inspect existing steps, selected step, validation errors, backend, and model family before editing a workflow.',
+      parameters: {
+        type: 'object',
+        properties: {},
+        required: [],
+        additionalProperties: false,
+      },
+    },
+    {
+      name: 'get_instrument_info',
+      description:
+        'Return the latest TekAutomate instrument connection context mirrored from the browser. ' +
+        'Use this when connected instrument details, backend, model family, or live mode matter.',
+      parameters: {
+        type: 'object',
+        properties: {},
+        required: [],
+        additionalProperties: false,
+      },
+    },
+    {
+      name: 'get_run_log',
+      description:
+        'Return the latest TekAutomate execution log tail mirrored from the browser. ' +
+        'Use this for failed runs, timeout debugging, screenshot-transfer issues, and runtime diagnosis.',
+      parameters: {
+        type: 'object',
+        properties: {},
+        required: [],
+        additionalProperties: false,
+      },
+    },
+    {
       name: 'prepare_flow_actions',
       description:
         'Validate, normalize, and target ACTIONS_JSON before the frontend applies it. ' +
@@ -426,6 +470,27 @@ export function getToolDefinitions() {
           request: { type: 'string', description: 'Optional user request or debugging goal.' },
         },
         required: ['runLog'],
+        additionalProperties: false,
+      },
+    },
+    {
+      name: 'stage_workflow_proposal',
+      description:
+        'Stage a structured workflow proposal for TekAutomate UI. ' +
+        'Use this after build_or_edit_workflow or runtime diagnosis when you want TekAutomate to show Apply to Flow outside ChatKit.',
+      parameters: {
+        type: 'object',
+        properties: {
+          summary: { type: 'string', description: 'Short human-readable proposal summary.' },
+          findings: { type: 'array', items: { type: 'string' }, description: 'Optional findings list.' },
+          suggestedFixes: { type: 'array', items: { type: 'string' }, description: 'Optional suggestions list.' },
+          actions: {
+            type: 'array',
+            items: { type: 'object', additionalProperties: true },
+            description: 'Workflow actions for TekAutomate to apply later.',
+          },
+        },
+        required: ['actions'],
         additionalProperties: false,
       },
     },
@@ -839,6 +904,11 @@ const MCP_EXPOSED_TOOLS = new Set([
   // Gateway — advanced routing, build, save/learn, materialize, batch ops
   'tek_router',
   'build_or_edit_workflow',
+  'review_run_log',
+  'stage_workflow_proposal',
+  'get_current_workflow',
+  'get_instrument_info',
+  'get_run_log',
   // Direct knowledge tools — simple flat schemas, easy for AI
   'search_scpi',             // { query: "edge trigger", limit?: 10 }
   'smart_scpi_lookup',       // { query: "how do I measure voltage on CH1" }
