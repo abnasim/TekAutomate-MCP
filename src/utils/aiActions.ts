@@ -366,6 +366,10 @@ function normalizeAction(raw: unknown, idx: number): AiAction[] {
   }
 
   if (explicitType === 'replace_flow') {
+    const payloadObj =
+      r.payload && typeof r.payload === 'object'
+        ? (r.payload as Record<string, unknown>)
+        : {};
     const flowObj =
       r.flow && typeof r.flow === 'object'
         ? (r.flow as Record<string, unknown>)
@@ -375,12 +379,20 @@ function normalizeAction(raw: unknown, idx: number): AiAction[] {
     const steps =
       Array.isArray(r.steps)
         ? (r.steps as unknown[])
+        : Array.isArray(r.newSteps)
+          ? (r.newSteps as unknown[])
+        : Array.isArray(r.new_steps)
+          ? (r.new_steps as unknown[])
         : Array.isArray(flowObj?.steps)
           ? (flowObj?.steps as unknown[])
         : Array.isArray(r.payload) // tolerate payload as direct array
           ? (r.payload as unknown[])
           : Array.isArray((r.payload as Record<string, unknown> | undefined)?.steps)
             ? ((r.payload as Record<string, unknown>).steps as unknown[])
+            : Array.isArray(payloadObj.newSteps)
+              ? (payloadObj.newSteps as unknown[])
+            : Array.isArray(payloadObj.new_steps)
+              ? (payloadObj.new_steps as unknown[])
             : [];
     if (!steps.length) return [];
     return [{
