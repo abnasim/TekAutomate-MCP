@@ -103,6 +103,16 @@ function downloadTextFile(filename: string, content: string): void {
   URL.revokeObjectURL(url);
 }
 
+function stripOpenAIFileCitations(text: string): string {
+  if (!text) return '';
+  return text
+    .replace(/fileciteturn\d+file\d+/g, '')
+    .replace(/[^]*/g, '')
+    .replace(/\s{2,}/g, ' ')
+    .replace(/[ \t]+\n/g, '\n')
+    .trim();
+}
+
 export function AiChatPanel({
   steps,
   runLog,
@@ -460,8 +470,8 @@ export function AiChatPanel({
     return steps.length + (hasConnect ? 0 : 1) + (hasDisconnect ? 0 : 1);
   };
 
-    const assistantBodyText = (turn: typeof state.history[number]): string => {
-      const content = formatTurnText(turn, turn.content || '');
+  const assistantBodyText = (turn: typeof state.history[number]): string => {
+      const content = stripOpenAIFileCitations(formatTurnText(turn, turn.content || ''));
       if (content) {
         if (turn.actions?.length) {
           const stripped = stripStructuredPayloads(content);
@@ -477,9 +487,10 @@ export function AiChatPanel({
 
   // Render inline markdown: **bold**, *italic*, `code`
   const renderInlineMarkdown = (text: string): React.ReactNode => {
-    if (!text) return null;
+    const sanitized = stripOpenAIFileCitations(text);
+    if (!sanitized) return null;
     const parts: React.ReactNode[] = [];
-    let remaining = text;
+    let remaining = sanitized;
     let key = 0;
     while (remaining.length > 0) {
       // Find earliest match across bold, italic, inline code
@@ -521,8 +532,9 @@ export function AiChatPanel({
 
   // Render markdown text for AI/Live mode responses
   const renderMarkdownBody = (text: string): React.ReactNode => {
-    if (!text) return null;
-    const lines = text.split('\n');
+    const sanitized = stripOpenAIFileCitations(text);
+    if (!sanitized) return null;
+    const lines = sanitized.split('\n');
     const nodes: React.ReactNode[] = [];
     let i = 0;
     while (i < lines.length) {
@@ -638,7 +650,7 @@ export function AiChatPanel({
   };
 
   const renderAssistantMessageContent = (text: string, tekMode?: string): React.ReactNode => {
-    const source = String(text || '');
+    const source = stripOpenAIFileCitations(String(text || ''));
     const renderJsonDisclosure = (key: string, jsonText: string, label = 'JSON payload'): React.ReactNode => {
       const parsedActions = parseAiActionResponse(jsonText);
       const preview = jsonText.split('\n').slice(0, 3).join('\n');
