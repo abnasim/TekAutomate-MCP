@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef, Suspense, useCallback } from 'react';
 import { Bot, KeyRound, Loader2, Paperclip, Send, Settings, Terminal, X } from 'lucide-react';
-import { parseAiActionResponse, type AiAction } from '../../utils/aiActions';
+import { normalizeAiActions, parseAiActionResponse, type AiAction } from '../../utils/aiActions';
 import type { ExecutionAuditReport } from '../../utils/executionAudit';
 import type { StepPreview } from './StepsListPreview';
 
@@ -15,7 +15,6 @@ import {
   type McpChatAttachment,
 } from '../../utils/ai/mcpClient';
 import { OpenAiChatKitPanel, type ParsedActionsPreview } from './OpenAiChatKitPanel';
-import { prepareFlowActionsViaMcp } from '../../utils/ai/liveToolLoop';
 
 interface AiChatPanelProps {
   steps: StepPreview[];
@@ -168,38 +167,21 @@ export function AiChatPanel({
   const prepareAndApplyAiActions = useCallback(async (
     actions: AiAction[],
     summary?: string,
-    findings?: string[],
-    suggestedFixes?: string[]
+    _findings?: string[],
+    _suggestedFixes?: string[]
   ): Promise<string> => {
     if (!actions.length) return 'No actions to apply.';
     if (!onApplyAiActions) return 'Apply action handler is unavailable in this view.';
-
-    const prepared = await prepareFlowActionsViaMcp({
-      summary,
-      findings,
-      suggestedFixes,
-      actions: actions as unknown as Record<string, unknown>[],
-      currentWorkflow: steps as unknown as Array<Record<string, unknown>>,
-      selectedStepId: flowContext?.selectedStep?.id || null,
-      flowContext: {
-        backend: flowContext?.backend,
-        modelFamily: flowContext?.modelFamily,
-        deviceDriver: flowContext?.deviceDriver,
-      },
-    });
-
-    if (prepared.errors.length) {
-      return prepared.errors[0];
-    }
-    if (!prepared.actions.length) {
-      return 'Prepared actions were empty, so nothing was applied.';
+    const normalizedActions = normalizeAiActions(actions as unknown[]);
+    if (!normalizedActions.length) {
+      return 'Proposal actions could not be normalized into valid TekAutomate actions.';
     }
 
-    const result = await onApplyAiActions(prepared.actions as unknown as AiAction[]);
+    const result = await onApplyAiActions(normalizedActions as AiAction[]);
     if (result.changed && result.applied > 0) {
       return summary || `Applied ${result.applied} action(s).`;
     }
-    return 'No flow changes were applied. The prepared actions did not change the current flow.';
+    return 'No flow changes were applied. The proposal already matches the current flow.';
   }, [flowContext?.backend, flowContext?.deviceDriver, flowContext?.modelFamily, flowContext?.selectedStep?.id, onApplyAiActions, steps]);
 
   const handleChatKitActionsDetected = useCallback(async (actions: AiAction[], summary?: string) => {

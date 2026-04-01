@@ -542,6 +542,11 @@ function normalizeAction(raw: unknown, idx: number): AiAction[] {
   return [];
 }
 
+export function normalizeAiActions(rawActions: unknown[]): AiAction[] {
+  if (!Array.isArray(rawActions)) return [];
+  return rawActions.flatMap((action, index) => normalizeAction(action, index));
+}
+
 export function parseAiActionResponse(text: string): AiActionParseResult | null {
   try {
     const parsed = JSON.parse(text) as ParsedRoot;
@@ -571,7 +576,7 @@ export function parseAiActionResponse(text: string): AiActionParseResult | null 
       : Array.isArray(parsed.result?.actions)
         ? (parsed.result?.actions as unknown[])
         : [];
-    const actions = sourceActions.flatMap((a, i) => normalizeAction(a, i));
+    const actions = normalizeAiActions(sourceActions);
     if (actions.length === 0 && typeof parsed.summary !== 'string') return null;
     return {
       summary: typeof parsed.summary === 'string' ? parsed.summary : 'Proposed actionable fixes.',

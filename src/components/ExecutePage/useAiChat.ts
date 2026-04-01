@@ -1,8 +1,8 @@
 import { useMemo, useState, useEffect, useRef } from 'react';
 import type { AiAction, AiActionParseResult } from '../../utils/aiActions';
-import { canMaterializeAiAction, parseAiActionResponse } from '../../utils/aiActions';
+import { canMaterializeAiAction, normalizeAiActions, parseAiActionResponse } from '../../utils/aiActions';
 import { streamMcpChat, disconnectLiveSession, resolveMcpHost, type McpChatAttachment } from '../../utils/ai/mcpClient';
-import { runLiveToolLoop, fetchLiveTools, buildLiveSystemPrompt, buildAnthropicChatPrompt, buildWorkflowContext, prepareFlowActionsViaMcp } from '../../utils/ai/liveToolLoop';
+import { runLiveToolLoop, fetchLiveTools, buildLiveSystemPrompt, buildAnthropicChatPrompt, buildWorkflowContext } from '../../utils/ai/liveToolLoop';
 import type { ChatTurn, PredefinedAction, RagCorpus } from '../../utils/ai/types';
 import type { StepPreview } from './StepsListPreview';
 import { useAiChatContext } from './aiChatContext';
@@ -1229,33 +1229,16 @@ export function useAiChat(params: {
     if (selected.length === 1 && selected[0].action_type === 'replace_flow' && !canMaterializeAiAction(selected[0])) {
       return 'This assistant flow is descriptive, but it does not map to valid TekAutomate step types yet, so it cannot be applied automatically.';
     }
-
-    const prepared = await prepareFlowActionsViaMcp({
-      summary: turn.summary,
-      findings: turn.findings || [],
-      suggestedFixes: turn.suggestedFixes || [],
-      actions: selected as unknown as Record<string, unknown>[],
-      currentWorkflow: params.steps as unknown as Array<Record<string, unknown>>,
-      selectedStepId: (params.flowContext?.selectedStep && String(params.flowContext.selectedStep.id || '').trim()) || null,
-      flowContext: {
-        backend: params.flowContext?.backend,
-        modelFamily: params.flowContext?.modelFamily,
-        deviceDriver: params.flowContext?.deviceDriver,
-      },
-    });
-    if (prepared.errors.length) {
-      return prepared.errors[0];
+    const normalizedActions = normalizeAiActions(selected as unknown[]);
+    if (!normalizedActions.length) {
+      return 'Proposal actions could not be normalized into valid TekAutomate actions.';
     }
-    if (!prepared.actions.length) {
-      return 'Prepared actions were empty, so nothing was applied.';
-    }
-
-    const result = await params.onApplyAiActions(prepared.actions as unknown as AiAction[]);
+    const result = await params.onApplyAiActions(normalizedActions as AiAction[]);
     if (result.changed && result.applied > 0) {
       const selectedIds = selected.map((a) => a.id).filter(Boolean);
       dispatch({ type: 'MARK_APPLIED', turnIndex, actionIds: selectedIds });
-      if (prepared.actions.length === 1 && String(prepared.actions[0]?.type || prepared.actions[0]?.action_type || '') === 'replace_flow') {
-        const stepCount = getReplaceFlowStepCount(prepared.actions[0] as unknown as AiAction);
+      if (normalizedActions.length === 1 && String(normalizedActions[0]?.action_type || '') === 'replace_flow') {
+        const stepCount = getReplaceFlowStepCount(normalizedActions[0] as unknown as AiAction);
         return stepCount
           ? `Applied the proposed ${stepCount}-step flow. No auto-run was started. Click Run on scope when ready.`
           : 'Applied the proposed flow. No auto-run was started. Click Run on scope when ready.';

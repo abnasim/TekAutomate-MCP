@@ -4,11 +4,10 @@ import { streamMcpChat } from '../../utils/ai/mcpClient';
 import { StepsListPreview } from './StepsListPreview';
 import type { StepPreview } from './StepsListPreview';
 import { PythonCodeEditor } from '../PythonCodeEditor';
-import type { AiAction } from '../../utils/aiActions';
+import { normalizeAiActions, type AiAction } from '../../utils/aiActions';
 import type { ExecutionAuditReport } from '../../utils/executionAudit';
 import { AiChatProvider } from './aiChatContext';
 import { AiChatPanel } from './aiChatPanel';
-import { prepareFlowActionsViaMcp } from '../../utils/ai/liveToolLoop';
 import type { ParsedActionsPreview } from './OpenAiChatKitPanel';
 
 export type ExecutionSource = 'steps' | 'blockly' | 'live';
@@ -62,6 +61,42 @@ interface WorkflowProposalState extends ParsedActionsPreview {
   receivedAt: number;
 }
 
+const EXECUTE_PAGE_PROPOSAL_STORAGE = 'tekautomate.execute.latest_proposal';
+const EXECUTE_PAGE_TAB_STORAGE = 'tekautomate.execute.center_tab';
+
+function loadStoredWorkflowProposal(): WorkflowProposalState | null {
+  if (typeof window === 'undefined') return null;
+  try {
+    const raw = window.localStorage.getItem(EXECUTE_PAGE_PROPOSAL_STORAGE);
+    if (!raw) return null;
+    const parsed = JSON.parse(raw) as WorkflowProposalState;
+    if (!parsed || typeof parsed !== 'object' || !Array.isArray(parsed.actions)) return null;
+    return {
+      summary: typeof parsed.summary === 'string' ? parsed.summary : '',
+      findings: Array.isArray(parsed.findings) ? parsed.findings.map(String) : [],
+      suggestedFixes: Array.isArray(parsed.suggestedFixes) ? parsed.suggestedFixes.map(String) : [],
+      actions: parsed.actions,
+      rawJson: typeof parsed.rawJson === 'string' ? parsed.rawJson : '',
+      source: parsed.source,
+      receivedAt: typeof parsed.receivedAt === 'number' ? parsed.receivedAt : Date.now(),
+    };
+  } catch {
+    return null;
+  }
+}
+
+function loadStoredCenterTab(defaultTab: ExecutionSource): ExecutionSource | 'proposals' {
+  if (typeof window === 'undefined') return defaultTab;
+  try {
+    const raw = window.localStorage.getItem(EXECUTE_PAGE_TAB_STORAGE);
+    return raw === 'proposals' || raw === 'steps' || raw === 'blockly' || raw === 'live'
+      ? raw
+      : defaultTab;
+  } catch {
+    return defaultTab;
+  }
+}
+
 function getRunLogLineClass(line: string): string {
   const trimmed = line.trim();
   if (!trimmed) return 'text-slate-400 dark:text-slate-500';
@@ -106,7 +141,7 @@ function ExecutePageContent({
   blocklyContent,
   liveModeContent,
 }: ExecutePageProps) {
-  const [centerTab, setCenterTab] = useState<ExecutionSource | 'proposals'>(executionSource);
+  const [centerTab, setCenterTab] = useState<ExecutionSource | 'proposals'>(() => loadStoredCenterTab(executionSource));
   const [rightTab, setRightTab] = useState<'code' | 'logs'>('logs');
   const [rightPanelOpen, setRightPanelOpen] = useState(true);
   const [copied, setCopied] = useState(false);
@@ -115,14 +150,36 @@ function ExecutePageContent({
   const [editorCode, setEditorCode] = useState('');
   const [aiCheckResult, setAiCheckResult] = useState('');
   const [aiCheckLoading, setAiCheckLoading] = useState(false);
-  const [workflowProposal, setWorkflowProposal] = useState<WorkflowProposalState | null>(null);
+  const [workflowProposal, setWorkflowProposal] = useState<WorkflowProposalState | null>(() => loadStoredWorkflowProposal());
   const [applyingProposal, setApplyingProposal] = useState(false);
   const [proposalStatus, setProposalStatus] = useState<string | null>(null);
   void onBack;
 
   useEffect(() => {
-    setCenterTab(executionSource);
-  }, [executionSource]);
+    setCenterTab((current) => (current === 'proposals' && workflowProposal ? current : executionSource));
+  }, [executionSource, workflowProposal]);
+
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    try {
+      window.localStorage.setItem(EXECUTE_PAGE_TAB_STORAGE, centerTab);
+    } catch {
+      // Ignore storage failures.
+    }
+  }, [centerTab]);
+
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    try {
+      if (workflowProposal) {
+        window.localStorage.setItem(EXECUTE_PAGE_PROPOSAL_STORAGE, JSON.stringify(workflowProposal));
+      } else {
+        window.localStorage.removeItem(EXECUTE_PAGE_PROPOSAL_STORAGE);
+      }
+    } catch {
+      // Ignore storage failures.
+    }
+  }, [workflowProposal]);
 
   const runLogLines = useMemo(
     () => (runLog || 'Logs will appear here when you run the flow.').split(/\r?\n/),
@@ -159,32 +216,16 @@ function ExecutePageContent({
     setApplyingProposal(true);
     setProposalStatus(null);
     try {
-      const prepared = await prepareFlowActionsViaMcp({
-        summary: workflowProposal.summary,
-        findings: workflowProposal.findings,
-        suggestedFixes: workflowProposal.suggestedFixes,
-        actions: workflowProposal.actions as unknown as Record<string, unknown>[],
-        currentWorkflow: steps as unknown as Array<Record<string, unknown>>,
-        selectedStepId: flowContext?.selectedStep?.id || null,
-        flowContext: {
-          backend: flowContext?.backend,
-          modelFamily: flowContext?.modelFamily,
-          deviceDriver: flowContext?.deviceDriver,
-        },
-      });
-      if (prepared.errors.length) {
-        setProposalStatus(prepared.errors[0]);
+      const normalizedActions = normalizeAiActions(workflowProposal.actions as unknown[]);
+      if (!normalizedActions.length) {
+        setProposalStatus('Proposal actions could not be normalized into valid TekAutomate actions.');
         return;
       }
-      if (!prepared.actions.length) {
-        setProposalStatus('Prepared actions were empty, so nothing was applied.');
-        return;
-      }
-      const result = await onApplyAiActions(prepared.actions as unknown as AiAction[]);
+      const result = await onApplyAiActions(normalizedActions as AiAction[]);
       if (result.changed && result.applied > 0) {
         setProposalStatus(workflowProposal.summary || `Applied ${result.applied} action(s).`);
       } else {
-        setProposalStatus('No flow changes were applied. The prepared actions did not change the current flow.');
+        setProposalStatus('No flow changes were applied. The proposal already matches the current flow.');
       }
     } catch (err) {
       setProposalStatus(err instanceof Error ? err.message : 'Failed to apply workflow proposal.');

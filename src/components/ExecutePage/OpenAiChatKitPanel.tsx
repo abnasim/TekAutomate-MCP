@@ -593,19 +593,23 @@ export function OpenAiChatKitPanel({
     // Don't restore threads from localStorage — ChatKit manages thread history
     // internally via its built-in history UI. Storing thread IDs causes stale
     // 404s when threads expire or get deleted on OpenAI's side.
-    initialThread: null,
+    initialThread: getStoredThreadId() || null,
     onThreadChange: (detail: { threadId: string | null }) => {
       setActiveThreadId(detail.threadId ?? null);
+      setStoredThreadId(detail.threadId || '');
       onThreadChange?.(detail.threadId || '');
     },
     onError: (detail: { error: Error }) => {
       console.error('[ChatKit] Error:', detail.error);
+      const message = String(detail.error?.message || '').toLowerCase();
+      if (message.includes('thread') && (message.includes('not found') || message.includes('404') || message.includes('invalid'))) {
+        setStoredThreadId('');
+      }
       setInitError(detail.error?.message || 'ChatKit error');
     },
     onReady: () => {
       console.log('[ChatKit] Ready');
       setInitError(null);
-      onProposalDetectedRef.current?.(null);
       lastParsedJsonRef.current = '';
       seenProposalIdRef.current = '';
       proposalSessionStartedAtRef.current = Date.now();

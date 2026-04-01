@@ -1,4 +1,4 @@
-import { applyAiActionsToSteps, canMaterializeAiAction, parseAiActionResponse, type StepLike } from './aiActions';
+import { applyAiActionsToSteps, canMaterializeAiAction, normalizeAiActions, parseAiActionResponse, type StepLike } from './aiActions';
 
 describe('aiActions normalization', () => {
   it('normalizes replace_step style payload', () => {
@@ -123,6 +123,23 @@ describe('aiActions normalization', () => {
     expect(parsed?.actions.length).toBe(2);
     expect(parsed?.actions.map((a) => a.payload?.param)).toEqual(['scopeType', 'method']);
     expect(parsed?.actions.every((a) => a.target_step_id === 'shot1')).toBe(true);
+  });
+
+  it('normalizes prepared actions that use type instead of action_type', () => {
+    const normalized = normalizeAiActions([
+      {
+        type: 'insert_step_after',
+        stepId: '2',
+        newStep: {
+          type: 'write',
+          label: 'Enable FastFrame',
+          params: { command: 'HORizontal:FASTframe:STATE ON' },
+        },
+      },
+    ]);
+    expect(normalized).toHaveLength(1);
+    expect(normalized[0].action_type).toBe('insert_step_after');
+    expect(normalized[0].target_step_id).toBe('2');
   });
 });
 

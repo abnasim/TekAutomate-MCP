@@ -1,4 +1,4 @@
-import React, { useEffect, useRef, useState, useCallback, useMemo } from 'react';
+import React, { useEffect, useLayoutEffect, useRef, useState, useCallback, useMemo } from 'react';
 import {
   Trash2, Copy, Download, ChevronRight, ChevronLeft, AlertCircle, Settings, Search,
   Upload, Folder, Zap, X, Undo2, Redo2, FileJson, Code2, ChevronDown, ChevronUp,
@@ -1294,22 +1294,23 @@ function AppInner() {
     return window.matchMedia('(prefers-color-scheme: dark)').matches;
   });
 
+  const syncThemeClass = useCallback((dark: boolean) => {
+    if (typeof document === 'undefined') return;
+    const root = document.documentElement;
+    root.classList.toggle('dark', dark);
+    root.style.colorScheme = dark ? 'dark' : 'light';
+  }, []);
+
   // Multi-select is builder-only UX. Clear stale selection when leaving builder.
   useEffect(() => {
     if (currentView !== 'builder' && selectedSteps.length > 0) {
       setSelectedSteps([]);
     }
   }, [currentView, selectedSteps.length]);
-  useEffect(() => {
-    const root = document.documentElement;
-    if (isDark) {
-      root.classList.add('dark');
-      localStorage.setItem('tekautomate_dark', 'true');
-    } else {
-      root.classList.remove('dark');
-      localStorage.setItem('tekautomate_dark', 'false');
-    }
-  }, [isDark]);
+  useLayoutEffect(() => {
+    syncThemeClass(isDark);
+    localStorage.setItem('tekautomate_dark', isDark ? 'true' : 'false');
+  }, [isDark, syncThemeClass]);
   // eslint-disable-next-line @typescript-eslint/no-unused-vars
   const [_enableFlowDesigner, _setEnableFlowDesigner] = useState(() => {
     const saved = localStorage.getItem('enableFlowDesigner');
