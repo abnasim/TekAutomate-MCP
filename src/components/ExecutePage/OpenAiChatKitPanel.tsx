@@ -32,6 +32,8 @@ function readCurrentTheme(): 'dark' | 'light' {
 interface OpenAiChatKitPanelProps {
   apiKey: string;
   steps: StepPreview[];
+  workflowId?: string;
+  threadStorageKey?: string;
   workspaceRevision?: number;
   runLog?: string;
   autoApply?: boolean;
@@ -54,7 +56,8 @@ interface OpenAiChatKitPanelProps {
   className?: string;
 }
 
-function getWorkflowId(): string {
+function getWorkflowId(explicitWorkflowId?: string): string {
+  if (explicitWorkflowId?.trim()) return explicitWorkflowId.trim();
   try {
     return localStorage.getItem(CHATKIT_WORKFLOW_ID_KEY) || DEFAULT_WORKFLOW_ID;
   } catch {
@@ -62,17 +65,17 @@ function getWorkflowId(): string {
   }
 }
 
-function getStoredThreadId(): string {
+function getStoredThreadId(threadStorageKey?: string): string {
   try {
-    return localStorage.getItem(CHATKIT_THREAD_KEY) || '';
+    return localStorage.getItem(threadStorageKey || CHATKIT_THREAD_KEY) || '';
   } catch {
     return '';
   }
 }
 
-function setStoredThreadId(id: string): void {
+function setStoredThreadId(id: string, threadStorageKey?: string): void {
   try {
-    localStorage.setItem(CHATKIT_THREAD_KEY, id);
+    localStorage.setItem(threadStorageKey || CHATKIT_THREAD_KEY, id);
   } catch {
     // Ignore storage errors
   }
@@ -303,6 +306,8 @@ function buildRuntimeInstrumentPayload(
 export function OpenAiChatKitPanel({
   apiKey,
   steps,
+  workflowId,
+  threadStorageKey,
   workspaceRevision,
   runLog,
   autoApply = false,
@@ -580,8 +585,8 @@ export function OpenAiChatKitPanel({
   // The user's API key is used — no MCP proxy needed for session creation.
   const getClientSecret = useCallback(
     async (_currentSecret: string | null): Promise<string> => {
-      const workflowId = getWorkflowId();
-      if (!workflowId) {
+      const resolvedWorkflowId = getWorkflowId(workflowId);
+      if (!resolvedWorkflowId) {
         const msg = 'ChatKit workflow ID not configured.';
         setInitError(msg);
         throw new Error(msg);
@@ -600,7 +605,7 @@ export function OpenAiChatKitPanel({
         const res = await fetch(sessionUrl, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ apiKey, workflowId, userId: 'tekautomate-user' }),
+          body: JSON.stringify({ apiKey, workflowId: resolvedWorkflowId, userId: 'tekautomate-user' }),
         });
         if (res.ok) {
           const data = await res.json();
@@ -627,7 +632,7 @@ export function OpenAiChatKitPanel({
             'OpenAI-Beta': 'chatkit_beta=v1',
           },
           body: JSON.stringify({
-            workflow: { id: workflowId },
+            workflow: { id: resolvedWorkflowId },
             user: 'tekautomate-user',
           }),
         });
@@ -656,7 +661,7 @@ export function OpenAiChatKitPanel({
         throw err;
       }
     },
-    [apiKey],
+    [apiKey, workflowId],
   );
 
   // ── ChatKit hook ──
@@ -665,17 +670,17 @@ export function OpenAiChatKitPanel({
     // Don't restore threads from localStorage — ChatKit manages thread history
     // internally via its built-in history UI. Storing thread IDs causes stale
     // 404s when threads expire or get deleted on OpenAI's side.
-    initialThread: getStoredThreadId() || null,
+    initialThread: getStoredThreadId(threadStorageKey) || null,
     onThreadChange: (detail: { threadId: string | null }) => {
       setActiveThreadId(detail.threadId ?? null);
-      setStoredThreadId(detail.threadId || '');
+      setStoredThreadId(detail.threadId || '', threadStorageKey);
       onThreadChange?.(detail.threadId || '');
     },
     onError: (detail: { error: Error }) => {
       console.error('[ChatKit] Error:', detail.error);
       const message = String(detail.error?.message || '').toLowerCase();
       if (message.includes('thread') && (message.includes('not found') || message.includes('404') || message.includes('invalid'))) {
-        setStoredThreadId('');
+        setStoredThreadId('', threadStorageKey);
       }
       setInitError(detail.error?.message || 'ChatKit error');
     },

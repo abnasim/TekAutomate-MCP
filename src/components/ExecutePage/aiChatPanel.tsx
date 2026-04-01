@@ -158,6 +158,8 @@ export function AiChatPanel({
   });
   const [transientUiNow, setTransientUiNow] = useState(() => Date.now());
   const CHATKIT_WORKFLOW_ID_KEY = 'tekautomate.chatkit.workflow_id';
+  const CHATKIT_LIVE_WORKFLOW_ID = 'wf_69ccc162bc34819089705162201bc4b80128ecc0657c5932';
+  const CHATKIT_LIVE_THREAD_KEY = 'tekautomate.chatkit.thread_id.live';
   const CHATKIT_DEFAULT_WORKFLOW = 'wf_69cb9085f72c8190ae05b360552d6987032b7c148cd57c24';
   const [chatKitWorkflowId, setChatKitWorkflowId] = useState(() => {
     try { return localStorage.getItem(CHATKIT_WORKFLOW_ID_KEY) || CHATKIT_DEFAULT_WORKFLOW; } catch { return CHATKIT_DEFAULT_WORKFLOW; }
@@ -417,7 +419,16 @@ export function AiChatPanel({
       : 'AI — conversational assistant';
 
   // Show ChatKit when: OpenAI provider + AI Chat mode + workflow ID configured
-  const useChatKitEmbed = state.tekMode === 'ai' && state.provider === 'openai' && chatKitWorkflowId.trim().length > 0;
+  const activeChatKitWorkflowId = state.tekMode === 'live'
+    ? CHATKIT_LIVE_WORKFLOW_ID
+    : chatKitWorkflowId.trim();
+  const activeChatKitThreadKey = state.tekMode === 'live'
+    ? CHATKIT_LIVE_THREAD_KEY
+    : undefined;
+  const useChatKitEmbed =
+    state.provider === 'openai'
+    && (state.tekMode === 'ai' || state.tekMode === 'live')
+    && activeChatKitWorkflowId.length > 0;
 
   const interactionSummary = state.tekMode === 'mcp'
     ? 'Search commands, build flows, validate SCPI. No AI calls.'
@@ -1609,7 +1620,7 @@ export function AiChatPanel({
                   />
                 </div>
                 <p className="mt-0.5 text-[9px] text-slate-400 dark:text-white/30">
-                  Set to enable ChatKit for OpenAI AI Chat mode. Create in Agent Builder.
+                  Sets the OpenAI AI Chat workflow. Live mode uses its own dedicated ChatKit workflow automatically.
                 </p>
               </label>
               <label className="block">
@@ -1654,6 +1665,8 @@ export function AiChatPanel({
           <OpenAiChatKitPanel
             apiKey={state.openaiApiKey || state.apiKey}
             steps={steps}
+            workflowId={activeChatKitWorkflowId}
+            threadStorageKey={activeChatKitThreadKey}
             workspaceRevision={workspaceRevision}
             runLog={runLog}
             autoApply={false}
