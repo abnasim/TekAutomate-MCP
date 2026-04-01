@@ -17,8 +17,8 @@ export interface LiveActionRequest {
 }
 
 interface PendingActionRecord extends LiveActionRequest {
-  resolve: (value: LiveActionResultEnvelope) => void;
-  reject: (reason?: unknown) => void;
+  resolveHandlers: Array<(value: LiveActionResultEnvelope) => void>;
+  rejectHandlers: Array<(reason?: unknown) => void>;
   timeoutHandle: ReturnType<typeof setTimeout>;
 }
 
@@ -30,6 +30,7 @@ export interface LiveActionResultEnvelope {
 }
 
 const LIVE_ACTION_TIMEOUT_MS = 45_000;
+const SCREENSHOT_DEBOUNCE_MS = 1_500;
 const liveActionQueue: PendingActionRecord[] = [];
 const liveActionWaiters = new Map<string, Array<(action: LiveActionRequest | null) => void>>();
 
@@ -37,17 +38,46 @@ function createActionId(): string {
   return `live_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
 }
 
+function isScreenshotAction(record: LiveActionRequest | PendingActionRecord): boolean {
+  return record.toolName === 'capture_screenshot';
+}
+
+function getNextQueuedRecord(sessionKey: string): PendingActionRecord | null {
+  const queued = liveActionQueue.filter((item) => item.sessionKey === sessionKey && item.status === 'queued');
+  if (!queued.length) return null;
+
+  const commandLike = queued.find((item) => !isScreenshotAction(item));
+  if (commandLike) return commandLike;
+
+  const screenshots = queued
+    .filter((item) => isScreenshotAction(item))
+    .sort((a, b) => Date.parse(b.createdAt) - Date.parse(a.createdAt));
+  const latestScreenshot = screenshots[0];
+  if (!latestScreenshot) return null;
+
+  const ageMs = Date.now() - Date.parse(latestScreenshot.createdAt);
+  if (ageMs < SCREENSHOT_DEBOUNCE_MS) {
+    return null;
+  }
+  return latestScreenshot;
+}
+
 function notifySession(sessionKey: string) {
   const waiters = liveActionWaiters.get(sessionKey);
   if (!waiters?.length) return;
-  const action = liveActionQueue.find((item) => item.sessionKey === sessionKey && item.status === 'queued');
+  const action = getNextQueuedRecord(sessionKey);
   if (!action) return;
   liveActionWaiters.delete(sessionKey);
   waiters.forEach((resolve) => resolve(stripRecord(action)));
 }
 
 function stripRecord(record: PendingActionRecord): LiveActionRequest {
-  const { resolve: _resolve, reject: _reject, timeoutHandle: _timeoutHandle, ...action } = record;
+  const {
+    resolveHandlers: _resolveHandlers,
+    rejectHandlers: _rejectHandlers,
+    timeoutHandle: _timeoutHandle,
+    ...action
+  } = record;
   return action;
 }
 
@@ -86,10 +116,33 @@ export async function enqueueLiveAction(params: {
 
   const timeoutMs = Math.max(5_000, Math.min(params.timeoutMs ?? LIVE_ACTION_TIMEOUT_MS, 120_000));
   return new Promise<LiveActionResultEnvelope>((resolve, reject) => {
+    if (params.toolName === 'capture_screenshot') {
+      const existingQueuedScreenshot = liveActionQueue.find(
+        (item) =>
+          item.sessionKey === sessionKey
+          && item.status === 'queued'
+          && item.toolName === 'capture_screenshot',
+      );
+      if (existingQueuedScreenshot) {
+        existingQueuedScreenshot.args = params.args;
+        existingQueuedScreenshot.createdAt = new Date().toISOString();
+        existingQueuedScreenshot.resolveHandlers.push(resolve);
+        existingQueuedScreenshot.rejectHandlers.push(reject);
+        notifySession(sessionKey);
+        return;
+      }
+    }
+
     const id = createActionId();
     const timeoutHandle = setTimeout(() => {
+      const record = liveActionQueue.find((item) => item.id === id);
       cleanupRecord(id);
-      reject(new Error(`Timed out waiting for TekAutomate live action result for ${params.toolName}.`));
+      const error = new Error(`Timed out waiting for TekAutomate live action result for ${params.toolName}.`);
+      if (record) {
+        record.rejectHandlers.forEach((handler) => handler(error));
+        return;
+      }
+      reject(error);
     }, timeoutMs);
 
     const record: PendingActionRecord = {
@@ -99,8 +152,8 @@ export async function enqueueLiveAction(params: {
       args: params.args,
       createdAt: new Date().toISOString(),
       status: 'queued',
-      resolve,
-      reject,
+      resolveHandlers: [resolve],
+      rejectHandlers: [reject],
       timeoutHandle,
     };
 
@@ -113,7 +166,7 @@ export async function waitForNextLiveAction(sessionKey: string, timeoutMs = 25_0
   const normalized = String(sessionKey || '').trim();
   if (!normalized) return null;
 
-  const queued = liveActionQueue.find((item) => item.sessionKey === normalized && item.status === 'queued');
+  const queued = getNextQueuedRecord(normalized);
   if (queued) {
     queued.status = 'claimed';
     queued.claimedAt = new Date().toISOString();
@@ -171,8 +224,8 @@ export function completeLiveAction(input: {
     error: input.error,
     completedAt: new Date().toISOString(),
   };
-  record.resolve(payload);
+  record.resolveHandlers.forEach((handler) => handler(payload));
   cleanupRecord(record.id);
+  notifySession(record.sessionKey);
   return true;
 }
-

@@ -88,6 +88,10 @@ function splitScpiCommandString(command: string): string[] {
   return parts.length ? parts : [text];
 }
 
+function getToolExecutionPriority(toolName: string): number {
+  return toolName === 'capture_screenshot' ? 1 : 0;
+}
+
 /**
  * Verify SCPI commands against the command index before sending to the instrument.
  * Bypasses verification for star commands (*IDN?, *RST, etc.) which are universal.
@@ -360,7 +364,9 @@ async function runAnthropicLoop(params: LiveToolLoopParams): Promise<LiveToolLoo
     }
 
     // Check for tool calls
-    const toolUseBlocks = content.filter((c) => c.type === 'tool_use');
+    const toolUseBlocks = content
+      .filter((c) => c.type === 'tool_use')
+      .sort((a, b) => getToolExecutionPriority(String(a.name || '')) - getToolExecutionPriority(String(b.name || '')));
     if (toolUseBlocks.length === 0 || json.stop_reason !== 'tool_use') {
       break;
     }
@@ -536,7 +542,11 @@ async function runOpenAiLoop(params: LiveToolLoopParams): Promise<LiveToolLoopRe
     const toolResultsInput: Array<Record<string, unknown>> = [];
 
     let prevToolNameOai = '';
-    for (const item of output) {
+    const orderedOutput = [...output].sort((a, b) => {
+      if (a.type !== 'function_call' || b.type !== 'function_call') return 0;
+      return getToolExecutionPriority(String(a.name || '')) - getToolExecutionPriority(String(b.name || ''));
+    });
+    for (const item of orderedOutput) {
       // Extract text from message items
       if (item.type === 'message') {
         const content = Array.isArray(item.content) ? item.content as Array<Record<string, unknown>> : [];
@@ -812,8 +822,8 @@ export function buildLiveSystemPrompt(instrument?: {
       '### Execution',
       '- SESSION STARTUP: on the first live request in a session, call get_instrument_info, then send_scpi("*IDN?") to ground yourself before making assumptions about the scope.',
       '- Treat get_instrument_info as a hint and *IDN? as live proof of the connected scope when identity matters.',
-      '- BATCH tool calls: call send_scpi AND capture_screenshot in the SAME response when possible.',
-      '  Don\'t waste a round-trip just to take a screenshot — include it alongside your commands.',
+      '- Treat capture_screenshot as LOW priority. Do the control/query work first.',
+      '- If you need visual confirmation, request only ONE fresh screenshot after the command burst is complete.',
       '- Pack ALL related SCPI commands into ONE send_scpi call. Don\'t send them one at a time.',
       '- Common commands → send_scpi IMMEDIATELY. No search needed for: *RST, *IDN?, AUTOSet, ADDMEAS, SCAle, TRIGger:A:EDGE.',
       '- Unknown commands → tek_router search → send_scpi. Two calls max.',
