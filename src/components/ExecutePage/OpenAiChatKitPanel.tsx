@@ -136,7 +136,7 @@ function getChatKitThemeOptions(theme: 'dark' | 'light'): ThemeOption {
         ? { hue: 222, tint: 1, shade: -1 }
         : { hue: 222, tint: 8, shade: 2 },
       surface: theme === 'dark'
-        ? { background: '#0b1120', foreground: '#f8fafc' }
+        ? { background: '#111827', foreground: '#f8fafc' }
         : { background: '#ffffff', foreground: '#111827' },
     },
   };
@@ -1426,7 +1426,7 @@ function OpenAiChatKitPanelInner({
             flexDirection: 'column',
             gap: 14,
             borderBottom: '1px solid rgba(255,255,255,0.06)',
-            background: chatKitTheme === 'dark' ? '#171717' : '#ffffff',
+            background: chatKitTheme === 'dark' ? '#111827' : '#ffffff',
           }}
         >
           <div
