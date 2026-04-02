@@ -117,15 +117,15 @@ function getStartScreenGreeting(isLiveMode: boolean): string {
 function getStartScreenPrompts(isLiveMode: boolean): Array<{ label: string; prompt: string }> {
   return isLiveMode
     ? [
-        { label: 'What is Instrument Co-Pilot?', prompt: 'What is TekAutomate Instrument Co-Pilot? What can you do in Live mode?' },
-        { label: 'Check connection', prompt: 'Check the connected instrument and tell me what scope is online.' },
-        { label: 'Set scope to default', prompt: 'Reset the scope to its default factory settings.' },
-        { label: 'Discover SCPI commands', prompt: 'What SCPI commands are available on the connected instrument?' },
+        { label: 'What is Instrument Co-Pilot?', prompt: 'What is TekAutomate Instrument Co-Pilot? Explain what you can do in Live mode and how you help control the scope in real time.' },
+        { label: 'Check connection', prompt: 'Check the connected instrument and tell me what scope is online right now.' },
+        { label: 'Set scope to default', prompt: 'Reset the scope to its default factory settings using *RST and confirm the state.' },
+        { label: 'Discover SCPI commands', prompt: 'What SCPI commands are available on the connected instrument? Help me discover and explore them.' },
       ]
     : [
-        { label: 'What is TekAutomate?', prompt: 'What is TekAutomate? How can you help me?' },
-        { label: 'Build me a flow', prompt: 'Build me a new test automation workflow.' },
-        { label: 'Check instrument', prompt: 'Check the connected instrument and tell me its status.' },
+        { label: 'What is TekAutomate?', prompt: 'What is TekAutomate? Explain what you are and how you help with test automation workflows for Tektronix instruments.' },
+        { label: 'Build me a flow', prompt: 'Build me a new test automation workflow. Ask me what instrument and measurements I need.' },
+        { label: 'Check instrument', prompt: 'Check the connected instrument and tell me its identity, status, and any errors.' },
       ];
 }
 
