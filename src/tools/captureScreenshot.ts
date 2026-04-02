@@ -28,7 +28,7 @@ async function compressAnalyzedScreenshotPayload(
     const sharp = (await import('sharp')).default;
     const rawBuffer = Buffer.from(base64, 'base64');
     const variants = [
-      { width: 800, height: 480, quality: 65 },
+      { width: 800, height: 480, quality: 75 },
       { width: 640, height: 384, quality: 55 },
       { width: 480, height: 288, quality: 45 },
     ];
