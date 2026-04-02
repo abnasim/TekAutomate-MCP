@@ -148,13 +148,6 @@ function getQuickActions(isLiveMode: boolean): QuickAction[] {
 function getChatKitThemeOptions(theme: 'dark' | 'light'): ThemeOption {
   return {
     colorScheme: theme,
-    typography: {
-      baseSize: 15,
-      fontFamily: 'JetBrains Mono',
-      fontFamilyMono: 'JetBrains Mono',
-    },
-    radius: 'sharp',
-    density: 'compact',
     color: theme === 'dark'
       ? {
           grayscale: { hue: 220, tint: 7, shade: 1 },
