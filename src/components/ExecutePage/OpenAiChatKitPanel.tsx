@@ -163,7 +163,6 @@ function getChatKitThemeOptions(theme: 'dark' | 'light'): ThemeOption {
         radius: 'soft',
         density: 'normal',
         color: {
-          grayscale: { hue: 220, tint: 1, shade: 8 },
           accent: { primary: '#007FE0', level: 2 },
         },
       }
