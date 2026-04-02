@@ -1,5 +1,5 @@
 import type { AssembledContext, ChatTurn } from '../types';
-import { buildRequestHistory } from '../historyTrim';
+import { trimConversationHistory } from '../historyTrim';
 
 export class OpenAiResponsesAdapter {
   private apiKey: string;
@@ -19,7 +19,7 @@ export class OpenAiResponsesAdapter {
     onChunk: (chunk: string) => void
   ): Promise<void> {
     // Keep only the most recent conversational turns so requests do not grow unbounded.
-    const historyInput = buildRequestHistory(history, context.userPrompt).map((turn) => ({
+    const historyInput = trimConversationHistory(history).map((turn) => ({
       role: turn.role as 'user' | 'assistant',
       content: turn.content,
     }));

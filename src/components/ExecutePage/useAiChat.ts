@@ -4,7 +4,7 @@ import { canMaterializeAiAction, normalizeAiActions, parseAiActionResponse } fro
 import { streamMcpChat, disconnectLiveSession, resolveMcpHost, type McpChatAttachment } from '../../utils/ai/mcpClient';
 import { runLiveToolLoop, fetchLiveTools, buildLiveSystemPrompt, buildAnthropicChatPrompt, buildWorkflowContext } from '../../utils/ai/liveToolLoop';
 import type { ChatTurn, PredefinedAction, RagCorpus } from '../../utils/ai/types';
-import { buildRequestHistory } from '../../utils/ai/historyTrim';
+import { trimConversationHistory } from '../../utils/ai/historyTrim';
 import type { StepPreview } from './StepsListPreview';
 import { useAiChatContext } from './aiChatContext';
 import type { TekMode } from './aiChatReducer';
@@ -803,7 +803,7 @@ export function useAiChat(params: {
           model: state.model,
           systemPrompt,
           userMessage: effectiveMessage,
-          history: buildRequestHistory(state.history, effectiveMessage, 4000),
+          history: trimConversationHistory(state.history, 3, 4000),
           tools: liveTools,
           instrumentEndpoint: params.instrumentEndpoint ?? undefined,
           flowContext: { modelFamily, deviceDriver },
@@ -947,7 +947,7 @@ export function useAiChat(params: {
               params.flowContext?.deviceDriver,
             ),
             userMessage: fullMessage,
-            history: buildRequestHistory(state.history, effectiveMessage, 3000).map((h) => ({
+            history: trimConversationHistory(state.history, 3, 3000).map((h) => ({
               role: h.role as string,
               content: h.content,
             })),
@@ -1102,11 +1102,11 @@ export function useAiChat(params: {
           : undefined,
         history: options?.standalone
           ? []
-          : buildRequestHistory(
+          : trimConversationHistory(
               (chatBuildHandoff || autoBuildFollowUp) && handoffHistory.length > 0
                 ? handoffHistory
                 : state.history,
-              effectiveMessage,
+              3,
               4000
             ),
       };
