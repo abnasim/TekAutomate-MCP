@@ -153,6 +153,7 @@ export function AiChatPanel({
   const [input, setInput] = useState('');
   const [attachments, setAttachments] = useState<McpChatAttachment[]>([]);
   const [attachmentError, setAttachmentError] = useState<string | null>(null);
+  const [isDragOverComposer, setIsDragOverComposer] = useState(false);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const attachmentInputRef = useRef<HTMLInputElement>(null);
   const [showSettings, setShowSettings] = useState(false);
@@ -1187,6 +1188,12 @@ export function AiChatPanel({
     }
   };
 
+  const handleComposerDrop = (files: FileList | null) => {
+    if (!files || files.length === 0) return;
+    setIsDragOverComposer(false);
+    void handleAttachmentSelection(files);
+  };
+
   const handleSend = () => {
     const next = input.trim();
     if (!next && attachments.length === 0 && contextAttachments.length === 0) return;
@@ -1985,6 +1992,28 @@ export function AiChatPanel({
               ref={textareaRef}
               value={input}
               onChange={(e) => setInput(e.target.value)}
+              onDragEnter={(e) => {
+                if (e.dataTransfer?.types?.includes('Files')) {
+                  e.preventDefault();
+                  setIsDragOverComposer(true);
+                }
+              }}
+              onDragOver={(e) => {
+                if (e.dataTransfer?.types?.includes('Files')) {
+                  e.preventDefault();
+                  e.dataTransfer.dropEffect = 'copy';
+                  setIsDragOverComposer(true);
+                }
+              }}
+              onDragLeave={(e) => {
+                if (e.currentTarget === e.target) {
+                  setIsDragOverComposer(false);
+                }
+              }}
+              onDrop={(e) => {
+                e.preventDefault();
+                handleComposerDrop(e.dataTransfer?.files ?? null);
+              }}
               onPaste={(e) => {
                 const items = e.clipboardData?.items;
                 if (!items) return;
@@ -2017,8 +2046,15 @@ export function AiChatPanel({
                   : 'Ask about measurements, debugging, scope setup...'
             }
             rows={4}
-            className="w-full min-h-[110px] bg-slate-50 dark:bg-white/5 border border-slate-200 dark:border-white/10 focus:border-violet-500/50 rounded-xl px-3.5 py-3 text-sm text-slate-900 dark:text-white placeholder-slate-400 dark:placeholder-white/30 resize-y outline-none transition-colors"
+            className={`w-full min-h-[110px] rounded-xl px-3.5 py-3 text-sm text-slate-900 dark:text-white placeholder-slate-400 dark:placeholder-white/30 resize-y outline-none transition-colors ${
+              isDragOverComposer
+                ? 'bg-cyan-50 dark:bg-cyan-500/10 border border-cyan-400 dark:border-cyan-400/70'
+                : 'bg-slate-50 dark:bg-white/5 border border-slate-200 dark:border-white/10 focus:border-violet-500/50'
+            }`}
           />
+          {isDragOverComposer && (
+            <div className="pointer-events-none absolute inset-0 rounded-xl border-2 border-dashed border-cyan-400/80 bg-cyan-400/5" />
+          )}
           {(contextAttachments.length > 0 || attachments.length > 0) && (
             <div className="flex flex-wrap gap-1.5">
               {contextAttachments.map((file) => (
