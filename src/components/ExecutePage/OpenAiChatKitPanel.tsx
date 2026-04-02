@@ -146,28 +146,25 @@ function getQuickActions(isLiveMode: boolean): QuickAction[] {
 }
 
 function getChatKitThemeOptions(theme: 'dark' | 'light'): ThemeOption {
-  return (theme === 'dark'
-    ? {
-        colorScheme: 'dark',
-        typography: { baseSize: 14, fontFamily: 'Inter', fontFamilyMono: 'JetBrains Mono' },
-        radius: 'soft',
-        density: 'compact',
-        color: {
+  return {
+    colorScheme: theme,
+    typography: {
+      baseSize: 15,
+      fontFamily: 'JetBrains Mono',
+      fontFamilyMono: 'JetBrains Mono',
+    },
+    radius: 'sharp',
+    density: 'compact',
+    color: theme === 'dark'
+      ? {
           grayscale: { hue: 220, tint: 7, shade: 1 },
           accent: { primary: '#20E0FF', level: 2 },
-        },
-      }
-    : {
-        colorScheme: 'light',
-        typography: { baseSize: 14, fontFamily: 'Inter', fontFamilyMono: 'JetBrains Mono' },
-        radius: 'soft',
-        density: 'compact',
-        color: {
+        }
+      : {
           grayscale: { hue: 220, tint: 0, shade: 10 },
           accent: { primary: '#0091FF', level: 2 },
         },
-      }
-  ) as ThemeOption;
+  } as ThemeOption;
 }
 
 function extractClientSecret(payload: unknown): string | null {
@@ -1447,7 +1444,7 @@ function OpenAiChatKitPanelInner({
   }
 
   return (
-    <div ref={containerRef} className={className} style={{ flex: 1, minHeight: 0, display: 'flex', flexDirection: 'column', position: 'relative' }}>
+    <div ref={containerRef} className={className} data-chatkit-theme={chatKitTheme} style={{ flex: 1, minHeight: 0, display: 'flex', flexDirection: 'column', position: 'relative' }}>
       {!activeThreadId ? (
         <div
           style={{
