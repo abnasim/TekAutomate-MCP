@@ -15,7 +15,7 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { ChatKit, useChatKit } from '@openai/chatkit-react';
 import { parseAiActionResponse, type AiAction } from '../../utils/aiActions';
-import { resolveMcpHost } from '../../utils/ai/mcpClient';
+import { resolveMcpHost, resolveMcpHostCandidates } from '../../utils/ai/mcpClient';
 import { buildWorkflowContext, executeMcpTool } from '../../utils/ai/liveToolLoop';
 import type { StepPreview } from './StepsListPreview';
 
@@ -270,6 +270,58 @@ function collectStringCandidatesDeep(value: unknown, seen = new Set<unknown>()):
 
   const record = value as Record<string, unknown>;
   return Object.values(record).flatMap((item) => collectStringCandidatesDeep(item, seen));
+}
+
+function collectProposalObjectsDeep(
+  value: unknown,
+  seen = new Set<unknown>()
+): Array<{
+  summary?: string;
+  findings?: unknown[];
+  suggestedFixes?: unknown[];
+  actions?: unknown[];
+  rawJson?: string;
+}> {
+  if (!value || typeof value !== 'object') return [];
+  if (seen.has(value)) return [];
+  seen.add(value);
+
+  const matches: Array<{
+    summary?: string;
+    findings?: unknown[];
+    suggestedFixes?: unknown[];
+    actions?: unknown[];
+    rawJson?: string;
+  }> = [];
+
+  if (Array.isArray(value)) {
+    for (const item of value) {
+      matches.push(...collectProposalObjectsDeep(item, seen));
+    }
+    return matches;
+  }
+
+  const record = value as Record<string, unknown>;
+  if (Array.isArray(record.actions)) {
+    matches.push({
+      summary: typeof record.summary === 'string' ? record.summary : undefined,
+      findings: Array.isArray(record.findings) ? record.findings : undefined,
+      suggestedFixes: Array.isArray(record.suggestedFixes) ? record.suggestedFixes : undefined,
+      actions: record.actions,
+      rawJson: JSON.stringify({
+        summary: typeof record.summary === 'string' ? record.summary : '',
+        findings: Array.isArray(record.findings) ? record.findings : [],
+        suggestedFixes: Array.isArray(record.suggestedFixes) ? record.suggestedFixes : [],
+        actions: record.actions,
+      }),
+    });
+  }
+
+  for (const item of Object.values(record)) {
+    matches.push(...collectProposalObjectsDeep(item, seen));
+  }
+
+  return matches;
 }
 
 function buildRuntimeWorkflowPayload(
@@ -722,48 +774,72 @@ export function OpenAiChatKitPanel({
   }, [captureActionsPreview]);
 
   const fetchLatestStagedProposal = useCallback(async () => {
-    const mcpHost = resolveMcpHost();
-    if (!mcpHost) return false;
-    try {
-      const res = await fetch(`${mcpHost.replace(/\/$/, '')}/workflow-proposals/latest`);
-      if (!res.ok) return false;
-      const json = await res.json() as {
-        ok?: boolean;
-        proposal?: {
-          id?: string;
-          createdAt?: string;
-          summary?: string;
-          findings?: unknown[];
-          suggestedFixes?: unknown[];
-          actions?: unknown[];
-        } | null;
-      };
-      const proposal = json?.proposal;
-      if (!proposal?.id || !proposal?.createdAt) return false;
-      if (proposal.id === seenProposalIdRef.current) return false;
-      const createdAtMs = Date.parse(String(proposal.createdAt));
-      if (Number.isFinite(createdAtMs) && createdAtMs < proposalSessionStartedAtRef.current) return false;
+    const hosts = Array.from(new Set(resolveMcpHostCandidates().map((host) => host.replace(/\/+$/, ''))));
+    if (!hosts.length) return false;
 
-      const accepted = setStructuredProposal({
-        summary: proposal.summary,
-        findings: Array.isArray(proposal.findings) ? proposal.findings : [],
-        suggestedFixes: Array.isArray(proposal.suggestedFixes) ? proposal.suggestedFixes : [],
-        actions: Array.isArray(proposal.actions) ? proposal.actions : [],
-        rawJson: JSON.stringify({
-          summary: proposal.summary || '',
-          findings: Array.isArray(proposal.findings) ? proposal.findings : [],
-          suggestedFixes: Array.isArray(proposal.suggestedFixes) ? proposal.suggestedFixes : [],
-          actions: Array.isArray(proposal.actions) ? proposal.actions : [],
-        }),
-      });
-      if (accepted) {
-        seenProposalIdRef.current = proposal.id;
-        return true;
+    let newest:
+      | {
+          host: string;
+          proposal: {
+            id?: string;
+            createdAt?: string;
+            summary?: string;
+            findings?: unknown[];
+            suggestedFixes?: unknown[];
+            actions?: unknown[];
+          };
+          createdAtMs: number;
+        }
+      | null = null;
+
+    for (const host of hosts) {
+      try {
+        const res = await fetch(`${host}/workflow-proposals/latest`);
+        if (!res.ok) continue;
+        const json = (await res.json()) as {
+          ok?: boolean;
+          proposal?: {
+            id?: string;
+            createdAt?: string;
+            summary?: string;
+            findings?: unknown[];
+            suggestedFixes?: unknown[];
+            actions?: unknown[];
+          } | null;
+        };
+        const proposal = json?.proposal;
+        if (!proposal?.id || !proposal?.createdAt) continue;
+        if (proposal.id === seenProposalIdRef.current) continue;
+        const createdAtMs = Date.parse(String(proposal.createdAt));
+        if (Number.isFinite(createdAtMs) && createdAtMs < proposalSessionStartedAtRef.current) continue;
+        if (!newest || (!Number.isNaN(createdAtMs) && createdAtMs > newest.createdAtMs)) {
+          newest = { host, proposal, createdAtMs };
+        }
+      } catch {
+        // Ignore individual host failures and try the next candidate.
       }
-      return false;
-    } catch {
-      return false;
     }
+
+    if (!newest) return false;
+
+    const accepted = setStructuredProposal({
+      summary: newest.proposal.summary,
+      findings: Array.isArray(newest.proposal.findings) ? newest.proposal.findings : [],
+      suggestedFixes: Array.isArray(newest.proposal.suggestedFixes) ? newest.proposal.suggestedFixes : [],
+      actions: Array.isArray(newest.proposal.actions) ? newest.proposal.actions : [],
+      rawJson: JSON.stringify({
+        summary: newest.proposal.summary || '',
+        findings: Array.isArray(newest.proposal.findings) ? newest.proposal.findings : [],
+        suggestedFixes: Array.isArray(newest.proposal.suggestedFixes) ? newest.proposal.suggestedFixes : [],
+        actions: Array.isArray(newest.proposal.actions) ? newest.proposal.actions : [],
+      }),
+    });
+    if (accepted) {
+      seenProposalIdRef.current = String(newest.proposal.id || '');
+      console.log('[ChatKit] Accepted staged proposal from host:', newest.host);
+      return true;
+    }
+    return false;
   }, [setStructuredProposal]);
 
   const handleWidgetAction = useCallback(async (
@@ -957,6 +1033,15 @@ export function OpenAiChatKitPanel({
       });
     },
     onLog: (detail: { name?: string; data?: Record<string, unknown> }) => {
+      const structuredCandidates = collectProposalObjectsDeep(detail?.data);
+      for (const candidate of structuredCandidates) {
+        const accepted = setStructuredProposal(candidate);
+        if (accepted) {
+          console.log('[ChatKit] Parsed structured proposal from log event:', detail?.name || '(unnamed)');
+          return;
+        }
+      }
+
       const strings = collectStringCandidatesDeep(detail?.data);
       for (const text of strings) {
         if (!text.includes('ACTIONS_JSON') && !text.includes('"actions"') && !text.includes('"summary"')) continue;
