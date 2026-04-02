@@ -53,6 +53,13 @@ export interface LiveToolLoopResult {
   error?: string;
 }
 
+interface ScreenshotPayload {
+  base64: string;
+  mimeType: string;
+  capturedAt?: string;
+  sizeBytes?: number;
+}
+
 // ── Tool Execution ──
 
 export const EXECUTOR_TOOLS = new Set([
@@ -91,6 +98,22 @@ function splitScpiCommandString(command: string): string[] {
 
 function getToolExecutionPriority(toolName: string): number {
   return toolName === 'capture_screenshot' ? 1 : 0;
+}
+
+function extractScreenshotPayload(result: unknown): ScreenshotPayload | null {
+  if (!result || typeof result !== 'object') return null;
+  const record = result as Record<string, unknown>;
+  const nested = record.data && typeof record.data === 'object'
+    ? (record.data as Record<string, unknown>)
+    : null;
+  const candidate = typeof record.base64 === 'string' ? record : nested;
+  if (!candidate || typeof candidate.base64 !== 'string' || !candidate.base64) return null;
+  return {
+    base64: candidate.base64,
+    mimeType: typeof candidate.mimeType === 'string' ? candidate.mimeType : 'image/png',
+    capturedAt: typeof candidate.capturedAt === 'string' ? candidate.capturedAt : undefined,
+    sizeBytes: typeof candidate.sizeBytes === 'number' ? candidate.sizeBytes : undefined,
+  };
 }
 
 /**
@@ -581,10 +604,9 @@ async function runOpenAiLoop(params: LiveToolLoopParams): Promise<LiveToolLoopRe
           onToolResult?.(toolName, result);
           toolCallLog.push({ tool: toolName, args: toolArgs, result });
 
-          const resultObj = result && typeof result === 'object' ? result as Record<string, unknown> : null;
-          const isScreenshot = resultObj && typeof resultObj.base64 === 'string';
+          const screenshotPayload = extractScreenshotPayload(result);
 
-          if (isScreenshot && toolArgs.analyze === true) {
+          if (screenshotPayload && toolArgs.analyze === true) {
             // Send screenshot for AI analysis
             toolResultsInput.push({
               type: 'function_call_output',
@@ -596,7 +618,7 @@ async function runOpenAiLoop(params: LiveToolLoopParams): Promise<LiveToolLoopRe
               content: [
                 {
                   type: 'input_image',
-                  image_url: `data:${(resultObj.mimeType as string) || 'image/png'};base64,${resultObj.base64}`,
+                  image_url: `data:${screenshotPayload.mimeType};base64,${screenshotPayload.base64}`,
                   detail: 'low',
                 },
                 { type: 'input_text', text: 'Only mention what CHANGED or is relevant to the user\'s last request. Do NOT re-describe the entire display.' },
@@ -615,7 +637,7 @@ async function runOpenAiLoop(params: LiveToolLoopParams): Promise<LiveToolLoopRe
             toolResultsInput.push({
               type: 'function_call_output',
               call_id: callId,
-              output: isScreenshot ? 'Screenshot captured and displayed to user.' : truncated,
+              output: screenshotPayload ? 'Screenshot captured and displayed to user.' : truncated,
             });
           }
         } catch (err) {

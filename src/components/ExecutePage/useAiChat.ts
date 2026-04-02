@@ -43,6 +43,29 @@ function canonicalizeModelId(model: string): string {
   return raw.replace(/-\d{4}-\d{2}-\d{2}$/i, '');
 }
 
+function extractScreenshotResult(value: unknown): {
+  base64: string;
+  mimeType: string;
+  capturedAt: string;
+  sizeBytes: number;
+} | null {
+  if (!value || typeof value !== 'object') return null;
+  const record = value as Record<string, unknown>;
+  const nested = record.data && typeof record.data === 'object'
+    ? (record.data as Record<string, unknown>)
+    : null;
+  const candidate = typeof record.base64 === 'string' ? record : nested;
+  if (!candidate || typeof candidate.base64 !== 'string' || !candidate.base64) return null;
+  return {
+    base64: candidate.base64,
+    mimeType: typeof candidate.mimeType === 'string' ? candidate.mimeType : 'image/png',
+    capturedAt: typeof candidate.capturedAt === 'string' ? candidate.capturedAt : new Date().toISOString(),
+    sizeBytes: typeof candidate.sizeBytes === 'number'
+      ? candidate.sizeBytes
+      : Math.round(candidate.base64.length * 0.75),
+  };
+}
+
 const API_KEY_STORAGE = 'tekautomate.ai.byok.api_key';
 const API_KEY_STORAGE_BY_PROVIDER = {
   openai: 'tekautomate.ai.byok.api_key.openai',
@@ -810,16 +833,14 @@ export function useAiChat(params: {
           maxIterations: 12,
           onToolResult: (name, result) => {
             // Push screenshots to UI in real-time as they happen during the AI loop
-            if (name === 'capture_screenshot' && params.onLiveScreenshot && result && typeof result === 'object') {
-              const r = result as Record<string, unknown>;
-              const base64 = r.base64 as string | undefined;
-              const mimeType = (r.mimeType as string) || 'image/png';
-              if (base64 && base64.length > 100) {
+            if (name === 'capture_screenshot' && params.onLiveScreenshot) {
+              const screenshot = extractScreenshotResult(result);
+              if (screenshot && screenshot.base64.length > 100) {
                 params.onLiveScreenshot({
-                  dataUrl: `data:${mimeType};base64,${base64}`,
-                  mimeType,
-                  sizeBytes: Math.round(base64.length * 0.75),
-                  capturedAt: (r.capturedAt as string) || new Date().toISOString(),
+                  dataUrl: `data:${screenshot.mimeType};base64,${screenshot.base64}`,
+                  mimeType: screenshot.mimeType,
+                  sizeBytes: screenshot.sizeBytes,
+                  capturedAt: screenshot.capturedAt,
                 });
               }
             }
@@ -840,15 +861,13 @@ export function useAiChat(params: {
             (tc) => tc.tool === 'capture_screenshot' && tc.result && typeof tc.result === 'object'
           );
           if (screenshotCall) {
-            const r = screenshotCall.result as Record<string, unknown>;
-            const base64 = r.base64 as string | undefined;
-            const mimeType = (r.mimeType as string) || 'image/png';
-            if (base64 && base64.length > 100) {
+            const screenshot = extractScreenshotResult(screenshotCall.result);
+            if (screenshot && screenshot.base64.length > 100) {
               params.onLiveScreenshot({
-                dataUrl: `data:${mimeType};base64,${base64}`,
-                mimeType,
-                sizeBytes: Math.round(base64.length * 0.75),
-                capturedAt: (r.capturedAt as string) || new Date().toISOString(),
+                dataUrl: `data:${screenshot.mimeType};base64,${screenshot.base64}`,
+                mimeType: screenshot.mimeType,
+                sizeBytes: screenshot.sizeBytes,
+                capturedAt: screenshot.capturedAt,
               });
             }
           }
