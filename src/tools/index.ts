@@ -156,13 +156,13 @@ export function getToolDefinitions() {
     },
     {
       name: 'search_scpi',
-      description: 'Search SCPI commands by feature or keyword (e.g. "FastFrame", "trigger edge", "measurement frequency"). Returns compact discovery results by default for token efficiency: header, command type, group, short description, and an exact-lookup hint. Use get_command_by_header for full syntax, arguments, and examples after you pick a match. Pass verbosity:"full" only when you explicitly need rich command blobs.',
+      description: 'Search SCPI commands by feature or keyword (e.g. "FastFrame", "trigger edge", "measurement frequency"). Returns ultra-compact discovery results by default for token efficiency: header, type, description, and group. Use get_command_by_header for full syntax, arguments, and examples after you pick a match. Pass verbosity:"full" only when you explicitly need rich command blobs.',
       parameters: {
         type: 'object',
         properties: {
           query: { type: 'string', description: 'Feature or command to search, e.g. FastFrame.' },
           modelFamily: { type: 'string', description: 'Instrument model family filter, e.g. mso_5_series.' },
-          limit: { type: 'number', description: 'Max results to return (default 5).' },
+          limit: { type: 'number', description: 'Max results to return (default 10).' },
           offset: { type: 'number', description: 'Result offset for pagination (default 0).' },
           commandType: { type: 'string', enum: ['set', 'query', 'both'], description: 'Optional command type filter.' },
           verbosity: { type: 'string', enum: ['summary', 'full'], description: 'Response detail level (default summary).' },

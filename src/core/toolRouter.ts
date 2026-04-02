@@ -228,7 +228,7 @@ async function handleSearch(req: RouterRequest, startedAt: number): Promise<Rout
     const { serializeCommandSearchResult } = await import('../tools/commandResultShape');
     const cmdIdx = await getCommandIndex();
     const offset = Math.max(0, req.offset ?? 0);
-    const limit = req.limit ?? 5;
+    const limit = req.limit ?? 10;
     const results = cmdIdx.searchByQuery(req.query, req.modelFamily, limit + 1, undefined, offset);
     scpiCommands = results.map((cmd: any) => {
       const summary = serializeCommandSearchResult(cmd);
@@ -250,7 +250,6 @@ async function handleSearch(req: RouterRequest, startedAt: number): Promise<Rout
       offset,
       limit,
       returned: scpiCommands.length,
-      nextOffset: hasMore ? offset + scpiCommands.length : undefined,
       hasMore,
     };
     scpiMs = Date.now() - scpiStart;
@@ -712,7 +711,7 @@ async function handleSearchExec(req: RouterRequest, startedAt: number): Promise<
   const searchStart = Date.now();
   const engine = getToolSearchEngine();
   const hits = await engine.search(req.query, {
-    limit: req.limit ?? 5,
+    limit: req.limit ?? 10,
     categories: req.categories,
   });
   const searchMs = Date.now() - searchStart;
@@ -971,7 +970,7 @@ export const TEK_ROUTER_TOOL_DEFINITION = {
       },
       limit: {
         type: 'number',
-        description: 'Maximum search results to return (default 5).',
+        description: 'Maximum search results to return (default 10).',
       },
       offset: {
         type: 'number',

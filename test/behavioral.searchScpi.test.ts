@@ -13,6 +13,7 @@ describe('behavioral.searchScpi', () => {
       modelFamily: 'MSO4/5/6 Series',
       limit: 10,
       commandType: 'set',
+      verbosity: 'full',
     });
 
     expect(result.ok).toBe(true);
@@ -189,16 +190,11 @@ describe('behavioral.searchScpi', () => {
     const first = (result.data as Array<Record<string, unknown>>)[0];
     expect(first).toBeTruthy();
     expect(first.header).toBeTruthy();
-    expect(first.commandType).toBeTruthy();
-    expect(first.shortDescription).toBeTruthy();
-    expect(first.lookupHint).toEqual({
-      tool: 'get_command_by_header',
-      header: first.header,
-    });
-    expect(first).not.toHaveProperty('syntax');
-    expect(first).not.toHaveProperty('arguments');
-    expect(first).not.toHaveProperty('examples');
-    expect(first).not.toHaveProperty('description');
+    expect(first.type).toBeTruthy();
+    expect(first.desc).toBeTruthy();
+    expect(first.group).toBeTruthy();
+    expect(Object.keys(first).sort()).toEqual(['desc', 'group', 'header', 'type']);
+    expect(result.sourceMeta).toBeUndefined();
   });
 
   it('can still return full search results when explicitly requested', async () => {
@@ -223,7 +219,7 @@ describe('behavioral.searchScpi', () => {
 
     expect(result.ok).toBe(true);
     expect(Array.isArray(result.data)).toBe(true);
-    expect((result.data as unknown[]).length).toBeLessThanOrEqual(5);
+    expect((result.data as unknown[]).length).toBeLessThanOrEqual(10);
   });
 
   it('supports offset paging so follow-up searches can continue past the first page', async () => {
@@ -245,8 +241,7 @@ describe('behavioral.searchScpi', () => {
     const firstHeaders = new Set((firstPage.data as Array<{ header?: string }>).map((row) => String(row.header || '')));
     const secondHeaders = (secondPage.data as Array<{ header?: string }>).map((row) => String(row.header || ''));
 
-    expect((firstPage.paging as { hasMore?: boolean; nextOffset?: number })?.hasMore).toBe(true);
-    expect((firstPage.paging as { nextOffset?: number })?.nextOffset).toBe(5);
+    expect((firstPage.paging as { hasMore?: boolean })?.hasMore).toBe(true);
     expect(secondHeaders.length).toBeGreaterThan(0);
     expect(secondHeaders.some((header) => !firstHeaders.has(header))).toBe(true);
   });
@@ -261,12 +256,13 @@ describe('behavioral.searchScpi', () => {
       query: 'trigger mode',
       modelFamily: 'MSO4/5/6 Series',
       limit: 5,
+      verbosity: 'full',
       sourceMetaMode: 'full',
     });
 
     expect(compact.ok).toBe(true);
     expect(full.ok).toBe(true);
-    expect((compact.sourceMeta || []).every((row) => !('commandId' in row))).toBe(true);
+    expect(compact.sourceMeta).toBeUndefined();
     expect((full.sourceMeta || []).some((row) => 'commandId' in row)).toBe(true);
   });
 
