@@ -57,6 +57,21 @@ html, body, #root {
   color: #9ca3af;
 }
 
+/* ChatKit composer — force dark mode colors to match app theme */
+.dark [class*="composer" i] textarea,
+.dark [class*="composer" i] [contenteditable],
+.dark [class*="composer" i] input,
+.dark [data-color-scheme="dark"] textarea,
+.dark [data-color-scheme="dark"] [contenteditable] {
+  background-color: #1f2937 !important;
+  color: #f3f4f6 !important;
+  border-color: #374151 !important;
+}
+.dark [class*="composer" i] textarea::placeholder,
+.dark [class*="composer" i] input::placeholder {
+  color: #9ca3af !important;
+}
+
 /* Near-invisible scrollbar for horizontal-scroll toolbars (nav tabs, Blockly toolbar) */
 .nav-tabs-scroll {
   overflow-x: auto;
