@@ -116,6 +116,101 @@ function extractScreenshotPayload(result: unknown): ScreenshotPayload | null {
   };
 }
 
+async function compressScreenshotForAnalysis(result: unknown, analyze?: boolean): Promise<unknown> {
+  if (analyze !== true) return result;
+  const screenshot = extractScreenshotPayload(result);
+  if (!screenshot) return result;
+  if (typeof window === 'undefined' || typeof document === 'undefined') return result;
+
+  const variants = [
+    { width: 640, height: 384, quality: 0.55 },
+    { width: 480, height: 288, quality: 0.45 },
+  ];
+
+  try {
+    const dataUrl = `data:${screenshot.mimeType};base64,${screenshot.base64}`;
+    const img = await new Promise<HTMLImageElement>((resolve, reject) => {
+      const element = new Image();
+      element.onload = () => resolve(element);
+      element.onerror = () => reject(new Error('Failed to load screenshot for compression'));
+      element.src = dataUrl;
+    });
+
+    const originalBytes = screenshot.sizeBytes ?? Math.round(screenshot.base64.length * 0.75);
+    let bestDataUrl = dataUrl;
+    let bestBytes = originalBytes;
+
+    for (const variant of variants) {
+      const scale = Math.min(variant.width / img.width, variant.height / img.height, 1);
+      const width = Math.max(1, Math.round(img.width * scale));
+      const height = Math.max(1, Math.round(img.height * scale));
+      const canvas = document.createElement('canvas');
+      canvas.width = width;
+      canvas.height = height;
+      const ctx = canvas.getContext('2d');
+      if (!ctx) continue;
+      ctx.drawImage(img, 0, 0, width, height);
+      const candidateDataUrl = canvas.toDataURL('image/jpeg', variant.quality);
+      const base64Part = candidateDataUrl.split(',')[1] || '';
+      const candidateBytes = Math.round(base64Part.length * 0.75);
+      if (candidateBytes < bestBytes) {
+        bestDataUrl = candidateDataUrl;
+        bestBytes = candidateBytes;
+      }
+      if (candidateBytes <= 25 * 1024) break;
+    }
+
+    if (bestBytes >= originalBytes) return result;
+
+    const match = bestDataUrl.match(/^data:([^;]+);base64,(.+)$/);
+    if (!match) return result;
+    const compressedPayload: ScreenshotPayload = {
+      ...screenshot,
+      mimeType: match[1],
+      base64: match[2],
+      sizeBytes: bestBytes,
+    };
+
+    if (result && typeof result === 'object') {
+      const record = result as Record<string, unknown>;
+      if (typeof record.base64 === 'string') {
+        return {
+          ...record,
+          mimeType: compressedPayload.mimeType,
+          base64: compressedPayload.base64,
+          sizeBytes: compressedPayload.sizeBytes,
+          originalSizeBytes: originalBytes,
+          originalMimeType: screenshot.mimeType,
+        };
+      }
+      if (record.data && typeof record.data === 'object') {
+        return {
+          ...record,
+          data: {
+            ...(record.data as Record<string, unknown>),
+            mimeType: compressedPayload.mimeType,
+            base64: compressedPayload.base64,
+            sizeBytes: compressedPayload.sizeBytes,
+            originalSizeBytes: originalBytes,
+            originalMimeType: screenshot.mimeType,
+          },
+        };
+      }
+    }
+
+    return {
+      mimeType: compressedPayload.mimeType,
+      base64: compressedPayload.base64,
+      sizeBytes: compressedPayload.sizeBytes,
+      capturedAt: compressedPayload.capturedAt,
+      originalSizeBytes: originalBytes,
+      originalMimeType: screenshot.mimeType,
+    };
+  } catch {
+    return result;
+  }
+}
+
 /**
  * Verify SCPI commands against the command index before sending to the instrument.
  * Bypasses verification for star commands (*IDN?, *RST, etc.) which are universal.
@@ -228,7 +323,11 @@ export async function executeMcpTool(
     if (!res.ok) throw new Error(`Executor error ${res.status}`);
     const json = await res.json() as Record<string, unknown>;
     // Executor flattens result_data into top level for send_scpi/capture_screenshot
-    return json.result_data ?? (json.base64 ? json : json.responses ? json : json);
+    const directResult = json.result_data ?? (json.base64 ? json : json.responses ? json : json);
+    if (toolName === 'capture_screenshot') {
+      return compressScreenshotForAnalysis(directResult, args.analyze === true);
+    }
+    return directResult;
   }
 
   // Knowledge/search tools: call MCP server
