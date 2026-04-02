@@ -516,7 +516,7 @@ export function OpenAiChatKitPanel({
   className,
 }: OpenAiChatKitPanelProps) {
   const [initError, setInitError] = useState<string | null>(null);
-  const [activeThreadId, setActiveThreadId] = useState<string | null>(null);
+  const [activeThreadId, setActiveThreadId] = useState<string | null>(() => getStoredThreadId(threadStorageKey) || null);
   const [chatKitTheme, setChatKitTheme] = useState<'dark' | 'light'>(() => readCurrentTheme());
   const [isSendingPrompt, setIsSendingPrompt] = useState(false);
   const onActionsRef = useRef(onActionsDetected);
@@ -889,6 +889,7 @@ export function OpenAiChatKitPanel({
       const message = String(detail.error?.message || '').toLowerCase();
       if (message.includes('thread') && (message.includes('not found') || message.includes('404') || message.includes('invalid'))) {
         setStoredThreadId('', threadStorageKey);
+        setActiveThreadId(null);
       }
       setInitError(detail.error?.message || 'ChatKit error');
     },
