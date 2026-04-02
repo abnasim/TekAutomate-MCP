@@ -60,7 +60,6 @@ const MAX_ATTACHMENT_COUNT = 6;
 const MAX_ATTACHMENT_BYTES = 8 * 1024 * 1024;
 const MAX_TEXT_EXCERPT = 12000;
 const INSTRUMENT_OUTPUT_MODE_STORAGE = 'tekautomate.ai.instrument_output_mode';
-const OPENAI_CHAT_SURFACE_STORAGE = 'tekautomate.openai.chat.surface';
 
 const TEXT_MIME_PREFIXES = ['text/'];
 const TEXT_EXTENSIONS = new Set([
@@ -228,14 +227,7 @@ export function AiChatPanel({
       return 'verbose';
     }
   });
-  const [openAiChatSurface, setOpenAiChatSurface] = useState<'chatkit' | 'native'>(() => {
-    if (typeof window === 'undefined') return 'chatkit';
-    try {
-      return window.localStorage.getItem(OPENAI_CHAT_SURFACE_STORAGE) === 'native' ? 'native' : 'chatkit';
-    } catch {
-      return 'chatkit';
-    }
-  });
+  const [openAiChatSurface, setOpenAiChatSurface] = useState<'chatkit' | 'native'>('chatkit');
   const [transientUiNow, setTransientUiNow] = useState(() => Date.now());
   const CHATKIT_WORKFLOW_ID_KEY = 'tekautomate.chatkit.workflow_id';
   const CHATKIT_LIVE_WORKFLOW_ID = 'wf_69ccc162bc34819089705162201bc4b80128ecc0657c5932';
@@ -330,14 +322,6 @@ export function AiChatPanel({
       // Ignore storage failures.
     }
   }, [instrumentOutputMode]);
-
-  useEffect(() => {
-    try {
-      window.localStorage.setItem(OPENAI_CHAT_SURFACE_STORAGE, openAiChatSurface);
-    } catch {
-      // Ignore storage failures.
-    }
-  }, [openAiChatSurface]);
 
   useEffect(() => {
     if (!state.apiKey.trim()) return; // need key for live
