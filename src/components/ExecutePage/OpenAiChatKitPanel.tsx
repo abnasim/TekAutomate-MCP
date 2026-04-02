@@ -142,8 +142,8 @@ function getChatKitThemeOptions(theme: 'dark' | 'light'): ThemeOption {
           accent: { primary: '#20E0FF', level: 2 },
         }
       : {
-          grayscale: { hue: 220, tint: 1, shade: -1 },
-          accent: { primary: '#0891b2', level: 2 },
+          grayscale: { hue: 220, tint: 0, shade: 10 },
+          accent: { primary: '#0091FF', level: 2 },
         },
   } as ThemeOption;
 }
