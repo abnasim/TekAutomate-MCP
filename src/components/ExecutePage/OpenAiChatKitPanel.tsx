@@ -1415,7 +1415,7 @@ function OpenAiChatKitPanelInner({
   }
 
   return (
-    <div ref={containerRef} className={className} style={{ flex: 1, minHeight: 0, display: 'flex', flexDirection: 'column', position: 'relative' }}>
+    <div ref={containerRef} className={className} data-chatkit-theme={chatKitTheme} style={{ flex: 1, minHeight: 0, display: 'flex', flexDirection: 'column', position: 'relative' }}>
       {!activeThreadId ? (
         <div
           style={{
