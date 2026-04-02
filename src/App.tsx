@@ -23,6 +23,7 @@ import { ParsedSCPI, EditableParameter } from './types/scpi';
 import { loadCompleteCommandsFile, normalizeCommandHeader, DEFAULT_CATEGORY_COLORS } from './utils/commandLoader';
 import { normalizeCategoryName } from './utils/categoryMapping';
 import { WelcomeWizard, DeviceFamily, BackendChoice, Intent, WizardData } from './components/WelcomeWizard';
+import { EulaDialog } from './components/EulaDialog';
 import { InteractiveTour } from './components/InteractiveTour';
 import { TriggerMascot, useTriggerMascot, TriggerAnimation } from './components/TriggerMascot';
 import { AcademyProvider, AcademyModal, useHelp } from './components/Academy';
@@ -1199,6 +1200,7 @@ function AppInner() {
   const [lastSelectedStep, setLastSelectedStep] = useState<string | null>(null); // For shift-click range selection
   const [contextMenu, setContextMenu] = useState<{ x: number; y: number; stepId: string } | null>(null);
   const [showWelcomeWizard, setShowWelcomeWizard] = useState(false);
+  const [showEula, setShowEula] = useState(false);
   const [runTour, setRunTour] = useState(false);
   const [showAboutModal, setShowAboutModal] = useState(false);
   const [showMcpModal, setShowMcpModal] = useState(false);
@@ -1582,6 +1584,14 @@ function AppInner() {
   
   // Blockly Builder uses its own localStorage for workspace persistence
   // No need for flowBuilderState anymore
+
+  // Check if EULA has been accepted
+  useEffect(() => {
+    const eulaAccepted = localStorage.getItem('tekautomate_eula_accepted');
+    if (!eulaAccepted) {
+      setShowEula(true);
+    }
+  }, []);
 
   // Check if welcome wizard should be shown on first launch
   useEffect(() => {
@@ -8202,6 +8212,13 @@ Keep under 120 words. No headings. Bullets only. Stay on this command. Do not de
                       >
                         <Cpu size={14} />
                         MCP Setup
+                      </button>
+                      <button
+                        onClick={() => { setShowEula(true); setShowHelpDropdown(false); }}
+                        className="w-full text-left px-3 py-2 text-xs hover:bg-gray-100 dark:hover:bg-gray-700 flex items-center gap-2 text-gray-900 dark:text-gray-200"
+                      >
+                        <ShieldAlert size={14} />
+                        License Agreement
                       </button>
                       <button
                         onClick={() => { setShowAboutModal(true); setShowHelpDropdown(false); }}
@@ -14851,6 +14868,14 @@ scpi.query('*OPC?')`;
           </div>
         </div>
       )}
+
+      <EulaDialog
+        isOpen={showEula}
+        onAccept={() => {
+          localStorage.setItem('tekautomate_eula_accepted', 'true');
+          setShowEula(false);
+        }}
+      />
 
       <WelcomeWizard
         isOpen={showWelcomeWizard}
