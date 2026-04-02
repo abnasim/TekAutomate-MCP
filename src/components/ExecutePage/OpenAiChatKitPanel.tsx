@@ -133,12 +133,10 @@ function getChatKitThemeOptions(theme: 'dark' | 'light'): ThemeOption {
   return {
     colorScheme: theme,
     typography: {
-      baseSize: 16,
-      fontFamily: 'Inter',
-      fontFamilyMono: 'JetBrains Mono',
+      baseSize: 14,
     },
     radius: 'soft',
-    density: 'normal',
+    density: 'compact',
     color: theme === 'dark'
       ? {
           grayscale: { hue: 220, tint: 7, shade: 1 },
