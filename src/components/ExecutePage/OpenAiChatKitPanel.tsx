@@ -130,18 +130,17 @@ function getStartScreenPrompts(isLiveMode: boolean): Array<{ label: string; prom
 }
 
 interface QuickAction {
+  id: string;
   label: string;
   icon: string;
-  type: 'prompt' | 'tool';
-  prompt?: string;
-  toolName?: string;
-  toolArgs?: Record<string, unknown>;
+  placeholder: string;
+  toolName: string;
 }
 
 function getQuickActions(isLiveMode: boolean): QuickAction[] {
   return isLiveMode
     ? [
-        { label: 'Discover SCPI', icon: '🔍', type: 'tool', toolName: 'discover_scpi', toolArgs: {} },
+        { id: 'discover_scpi', label: 'Discover SCPI', icon: '🔍', placeholder: 'e.g. horizontal, trigger, channel, measurement...', toolName: 'discover_scpi' },
       ]
     : [];
 }
@@ -672,6 +671,8 @@ function OpenAiChatKitPanelInner({
   const [activeThreadId, setActiveThreadId] = useState<string | null>(() => getStoredThreadId(threadStorageKey) || null);
   const chatKitThemeOptions = getChatKitThemeOptions(chatKitTheme);
   const [isSendingPrompt, setIsSendingPrompt] = useState(false);
+  const [activeQuickAction, setActiveQuickAction] = useState<string | null>(null);
+  const quickActionInputRef = useRef<HTMLInputElement>(null);
   const onActionsRef = useRef(onActionsDetected);
   onActionsRef.current = onActionsDetected;
   const onProposalDetectedRef = useRef(onProposalDetected);
@@ -1498,55 +1499,115 @@ function OpenAiChatKitPanelInner({
         {quickActions.length > 0 && (
           <div style={{
             display: 'flex',
+            alignItems: 'center',
             gap: 6,
             padding: '4px 12px 6px',
             borderTop: `1px solid ${chatKitTheme === 'dark' ? 'rgba(255,255,255,0.06)' : 'rgba(0,0,0,0.06)'}`,
             background: chatKitTheme === 'dark' ? 'rgba(255,255,255,0.02)' : 'rgba(0,0,0,0.01)',
           }}>
-            {quickActions.map((qa) => (
-              <button
-                key={qa.label}
-                type="button"
-                onClick={() => {
-                  if (qa.type === 'tool' && qa.toolName) {
-                    void (async () => {
-                      try {
-                        const result = await executeMcpTool(
-                          qa.toolName!,
-                          qa.toolArgs || {},
-                          instrumentEndpoint || undefined,
-                          { modelFamily: flowContext?.modelFamily, deviceDriver: flowContext?.deviceDriver },
-                        );
-                        // Send the result as context to the chat
-                        void handleStarterPrompt(`Here are the SCPI discovery results from the instrument:\n\n${JSON.stringify(result, null, 2)}\n\nSummarize what commands are available and organize them by category.`);
-                      } catch (err) {
-                        void handleStarterPrompt(`SCPI discovery failed: ${err instanceof Error ? err.message : 'Unknown error'}. Can you help troubleshoot?`);
+            {quickActions.map((qa) => {
+              const isActive = activeQuickAction === qa.id;
+              return (
+                <div key={qa.id} style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      if (isActive) {
+                        setActiveQuickAction(null);
+                      } else {
+                        setActiveQuickAction(qa.id);
+                        setTimeout(() => quickActionInputRef.current?.focus(), 50);
                       }
-                    })();
-                  } else if (qa.prompt) {
-                    void handleStarterPrompt(qa.prompt);
-                  }
-                }}
-                disabled={isSendingPrompt}
-                style={{
-                  display: 'flex',
-                  alignItems: 'center',
-                  gap: 4,
-                  padding: '4px 10px',
-                  fontSize: 12,
-                  fontWeight: 500,
-                  borderRadius: 6,
-                  border: `1px solid ${chatKitTheme === 'dark' ? 'rgba(255,255,255,0.1)' : 'rgba(0,0,0,0.1)'}`,
-                  color: chatKitTheme === 'dark' ? '#94a3b8' : '#64748b',
-                  background: 'transparent',
-                  cursor: isSendingPrompt ? 'default' : 'pointer',
-                  opacity: isSendingPrompt ? 0.5 : 1,
-                }}
-              >
-                <span>{qa.icon}</span>
-                <span>{qa.label}</span>
-              </button>
-            ))}
+                    }}
+                    disabled={isSendingPrompt}
+                    style={{
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: 4,
+                      padding: '4px 10px',
+                      fontSize: 12,
+                      fontWeight: 500,
+                      borderRadius: 6,
+                      border: `1px solid ${isActive
+                        ? (chatKitTheme === 'dark' ? '#20E0FF' : '#0091FF')
+                        : (chatKitTheme === 'dark' ? 'rgba(255,255,255,0.1)' : 'rgba(0,0,0,0.1)')}`,
+                      color: isActive
+                        ? (chatKitTheme === 'dark' ? '#20E0FF' : '#0091FF')
+                        : (chatKitTheme === 'dark' ? '#94a3b8' : '#64748b'),
+                      background: isActive
+                        ? (chatKitTheme === 'dark' ? 'rgba(32,224,255,0.08)' : 'rgba(0,145,255,0.06)')
+                        : 'transparent',
+                      cursor: isSendingPrompt ? 'default' : 'pointer',
+                      opacity: isSendingPrompt ? 0.5 : 1,
+                      whiteSpace: 'nowrap',
+                    }}
+                  >
+                    <span>{qa.icon}</span>
+                    <span>{qa.label}</span>
+                    {isActive && <span style={{ marginLeft: 2, fontSize: 10, opacity: 0.7 }}>✕</span>}
+                  </button>
+                  {isActive && (
+                    <form
+                      style={{ display: 'flex', alignItems: 'center', gap: 4, flex: 1 }}
+                      onSubmit={(e) => {
+                        e.preventDefault();
+                        const val = quickActionInputRef.current?.value?.trim();
+                        if (!val) return;
+                        setActiveQuickAction(null);
+                        void (async () => {
+                          try {
+                            const result = await executeMcpTool(
+                              qa.toolName,
+                              { query: val },
+                              instrumentEndpoint || undefined,
+                              { modelFamily: flowContext?.modelFamily, deviceDriver: flowContext?.deviceDriver },
+                            );
+                            void handleStarterPrompt(`I ran Discover SCPI for "${val}". Here are the results:\n\n${JSON.stringify(result, null, 2)}\n\nSummarize what was found and list the relevant commands.`);
+                          } catch (err) {
+                            void handleStarterPrompt(`SCPI discovery for "${val}" failed: ${err instanceof Error ? err.message : 'Unknown error'}. Can you help troubleshoot?`);
+                          }
+                        })();
+                      }}
+                    >
+                      <input
+                        ref={quickActionInputRef}
+                        type="text"
+                        placeholder={qa.placeholder}
+                        disabled={isSendingPrompt}
+                        style={{
+                          flex: 1,
+                          minWidth: 160,
+                          padding: '4px 8px',
+                          fontSize: 12,
+                          borderRadius: 6,
+                          border: `1px solid ${chatKitTheme === 'dark' ? 'rgba(255,255,255,0.15)' : 'rgba(0,0,0,0.12)'}`,
+                          background: chatKitTheme === 'dark' ? 'rgba(255,255,255,0.05)' : 'rgba(0,0,0,0.03)',
+                          color: chatKitTheme === 'dark' ? '#e2e8f0' : '#1e293b',
+                          outline: 'none',
+                        }}
+                      />
+                      <button
+                        type="submit"
+                        disabled={isSendingPrompt}
+                        style={{
+                          padding: '4px 10px',
+                          fontSize: 11,
+                          fontWeight: 600,
+                          borderRadius: 6,
+                          border: 'none',
+                          background: chatKitTheme === 'dark' ? '#20E0FF' : '#0091FF',
+                          color: '#000',
+                          cursor: 'pointer',
+                          whiteSpace: 'nowrap',
+                        }}
+                      >
+                        Go
+                      </button>
+                    </form>
+                  )}
+                </div>
+              );
+            })}
           </div>
         )}
       </div>
