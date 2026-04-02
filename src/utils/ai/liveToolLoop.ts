@@ -1520,7 +1520,8 @@ export function buildLiveSystemPrompt(instrument?: {
       '- Keep pre-JSON prose to 1-2 short sentences max for workflow proposals.',
       '- Do NOT narrate your search process, tool selection, or internal uncertainty unless you are blocked.',
       '- Use the minimum tool path: get_current_workflow only when current flow matters, get_instrument_info only when live instrument context matters, and lookup tools only when exact commands need verification.',
-      '- Prefer MCP/runtime/SCPI tools over local file search. Use get_current_workflow, get_instrument_info, get_run_log, search_scpi, get_command_by_header, browse_scpi_commands, and verify_scpi_commands before inspecting repository files.',
+      '- For structural workflow edits (reorder, move, regroup, remove, rename labels), use current workflow context directly. Do not search SCPI docs unless command content is changing.',
+      '- Prefer MCP/runtime/SCPI tools over local file search only when command syntax, runtime context, or instrument behavior actually matters.',
       '- For runtime debugging: get_run_log first and reason from the evidence. Only use command lookup tools if exact repair commands must be verified.',
       '- Treat the workflow as a living artifact: preserve good steps, fix one concrete issue at a time, and prefer targeted edits over broad rewrites.',
       '- For diagnostic questions: ask 1-2 narrowing questions to guide the right path.',
@@ -1529,7 +1530,8 @@ export function buildLiveSystemPrompt(instrument?: {
       '- For clear build, edit, fix, or apply requests: return plain ACTIONS_JSON with verified steps.',
       '- Do NOT wrap ACTIONS_JSON in HTML tags.',
       '- Do NOT use markdown code fences around ACTIONS_JSON.',
-      '- If existing flow: prefer targeted edits and use insert_step_after, replace_step, set_step_param, or remove_step instead of rebuilding the whole flow.',
+      '- If existing flow: prefer targeted edits and use insert_step_after, replace_step, set_step_param, remove_step, or move_step instead of rebuilding the whole flow.',
+      '- Same-level reorder: use move_step with targetStepId plus afterStepId (or position). Moving into a group: use move_step with targetGroupId and optional position.',
       '- If empty flow: use replace_flow.',
       '- Once you have a real workflow proposal, call stage_workflow_proposal instead of dumping raw ACTIONS_JSON into chat.',
       '- Build the actions yourself from the verified commands and workflow context.',
@@ -1677,7 +1679,7 @@ export function buildAnthropicChatPrompt(opts: {
     '2. Call get_current_workflow only when the current flow matters for the answer.',
     '3. Call get_instrument_info only when connected instrument/model/backend affects the answer.',
     '4. For runtime failures or "check the logs" requests, call get_run_log first and reason from the evidence.',
-    '5. Prefer MCP/runtime/SCPI tools over local file search. Use workflow/runtime context and SCPI lookup tools first; inspect repository files only when MCP tools cannot answer the question.',
+    '5. For structural workflow edits (reorder, move, regroup, remove, rename labels), use current workflow context directly. Only use SCPI lookup tools when command content is changing or must be verified.',
     '6. When you have a real workflow proposal, call stage_workflow_proposal so TekAutomate can show Apply to Flow.',
     '7. If your actions array is empty, do not call stage_workflow_proposal.',
     '8. Use the minimum number of tool calls. For normal build/edit requests, 1-3 calls is the goal.',
@@ -1704,8 +1706,9 @@ export function buildAnthropicChatPrompt(opts: {
     '## ACTIONS_JSON Format',
     'For build, edit, fix, or apply requests, prefer stage_workflow_proposal over raw ACTIONS_JSON transcript output.',
     '- Do NOT wrap ACTIONS_JSON in HTML tags or markdown code fences.',
-    '- Existing flow → prefer targeted edits and use insert_step_after, replace_step, set_step_param, or remove_step.',
-    '- Empty flow → use replace_flow.',
+    '- Existing flow -> prefer targeted edits and use insert_step_after, replace_step, set_step_param, remove_step, or move_step.',
+    '- Empty flow -> use replace_flow.',
+    '- Same-level reorder -> use move_step with targetStepId plus afterStepId (or position). Moving into a group -> use move_step with targetGroupId and optional position.',
     '- TekAutomate will call prepare_flow_actions automatically after Apply to Flow or auto-apply; do not call that tool while drafting the proposal.',
     '',
 
@@ -1729,3 +1732,4 @@ export function buildAnthropicChatPrompt(opts: {
     opts.deviceDriver ? `## Instrument: ${modelFamily} (driver: ${opts.deviceDriver}, backend: ${backend})` : '',
   ].filter(Boolean).join('\n');
 }
+

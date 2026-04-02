@@ -178,6 +178,25 @@ describe('applyAiActionsToSteps extended actions', () => {
     expect(g2?.children?.[0]?.id).toBe('a');
   });
 
+  it('parses same-level move_step reorder payloads with afterStepId', () => {
+    const json = JSON.stringify({
+      summary: 'Move Autoset after Connect.',
+      actions: [
+        {
+          action_type: 'move_step',
+          targetStepId: '9',
+          afterStepId: '1',
+        },
+      ],
+    });
+    const parsed = parseAiActionResponse(json);
+    expect(parsed).not.toBeNull();
+    expect(parsed?.actions).toHaveLength(1);
+    expect(parsed?.actions[0].action_type).toBe('move_step');
+    expect(parsed?.actions[0].target_step_id).toBe('9');
+    expect((parsed?.actions[0].payload as Record<string, unknown>)?.after_step_id).toBe('1');
+  });
+
   it('replaces step preserving id', () => {
     const out = applyAiActionsToSteps(base, [
       {
@@ -191,6 +210,23 @@ describe('applyAiActionsToSteps extended actions', () => {
     expect(replaced?.id).toBe('a');
     expect(replaced?.type).toBe('query');
     expect(replaced?.label).toBe('Busy');
+  });
+
+  it('reorders a top-level step after another top-level step', () => {
+    const out = applyAiActionsToSteps([
+      { id: '1', type: 'connect', label: 'Connect', params: {} },
+      { id: '2', type: 'write', label: 'Set bus type', params: { command: 'BUS:B1:TYPE I2C' } },
+      { id: '9', type: 'write', label: 'Autoset', params: { command: 'FPAnel:PRESS AUTOset' } },
+      { id: '10', type: 'disconnect', label: 'Disconnect', params: {} },
+    ], [
+      {
+        id: 'move_autoset',
+        action_type: 'move_step',
+        target_step_id: '9',
+        payload: { after_step_id: '1' },
+      },
+    ]);
+    expect(out.map((step) => step.id)).toEqual(['1', '9', '2', '10']);
   });
 
   it('does not allow replacing non-python step with python unless explicitly allowed', () => {

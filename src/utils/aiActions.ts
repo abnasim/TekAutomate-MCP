@@ -351,7 +351,27 @@ function normalizeAction(raw: unknown, idx: number): AiAction[] {
             : '';
     const targetGroupId =
       typeof r.targetGroupId === 'string' ? r.targetGroupId : typeof r.target_group_id === 'string' ? r.target_group_id : '';
-    if (!stepId || !targetGroupId) return [];
+    const payloadObj =
+      r.payload && typeof r.payload === 'object'
+        ? (r.payload as Record<string, unknown>)
+        : {};
+    const afterStepId =
+      typeof r.afterStepId === 'string'
+        ? r.afterStepId
+        : typeof r.after_step_id === 'string'
+          ? r.after_step_id
+          : typeof payloadObj.afterStepId === 'string'
+            ? payloadObj.afterStepId
+            : typeof payloadObj.after_step_id === 'string'
+              ? payloadObj.after_step_id
+              : '';
+    const position =
+      typeof r.position === 'number'
+        ? r.position
+        : typeof payloadObj.position === 'number'
+          ? payloadObj.position
+          : undefined;
+    if (!stepId || (!targetGroupId && !afterStepId && !Number.isFinite(position))) return [];
     return [{
       id,
       action_type: 'move_step',
@@ -359,8 +379,9 @@ function normalizeAction(raw: unknown, idx: number): AiAction[] {
       reason: typeof r.note === 'string' ? r.note : undefined,
       confidence: sanitizeConfidence(r.confidence),
       payload: {
-        target_group_id: targetGroupId,
-        position: typeof r.position === 'number' ? r.position : undefined,
+        ...(targetGroupId ? { target_group_id: targetGroupId } : {}),
+        ...(afterStepId ? { after_step_id: afterStepId } : {}),
+        ...(Number.isFinite(position) ? { position } : {}),
       },
     }];
   }
@@ -744,6 +765,20 @@ export function applyAiActionsToSteps<T extends StepLike>(steps: T[], actions: A
     return null;
   };
 
+  const findStepLocation = (
+    arr: StepLike[],
+    stepId: string
+  ): { array: StepLike[]; index: number } | null => {
+    for (let i = 0; i < arr.length; i += 1) {
+      if (arr[i].id === stepId) return { array: arr, index: i };
+      if (arr[i].children?.length) {
+        const found = findStepLocation(arr[i].children!, stepId);
+        if (found) return found;
+      }
+    }
+    return null;
+  };
+
   const findAndMutate = (
     arr: StepLike[],
     fn: (arrRef: StepLike[], idx: number) => boolean
@@ -945,18 +980,44 @@ export function applyAiActionsToSteps<T extends StepLike>(steps: T[], actions: A
       case 'move_step': {
         const target = String(action.target_step_id || '');
         const targetGroupId = String(action.payload?.target_group_id || '');
-        if (!target || !targetGroupId) break;
+        const afterStepId = String(action.payload?.after_step_id || action.payload?.afterStepId || '');
+        const positionValue = action.payload?.position;
+        const hasPosition = typeof positionValue === 'number' && Number.isFinite(positionValue);
+        if (!target) break;
+        const sourceLocation = findStepLocation(current, target);
+        if (!sourceLocation) break;
         const removed = removeStepById(current, target);
         if (!removed) break;
-        const targetGroup = findStepById(current, targetGroupId);
-        if (!targetGroup) {
-          current.push(removed as T);
+        if (targetGroupId) {
+          const targetGroup = findStepById(current, targetGroupId);
+          if (!targetGroup) {
+            current.push(removed as T);
+            break;
+          }
+          if (!Array.isArray(targetGroup.children)) targetGroup.children = [];
+          const pos = Number(positionValue);
+          const insertAt = Number.isFinite(pos) ? Math.max(0, Math.min(targetGroup.children.length, Math.floor(pos))) : targetGroup.children.length;
+          targetGroup.children.splice(insertAt, 0, removed);
           break;
         }
-        if (!Array.isArray(targetGroup.children)) targetGroup.children = [];
-        const pos = Number(action.payload?.position);
-        const insertAt = Number.isFinite(pos) ? Math.max(0, Math.min(targetGroup.children.length, Math.floor(pos))) : targetGroup.children.length;
-        targetGroup.children.splice(insertAt, 0, removed);
+        const destinationArray = sourceLocation.array;
+        if (afterStepId) {
+          const afterTarget = resolveTargetId(afterStepId);
+          const afterLocation = findStepLocation(current, afterTarget);
+          if (afterLocation) {
+            const insertAt = afterLocation.array === destinationArray
+              ? afterLocation.index + 1
+              : destinationArray.length;
+            destinationArray.splice(Math.max(0, Math.min(destinationArray.length, insertAt)), 0, removed);
+            break;
+          }
+        }
+        if (hasPosition) {
+          const insertAt = Math.max(0, Math.min(destinationArray.length, Math.floor(Number(positionValue))));
+          destinationArray.splice(insertAt, 0, removed);
+          break;
+        }
+        destinationArray.push(removed);
         break;
       }
       case 'replace_step': {

@@ -67,7 +67,7 @@ const ACTION_OUTPUT_RULES = [
   'insert_step_after -> { targetStepId, newStep:{ type,label,params } }',
   'set_step_param -> { targetStepId, param, value }',
   'remove_step -> { targetStepId }',
-  'move_step -> { targetStepId, targetGroupId, position }',
+  'move_step -> either { targetStepId, targetGroupId, position } to move into a group, or { targetStepId, afterStepId } / { targetStepId, position } to reorder at the same level.',
   'replace_flow -> { steps:[...] } (only when user asks to rebuild from scratch)',
   'add_error_check_after_step -> { targetStepId }',
 ];
