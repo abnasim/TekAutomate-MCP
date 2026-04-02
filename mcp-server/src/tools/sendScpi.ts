@@ -3,7 +3,7 @@ import { getCommandIndex } from '../core/commandIndex';
 import type { ToolResult } from '../core/schemas';
 import { dispatchLiveActionThroughTekAutomate, shouldBridgeToTekAutomate, withRuntimeInstrumentDefaults } from './liveToolSupport';
 
-interface Input {
+interface Input extends Record<string, unknown> {
   commands: string[];
   executorUrl: string;
   visaResource: string;
@@ -85,7 +85,7 @@ async function verifyCommandsLocally(
 
 export async function sendScpi(input: Input): Promise<ToolResult<Record<string, unknown>>> {
   if (shouldBridgeToTekAutomate(input)) {
-    const bridged = await dispatchLiveActionThroughTekAutomate('send_scpi', input as unknown as Record<string, unknown>, Math.max((input.timeoutMs ?? 10_000) + 10_000, 30_000));
+    const bridged = await dispatchLiveActionThroughTekAutomate('send_scpi', input, Math.max((input.timeoutMs ?? 10_000) + 10_000, 30_000));
     return {
       ok: bridged.ok,
       data: bridged.ok

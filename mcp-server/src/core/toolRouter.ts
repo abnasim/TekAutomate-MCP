@@ -57,8 +57,10 @@ export interface RouterSearchResult {
 export interface RouterResponse {
   ok: boolean;
   action: string;
-  results?: RouterSearchResult[];
+  results?: Array<RouterSearchResult | Record<string, unknown>>;
   data?: unknown;
+  knowledge?: unknown;
+  blindSpotHint?: string;
   paging?: {
     offset: number;
     limit: number;
@@ -69,6 +71,7 @@ export interface RouterResponse {
   text?: string;
   warnings?: string[];
   error?: string;
+  timing?: unknown;
   durationMs?: number;
 }
 

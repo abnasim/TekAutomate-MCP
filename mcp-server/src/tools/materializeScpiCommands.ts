@@ -31,7 +31,7 @@ export async function materializeScpiCommands(
 
   const results: Array<Record<string, unknown>> = [];
   const warnings: string[] = [];
-  const sourceMeta: Array<{ file: string; commandId?: string; section?: string }> = [];
+  const sourceMeta: NonNullable<ToolResult['sourceMeta']> = [];
   let allOk = true;
 
   for (const item of items) {

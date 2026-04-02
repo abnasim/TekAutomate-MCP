@@ -33,6 +33,7 @@ export interface ManualReference {
 
 export interface CommandRecord {
   commandId: string;
+  command?: string;
   sourceFile: string;
   group: string;
   header: string;
@@ -47,6 +48,7 @@ export interface CommandRecord {
   arguments: CommandArgument[];
   queryResponse?: string;
   codeExamples: CommandCodeExample[];
+  examples?: Array<{ description?: string; scpi?: string; tm_devices?: string }>;
   relatedCommands: string[];
   notes: string[];
   manualReference?: ManualReference;

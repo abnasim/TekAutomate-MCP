@@ -917,6 +917,7 @@ async function runTmDevices(req: McpChatRequest) {
 interface ToolLoopResult {
   text: string;
   displayText?: string;
+  screenshots?: Array<{ base64: string; mimeType: string; capturedAt: string }>;
   commands?: CommandSuggestion[]; // Add commands for apply card
   errors: string[];
   assistantThreadId?: string;
@@ -942,6 +943,7 @@ interface ToolLoopResult {
     toolDefinitions?: Array<{ name: string; description: string }>;
     toolTrace?: Array<{
       name: string;
+      tool?: string;
       args: Record<string, unknown>;
       startedAt: string;
       durationMs?: number;
@@ -951,6 +953,7 @@ interface ToolLoopResult {
         warnings?: string[];
         hasImage?: boolean;
       };
+      result?: unknown;
       rawResult?: unknown;
     }>;
     rawOutput?: unknown;
@@ -1642,7 +1645,11 @@ async function detectFlowCommandIssues(req: McpChatRequest): Promise<string[]> {
         out.push(`[${String(step.id || '?')}] command header not verified: ${header}`);
         continue;
       }
-      const entryHeader = String((entry as Record<string, unknown>).header || (entry as Record<string, unknown>).command || '');
+      const entryHeader = String(
+        ((entry as unknown as Record<string, unknown>).header)
+        || ((entry as unknown as Record<string, unknown>).command)
+        || ''
+      );
       if (normalizeHeaderForMatch(entryHeader) !== normalizeHeaderForMatch(header)) {
         out.push(`[${String(step.id || '?')}] command header not verified: ${header}`);
         continue;
@@ -4722,7 +4729,7 @@ async function runChatConversation(
     ];
 
     const systemPrompt = `${CHAT_MODE_SYSTEM_PROMPT}\n\n${developerPrompt}`;
-    const toolTrace: Array<Record<string, unknown>> = [];
+    const toolTrace: NonNullable<ToolLoopResult['debug']>['toolTrace'] = [];
     let finalText = '';
     let iterations = 0;
     let totalToolMs = 0;
@@ -4771,11 +4778,26 @@ async function runChatConversation(
             ? resultText.slice(0, 30000) + '\n[Truncated]'
             : resultText;
           toolResults.push({ type: 'tool_result', tool_use_id: toolId, content: cappedResult });
-          toolTrace.push({ tool: toolName, args: toolArgs, ok: true, durationMs: Date.now() - toolStart });
+          toolTrace.push({
+            name: toolName,
+            tool: toolName,
+            args: toolArgs,
+            startedAt: new Date(toolStart).toISOString(),
+            durationMs: Date.now() - toolStart,
+            resultSummary: { ok: true },
+          });
         } catch (err) {
           const msg = err instanceof Error ? err.message : String(err);
           toolResults.push({ type: 'tool_result', tool_use_id: toolId, content: `Error: ${msg}` });
-          toolTrace.push({ tool: toolName, args: toolArgs, ok: false, error: msg, durationMs: Date.now() - toolStart });
+          toolTrace.push({
+            name: toolName,
+            tool: toolName,
+            args: toolArgs,
+            startedAt: new Date(toolStart).toISOString(),
+            durationMs: Date.now() - toolStart,
+            resultSummary: { ok: false, warnings: [msg] },
+            result: { error: msg },
+          });
         }
         totalToolMs += Date.now() - toolStart;
       }
@@ -4805,7 +4827,10 @@ async function runChatConversation(
         systemPrompt,
         developerPrompt,
         userPrompt,
-        toolDefinitions: anthropicTools.map((t: any) => t.name),
+        toolDefinitions: anthropicTools.map((t: any) => ({
+          name: String(t?.name || ''),
+          description: String(t?.description || ''),
+        })),
         toolTrace,
         resolutionPath: 'anthropic-sdk',
       },
@@ -6854,12 +6879,7 @@ async function runOpenAiResponses(
   req: McpChatRequest,
   flowCommandIssues: string[] = [],
   options: { routerBaselineText?: string; routerBaselineMode?: string } = {}
-): Promise<{
-  text: string;
-  assistantThreadId?: string;
-  metrics: NonNullable<ToolLoopResult['metrics']>;
-  debug: NonNullable<ToolLoopResult['debug']>;
-}> {
+): Promise<ToolLoopResult> {
   const instructions = getModePrompt(req);
   const userPrompt = buildUserPrompt(req, flowCommandIssues);
     const useHostedAssistant = shouldUseOpenAiAssistant(req);
@@ -6972,6 +6992,8 @@ async function runOpenAiResponses(
   return {
     text: content,
     assistantThreadId,
+    errors: [],
+    warnings: [],
     metrics: {
       totalMs: 0,
       usedShortcut: false,
@@ -7234,12 +7256,7 @@ async function runOpenAiToolLoop(
   req: McpChatRequest,
   flowCommandIssues: string[] = [],
   _maxCalls = 8
-): Promise<{
-  text: string;
-  assistantThreadId?: string;
-  metrics: NonNullable<ToolLoopResult['metrics']>;
-  debug: NonNullable<ToolLoopResult['debug']>;
-}> {
+): Promise<ToolLoopResult> {
   const isLiveMode = req.interactionMode === 'live';
   const modePrompt = getModePrompt(req);
   const systemPrompt = isLiveMode
@@ -7296,6 +7313,8 @@ async function runOpenAiToolLoop(
         return {
           text: oneShot.text,
           assistantThreadId: oneShot.responseId,
+          errors: [],
+          warnings: [],
           metrics: {
             totalMs: 0,
             usedShortcut: false,
@@ -7523,6 +7542,8 @@ async function runOpenAiToolLoop(
     return {
       text: finalText || extractOpenAiResponseText(latestJson),
       assistantThreadId,
+      errors: [],
+      warnings: [],
       metrics: {
         totalMs: 0,
         usedShortcut: false,
@@ -7696,6 +7717,8 @@ async function runOpenAiToolLoop(
     return {
       text: liveFinalText,
       screenshots: liveScreenshots.length > 0 ? liveScreenshots : undefined,
+      errors: [],
+      warnings: [],
       metrics: {
         totalMs: 0, usedShortcut: false, provider: 'openai',
         iterations: liveIterations, toolCalls: totalLiveToolCalls,
@@ -7737,6 +7760,8 @@ async function runOpenAiToolLoop(
 
   return {
     text: content,
+    errors: [],
+    warnings: [],
     metrics: {
       totalMs: 0,
       usedShortcut: false,
@@ -7878,12 +7903,7 @@ async function runAnthropicToolLoop(
   req: McpChatRequest,
   flowCommandIssues: string[] = [],
   maxCalls = 6
-): Promise<{
-  text: string;
-  displayText?: string;
-  metrics: NonNullable<ToolLoopResult['metrics']>;
-  debug: NonNullable<ToolLoopResult['debug']>;
-}> {
+): Promise<ToolLoopResult> {
   const modePrompt = getModePrompt(req);
   const isLive = req.interactionMode === 'live';
 
@@ -8141,6 +8161,8 @@ async function runAnthropicToolLoop(
   return {
     text: finalText,
     screenshots: anthScreenshots.length > 0 ? anthScreenshots : undefined,
+    errors: [],
+    warnings: [],
     metrics: {
       totalMs: 0,
       usedShortcut: false,
@@ -8888,8 +8910,10 @@ export async function runToolLoop(req: McpChatRequest): Promise<ToolLoopResult> 
         shortcutResponse: text,
         toolTrace: [
           {
+            name: 'detectFlowCommandIssues',
             tool: 'detectFlowCommandIssues',
             args: {},
+            startedAt: new Date().toISOString(),
             result: { count: 0, issues: [] },
           },
         ],
