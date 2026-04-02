@@ -93,6 +93,21 @@ function readFileAsText(file: File): Promise<string> {
   });
 }
 
+function buildLiveScreenshotAttachment(
+  screenshot: NonNullable<AiChatPanelProps['latestLiveScreenshot']>
+): McpChatAttachment {
+  const extension =
+    screenshot.mimeType === 'image/jpeg' ? 'jpg'
+    : screenshot.mimeType === 'image/webp' ? 'webp'
+    : 'png';
+  return {
+    name: `scope-screenshot-${screenshot.capturedAt.replace(/[:.]/g, '-')}.${extension}`,
+    mimeType: screenshot.mimeType,
+    size: screenshot.sizeBytes,
+    dataUrl: screenshot.dataUrl,
+  };
+}
+
 function downloadTextFile(filename: string, content: string): void {
   const blob = new Blob([content], { type: 'text/plain;charset=utf-8' });
   const url = URL.createObjectURL(blob);
@@ -1108,6 +1123,23 @@ export function AiChatPanel({
     setAttachments((prev) => prev.filter((item) => item.name !== name));
   };
 
+  const attachLatestScreenshot = () => {
+    if (!latestLiveScreenshot) {
+      setAttachmentError('Capture a screenshot first, then attach it to your message.');
+      return;
+    }
+    setAttachmentError(null);
+    const screenshotAttachment = buildLiveScreenshotAttachment(latestLiveScreenshot);
+    setAttachments((prev) => {
+      const withoutExisting = prev.filter((item) => item.name !== screenshotAttachment.name);
+      if (withoutExisting.length + 1 > MAX_ATTACHMENT_COUNT) {
+        setAttachmentError(`You can attach up to ${MAX_ATTACHMENT_COUNT} files per message.`);
+        return prev;
+      }
+      return [...withoutExisting, screenshotAttachment];
+    });
+  };
+
   const handleAttachmentSelection = async (files: FileList | null) => {
     if (!files || files.length === 0) return;
     const incoming = Array.from(files);
@@ -2033,6 +2065,18 @@ export function AiChatPanel({
               Clear chat
             </button>
             <div className="flex items-center gap-2">
+              {state.tekMode === 'live' && (
+                <button
+                  type="button"
+                  onClick={attachLatestScreenshot}
+                  disabled={state.isLoading || !latestLiveScreenshot}
+                  className="inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg border border-cyan-300 dark:border-cyan-500/30 text-cyan-700 dark:text-cyan-200 text-xs font-medium hover:bg-cyan-50 dark:hover:bg-cyan-500/10 disabled:opacity-40 transition-colors"
+                  title={latestLiveScreenshot ? 'Attach the current scope screenshot to this message' : 'Capture a screenshot first'}
+                >
+                  <Paperclip size={12} />
+                  Current screenshot
+                </button>
+              )}
               <button
                 type="button"
                 onClick={openAttachmentPicker}
