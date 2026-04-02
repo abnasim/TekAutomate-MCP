@@ -133,7 +133,7 @@ function getChatKitThemeOptions(theme: 'dark' | 'light'): ThemeOption {
   return {
     colorScheme: theme,
     typography: {
-      baseSize: 16,
+      baseSize: 15,
       fontFamily: 'JetBrains Mono',
       fontFamilyMono: 'JetBrains Mono',
     },
