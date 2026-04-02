@@ -13,7 +13,7 @@
  */
 
 import React, { useCallback, useEffect, useRef, useState } from 'react';
-import { ChatKit, useChatKit } from '@openai/chatkit-react';
+import { ChatKit, useChatKit, type ThemeOption } from '@openai/chatkit-react';
 import { parseAiActionResponse, type AiAction } from '../../utils/aiActions';
 import { resolveMcpHost, resolveMcpHostCandidates } from '../../utils/ai/mcpClient';
 import { buildWorkflowContext, executeMcpTool } from '../../utils/ai/liveToolLoop';
@@ -124,6 +124,22 @@ function getStartScreenPrompts(isLiveMode: boolean): Array<{ label: string; prom
         { label: 'Check my flow', prompt: 'Review the current workflow and suggest improvements.' },
         { label: 'Build a measurement', prompt: 'Build a frequency and amplitude measurement workflow for CH1.' },
       ];
+}
+
+function getChatKitThemeOptions(theme: 'dark' | 'light'): ThemeOption {
+  return {
+    colorScheme: theme,
+    radius: 'round',
+    density: 'compact',
+    color: {
+      grayscale: theme === 'dark'
+        ? { hue: 222, tint: 8, shade: 2 }
+        : { hue: 222, tint: 1, shade: -1 },
+      surface: theme === 'dark'
+        ? { background: '#0b1120', foreground: '#f8fafc' }
+        : { background: '#ffffff', foreground: '#111827' },
+    },
+  };
 }
 
 function extractClientSecret(payload: unknown): string | null {
@@ -600,6 +616,7 @@ export function OpenAiChatKitPanel({
   const [initError, setInitError] = useState<string | null>(null);
   const [activeThreadId, setActiveThreadId] = useState<string | null>(() => getStoredThreadId(threadStorageKey) || null);
   const [chatKitTheme, setChatKitTheme] = useState<'dark' | 'light'>(() => readCurrentTheme());
+  const chatKitThemeOptions = getChatKitThemeOptions(chatKitTheme);
   const [isSendingPrompt, setIsSendingPrompt] = useState(false);
   const onActionsRef = useRef(onActionsDetected);
   onActionsRef.current = onActionsDetected;
@@ -1123,7 +1140,7 @@ export function OpenAiChatKitPanel({
       }
     },
     // UI customization
-    theme: chatKitTheme,
+    theme: chatKitThemeOptions,
     composer: {
       placeholder: isLiveMode
         ? 'Tell TekAutomate Live what to do with the scope...'
