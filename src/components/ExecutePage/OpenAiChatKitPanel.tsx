@@ -146,18 +146,7 @@ function getQuickActions(isLiveMode: boolean): QuickAction[] {
 }
 
 function getChatKitThemeOptions(theme: 'dark' | 'light'): ThemeOption {
-  return {
-    colorScheme: theme,
-    color: theme === 'dark'
-      ? {
-          grayscale: { hue: 220, tint: 7, shade: 1 },
-          accent: { primary: '#20E0FF', level: 2 },
-        }
-      : {
-          grayscale: { hue: 220, tint: 0, shade: 10 },
-          accent: { primary: '#0091FF', level: 2 },
-        },
-  } as ThemeOption;
+  return { colorScheme: theme } as ThemeOption;
 }
 
 function extractClientSecret(payload: unknown): string | null {
