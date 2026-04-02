@@ -277,8 +277,20 @@ class _Handler(BaseHTTPRequestHandler):
             else:
                 verbose = (data.get("outputMode") or data.get("output_mode") or "clean") == "verbose"
                 result = run_executor_action("send_scpi", {"commands": commands, "timeout_ms": timeout_ms, "keep_alive": keep_alive, "verbose": verbose}, timeout_sec, scope_visa, on_line=_on_line)
+                if not isinstance(result, dict):
+                    result = {
+                        "ok": False,
+                        "error": f"Executor returned invalid send_scpi result: {type(result).__name__}",
+                        "stdout": "",
+                        "stderr": "",
+                        "exit_code": -1,
+                        "result_data": {},
+                    }
                 # Broadcast per-command results with color-coded verbose logging
-                scpi_responses = result.get("responses") or result.get("result_data", {}).get("responses") or []
+                result_data = result.get("result_data")
+                if not isinstance(result_data, dict):
+                    result_data = {}
+                scpi_responses = result.get("responses") or result_data.get("responses") or []
                 for item in scpi_responses:
                     cmd = item.get("command", "")
                     resp = item.get("response", "")
@@ -316,8 +328,9 @@ class _Handler(BaseHTTPRequestHandler):
                     self._emit("POST", "/run", 200, f"OK ({elapsed:.1f}s) action=send_scpi visa={scope_visa} cmds={cmd_count}")
                 elif action == "capture_screenshot":
                     size_bytes = None
-                    if isinstance(result.get("result_data"), dict):
-                        size_bytes = result["result_data"].get("sizeBytes")
+                    result_data = result.get("result_data")
+                    if isinstance(result_data, dict):
+                        size_bytes = result_data.get("sizeBytes")
                     size_text = f" size={size_bytes}B" if isinstance(size_bytes, int) else ""
                     self._emit("POST", "/run", 200, f"OK ({elapsed:.1f}s) action=capture_screenshot visa={scope_visa} scope={scope_type}{size_text}")
                 elif action == "disconnect":
