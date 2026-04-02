@@ -25,7 +25,7 @@ async function compressAnalyzedScreenshotPayload(
   if (!base64 || !mimeType.startsWith('image/')) return payload;
 
   try {
-    const sharp = (await import('sharp')).default;
+    const { Jimp } = await import('jimp');
     const rawBuffer = Buffer.from(base64, 'base64');
     const variants = [
       { width: 800, height: 480, quality: 75 },
@@ -33,12 +33,14 @@ async function compressAnalyzedScreenshotPayload(
       { width: 480, height: 288, quality: 45 },
     ];
 
+    const image = await Jimp.read(rawBuffer);
     let best: Buffer = rawBuffer;
     for (const variant of variants) {
-      const candidate: Buffer = await sharp(rawBuffer)
-        .resize(variant.width, variant.height, { fit: 'inside', withoutEnlargement: true })
-        .jpeg({ quality: variant.quality, mozjpeg: true })
-        .toBuffer();
+      const scale = Math.min(variant.width / image.bitmap.width, variant.height / image.bitmap.height, 1);
+      const width = Math.max(1, Math.round(image.bitmap.width * scale));
+      const height = Math.max(1, Math.round(image.bitmap.height * scale));
+      const candidateImage = image.clone().resize({ w: width, h: height });
+      const candidate: Buffer = await candidateImage.getBuffer('image/jpeg', { quality: variant.quality });
 
       if (candidate.length < best.length) {
         best = candidate;
