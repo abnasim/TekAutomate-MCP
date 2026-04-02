@@ -94,7 +94,7 @@ async function main() {
         : JSON.stringify(result, null, 2);
 
       // Cap response size for MCP clients
-      const MAX_MCP_RESPONSE = 48000;
+      const MAX_MCP_RESPONSE = 70000;
       if (text.length > MAX_MCP_RESPONSE) {
         const truncated = text.slice(0, MAX_MCP_RESPONSE);
         const lastNewline = truncated.lastIndexOf('\n');
@@ -126,3 +126,4 @@ main().catch((err) => {
   console.error('[tekautomate-mcp] Fatal:', err);
   process.exit(1);
 });
+
