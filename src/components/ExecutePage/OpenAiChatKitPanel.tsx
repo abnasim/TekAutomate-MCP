@@ -110,19 +110,21 @@ function getOrCreateLiveSessionKey(workflowId?: string, userId?: string): string
 
 function getStartScreenGreeting(isLiveMode: boolean): string {
   return isLiveMode
-    ? 'TekAutomate Live Copilot — control the scope, inspect the screen, and verify changes in real time.'
-    : 'TekAutomate AI Chat — ask about SCPI, measurements, workflows, or runtime failures.';
+    ? 'What would you like to do?'
+    : 'What can you do?';
 }
 
 function getStartScreenPrompts(isLiveMode: boolean): Array<{ label: string; prompt: string }> {
   return isLiveMode
     ? [
-        { label: 'Check instruments', prompt: 'Check the connected instrument and tell me what scope is online right now.' },
-        { label: 'Capture screen', prompt: 'Capture a fresh screenshot and tell me what the scope is showing.' },
+        { label: 'Check connection', prompt: 'Check the connected instrument and tell me what scope is online right now.' },
+        { label: 'Set scope to default', prompt: 'Reset the scope to its default factory settings using *RST and confirm the state.' },
+        { label: 'Discover SCPI commands', prompt: 'What SCPI commands are available on the connected instrument? Help me discover and explore them.' },
       ]
     : [
-        { label: 'Check my flow', prompt: 'Review the current workflow and suggest improvements.' },
-        { label: 'Build a measurement', prompt: 'Build a frequency and amplitude measurement workflow for CH1.' },
+        { label: 'What can you do?', prompt: 'What can you help me with? Show me your capabilities for building and managing test automation workflows.' },
+        { label: 'Build me a flow', prompt: 'Build me a new test automation workflow. Ask me what instrument and measurements I need.' },
+        { label: 'Check instrument', prompt: 'Check the connected instrument and tell me its identity, status, and any errors.' },
       ];
 }
 
