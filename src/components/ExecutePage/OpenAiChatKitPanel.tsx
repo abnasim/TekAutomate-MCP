@@ -525,17 +525,6 @@ function extractScreenshotPayload(value: unknown): LatestScreenshotState | null 
   };
 }
 
-async function dataUrlToFile(dataUrl: string, fileName: string, mimeType: string): Promise<File> {
-  const response = await fetch(dataUrl);
-  const blob = await response.blob();
-  return new File([blob], fileName, { type: mimeType });
-}
-
-function buildScreenshotFileName(capturedAt: string, mimeType: string): string {
-  const extension = mimeType === 'image/jpeg' ? 'jpg' : 'png';
-  return `tekautomate-screenshot-${capturedAt.replace(/[:.]/g, '-')}.${extension}`;
-}
-
 export function OpenAiChatKitPanel({
   apiKey,
   steps,
@@ -560,8 +549,6 @@ export function OpenAiChatKitPanel({
   const [activeThreadId, setActiveThreadId] = useState<string | null>(() => getStoredThreadId(threadStorageKey) || null);
   const [chatKitTheme, setChatKitTheme] = useState<'dark' | 'light'>(() => readCurrentTheme());
   const [isSendingPrompt, setIsSendingPrompt] = useState(false);
-  const [latestScreenshot, setLatestScreenshot] = useState<LatestScreenshotState | null>(null);
-  const [includeLatestScreenshot, setIncludeLatestScreenshot] = useState(false);
   const onActionsRef = useRef(onActionsDetected);
   onActionsRef.current = onActionsDetected;
   const onProposalDetectedRef = useRef(onProposalDetected);
@@ -581,11 +568,6 @@ export function OpenAiChatKitPanel({
   const responseScanTimersRef = useRef<number[]>([]);
   const seenProposalIdRef = useRef('');
   const proposalSessionStartedAtRef = useRef(Date.now());
-
-  useEffect(() => {
-    if (!latestLiveScreenshot) return;
-    setLatestScreenshot(latestLiveScreenshot);
-  }, [latestLiveScreenshot]);
 
   useEffect(() => {
     if (typeof document === 'undefined') return;
@@ -950,10 +932,7 @@ export function OpenAiChatKitPanel({
     },
     // ── Response end — scan for ACTIONS_JSON and auto-apply ──
     onResponseEnd: () => {
-      if (isLiveMode) {
-        void primeComposerWithLatestScreenshot();
-        return;
-      }
+      if (isLiveMode) return;
       responseScanTimersRef.current.forEach((timer) => window.clearTimeout(timer));
       responseScanTimersRef.current = [];
       [150, 600, 1200, 2200, 3500].forEach((delay) => {
@@ -1040,7 +1019,6 @@ export function OpenAiChatKitPanel({
         if (name === 'capture_screenshot') {
           const screenshot = extractScreenshotPayload(result);
           if (screenshot) {
-            setLatestScreenshot(screenshot);
             onLiveScreenshotRef.current?.(screenshot);
           }
         }
@@ -1070,20 +1048,6 @@ export function OpenAiChatKitPanel({
     },
   });
 
-  const primeComposerWithLatestScreenshot = useCallback(async () => {
-    if (!includeLatestScreenshot || !latestScreenshot || !chatkit.setComposerValue) return;
-    try {
-      const file = await dataUrlToFile(
-        latestScreenshot.dataUrl,
-        buildScreenshotFileName(latestScreenshot.capturedAt, latestScreenshot.mimeType),
-        latestScreenshot.mimeType,
-      );
-      await chatkit.setComposerValue({ files: [file] });
-    } catch (error) {
-      console.warn('[ChatKit] Failed to attach latest screenshot:', error);
-    }
-  }, [chatkit, includeLatestScreenshot, latestScreenshot]);
-
   const startScreenGreeting = getStartScreenGreeting(isLiveMode);
   const startScreenPrompts = getStartScreenPrompts(isLiveMode);
 
@@ -1091,16 +1055,6 @@ export function OpenAiChatKitPanel({
     if (!prompt || isSendingPrompt) return;
     setIsSendingPrompt(true);
     try {
-      if (includeLatestScreenshot && latestScreenshot && chatkit.setComposerValue) {
-        const file = await dataUrlToFile(
-          latestScreenshot.dataUrl,
-          buildScreenshotFileName(latestScreenshot.capturedAt, latestScreenshot.mimeType),
-          latestScreenshot.mimeType,
-        );
-        await chatkit.setComposerValue({ text: prompt, files: [file] });
-        chatkit.focusComposer?.();
-        return;
-      }
       await chatkit.sendUserMessage({ text: prompt });
       chatkit.focusComposer?.();
     } catch (error) {
@@ -1108,7 +1062,7 @@ export function OpenAiChatKitPanel({
     } finally {
       setIsSendingPrompt(false);
     }
-  }, [chatkit, includeLatestScreenshot, isSendingPrompt, latestScreenshot]);
+  }, [chatkit, isSendingPrompt]);
 
   // ── Widget action handler — replaces MutationObserver for ACTIONS_JSON ──
   // ChatKit emits widget actions as DOM CustomEvents on the <openai-chatkit> element.
@@ -1182,10 +1136,6 @@ export function OpenAiChatKitPanel({
   }, [fetchLatestStagedProposal, scanContainerForActions, isLiveMode]);
 
   useEffect(() => {
-    void primeComposerWithLatestScreenshot();
-  }, [primeComposerWithLatestScreenshot]);
-
-  useEffect(() => {
     const mcpHost = resolveMcpHost();
     if (!mcpHost) return;
 
@@ -1247,7 +1197,6 @@ export function OpenAiChatKitPanel({
           if (currentAction.toolName === 'capture_screenshot') {
             const screenshot = extractScreenshotPayload(result);
             if (screenshot) {
-              setLatestScreenshot(screenshot);
               onLiveScreenshotRef.current?.(screenshot);
             }
           }
@@ -1396,63 +1345,9 @@ export function OpenAiChatKitPanel({
               </button>
             ))}
           </div>
-          {isLiveMode ? (
-            <label
-              style={{
-                display: 'inline-flex',
-                alignItems: 'center',
-                gap: 8,
-                fontSize: 12,
-                color: chatKitTheme === 'dark' ? '#cbd5e1' : '#475569',
-              }}
-            >
-              <input
-                type="checkbox"
-                checked={includeLatestScreenshot}
-                onChange={(event) => setIncludeLatestScreenshot(event.target.checked)}
-                disabled={!latestScreenshot}
-              />
-              Include latest screenshot with the next chat message
-              <span style={{ opacity: 0.75 }}>
-                {latestScreenshot
-                  ? `(${Math.round(latestScreenshot.sizeBytes / 1024)} KB)`
-                  : '(capture one first)'}
-              </span>
-            </label>
-          ) : null}
         </div>
       ) : null}
       <div style={{ position: 'relative', zIndex: 1, flex: 1, minHeight: 0, display: 'flex', flexDirection: 'column' }}>
-        {isLiveMode ? (
-          <div
-            style={{
-              padding: '8px 12px',
-              borderBottom: '1px solid rgba(148,163,184,0.12)',
-              background: chatKitTheme === 'dark' ? '#111111' : '#f8fafc',
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'space-between',
-              gap: 12,
-              fontSize: 12,
-              color: chatKitTheme === 'dark' ? '#cbd5e1' : '#475569',
-            }}
-          >
-            <label style={{ display: 'inline-flex', alignItems: 'center', gap: 8 }}>
-              <input
-                type="checkbox"
-                checked={includeLatestScreenshot}
-                onChange={(event) => setIncludeLatestScreenshot(event.target.checked)}
-                disabled={!latestScreenshot}
-              />
-              Include latest screenshot with the next chat message
-            </label>
-            <span style={{ opacity: 0.75 }}>
-              {latestScreenshot
-                ? `Latest screenshot: ${Math.round(latestScreenshot.sizeBytes / 1024)} KB`
-                : 'No screenshot captured yet'}
-            </span>
-          </div>
-        ) : null}
         <ChatKit key={chatKitTheme} control={chatkit.control} style={{ width: '100%', height: '100%' }} />
       </div>
     </div>
