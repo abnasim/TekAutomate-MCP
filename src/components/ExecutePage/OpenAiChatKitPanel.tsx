@@ -1011,7 +1011,7 @@ export function OpenAiChatKitPanel({
     if (!prompt || isSendingPrompt) return;
     setIsSendingPrompt(true);
     try {
-      await chatkit.sendUserMessage(prompt);
+      await chatkit.sendUserMessage({ text: prompt });
       chatkit.focusComposer?.();
     } catch (error) {
       console.warn('[ChatKit] starter prompt failed:', error);
