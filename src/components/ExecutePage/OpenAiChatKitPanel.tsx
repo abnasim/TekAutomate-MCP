@@ -146,7 +146,28 @@ function getQuickActions(isLiveMode: boolean): QuickAction[] {
 }
 
 function getChatKitThemeOptions(theme: 'dark' | 'light'): ThemeOption {
-  return { colorScheme: theme } as ThemeOption;
+  return (theme === 'dark'
+    ? {
+        colorScheme: 'dark',
+        typography: { baseSize: 16, fontFamily: 'Inter', fontFamilyMono: 'JetBrains Mono' },
+        radius: 'soft',
+        density: 'normal',
+        color: {
+          grayscale: { hue: 220, tint: 7, shade: 1 },
+          accent: { primary: '#20E0FF', level: 2 },
+        },
+      }
+    : {
+        colorScheme: 'light',
+        typography: { baseSize: 16, fontFamily: 'Inter', fontFamilyMono: 'JetBrains Mono' },
+        radius: 'soft',
+        density: 'normal',
+        color: {
+          grayscale: { hue: 220, tint: 1, shade: 8 },
+          accent: { primary: '#007FE0', level: 2 },
+        },
+      }
+  ) as ThemeOption;
 }
 
 function extractClientSecret(payload: unknown): string | null {
@@ -1155,7 +1176,7 @@ function OpenAiChatKitPanelInner({
       }
     },
     // UI customization
-    theme: chatKitTheme as any,
+    theme: chatKitThemeOptions,
     composer: {
       placeholder: isLiveMode
         ? 'Tell TekAutomate Live what to do with the scope...'
