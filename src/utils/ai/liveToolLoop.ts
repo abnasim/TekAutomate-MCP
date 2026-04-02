@@ -123,7 +123,7 @@ async function compressScreenshotForAnalysis(result: unknown, analyze?: boolean)
   if (typeof window === 'undefined' || typeof document === 'undefined') return result;
 
   const variants = [
-    { width: 800, height: 480, quality: 0.65 },
+    { width: 800, height: 480, quality: 0.75 },
     { width: 640, height: 384, quality: 0.55 },
     { width: 480, height: 288, quality: 0.45 },
   ];
