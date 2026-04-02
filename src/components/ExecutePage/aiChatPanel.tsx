@@ -1976,7 +1976,31 @@ export function AiChatPanel({
         </div>
       )}
 
-      <div className="px-3 py-3 border-t border-slate-200 dark:border-white/10">
+      <div
+        className="px-3 py-3 border-t border-slate-200 dark:border-white/10"
+        onDragEnter={(e) => {
+          if (e.dataTransfer?.types?.includes('Files')) {
+            e.preventDefault();
+            setIsDragOverComposer(true);
+          }
+        }}
+        onDragOver={(e) => {
+          if (e.dataTransfer?.types?.includes('Files')) {
+            e.preventDefault();
+            e.dataTransfer.dropEffect = 'copy';
+            setIsDragOverComposer(true);
+          }
+        }}
+        onDragLeave={(e) => {
+          if (e.currentTarget === e.target) {
+            setIsDragOverComposer(false);
+          }
+        }}
+        onDrop={(e) => {
+          e.preventDefault();
+          handleComposerDrop(e.dataTransfer?.files ?? null);
+        }}
+      >
         <div className="relative flex flex-col gap-2">
           <input
             ref={attachmentInputRef}
@@ -1992,28 +2016,6 @@ export function AiChatPanel({
               ref={textareaRef}
               value={input}
               onChange={(e) => setInput(e.target.value)}
-              onDragEnter={(e) => {
-                if (e.dataTransfer?.types?.includes('Files')) {
-                  e.preventDefault();
-                  setIsDragOverComposer(true);
-                }
-              }}
-              onDragOver={(e) => {
-                if (e.dataTransfer?.types?.includes('Files')) {
-                  e.preventDefault();
-                  e.dataTransfer.dropEffect = 'copy';
-                  setIsDragOverComposer(true);
-                }
-              }}
-              onDragLeave={(e) => {
-                if (e.currentTarget === e.target) {
-                  setIsDragOverComposer(false);
-                }
-              }}
-              onDrop={(e) => {
-                e.preventDefault();
-                handleComposerDrop(e.dataTransfer?.files ?? null);
-              }}
               onPaste={(e) => {
                 const items = e.clipboardData?.items;
                 if (!items) return;
