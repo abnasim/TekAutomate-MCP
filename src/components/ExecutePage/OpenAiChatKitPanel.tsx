@@ -133,8 +133,8 @@ function getChatKitThemeOptions(theme: 'dark' | 'light'): ThemeOption {
     density: 'compact',
     color: {
       surface: theme === 'dark'
-        ? { background: '#111827', foreground: '#f8fafc' }
-        : { background: '#ffffff', foreground: '#111827' },
+        ? { background: '#111827', foreground: '#1f2937' }
+        : { background: '#ffffff', foreground: '#ffffff' },
     },
   };
 }
