@@ -67,6 +67,27 @@ async function compressAnalyzedScreenshotPayload(
   }
 }
 
+function stripScreenshotPayloadForNonAnalysis(
+  payload: Record<string, unknown>,
+  analyze?: boolean,
+): Record<string, unknown> {
+  if (analyze === true) return payload;
+
+  const capturedAt = typeof payload.capturedAt === 'string' ? payload.capturedAt : new Date().toISOString();
+  const sizeBytes = typeof payload.sizeBytes === 'number' ? payload.sizeBytes : undefined;
+  const scopeType = typeof payload.scopeType === 'string' ? payload.scopeType : undefined;
+  const originalMimeType = typeof payload.originalMimeType === 'string' ? payload.originalMimeType : undefined;
+
+  return {
+    ok: payload.ok === false ? false : true,
+    captured: true,
+    capturedAt,
+    ...(typeof sizeBytes === 'number' ? { sizeBytes } : {}),
+    ...(scopeType ? { scopeType } : {}),
+    ...(originalMimeType ? { originalMimeType } : {}),
+  };
+}
+
 export async function captureScreenshot(input: Input): Promise<ToolResult<Record<string, unknown>>> {
   if (shouldBridgeToTekAutomate(input)) {
     const bridged = await dispatchLiveActionThroughTekAutomate(
@@ -82,9 +103,12 @@ export async function captureScreenshot(input: Input): Promise<ToolResult<Record
     const maybeCompressed = bridged.ok
       ? await compressAnalyzedScreenshotPayload(data, input.analyze)
       : data;
+    const finalData = bridged.ok
+      ? stripScreenshotPayloadForNonAnalysis(maybeCompressed, input.analyze)
+      : maybeCompressed;
     return {
       ok: bridged.ok,
-      data: maybeCompressed,
+      data: finalData,
       sourceMeta: [],
       warnings: bridged.ok ? [] : [bridged.error || 'TekAutomate live action failed.'],
     };
@@ -103,6 +127,9 @@ export async function captureScreenshot(input: Input): Promise<ToolResult<Record
   }
   return {
     ...result,
-    data: await compressAnalyzedScreenshotPayload(result.data as Record<string, unknown>, input.analyze),
+    data: stripScreenshotPayloadForNonAnalysis(
+      await compressAnalyzedScreenshotPayload(result.data as Record<string, unknown>, input.analyze),
+      input.analyze,
+    ),
   };
 }
