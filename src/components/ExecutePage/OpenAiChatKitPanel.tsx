@@ -129,14 +129,23 @@ function getStartScreenPrompts(isLiveMode: boolean): Array<{ label: string; prom
 function getChatKitThemeOptions(theme: 'dark' | 'light'): ThemeOption {
   return {
     colorScheme: theme,
-    radius: 'round',
-    density: 'compact',
-    color: {
-      surface: theme === 'dark'
-        ? { background: '#111827', foreground: '#1f2937' }
-        : { background: '#ffffff', foreground: '#ffffff' },
+    typography: {
+      baseSize: 16,
+      fontFamily: 'Inter',
+      fontFamilyMono: 'JetBrains Mono',
     },
-  };
+    radius: 'soft',
+    density: 'normal',
+    color: theme === 'dark'
+      ? {
+          grayscale: { hue: 220, tint: 7, shade: 1 },
+          accent: { primary: '#20E0FF', level: 2 },
+        }
+      : {
+          grayscale: { hue: 220, tint: 1, shade: -1 },
+          accent: { primary: '#0891b2', level: 2 },
+        },
+  } as ThemeOption;
 }
 
 function extractClientSecret(payload: unknown): string | null {
