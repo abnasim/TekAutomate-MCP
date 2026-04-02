@@ -27,22 +27,39 @@ async function compressAnalyzedScreenshotPayload(
   try {
     const sharp = (await import('sharp')).default;
     const rawBuffer = Buffer.from(base64, 'base64');
-    const compressed = await sharp(rawBuffer)
-      .resize(800, 480, { fit: 'inside', withoutEnlargement: true })
-      .jpeg({ quality: 75, mozjpeg: true })
-      .toBuffer();
+    const variants = [
+      { width: 640, height: 384, quality: 55 },
+      { width: 480, height: 288, quality: 45 },
+    ];
 
-    if (compressed.length >= rawBuffer.length) {
+    let best = rawBuffer;
+    for (const variant of variants) {
+      const candidate = await sharp(rawBuffer)
+        .resize(variant.width, variant.height, { fit: 'inside', withoutEnlargement: true })
+        .jpeg({ quality: variant.quality, mozjpeg: true })
+        .toBuffer();
+
+      if (candidate.length < best.length) {
+        best = candidate;
+      }
+
+      if (candidate.length <= 25 * 1024) {
+        best = candidate;
+        break;
+      }
+    }
+
+    if (best.length >= rawBuffer.length) {
       return payload;
     }
 
     return {
       ...payload,
       mimeType: 'image/jpeg',
-      sizeBytes: compressed.length,
+      sizeBytes: best.length,
       originalMimeType: mimeType,
       originalSizeBytes: rawBuffer.length,
-      base64: compressed.toString('base64'),
+      base64: best.toString('base64'),
     };
   } catch {
     return payload;

@@ -597,6 +597,7 @@ async function runOpenAiLoop(params: LiveToolLoopParams): Promise<LiveToolLoopRe
                 {
                   type: 'input_image',
                   image_url: `data:${(resultObj.mimeType as string) || 'image/png'};base64,${resultObj.base64}`,
+                  detail: 'low',
                 },
                 { type: 'input_text', text: 'Only mention what CHANGED or is relevant to the user\'s last request. Do NOT re-describe the entire display.' },
               ],
