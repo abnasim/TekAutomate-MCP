@@ -434,7 +434,7 @@ export function AiChatPanel({
     : CHATKIT_DEFAULT_USER_ID;
   const useChatKitEmbed =
     state.provider === 'openai'
-    && state.tekMode === 'ai'
+    && (state.tekMode === 'ai' || state.tekMode === 'live')
     && activeChatKitWorkflowId.length > 0;
 
   const interactionSummary = state.tekMode === 'mcp'
@@ -1090,34 +1090,6 @@ export function AiChatPanel({
     setAttachments((prev) => prev.filter((item) => item.name !== name));
   };
 
-  const attachLatestLiveScreenshot = useCallback(() => {
-    if (!latestLiveScreenshot?.dataUrl) {
-      setAttachmentError('Capture a live screenshot first, then attach it here.');
-      return;
-    }
-
-    const attachmentName = `live-scope-${latestLiveScreenshot.capturedAt.replace(/[:.]/g, '-')}.${latestLiveScreenshot.mimeType.includes('png') ? 'png' : 'jpg'}`;
-    setAttachmentError(null);
-    setAttachments((prev) => {
-      if (prev.some((item) => item.dataUrl === latestLiveScreenshot.dataUrl || item.name === attachmentName)) {
-        return prev;
-      }
-      if (prev.length >= MAX_ATTACHMENT_COUNT) {
-        setAttachmentError(`You can attach up to ${MAX_ATTACHMENT_COUNT} files per message.`);
-        return prev;
-      }
-      return [
-        ...prev,
-        {
-          name: attachmentName,
-          mimeType: latestLiveScreenshot.mimeType,
-          size: latestLiveScreenshot.sizeBytes,
-          dataUrl: latestLiveScreenshot.dataUrl,
-        },
-      ];
-    });
-  }, [latestLiveScreenshot]);
-
   const handleAttachmentSelection = async (files: FileList | null) => {
     if (!files || files.length === 0) return;
     const incoming = Array.from(files);
@@ -1655,7 +1627,7 @@ export function AiChatPanel({
                   />
                 </div>
                 <p className="mt-0.5 text-[9px] text-slate-400 dark:text-white/30">
-                  Sets the OpenAI AI Chat workflow. Live mode runs through TekAutomate&apos;s browser-controlled copilot path instead.
+                  Sets the OpenAI AI Chat workflow. Live mode uses its own dedicated ChatKit workflow automatically.
                 </p>
               </label>
               <label className="block">
@@ -2016,18 +1988,6 @@ export function AiChatPanel({
               Clear chat
             </button>
             <div className="flex items-center gap-2">
-              {state.tekMode === 'live' && (
-                <button
-                  type="button"
-                  onClick={attachLatestLiveScreenshot}
-                  disabled={state.isLoading || !latestLiveScreenshot}
-                  className="inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg border border-cyan-300 dark:border-cyan-500/30 text-cyan-700 dark:text-cyan-200 text-xs font-medium hover:bg-cyan-50 dark:hover:bg-cyan-500/10 disabled:opacity-40 transition-colors"
-                  title={latestLiveScreenshot ? 'Attach the current live screenshot to this message' : 'Capture a live screenshot first'}
-                >
-                  <Paperclip size={12} />
-                  Current screen
-                </button>
-              )}
               <button
                 type="button"
                 onClick={openAttachmentPicker}

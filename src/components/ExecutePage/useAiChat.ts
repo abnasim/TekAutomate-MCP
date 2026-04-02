@@ -827,7 +827,6 @@ export function useAiChat(params: {
           systemPrompt,
           userMessage: effectiveMessage,
           history: trimConversationHistory(state.history, 3, 4000),
-          attachments: options?.attachments || [],
           tools: liveTools,
           instrumentEndpoint: params.instrumentEndpoint ?? undefined,
           flowContext: { modelFamily, deviceDriver },

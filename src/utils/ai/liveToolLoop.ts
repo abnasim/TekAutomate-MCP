@@ -9,7 +9,7 @@
  * No AI proxy through MCP. Keys stay in browser.
  */
 
-import { resolveMcpHost, type McpChatAttachment } from './mcpClient';
+import { resolveMcpHost } from './mcpClient';
 import { trimConversationHistory } from './historyTrim';
 
 // ── Types ──
@@ -27,7 +27,6 @@ export interface LiveToolLoopParams {
   systemPrompt: string;
   userMessage: string;
   history?: Array<{ role: string; content: string }>;
-  attachments?: McpChatAttachment[];
   tools: LiveToolDef[];
   instrumentEndpoint?: {
     executorUrl: string;
@@ -422,7 +421,7 @@ export async function prepareFlowActionsViaMcp(params: {
 async function runAnthropicLoop(params: LiveToolLoopParams): Promise<LiveToolLoopResult> {
   const {
     apiKey, model, systemPrompt, userMessage, history = [],
-    attachments = [], tools, instrumentEndpoint, flowContext,
+    tools, instrumentEndpoint, flowContext,
     maxIterations = 8, onChunk, onToolCall, onToolResult,
   } = params;
 
@@ -432,36 +431,12 @@ async function runAnthropicLoop(params: LiveToolLoopParams): Promise<LiveToolLoo
     input_schema: t.parameters,
   }));
 
-  const initialImageBlocks = attachments
-    .filter((attachment) => attachment.mimeType?.startsWith('image/') && attachment.dataUrl)
-    .slice(0, 4)
-    .map((attachment) => {
-      const match = String(attachment.dataUrl || '').match(/^data:([^;]+);base64,(.+)$/);
-      if (!match) return null;
-      return {
-        type: 'image' as const,
-        source: {
-          type: 'base64' as const,
-          media_type: match[1],
-          data: match[2],
-        },
-      };
-    })
-    .filter((block): block is { type: 'image'; source: { type: 'base64'; media_type: string; data: string } } => Boolean(block));
-
-  const initialUserContent: string | Array<Record<string, unknown>> = initialImageBlocks.length > 0
-    ? [
-        { type: 'text', text: userMessage },
-        ...initialImageBlocks,
-      ]
-    : userMessage;
-
   const messages: Array<Record<string, unknown>> = [
     ...trimConversationHistory(history).map((h) => ({
       role: h.role,
       content: h.content,
     })),
-    { role: 'user', content: initialUserContent },
+    { role: 'user', content: userMessage },
   ];
   // Track how many messages existed before the tool loop started, so we can
   // apply a sliding window that only keeps recent tool round-trips.
@@ -629,7 +604,7 @@ async function runAnthropicLoop(params: LiveToolLoopParams): Promise<LiveToolLoo
 async function runOpenAiLoop(params: LiveToolLoopParams): Promise<LiveToolLoopResult> {
   const {
     apiKey, model, systemPrompt, userMessage, history = [],
-    attachments = [], tools, instrumentEndpoint, flowContext,
+    tools, instrumentEndpoint, flowContext,
     maxIterations = 8, onChunk, onToolCall, onToolResult,
   } = params;
 
@@ -641,26 +616,12 @@ async function runOpenAiLoop(params: LiveToolLoopParams): Promise<LiveToolLoopRe
   }));
 
   // Build initial input with history + current message
-  const initialUserContent: string | Array<Record<string, unknown>> = attachments.length > 0
-    ? [
-        { type: 'input_text', text: userMessage },
-        ...attachments
-          .filter((attachment) => attachment.mimeType?.startsWith('image/') && attachment.dataUrl)
-          .slice(0, 4)
-          .map((attachment) => ({
-            type: 'input_image',
-            image_url: String(attachment.dataUrl),
-            detail: 'auto',
-          })),
-      ]
-    : userMessage;
-
   const initialInput: Array<Record<string, unknown>> = [
     ...trimConversationHistory(history).map((h) => ({
       role: h.role === 'assistant' ? 'assistant' : 'user',
       content: h.content,
     })),
-    { role: 'user', content: initialUserContent },
+    { role: 'user', content: userMessage },
   ];
 
   const toolCallLog: LiveToolLoopResult['toolCalls'] = [];
