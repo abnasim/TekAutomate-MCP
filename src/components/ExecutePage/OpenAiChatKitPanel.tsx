@@ -145,15 +145,10 @@ function getQuickActions(isLiveMode: boolean): QuickAction[] {
     : [];
 }
 
-const CHATKIT_FONT_SOURCES = [
-  { family: 'JetBrains Mono', src: 'url(https://fonts.gstatic.com/s/jetbrainsmono/v20/tDbY2o-flEEny0FZhsfKu5WU4zr3E_BX0PnT8RD8yKxTOlOTk6OThhvA.woff2) format("woff2")' },
-];
-
 function getChatKitThemeOptions(theme: 'dark' | 'light'): ThemeOption {
   return (theme === 'dark'
     ? {
         colorScheme: 'dark',
-        typography: { baseSize: 16, fontFamily: 'JetBrains Mono', fontFamilyMono: 'JetBrains Mono', fontSources: CHATKIT_FONT_SOURCES },
         radius: 'soft',
         density: 'normal',
         color: {
@@ -163,7 +158,6 @@ function getChatKitThemeOptions(theme: 'dark' | 'light'): ThemeOption {
       }
     : {
         colorScheme: 'light',
-        typography: { baseSize: 16, fontFamily: 'JetBrains Mono', fontFamilyMono: 'JetBrains Mono', fontSources: CHATKIT_FONT_SOURCES },
         radius: 'soft',
         density: 'normal',
         color: {
