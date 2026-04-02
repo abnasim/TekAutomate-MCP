@@ -1155,7 +1155,7 @@ function OpenAiChatKitPanelInner({
       }
     },
     // UI customization
-    theme: chatKitThemeOptions,
+    theme: chatKitTheme as any,
     composer: {
       placeholder: isLiveMode
         ? 'Tell TekAutomate Live what to do with the scope...'
