@@ -593,50 +593,8 @@ function extractScreenshotPayload(value: unknown): LatestScreenshotState | null 
   };
 }
 
-export function OpenAiChatKitPanel({
-  apiKey,
-  steps,
-  workflowId,
-  isLiveMode = false,
-  threadStorageKey,
-  userId,
-  historyEnabled = true,
-  workspaceRevision,
-  runLog,
-  autoApply = false,
-  flowContext,
-  instrumentEndpoint,
-  latestLiveScreenshot,
-  onLiveScreenshot,
-  onActionsDetected,
-  onProposalDetected,
-  onThreadChange,
-  className,
-}: OpenAiChatKitPanelProps) {
-  const [initError, setInitError] = useState<string | null>(null);
-  const [activeThreadId, setActiveThreadId] = useState<string | null>(() => getStoredThreadId(threadStorageKey) || null);
+export function OpenAiChatKitPanel(props: OpenAiChatKitPanelProps) {
   const [chatKitTheme, setChatKitTheme] = useState<'dark' | 'light'>(() => readCurrentTheme());
-  const chatKitThemeOptions = getChatKitThemeOptions(chatKitTheme);
-  const [isSendingPrompt, setIsSendingPrompt] = useState(false);
-  const onActionsRef = useRef(onActionsDetected);
-  onActionsRef.current = onActionsDetected;
-  const onProposalDetectedRef = useRef(onProposalDetected);
-  onProposalDetectedRef.current = onProposalDetected;
-  const stepsRef = useRef(steps);
-  stepsRef.current = steps;
-  const flowContextRef = useRef(flowContext);
-  flowContextRef.current = flowContext;
-  const instrumentEndpointRef = useRef(instrumentEndpoint);
-  instrumentEndpointRef.current = instrumentEndpoint;
-  const onLiveScreenshotRef = useRef(onLiveScreenshot);
-  onLiveScreenshotRef.current = onLiveScreenshot;
-  const autoApplyRef = useRef(autoApply);
-  autoApplyRef.current = autoApply;
-  const lastContextSentRef = useRef('');
-  const lastParsedJsonRef = useRef('');
-  const responseScanTimersRef = useRef<number[]>([]);
-  const seenProposalIdRef = useRef('');
-  const proposalSessionStartedAtRef = useRef(Date.now());
 
   useEffect(() => {
     if (typeof document === 'undefined') return;
@@ -659,6 +617,54 @@ export function OpenAiChatKitPanel({
       window.removeEventListener('pageshow', syncTheme);
     };
   }, []);
+
+  return <OpenAiChatKitPanelInner key={chatKitTheme} {...props} chatKitTheme={chatKitTheme} />;
+}
+
+function OpenAiChatKitPanelInner({
+  apiKey,
+  steps,
+  workflowId,
+  isLiveMode = false,
+  threadStorageKey,
+  userId,
+  historyEnabled = true,
+  workspaceRevision,
+  runLog,
+  autoApply = false,
+  flowContext,
+  instrumentEndpoint,
+  latestLiveScreenshot,
+  onLiveScreenshot,
+  onActionsDetected,
+  onProposalDetected,
+  onThreadChange,
+  className,
+  chatKitTheme,
+}: OpenAiChatKitPanelProps & { chatKitTheme: 'dark' | 'light' }) {
+  const [initError, setInitError] = useState<string | null>(null);
+  const [activeThreadId, setActiveThreadId] = useState<string | null>(() => getStoredThreadId(threadStorageKey) || null);
+  const chatKitThemeOptions = getChatKitThemeOptions(chatKitTheme);
+  const [isSendingPrompt, setIsSendingPrompt] = useState(false);
+  const onActionsRef = useRef(onActionsDetected);
+  onActionsRef.current = onActionsDetected;
+  const onProposalDetectedRef = useRef(onProposalDetected);
+  onProposalDetectedRef.current = onProposalDetected;
+  const stepsRef = useRef(steps);
+  stepsRef.current = steps;
+  const flowContextRef = useRef(flowContext);
+  flowContextRef.current = flowContext;
+  const instrumentEndpointRef = useRef(instrumentEndpoint);
+  instrumentEndpointRef.current = instrumentEndpoint;
+  const onLiveScreenshotRef = useRef(onLiveScreenshot);
+  onLiveScreenshotRef.current = onLiveScreenshot;
+  const autoApplyRef = useRef(autoApply);
+  autoApplyRef.current = autoApply;
+  const lastContextSentRef = useRef('');
+  const lastParsedJsonRef = useRef('');
+  const responseScanTimersRef = useRef<number[]>([]);
+  const seenProposalIdRef = useRef('');
+  const proposalSessionStartedAtRef = useRef(Date.now());
 
   const setStructuredProposal = useCallback((
     proposal: {
@@ -1460,7 +1466,7 @@ export function OpenAiChatKitPanel({
         </div>
       ) : null}
       <div style={{ position: 'relative', zIndex: 1, flex: 1, minHeight: 0, display: 'flex', flexDirection: 'column' }}>
-        <ChatKit key={chatKitTheme} control={chatkit.control} style={{ width: '100%', height: '100%' }} />
+        <ChatKit control={chatkit.control} style={{ width: '100%', height: '100%' }} />
       </div>
     </div>
   );
