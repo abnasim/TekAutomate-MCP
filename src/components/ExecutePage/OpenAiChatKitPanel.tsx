@@ -838,7 +838,16 @@ export function OpenAiChatKitPanel({
         const res = await fetch(sessionUrl, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ apiKey, workflowId: resolvedWorkflowId, userId: resolvedUserId }),
+          body: JSON.stringify({
+            apiKey,
+            workflowId: resolvedWorkflowId,
+            userId: resolvedUserId,
+            chatkit_configuration: {
+              file_upload: {
+                enabled: true,
+              },
+            },
+          }),
         });
         if (res.ok) {
           const data = await res.json();
@@ -867,6 +876,11 @@ export function OpenAiChatKitPanel({
           body: JSON.stringify({
             workflow: { id: resolvedWorkflowId },
             user: resolvedUserId,
+            chatkit_configuration: {
+              file_upload: {
+                enabled: true,
+              },
+            },
           }),
         });
         if (!res.ok) {
@@ -1033,13 +1047,14 @@ export function OpenAiChatKitPanel({
       placeholder: isLiveMode
         ? 'Tell TekAutomate Live what to do with the scope...'
         : 'Ask about measurements, debugging, scope setup...',
-      attachments: {
+      attachments: ({
         enabled: true,
+        uploadStrategy: { type: 'hosted' },
         maxCount: 4,
         accept: {
           'image/*': ['.png', '.jpg', '.jpeg', '.webp'],
         },
-      },
+      } as any),
     },
     widgets: {
       onAction: async (action) => {

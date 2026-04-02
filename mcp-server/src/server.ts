@@ -1151,6 +1151,11 @@ function filterTools(q) {
           body: JSON.stringify({
             workflow: { id: workflowId },
             user: userId,
+            chatkit_configuration: {
+              file_upload: {
+                enabled: true,
+              },
+            },
           }),
         });
         if (!sessionRes.ok) {
