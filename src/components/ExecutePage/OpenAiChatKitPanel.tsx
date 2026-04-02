@@ -146,7 +146,7 @@ function getQuickActions(isLiveMode: boolean): QuickAction[] {
 }
 
 const CHATKIT_FONT_SOURCES = [
-  { family: 'JetBrains Mono', src: 'https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600;700&display=swap' },
+  { family: 'JetBrains Mono', src: 'url(https://fonts.gstatic.com/s/jetbrainsmono/v20/tDbY2o-flEEny0FZhsfKu5WU4zr3E_BX0PnT8RD8yKxTOlOTk6OThhvA.woff2) format("woff2")' },
 ];
 
 function getChatKitThemeOptions(theme: 'dark' | 'light'): ThemeOption {
