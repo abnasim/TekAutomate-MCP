@@ -129,6 +129,23 @@ function getStartScreenPrompts(isLiveMode: boolean): Array<{ label: string; prom
       ];
 }
 
+interface QuickAction {
+  label: string;
+  icon: string;
+  type: 'prompt' | 'tool';
+  prompt?: string;
+  toolName?: string;
+  toolArgs?: Record<string, unknown>;
+}
+
+function getQuickActions(isLiveMode: boolean): QuickAction[] {
+  return isLiveMode
+    ? [
+        { label: 'Discover SCPI', icon: '🔍', type: 'tool', toolName: 'discover_scpi', toolArgs: {} },
+      ]
+    : [];
+}
+
 function getChatKitThemeOptions(theme: 'dark' | 'light'): ThemeOption {
   return {
     colorScheme: theme,
@@ -1178,6 +1195,8 @@ function OpenAiChatKitPanelInner({
   const startScreenGreeting = getStartScreenGreeting(isLiveMode);
   const startScreenPrompts = getStartScreenPrompts(isLiveMode);
 
+  const quickActions = getQuickActions(isLiveMode);
+
   const handleStarterPrompt = useCallback(async (prompt: string) => {
     if (!prompt || isSendingPrompt) return;
     setIsSendingPrompt(true);
@@ -1476,6 +1495,60 @@ function OpenAiChatKitPanelInner({
       ) : null}
       <div style={{ position: 'relative', zIndex: 1, flex: 1, minHeight: 0, display: 'flex', flexDirection: 'column' }}>
         <ChatKit control={chatkit.control} style={{ width: '100%', height: '100%' }} />
+        {quickActions.length > 0 && (
+          <div style={{
+            display: 'flex',
+            gap: 6,
+            padding: '4px 12px 6px',
+            borderTop: `1px solid ${chatKitTheme === 'dark' ? 'rgba(255,255,255,0.06)' : 'rgba(0,0,0,0.06)'}`,
+            background: chatKitTheme === 'dark' ? 'rgba(255,255,255,0.02)' : 'rgba(0,0,0,0.01)',
+          }}>
+            {quickActions.map((qa) => (
+              <button
+                key={qa.label}
+                type="button"
+                onClick={() => {
+                  if (qa.type === 'tool' && qa.toolName) {
+                    void (async () => {
+                      try {
+                        const result = await executeMcpTool(
+                          qa.toolName!,
+                          qa.toolArgs || {},
+                          instrumentEndpoint || undefined,
+                          { modelFamily: flowContext?.modelFamily, deviceDriver: flowContext?.deviceDriver },
+                        );
+                        // Send the result as context to the chat
+                        void handleStarterPrompt(`Here are the SCPI discovery results from the instrument:\n\n${JSON.stringify(result, null, 2)}\n\nSummarize what commands are available and organize them by category.`);
+                      } catch (err) {
+                        void handleStarterPrompt(`SCPI discovery failed: ${err instanceof Error ? err.message : 'Unknown error'}. Can you help troubleshoot?`);
+                      }
+                    })();
+                  } else if (qa.prompt) {
+                    void handleStarterPrompt(qa.prompt);
+                  }
+                }}
+                disabled={isSendingPrompt}
+                style={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: 4,
+                  padding: '4px 10px',
+                  fontSize: 12,
+                  fontWeight: 500,
+                  borderRadius: 6,
+                  border: `1px solid ${chatKitTheme === 'dark' ? 'rgba(255,255,255,0.1)' : 'rgba(0,0,0,0.1)'}`,
+                  color: chatKitTheme === 'dark' ? '#94a3b8' : '#64748b',
+                  background: 'transparent',
+                  cursor: isSendingPrompt ? 'default' : 'pointer',
+                  opacity: isSendingPrompt ? 0.5 : 1,
+                }}
+              >
+                <span>{qa.icon}</span>
+                <span>{qa.label}</span>
+              </button>
+            ))}
+          </div>
+        )}
       </div>
     </div>
   );
