@@ -100,6 +100,24 @@ function getOrCreateLiveSessionKey(workflowId?: string, userId?: string): string
   }
 }
 
+function getStartScreenGreeting(isLiveMode: boolean): string {
+  return isLiveMode
+    ? 'TekAutomate Live Copilot — control the scope, inspect the screen, and verify changes in real time.'
+    : 'TekAutomate AI Chat — ask about SCPI, measurements, workflows, or runtime failures.';
+}
+
+function getStartScreenPrompts(isLiveMode: boolean): Array<{ label: string; prompt: string }> {
+  return isLiveMode
+    ? [
+        { label: 'Check instruments', prompt: 'Check the connected instrument and tell me what scope is online right now.' },
+        { label: 'Capture screen', prompt: 'Capture a fresh screenshot and tell me what the scope is showing.' },
+      ]
+    : [
+        { label: 'Check my flow', prompt: 'Review the current workflow and suggest improvements.' },
+        { label: 'Build a measurement', prompt: 'Build a frequency and amplitude measurement workflow for CH1.' },
+      ];
+}
+
 function extractClientSecret(payload: unknown): string | null {
   if (!payload || typeof payload !== 'object') return null;
 
@@ -500,6 +518,7 @@ export function OpenAiChatKitPanel({
   const [initError, setInitError] = useState<string | null>(null);
   const [activeThreadId, setActiveThreadId] = useState<string | null>(null);
   const [chatKitTheme, setChatKitTheme] = useState<'dark' | 'light'>(() => readCurrentTheme());
+  const [isSendingPrompt, setIsSendingPrompt] = useState(false);
   const onActionsRef = useRef(onActionsDetected);
   onActionsRef.current = onActionsDetected;
   const onProposalDetectedRef = useRef(onProposalDetected);
@@ -978,26 +997,28 @@ export function OpenAiChatKitPanel({
         ? 'Tell TekAutomate Live what to do with the scope...'
         : 'Ask about measurements, debugging, scope setup...',
     },
-    startScreen: {
-      greeting: isLiveMode
-        ? 'TekAutomate Live Copilot — control the scope, inspect the screen, and verify changes in real time.'
-        : 'TekAutomate AI Chat — ask about SCPI, measurements, workflows, or runtime failures.',
-      prompts: isLiveMode
-        ? [
-            { label: 'Check instruments', prompt: 'Check the connected instrument and tell me what scope is online right now.' },
-            { label: 'Capture screen', prompt: 'Capture a fresh screenshot and tell me what the scope is showing.' },
-          ]
-        : [
-            { label: 'Check my flow', prompt: 'Review the current workflow and suggest improvements.' },
-            { label: 'Build a measurement', prompt: 'Build a frequency and amplitude measurement workflow for CH1.' },
-          ],
-    },
     widgets: {
       onAction: async (action) => {
         await handleWidgetAction(action);
       },
     },
   });
+
+  const startScreenGreeting = getStartScreenGreeting(isLiveMode);
+  const startScreenPrompts = getStartScreenPrompts(isLiveMode);
+
+  const handleStarterPrompt = useCallback(async (prompt: string) => {
+    if (!prompt || isSendingPrompt) return;
+    setIsSendingPrompt(true);
+    try {
+      await chatkit.sendUserMessage(prompt);
+      chatkit.focusComposer?.();
+    } catch (error) {
+      console.warn('[ChatKit] starter prompt failed:', error);
+    } finally {
+      setIsSendingPrompt(false);
+    }
+  }, [chatkit, isSendingPrompt]);
 
   // ── Widget action handler — replaces MutationObserver for ACTIONS_JSON ──
   // ChatKit emits widget actions as DOM CustomEvents on the <openai-chatkit> element.
@@ -1240,6 +1261,55 @@ export function OpenAiChatKitPanel({
 
   return (
     <div ref={containerRef} className={className} style={{ flex: 1, minHeight: 0, display: 'flex', flexDirection: 'column', position: 'relative' }}>
+      {!activeThreadId ? (
+        <div
+          style={{
+            position: 'relative',
+            zIndex: 2,
+            padding: '20px 20px 12px',
+            display: 'flex',
+            flexDirection: 'column',
+            gap: 14,
+            borderBottom: '1px solid rgba(255,255,255,0.06)',
+            background: chatKitTheme === 'dark' ? '#171717' : '#ffffff',
+          }}
+        >
+          <div
+            style={{
+              fontSize: 18,
+              fontWeight: 700,
+              lineHeight: 1.3,
+              color: chatKitTheme === 'dark' ? '#f3f4f6' : '#111827',
+              maxWidth: 720,
+            }}
+          >
+            {startScreenGreeting}
+          </div>
+          <div style={{ display: 'flex', flexWrap: 'wrap', gap: 10 }}>
+            {startScreenPrompts.map((item) => (
+              <button
+                key={item.label}
+                type="button"
+                onClick={() => { void handleStarterPrompt(item.prompt); }}
+                disabled={isSendingPrompt}
+                style={{
+                  borderRadius: 999,
+                  border: '1px solid rgba(148,163,184,0.22)',
+                  padding: '8px 14px',
+                  fontSize: 13,
+                  fontWeight: 500,
+                  cursor: isSendingPrompt ? 'default' : 'pointer',
+                  color: chatKitTheme === 'dark' ? '#e5e7eb' : '#1f2937',
+                  background: chatKitTheme === 'dark' ? 'rgba(255,255,255,0.03)' : '#f9fafb',
+                  opacity: isSendingPrompt ? 0.7 : 1,
+                }}
+              >
+                {item.label}
+              </button>
+            ))}
+          </div>
+        </div>
+      ) : null}
       <div style={{ position: 'relative', zIndex: 1, flex: 1, minHeight: 0 }}>
         <ChatKit key={chatKitTheme} control={chatkit.control} style={{ width: '100%', height: '100%' }} />
       </div>

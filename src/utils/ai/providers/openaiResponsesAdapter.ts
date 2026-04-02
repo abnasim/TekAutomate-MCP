@@ -1,4 +1,5 @@
 import type { AssembledContext, ChatTurn } from '../types';
+import { buildRequestHistory } from '../historyTrim';
 
 export class OpenAiResponsesAdapter {
   private apiKey: string;
@@ -17,13 +18,11 @@ export class OpenAiResponsesAdapter {
     history: ChatTurn[],
     onChunk: (chunk: string) => void
   ): Promise<void> {
-    // Build input array from history turns (up to last 12) + system + current user message
-    const historyInput = history
-      .slice(-12)
-      .map((turn) => ({
-        role: turn.role as 'user' | 'assistant',
-        content: turn.content,
-      }));
+    // Keep only the most recent conversational turns so requests do not grow unbounded.
+    const historyInput = buildRequestHistory(history, context.userPrompt).map((turn) => ({
+      role: turn.role as 'user' | 'assistant',
+      content: turn.content,
+    }));
 
     const input: Array<{ role: string; content: string }> = [
       { role: 'system', content: context.systemPrompt },

@@ -10,6 +10,7 @@
  */
 
 import { resolveMcpHost } from './mcpClient';
+import { buildRequestHistory } from './historyTrim';
 
 // ── Types ──
 
@@ -299,9 +300,9 @@ async function runAnthropicLoop(params: LiveToolLoopParams): Promise<LiveToolLoo
   }));
 
   const messages: Array<Record<string, unknown>> = [
-    ...history.slice(-12).map((h) => ({
+    ...buildRequestHistory(history, userMessage).map((h) => ({
       role: h.role,
-      content: String(h.content || '').slice(0, 3000),
+      content: h.content,
     })),
     { role: 'user', content: userMessage },
   ];
@@ -484,9 +485,9 @@ async function runOpenAiLoop(params: LiveToolLoopParams): Promise<LiveToolLoopRe
 
   // Build initial input with history + current message
   const initialInput: Array<Record<string, unknown>> = [
-    ...history.slice(-12).map((h) => ({
+    ...buildRequestHistory(history, userMessage).map((h) => ({
       role: h.role === 'assistant' ? 'assistant' : 'user',
-      content: String(h.content || '').slice(0, 3000),
+      content: h.content,
     })),
     { role: 'user', content: userMessage },
   ];
