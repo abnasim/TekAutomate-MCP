@@ -1443,7 +1443,7 @@ export async function resolveTriggerCommands(
   }
 
   // ── RUNT trigger: threshold HIGH/LOW ──
-  if (trigger.type === 'RUNt' || (trigger.type as string) === 'RUNT') {
+  if (trigger.type === 'RUNT' || (trigger.type as string) === 'RUNT') {
     if (trigger.levelVolts !== undefined) {
       out.push(buildSyntheticWrite(`TRIGger:A:RUNT:THReshold:HIGH ${formatValue(trigger.levelVolts)}`, 'TRIGGER'));
       out.push(buildSyntheticWrite(`TRIGger:A:RUNT:THReshold:LOW ${formatValue(-Math.abs(trigger.levelVolts))}`, 'TRIGGER'));
@@ -4833,7 +4833,7 @@ function parseTriggerClause(
   }
 
   if (/\brunt\b/i.test(clause)) {
-    trigger.type = 'RUNt';
+    trigger.type = 'RUNT';
     if (!trigger.slope) trigger.slope = 'RISe';
     if (trigger.levelVolts === undefined) {
       const signalAmplitude = parseLastVoltageInVolts(clause);
@@ -4876,7 +4876,7 @@ function filterMeasurementTypes(clause: string, matchedTypes: string[]): string[
   let types = canonicalMatchedTypes.filter(
     (type) => sanitizedClause.toLowerCase().includes(type.toLowerCase()) || canonicalMatchedTypes.length === 1
   );
-  if (!types.length) types = matchedTypes;
+  if (!types.length) types = matchedTypes as Array<ParsedMeasurementIntent['type']>;
   types = types
     .map((type) => canonicalizeMeasurementType(type))
     .filter((type): type is ParsedMeasurementIntent['type'] => Boolean(type));

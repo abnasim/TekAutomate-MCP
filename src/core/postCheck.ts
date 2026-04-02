@@ -19,7 +19,7 @@ export interface PostCheckResult {
   ok: boolean;
   text: string;
   errors: string[];
-  warnings: string[];
+  warnings?: string[];
 }
 
 export interface PostCheckOptions {
@@ -1035,7 +1035,13 @@ export async function postCheckResponse(
     finalText.trim().startsWith('{') &&
     Array.isArray(actionsJson.actions) &&
     (actionsJson.actions as Array<Record<string, unknown>>).some(
-      (a) => a && typeof a === 'object' && (a.action_type !== undefined || a.payload?.new_step !== undefined)
+      (a) => {
+        if (!a || typeof a !== 'object') return false;
+        const payload = a.payload && typeof a.payload === 'object'
+          ? (a.payload as Record<string, unknown>)
+          : undefined;
+        return a.action_type !== undefined || payload?.new_step !== undefined;
+      }
     );
   const assistantMode =
     options?.assistantMode === true || (options?.assistantMode !== false && rawLooksLikeAssistant);

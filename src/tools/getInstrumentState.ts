@@ -2,7 +2,7 @@ import { getInstrumentStateProxy } from '../core/instrumentProxy';
 import type { ToolResult } from '../core/schemas';
 import { dispatchLiveActionThroughTekAutomate, shouldBridgeToTekAutomate, withRuntimeInstrumentDefaults } from './liveToolSupport';
 
-interface Input {
+interface Input extends Record<string, unknown> {
   executorUrl: string;
   visaResource: string;
   backend: string;
@@ -12,7 +12,7 @@ interface Input {
 
 export async function getInstrumentState(input: Input): Promise<ToolResult<Record<string, unknown>>> {
   if (shouldBridgeToTekAutomate(input)) {
-    const bridged = await dispatchLiveActionThroughTekAutomate('get_instrument_state', input as unknown as Record<string, unknown>, 30_000);
+    const bridged = await dispatchLiveActionThroughTekAutomate('get_instrument_state', input, 30_000);
     return {
       ok: bridged.ok,
       data: bridged.ok

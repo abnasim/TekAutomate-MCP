@@ -113,7 +113,7 @@ function normalizeSteps(value: unknown): RuntimeWorkflowStep[] {
         command: typeof step.command === 'string' ? step.command : undefined,
       } satisfies RuntimeWorkflowStep;
     })
-    .filter((item): item is RuntimeWorkflowStep => !!item);
+    .filter((item) => item !== null) as RuntimeWorkflowStep[];
 }
 
 function normalizeRunLog(value: unknown): RuntimeRunLogInfo {

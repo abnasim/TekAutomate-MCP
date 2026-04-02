@@ -2,7 +2,7 @@ import { captureScreenshotProxy } from '../core/instrumentProxy';
 import type { ToolResult } from '../core/schemas';
 import { dispatchLiveActionThroughTekAutomate, shouldBridgeToTekAutomate, withRuntimeInstrumentDefaults } from './liveToolSupport';
 
-interface Input {
+interface Input extends Record<string, unknown> {
   executorUrl: string;
   visaResource: string;
   backend: string;
@@ -32,9 +32,9 @@ async function compressAnalyzedScreenshotPayload(
       { width: 480, height: 288, quality: 45 },
     ];
 
-    let best = rawBuffer;
+    let best: Buffer = rawBuffer;
     for (const variant of variants) {
-      const candidate = await sharp(rawBuffer)
+      const candidate: Buffer = await sharp(rawBuffer)
         .resize(variant.width, variant.height, { fit: 'inside', withoutEnlargement: true })
         .jpeg({ quality: variant.quality, mozjpeg: true })
         .toBuffer();
@@ -70,7 +70,7 @@ export async function captureScreenshot(input: Input): Promise<ToolResult<Record
   if (shouldBridgeToTekAutomate(input)) {
     const bridged = await dispatchLiveActionThroughTekAutomate(
       'capture_screenshot',
-      input as unknown as Record<string, unknown>,
+      input,
       90_000,
     );
     const data = bridged.ok

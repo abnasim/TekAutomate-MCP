@@ -1697,7 +1697,7 @@ export async function executeBuild(request: BuildRequest): Promise<MicroToolResu
   // alongside the verified command cards.
   let ragChunks: Array<{ title: string; body: string; source?: string; corpus?: string }> = [];
   try {
-    const rag = getRagIndexes();
+    const rag = await getRagIndexes();
     if (rag) {
       const queryWords = new Set(request.query.toLowerCase().split(/\s+/).filter(w => w.length > 2));
       // Search SCPI corpus + app_logic for relevant context

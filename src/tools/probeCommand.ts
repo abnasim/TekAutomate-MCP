@@ -2,7 +2,7 @@ import { probeCommandProxy } from '../core/instrumentProxy';
 import type { ToolResult } from '../core/schemas';
 import { dispatchLiveActionThroughTekAutomate, shouldBridgeToTekAutomate, withRuntimeInstrumentDefaults } from './liveToolSupport';
 
-interface Input {
+interface Input extends Record<string, unknown> {
   command: string;
   executorUrl: string;
   visaResource: string;
@@ -13,7 +13,7 @@ interface Input {
 
 export async function probeCommand(input: Input): Promise<ToolResult<Record<string, unknown>>> {
   if (shouldBridgeToTekAutomate(input)) {
-    const bridged = await dispatchLiveActionThroughTekAutomate('probe_command', input as unknown as Record<string, unknown>, 30_000);
+    const bridged = await dispatchLiveActionThroughTekAutomate('probe_command', input, 30_000);
     return {
       ok: bridged.ok,
       data: bridged.ok

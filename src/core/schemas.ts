@@ -1,8 +1,10 @@
 export interface ToolSourceMeta {
-  file: string;
+  file?: string;
   commandId?: string;
   section?: string;
   score?: number;
+  type?: string;
+  [key: string]: unknown;
 }
 
 export interface ToolResult<T = unknown> {

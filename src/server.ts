@@ -340,8 +340,8 @@ export async function createServer(port = 8787): Promise<http.Server> {
     try {
       const [serverMod, transportMod, typesMod] = await Promise.all([
         import('@modelcontextprotocol/sdk/server'),
-        import('@modelcontextprotocol/sdk/server/streamableHttp'),
-        import('@modelcontextprotocol/sdk/types'),
+        import('@modelcontextprotocol/sdk/server/streamableHttp.js'),
+        import('@modelcontextprotocol/sdk/types.js'),
       ]);
       _mcpSdk = {
         Server: serverMod.Server,

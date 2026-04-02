@@ -25,7 +25,7 @@ interface SmartScpiResult {
   conversationalPrompt?: string;
 }
 
-interface CommandSuggestion {
+export interface CommandSuggestion {
   header: string;
   description: string;
   shortDescription: string;
@@ -351,8 +351,9 @@ export class SmartScpiAssistant {
   /**
    * Generate workflow suggestions
    */
-  private generateWorkflow(commands: CommandRecord[], intent: ReturnType<SmartScpiAssistant['parseIntent']>): string[] {
-    const { primary, modifiers, action } = intent;
+  private generateWorkflow(commands: CommandRecord[], intent: IntentResult): string[] {
+    const primary = intent.intent;
+    const action = intent.action;
     const workflow: string[] = [];
 
     // Power + Harmonics workflow
@@ -888,7 +889,7 @@ Which category would you like to explore?`;
 
     keywords.forEach(keyword => {
       const matching = commands.filter(cmd =>
-        cmd.command.toLowerCase().includes(keyword) ||
+        cmd.header.toLowerCase().includes(keyword) ||
         cmd.description.toLowerCase().includes(keyword)
       );
       if (matching.length > 0) {
@@ -995,7 +996,7 @@ Which category would you like to explore?`;
 
     if (result.intent === 'trigger' && result.commands.length > 5) {
       // Broad trigger query - offer trigger types
-      const triggerGroups = this.groupCommandsByType(result.commands, [
+      const triggerGroups = this.groupCommandsByTypeForHierarchy(result.commands, [
         'edge', 'bus', 'logic', 'pulse', 'width', 'video', 'pattern', 'glitch', 'runt', 'window', 'timeout'
       ]);
 
@@ -1008,7 +1009,7 @@ Which category would you like to explore?`;
 
     if (result.intent === 'bus' && result.commands.length > 3) {
       // Bus query - offer protocols
-      const protocolGroups = this.groupCommandsByType(result.commands, [
+      const protocolGroups = this.groupCommandsByTypeForHierarchy(result.commands, [
         'i2c', 'spi', 'can', 'lin', 'rs232', 'rs422', 'rs485', 'mil', '1553', 'ethernet', 'usb'
       ]);
 
@@ -1031,7 +1032,7 @@ Which category would you like to explore?`;
   /**
    * Group commands by type for conversational hierarchy
    */
-  private groupCommandsByType(commands: CommandRecord[], keywords: string[]): Record<string, CommandRecord[]> {
+  private groupCommandsByTypeForHierarchy(commands: CommandRecord[], keywords: string[]): Record<string, CommandRecord[]> {
     const groups: Record<string, CommandRecord[]> = {};
 
     commands.forEach(cmd => {
