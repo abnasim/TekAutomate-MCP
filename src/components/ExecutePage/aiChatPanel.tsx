@@ -160,6 +160,21 @@ function buildLiveScreenshotAttachment(
   };
 }
 
+async function buildOptimizedImageAttachment(input: {
+  name: string;
+  mimeType: string;
+  size: number;
+  dataUrl: string;
+}): Promise<McpChatAttachment> {
+  const optimized = await optimizeImageDataUrl(input.dataUrl, input.mimeType);
+  return {
+    name: input.name,
+    mimeType: optimized.mimeType,
+    size: optimized.size,
+    dataUrl: optimized.dataUrl,
+  };
+}
+
 function downloadTextFile(filename: string, content: string): void {
   const blob = new Blob([content], { type: 'text/plain;charset=utf-8' });
   const url = URL.createObjectURL(blob);
@@ -1168,13 +1183,12 @@ export function AiChatPanel({
     }
     setAttachmentError(null);
     const baseAttachment = buildLiveScreenshotAttachment(latestLiveScreenshot);
-    const optimized = await optimizeImageDataUrl(baseAttachment.dataUrl || '', baseAttachment.mimeType);
-    const screenshotAttachment: McpChatAttachment = {
-      ...baseAttachment,
-      dataUrl: optimized.dataUrl,
-      mimeType: optimized.mimeType,
-      size: optimized.size,
-    };
+    const screenshotAttachment = await buildOptimizedImageAttachment({
+      name: baseAttachment.name,
+      mimeType: baseAttachment.mimeType,
+      size: baseAttachment.size,
+      dataUrl: baseAttachment.dataUrl || '',
+    });
     setAttachments((prev) => {
       const withoutExisting = prev.filter((item) => item.name !== screenshotAttachment.name);
       if (withoutExisting.length + 1 > MAX_ATTACHMENT_COUNT) {
@@ -1215,7 +1229,12 @@ export function AiChatPanel({
           if (isImage || isPdf) {
             item.dataUrl = await readFileAsDataUrl(file);
             if (isImage && item.dataUrl) {
-              const optimized = await optimizeImageDataUrl(item.dataUrl, mimeType);
+              const optimized = await buildOptimizedImageAttachment({
+                name: item.name,
+                mimeType,
+                size: item.size,
+                dataUrl: item.dataUrl,
+              });
               item.dataUrl = optimized.dataUrl;
               item.mimeType = optimized.mimeType;
               item.size = optimized.size;

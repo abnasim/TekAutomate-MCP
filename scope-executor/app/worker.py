@@ -51,8 +51,13 @@ _capture_locks: dict[str, threading.Lock] = {}
 _visa_locks: dict[str, threading.Lock] = {}  # Per-VISA resource lock — prevents send_scpi + screenshot race
 _recent_capture_results: dict[str, tuple[float, dict]] = {}
 _recent_capture_errors: dict[str, tuple[float, str]] = {}
+_recent_scpi_activity: dict[str, tuple[float, dict]] = {}
 _DEFAULT_CAPTURE_TIMEOUT_MS = 45000
 _BUSY_CAPTURE_CACHE_MAX_AGE_SEC = 10.0
+_SCPI_CHUNK_SIZE_SOCKET = 8
+_SCPI_CHUNK_SIZE_VISA = 12
+_SCPI_CHUNK_PAUSE_SEC = 0.12
+_CAPTURE_RETRY_COUNT = 2
 
 
 def _visa_lock_for(visa: str) -> threading.Lock:
@@ -179,6 +184,92 @@ def _capture_timeout_ms(job: dict) -> int:
     return _DEFAULT_CAPTURE_TIMEOUT_MS
 
 
+def _record_scpi_activity(visa: str, *, command_count: int, total_ms: float, had_timeout: bool, used_socket: bool):
+    _recent_scpi_activity[visa] = (
+        time.time(),
+        {
+            "command_count": command_count,
+            "total_ms": total_ms,
+            "had_timeout": had_timeout,
+            "used_socket": used_socket,
+        },
+    )
+
+
+def _recent_scpi_settle_delay(visa: str) -> float:
+    recent = _recent_scpi_activity.get(visa)
+    if not recent:
+        return 0.0
+    timestamp, meta = recent
+    if time.time() - timestamp > 8.0:
+        return 0.0
+    command_count = int(meta.get("command_count", 0) or 0)
+    total_ms = float(meta.get("total_ms", 0) or 0)
+    had_timeout = bool(meta.get("had_timeout", False))
+    if had_timeout:
+        return 0.8
+    if command_count >= 18 or total_ms >= 4000:
+        return 0.45
+    if command_count >= 10 or total_ms >= 2000:
+        return 0.2
+    return 0.0
+
+
+def _command_timeout_ms(cmd: str, default_timeout_ms: int) -> int:
+    upper = cmd.upper()
+    timeout_ms = default_timeout_ms
+    if upper.endswith("?"):
+        timeout_ms = max(timeout_ms, 4000)
+    if (
+        "MEASUREMENT:" in upper
+        or "MEASUREMENT;" in upper
+        or "MEASUREMENT:MEAS" in upper
+        or "MEASU" in upper
+        or "BUS:" in upper
+        or "DISPLAY?" in upper
+        or "THRESH" in upper
+    ):
+        timeout_ms = max(timeout_ms, 7000)
+    if (
+        "AUTOSET" in upper
+        or "SAVE:" in upper
+        or "RECALL:" in upper
+        or "RECALL:" in upper
+        or "FILESYSTEM:" in upper
+        or "*RST" in upper
+    ):
+        timeout_ms = max(timeout_ms, 12000)
+    return timeout_ms
+
+
+def _command_settle_seconds(cmd: str) -> float:
+    upper = cmd.upper()
+    if any(token in upper for token in ("AUTOSET", "SAVE:", "FILESYSTEM:", "RECALL:", "RECAll:", "ACQUIRE:STATE", "ACQuire:STATE")):
+        return 0.18
+    if any(token in upper for token in ("MEASU", "HORIZ", "TRIGGER", "BUS:", "DISPLAY:")):
+        return 0.04
+    return 0.0
+
+
+def _set_session_timeout(session, timeout_ms: int, use_socket: bool):
+    if use_socket:
+        session.set_timeout(timeout_ms / 1000.0)
+    else:
+        session.timeout = timeout_ms
+
+
+def _open_command_session(visa: str, timeout_ms: int, use_socket: bool):
+    if use_socket:
+        session = _get_socket_session(visa)
+        _set_session_timeout(session, timeout_ms, True)
+        return session, False
+    session = _open_fresh_scope_session(visa)
+    session.timeout = timeout_ms
+    session.write_termination = "\n"
+    session.read_termination = "\n"
+    return session, True
+
+
 def _get_scope_session(visa: str):
     with _session_lock:
         session = _scope_sessions.get(visa)
@@ -291,47 +382,65 @@ def _handle_capture_screenshot(job: dict) -> dict:
             raise RuntimeError(recent_error[1])
 
         try:
+            settle_delay = _recent_scpi_settle_delay(visa)
+            if settle_delay > 0:
+                time.sleep(settle_delay)
             # Use raw SocketInstr for SOCKET resources — pyvisa can't handle
             # binary block transfers (screenshots, curve data) over raw sockets.
-            if _is_socket_resource(visa):
+            last_error = None
+            for attempt in range(_CAPTURE_RETRY_COUNT):
                 try:
-                    sock = _get_socket_session(visa)
-                except Exception:
-                    _reset_socket_session(visa)
-                    sock = _get_socket_session(visa)
-                sock.set_timeout(capture_timeout_ms / 1000.0)
-                data = sock.fetch_screen("temp_screenshot.png")
-            else:
-                scpi = _open_fresh_scope_session(visa)
-                try:
-                    scpi.timeout = capture_timeout_ms
-                    scpi.write_termination = "\n"
-                    scpi.read_termination = None
-
-                    if scope_type == "legacy":
-                        scpi.write('HARDCOPY:PORT FILE')
-                        scpi.write('HARDCOPY:FORMAT PNG')
-                        scpi.write('HARDCOPY:FILENAME "C:/TekScope/Temp/screenshot.png"')
-                        scpi.write('HARDCOPY START')
-                        if str(scpi.query('*OPC?')).strip() != '1':
-                            raise RuntimeError("HARDCOPY START did not complete")
-                        scpi.write('FILESYSTEM:READFILE "C:/TekScope/Temp/screenshot.png"')
-                        data = scpi.read_raw()
-                        scpi.write('FILESYSTEM:DELETE "C:/TekScope/Temp/screenshot.png"')
-                        scpi.query('*OPC?')
+                    if _is_socket_resource(visa):
+                        if attempt > 0:
+                            _reset_socket_session(visa)
+                            time.sleep(0.25 * attempt)
+                        try:
+                            sock = _get_socket_session(visa)
+                        except Exception:
+                            _reset_socket_session(visa)
+                            sock = _get_socket_session(visa)
+                        sock.set_timeout(capture_timeout_ms / 1000.0)
+                        data = sock.fetch_screen("temp_screenshot.png")
                     else:
-                        temp_path = 'C:/Temp_Screen.png'
-                        scpi.write(f'SAVE:IMAGE "{temp_path}"')
-                        if str(scpi.query('*OPC?')).strip() != '1':
-                            raise RuntimeError("SAVE:IMAGE did not complete")
-                        scpi.write(f'FILESYSTEM:READFILE "{temp_path}"')
-                        data = scpi.read_raw()
-                        scpi.write(f'FILESYSTEM:DELETE "{temp_path}"')
-                finally:
-                    try:
-                        scpi.close()
-                    except Exception:
-                        pass
+                        scpi = _open_fresh_scope_session(visa)
+                        try:
+                            scpi.timeout = capture_timeout_ms
+                            scpi.write_termination = "\n"
+                            scpi.read_termination = None
+
+                            if scope_type == "legacy":
+                                scpi.write('HARDCOPY:PORT FILE')
+                                scpi.write('HARDCOPY:FORMAT PNG')
+                                scpi.write('HARDCOPY:FILENAME "C:/TekScope/Temp/screenshot.png"')
+                                scpi.write('HARDCOPY START')
+                                if str(scpi.query('*OPC?')).strip() != '1':
+                                    raise RuntimeError("HARDCOPY START did not complete")
+                                scpi.write('FILESYSTEM:READFILE "C:/TekScope/Temp/screenshot.png"')
+                                data = scpi.read_raw()
+                                scpi.write('FILESYSTEM:DELETE "C:/TekScope/Temp/screenshot.png"')
+                                scpi.query('*OPC?')
+                            else:
+                                temp_path = 'C:/Temp_Screen.png'
+                                scpi.write(f'SAVE:IMAGE "{temp_path}"')
+                                if str(scpi.query('*OPC?')).strip() != '1':
+                                    raise RuntimeError("SAVE:IMAGE did not complete")
+                                scpi.write(f'FILESYSTEM:READFILE "{temp_path}"')
+                                data = scpi.read_raw()
+                                scpi.write(f'FILESYSTEM:DELETE "{temp_path}"')
+                        finally:
+                            try:
+                                scpi.close()
+                            except Exception:
+                                pass
+                    break
+                except Exception as exc:
+                    last_error = exc
+                    if _is_socket_resource(visa):
+                        _reset_socket_session(visa)
+                    if attempt >= _CAPTURE_RETRY_COUNT - 1:
+                        raise
+            if last_error and 'data' not in locals():
+                raise last_error
 
             import base64
 
@@ -405,16 +514,7 @@ def _handle_send_scpi(job: dict) -> dict:
 
     use_socket = _is_socket_resource(visa)
 
-    if use_socket:
-        scpi = _get_socket_session(visa)
-        scpi.set_timeout(timeout_ms / 1000.0)
-        close_scpi = False
-    else:
-        scpi = _open_fresh_scope_session(visa)
-        scpi.timeout = timeout_ms
-        scpi.write_termination = "\n"
-        scpi.read_termination = "\n"
-        close_scpi = True
+    scpi, close_scpi = _open_command_session(visa, timeout_ms, use_socket)
 
     if verbose:
         transport = "socket" if use_socket else "visa-fresh"
@@ -423,12 +523,18 @@ def _handle_send_scpi(job: dict) -> dict:
     started = time.time()
     responses = []
     session_reset = False
+    had_timeout = False
     try:
-        for cmd in commands:
+        chunk_size = _SCPI_CHUNK_SIZE_SOCKET if use_socket else _SCPI_CHUNK_SIZE_VISA
+        for index, cmd in enumerate(commands):
+            if index > 0 and index % chunk_size == 0:
+                time.sleep(_SCPI_CHUNK_PAUSE_SEC if use_socket else _SCPI_CHUNK_PAUSE_SEC / 2)
             cmd_started = time.time()
             ok = True
             error = None
             response = "OK"
+            command_timeout_ms = _command_timeout_ms(cmd, timeout_ms)
+            _set_session_timeout(scpi, command_timeout_ms, use_socket)
 
             if verbose:
                 _emit({"log": "scpi", "level": "send", "msg": f"[SCPI TX] {cmd}"})
@@ -439,28 +545,26 @@ def _handle_send_scpi(job: dict) -> dict:
                 else:
                     scpi.write(cmd)
             except Exception as exc:
+                had_timeout = had_timeout or ('timed out' in str(exc).lower() or 'timeout' in str(exc).lower())
                 if not session_reset:
                     session_reset = True
                     try:
                         if use_socket:
                             _reset_socket_session(visa)
-                            scpi = _get_socket_session(visa)
-                            scpi.set_timeout(timeout_ms / 1000.0)
+                            scpi, close_scpi = _open_command_session(visa, command_timeout_ms, True)
                         else:
                             try:
                                 scpi.close()
                             except Exception:
                                 pass
                             _reset_resource_manager()
-                            scpi = _open_fresh_scope_session(visa)
-                            scpi.timeout = timeout_ms
-                            scpi.write_termination = "\n"
-                            scpi.read_termination = "\n"
+                            scpi, close_scpi = _open_command_session(visa, command_timeout_ms, False)
                         if cmd.strip().endswith("?"):
                             response = str(scpi.query(cmd)).strip()
                         else:
                             scpi.write(cmd)
                     except Exception as retry_exc:
+                        had_timeout = had_timeout or ('timed out' in str(retry_exc).lower() or 'timeout' in str(retry_exc).lower())
                         ok = False
                         response = ""
                         error = f"Retry failed: {retry_exc}"
@@ -469,6 +573,9 @@ def _handle_send_scpi(job: dict) -> dict:
                     response = ""
                     error = str(exc)
             elapsed_ms = round((time.time() - cmd_started) * 1000, 1)
+            settle_seconds = _command_settle_seconds(cmd)
+            if settle_seconds > 0:
+                time.sleep(settle_seconds)
 
             if verbose:
                 if ok:
@@ -497,6 +604,13 @@ def _handle_send_scpi(job: dict) -> dict:
     if verbose:
         ok_count = sum(1 for r in responses if r["ok"])
         _emit({"log": "scpi", "level": "info", "msg": f"[SCPI] Done: {ok_count}/{len(responses)} OK in {total_ms}ms"})
+    _record_scpi_activity(
+        visa,
+        command_count=len(commands),
+        total_ms=total_ms,
+        had_timeout=had_timeout,
+        used_socket=use_socket,
+    )
 
     return {
         "ok": all(item["ok"] for item in responses),

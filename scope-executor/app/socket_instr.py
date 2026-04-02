@@ -21,7 +21,7 @@ class SocketInstr:
         self.socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
         try:
             self.socket.connect((host, port))
-            self.socket.setblocking(False)
+            self.socket.setblocking(True)
             self.socket.settimeout(timeout)
         except socket.error as msg:
             raise RuntimeError(f"Could not connect to {host}:{port}: {msg}")
@@ -40,10 +40,15 @@ class SocketInstr:
     def read(self) -> str:
         """Read ASCII response until newline."""
         try:
-            resp = self.socket.recv(1048576)
-            while resp[-1:] != b'\n':
-                resp += self.socket.recv(1048576)
-            return resp.decode('latin_1').strip()
+            resp = bytearray()
+            while True:
+                chunk = self.socket.recv(1048576)
+                if not chunk:
+                    raise RuntimeError("Socket connection closed while waiting for response")
+                resp.extend(chunk)
+                if resp[-1:] == b'\n':
+                    break
+            return bytes(resp).decode('latin_1').strip()
         except socket.error as msg:
             raise RuntimeError(f"Socket recv failed: {msg}")
 
@@ -66,6 +71,8 @@ class SocketInstr:
         try:
             while n_bytes:
                 c = self.socket.recv_into(mv, n_bytes)
+                if c == 0:
+                    raise RuntimeError('Socket connection closed during binary read')
                 mv = mv[c:]
                 n_bytes -= c
         except socket.error as msg:

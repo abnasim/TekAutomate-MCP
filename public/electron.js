@@ -28,16 +28,22 @@ function isPortListening(port, host = '127.0.0.1') {
 
 async function startMcpServerSilently() {
   try {
+    if (!isDev) return;
     await killStaleMcpOnPort(MCP_PORT);
     const alreadyRunning = await isPortListening(MCP_PORT);
     if (alreadyRunning) return;
     const npmCommand = process.platform === 'win32' ? 'npm.cmd' : 'npm';
     const appRoot = path.join(__dirname, '..');
+    const mcpPackageJson = path.join(appRoot, 'mcp-server', 'package.json');
+    if (!fs.existsSync(mcpPackageJson)) return;
     const child = spawn(npmCommand, ['--prefix', 'mcp-server', 'run', 'dev'], {
       cwd: appRoot,
       detached: true,
       stdio: 'ignore',
       shell: false,
+    });
+    child.once('error', () => {
+      // Silent fail by design.
     });
     child.unref();
   } catch {
