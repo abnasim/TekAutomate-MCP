@@ -14,6 +14,8 @@ interface SearchScpiInput {
   sourceMetaMode?: 'compact' | 'full';
 }
 
+const DEFAULT_SEARCH_LIMIT = 10;
+
 function buildSearchSourceMeta(
   entries: CommandRecord[],
   mode: 'compact' | 'full' = 'compact',
@@ -489,7 +491,7 @@ export async function searchScpi(input: SearchScpiInput): Promise<ToolResult<unk
     return { ok: true, data: [], sourceMeta: [], warnings: ['Empty query'] };
   }
   const index = await getCommandIndex();
-  const limit = input.limit || 5;
+  const limit = input.limit || DEFAULT_SEARCH_LIMIT;
   const offset = Math.max(0, input.offset || 0);
   const measurementPlan = buildMeasurementSearchPlan(q);
 
@@ -728,20 +730,18 @@ export async function searchScpi(input: SearchScpiInput): Promise<ToolResult<unk
   const total = reRanked.length;
   const final = reRanked.slice(offset, offset + limit);
   const hasMore = offset + final.length < total;
-  const nextOffset = hasMore ? offset + final.length : undefined;
 
   return {
     ok: true,
     data: final.map((e) =>
       input.verbosity === 'full' ? serializeCommandResult(e) : serializeCommandSearchResult(e)
     ),
-    sourceMeta: buildSearchSourceMeta(final, input.sourceMetaMode || 'compact'),
+    sourceMeta: input.verbosity === 'full' ? buildSearchSourceMeta(final, input.sourceMetaMode || 'compact') : undefined,
     warnings: final.length ? [] : ['No commands matched query'],
     paging: {
       offset,
       limit,
       returned: final.length,
-      nextOffset,
       hasMore,
     },
     debug: {
