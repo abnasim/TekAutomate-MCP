@@ -698,7 +698,6 @@ export function OpenAiChatKitPanel({
   }, []);
 
   const captureActionsPreview = useCallback((text: string) => {
-    if (isLiveMode) return false;
     const preview = extractActionsPreview(text);
     if (!preview) return false;
     const fingerprint = `${preview.summary}\n${preview.rawJson}`;
@@ -723,7 +722,6 @@ export function OpenAiChatKitPanel({
   }, [captureActionsPreview]);
 
   const fetchLatestStagedProposal = useCallback(async () => {
-    if (isLiveMode) return false;
     const mcpHost = resolveMcpHost();
     if (!mcpHost) return false;
     try {
@@ -946,7 +944,6 @@ export function OpenAiChatKitPanel({
     },
     // ── Response end — scan for ACTIONS_JSON and auto-apply ──
     onResponseEnd: () => {
-      if (isLiveMode) return;
       responseScanTimersRef.current.forEach((timer) => window.clearTimeout(timer));
       responseScanTimersRef.current = [];
       [150, 600, 1200, 2200, 3500].forEach((delay) => {
@@ -960,7 +957,6 @@ export function OpenAiChatKitPanel({
       });
     },
     onLog: (detail: { name?: string; data?: Record<string, unknown> }) => {
-      if (isLiveMode) return;
       const strings = collectStringCandidatesDeep(detail?.data);
       for (const text of strings) {
         if (!text.includes('ACTIONS_JSON') && !text.includes('"actions"') && !text.includes('"summary"')) continue;
