@@ -132,9 +132,6 @@ function getChatKitThemeOptions(theme: 'dark' | 'light'): ThemeOption {
     radius: 'round',
     density: 'compact',
     color: {
-      grayscale: theme === 'dark'
-        ? { hue: 222, tint: 8, shade: 2 }
-        : { hue: 222, tint: 1, shade: -1 },
       surface: theme === 'dark'
         ? { background: '#111827', foreground: '#f8fafc' }
         : { background: '#ffffff', foreground: '#111827' },
