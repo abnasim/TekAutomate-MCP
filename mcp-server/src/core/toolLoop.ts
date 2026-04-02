@@ -5175,6 +5175,7 @@ function buildOpenAiUserContent(req: McpChatRequest, userPrompt: string): Array<
       type: 'image_url',
       image_url: {
         url: image.dataUrl,
+        detail: 'auto',
       },
     })),
   ];
@@ -5193,6 +5194,7 @@ function buildOpenAiResponsesContent(req: McpChatRequest, userPrompt: string): A
     ...images.map((image) => ({
       type: 'input_image',
       image_url: image.dataUrl,
+      detail: 'auto',
     })),
   ];
 }

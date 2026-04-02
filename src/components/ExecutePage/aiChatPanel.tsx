@@ -93,6 +93,59 @@ function readFileAsText(file: File): Promise<string> {
   });
 }
 
+async function loadImageElement(dataUrl: string): Promise<HTMLImageElement> {
+  return new Promise((resolve, reject) => {
+    const image = new Image();
+    image.onload = () => resolve(image);
+    image.onerror = () => reject(new Error('Failed to load image for attachment optimization.'));
+    image.src = dataUrl;
+  });
+}
+
+async function optimizeImageDataUrl(
+  dataUrl: string,
+  mimeType: string
+): Promise<{ dataUrl: string; mimeType: string; size: number }> {
+  const parsedMimeType = String(mimeType || '').toLowerCase();
+  if (typeof document === 'undefined' || !parsedMimeType.startsWith('image/')) {
+    const base64 = String(dataUrl.split(',')[1] || '');
+    return { dataUrl, mimeType, size: Math.round(base64.length * 0.75) };
+  }
+
+  const image = await loadImageElement(dataUrl);
+  const maxLongSide = 1024;
+  const longSide = Math.max(image.naturalWidth, image.naturalHeight);
+  const scale = longSide > maxLongSide ? maxLongSide / longSide : 1;
+  const targetWidth = Math.max(1, Math.round(image.naturalWidth * scale));
+  const targetHeight = Math.max(1, Math.round(image.naturalHeight * scale));
+
+  const canvas = document.createElement('canvas');
+  canvas.width = targetWidth;
+  canvas.height = targetHeight;
+  const ctx = canvas.getContext('2d');
+  if (!ctx) {
+    const base64 = String(dataUrl.split(',')[1] || '');
+    return { dataUrl, mimeType, size: Math.round(base64.length * 0.75) };
+  }
+  ctx.drawImage(image, 0, 0, targetWidth, targetHeight);
+
+  const preferredMimeType = parsedMimeType === 'image/png' ? 'image/jpeg' : mimeType;
+  const quality = preferredMimeType === 'image/jpeg' || preferredMimeType === 'image/webp' ? 0.82 : undefined;
+  const optimizedDataUrl = canvas.toDataURL(preferredMimeType, quality);
+  const optimizedBase64 = String(optimizedDataUrl.split(',')[1] || '');
+  const originalBase64 = String(dataUrl.split(',')[1] || '');
+
+  if (!optimizedBase64 || optimizedBase64.length >= originalBase64.length) {
+    return { dataUrl, mimeType, size: Math.round(originalBase64.length * 0.75) };
+  }
+
+  return {
+    dataUrl: optimizedDataUrl,
+    mimeType: preferredMimeType,
+    size: Math.round(optimizedBase64.length * 0.75),
+  };
+}
+
 function buildLiveScreenshotAttachment(
   screenshot: NonNullable<AiChatPanelProps['latestLiveScreenshot']>
 ): McpChatAttachment {
@@ -1124,13 +1177,20 @@ export function AiChatPanel({
     setAttachments((prev) => prev.filter((item) => item.name !== name));
   };
 
-  const attachLatestScreenshot = () => {
+  const attachLatestScreenshot = async () => {
     if (!latestLiveScreenshot) {
       setAttachmentError('Capture a screenshot first, then attach it to your message.');
       return;
     }
     setAttachmentError(null);
-    const screenshotAttachment = buildLiveScreenshotAttachment(latestLiveScreenshot);
+    const baseAttachment = buildLiveScreenshotAttachment(latestLiveScreenshot);
+    const optimized = await optimizeImageDataUrl(baseAttachment.dataUrl || '', baseAttachment.mimeType);
+    const screenshotAttachment: McpChatAttachment = {
+      ...baseAttachment,
+      dataUrl: optimized.dataUrl,
+      mimeType: optimized.mimeType,
+      size: optimized.size,
+    };
     setAttachments((prev) => {
       const withoutExisting = prev.filter((item) => item.name !== screenshotAttachment.name);
       if (withoutExisting.length + 1 > MAX_ATTACHMENT_COUNT) {
@@ -1170,6 +1230,12 @@ export function AiChatPanel({
           };
           if (isImage || isPdf) {
             item.dataUrl = await readFileAsDataUrl(file);
+            if (isImage && item.dataUrl) {
+              const optimized = await optimizeImageDataUrl(item.dataUrl, mimeType);
+              item.dataUrl = optimized.dataUrl;
+              item.mimeType = optimized.mimeType;
+              item.size = optimized.size;
+            }
           }
           if (isTextAttachment(file)) {
             const text = await readFileAsText(file);
@@ -2106,7 +2172,9 @@ export function AiChatPanel({
               {state.tekMode === 'live' && (
                 <button
                   type="button"
-                  onClick={attachLatestScreenshot}
+                  onClick={() => {
+                    void attachLatestScreenshot();
+                  }}
                   disabled={state.isLoading || !latestLiveScreenshot}
                   className="inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg border border-cyan-300 dark:border-cyan-500/30 text-cyan-700 dark:text-cyan-200 text-xs font-medium hover:bg-cyan-50 dark:hover:bg-cyan-500/10 disabled:opacity-40 transition-colors"
                   title={latestLiveScreenshot ? 'Attach the current scope screenshot to this message' : 'Capture a screenshot first'}
