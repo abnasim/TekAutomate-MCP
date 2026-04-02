@@ -1068,6 +1068,11 @@ function OpenAiChatKitPanelInner({
       seenProposalIdRef.current = '';
       proposalSessionStartedAtRef.current = Date.now();
     },
+    onResponseStart: () => {
+      lastParsedJsonRef.current = '';
+      responseScanTimersRef.current.forEach((timer) => window.clearTimeout(timer));
+      responseScanTimersRef.current = [];
+    },
     // ── Response end — scan for ACTIONS_JSON and auto-apply ──
     onResponseEnd: () => {
       responseScanTimersRef.current.forEach((timer) => window.clearTimeout(timer));
@@ -1076,7 +1081,9 @@ function OpenAiChatKitPanelInner({
         const timer = window.setTimeout(() => {
           const matched = scanContainerForActions();
           void fetchLatestStagedProposal().then((proposalMatched) => {
-            console.log('[ChatKit] onResponseEnd rescan', { delay, matched, proposalMatched });
+            if (matched || proposalMatched) {
+              console.log('[ChatKit] onResponseEnd rescan matched', { delay, matched, proposalMatched });
+            }
           });
         }, delay);
         responseScanTimersRef.current.push(timer);
@@ -1263,7 +1270,9 @@ function OpenAiChatKitPanelInner({
       const allText = sources.filter(Boolean).join('\n');
       if (!allText || allText === lastProcessedRef.current) return;
       lastProcessedRef.current = allText;
-      console.log('[ChatKit] DOM scan, text length:', allText.length, 'has ACTIONS_JSON:', allText.includes('ACTIONS_JSON'));
+      if (allText.includes('ACTIONS_JSON')) {
+        console.log('[ChatKit] DOM scan found ACTIONS_JSON');
+      }
       scanContainerForActions();
     };
 
@@ -1406,6 +1415,13 @@ function OpenAiChatKitPanelInner({
     }).then(() => {
       lastContextSentRef.current = contextKey;
     }).catch((err) => {
+      const message = String(err instanceof Error ? err.message : err || '');
+      if (
+        message.includes('sendAction() ignored - thread is loading')
+        || message.includes('sendAction() ignored - already responding')
+      ) {
+        return;
+      }
       console.warn('[ChatKit] workflow_context_update failed:', err);
     });
   }, [activeThreadId, chatkit, steps, workspaceRevision]);
