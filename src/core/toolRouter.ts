@@ -16,6 +16,7 @@ export interface RouterRequest {
   args?: Record<string, unknown>;
   categories?: ToolCategory[];
   limit?: number;
+  offset?: number;
   debug?: boolean;
   context?: BuildRequest['context'];
   buildNew?: boolean;
@@ -58,6 +59,13 @@ export interface RouterResponse {
   action: string;
   results?: RouterSearchResult[];
   data?: unknown;
+  paging?: {
+    offset: number;
+    limit: number;
+    returned: number;
+    nextOffset?: number;
+    hasMore: boolean;
+  };
   text?: string;
   warnings?: string[];
   error?: string;
@@ -213,24 +221,38 @@ async function handleSearch(req: RouterRequest, startedAt: number): Promise<Rout
 
   // Direct SCPI command search via command index (header + description + tags)
   let scpiCommands: Array<Record<string, unknown>> = [];
+  let scpiPaging: RouterResponse['paging'];
   try {
     const scpiStart = Date.now();
     const { getCommandIndex } = await import('./commandIndex');
+    const { serializeCommandSearchResult } = await import('../tools/commandResultShape');
     const cmdIdx = await getCommandIndex();
-    const results = cmdIdx.searchByQuery(req.query, req.modelFamily, req.limit ?? 5);
-    scpiCommands = results.map((cmd: any) => ({
-      id: cmd.commandId || cmd.header || '',
-      name: cmd.header || '',
-      description: cmd.shortDescription || cmd.description || '',
-      category: 'scpi',
-      score: 10,
-      matchStage: 'command_index',
-      syntax: cmd.syntax,
-      arguments: cmd.arguments,
-      examples: cmd.examples || cmd.codeExamples,
-      group: cmd.group,
-      commandType: cmd.commandType,
-    }));
+    const offset = Math.max(0, req.offset ?? 0);
+    const limit = req.limit ?? 5;
+    const results = cmdIdx.searchByQuery(req.query, req.modelFamily, limit + 1, undefined, offset);
+    scpiCommands = results.map((cmd: any) => {
+      const summary = serializeCommandSearchResult(cmd);
+      return {
+        id: cmd.commandId || cmd.header || '',
+        name: cmd.header || '',
+        description: cmd.shortDescription || cmd.description || '',
+        category: 'scpi',
+        score: 10,
+        matchStage: 'command_index',
+        ...summary,
+      };
+    });
+    const hasMore = scpiCommands.length > limit;
+    if (hasMore) {
+      scpiCommands = scpiCommands.slice(0, limit);
+    }
+    scpiPaging = {
+      offset,
+      limit,
+      returned: scpiCommands.length,
+      nextOffset: hasMore ? offset + scpiCommands.length : undefined,
+      hasMore,
+    };
     scpiMs = Date.now() - scpiStart;
   } catch { /* non-fatal */ }
 
@@ -325,6 +347,7 @@ async function handleSearch(req: RouterRequest, startedAt: number): Promise<Rout
     ok: true,
     action: 'search',
     results,
+    paging: scpiPaging,
     knowledge,
     blindSpotHint,
     timing,
@@ -948,7 +971,11 @@ export const TEK_ROUTER_TOOL_DEFINITION = {
       },
       limit: {
         type: 'number',
-        description: 'Maximum search results to return.',
+        description: 'Maximum search results to return (default 5).',
+      },
+      offset: {
+        type: 'number',
+        description: 'Result offset for pagination (default 0).',
       },
       debug: {
         type: 'boolean',

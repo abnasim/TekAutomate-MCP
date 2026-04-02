@@ -2,13 +2,41 @@ import { getCommandIndex, type CommandType, type CommandRecord } from '../core/c
 import { classifyIntent } from '../core/intentMap';
 import { buildMeasurementSearchPlan } from '../core/measurementCatalog';
 import type { ToolResult } from '../core/schemas';
-import { serializeCommandResult } from './commandResultShape';
+import { serializeCommandResult, serializeCommandSearchResult } from './commandResultShape';
 
 interface SearchScpiInput {
   query: string;
   modelFamily?: string;
   limit?: number;
+  offset?: number;
   commandType?: CommandType;
+  verbosity?: 'summary' | 'full';
+  sourceMetaMode?: 'compact' | 'full';
+}
+
+function buildSearchSourceMeta(
+  entries: CommandRecord[],
+  mode: 'compact' | 'full' = 'compact',
+): ToolResult<unknown[]>['sourceMeta'] {
+  if (mode === 'full') {
+    return entries.map((e) => ({
+      file: e.sourceFile,
+      commandId: e.commandId,
+      section: e.group,
+    }));
+  }
+  const seen = new Set<string>();
+  const compact: ToolResult<unknown[]>['sourceMeta'] = [];
+  for (const entry of entries) {
+    const key = `${entry.sourceFile}:${entry.group}`;
+    if (seen.has(key)) continue;
+    seen.add(key);
+    compact.push({
+      file: entry.sourceFile,
+      section: entry.group,
+    });
+  }
+  return compact;
 }
 
 // ── Group affinity map ───────────────────────────────────────────────
@@ -461,7 +489,8 @@ export async function searchScpi(input: SearchScpiInput): Promise<ToolResult<unk
     return { ok: true, data: [], sourceMeta: [], warnings: ['Empty query'] };
   }
   const index = await getCommandIndex();
-  const limit = input.limit || 10;
+  const limit = input.limit || 5;
+  const offset = Math.max(0, input.offset || 0);
   const measurementPlan = buildMeasurementSearchPlan(q);
 
   // ── Query expansion for terms that don't match SCPI keywords ──
@@ -492,7 +521,7 @@ export async function searchScpi(input: SearchScpiInput): Promise<ToolResult<unk
   }
 
   // Fetch more candidates than needed so re-ranking has room to work
-  const fetchLimit = Math.max(limit * 4, 30);
+  const fetchLimit = Math.max((offset + limit) * 4, 30);
   // Search with both original and expanded queries
   let searchEntries = index.searchByQuery(expandedQuery, input.modelFamily, fetchLimit, input.commandType);
   if (expandedQuery !== q) {
@@ -687,17 +716,34 @@ export async function searchScpi(input: SearchScpiInput): Promise<ToolResult<unk
     reRanked = [...top, ...rest];
   }
 
-  const final = reRanked.slice(0, limit);
+  const exactPinnedHeaders = new Set(
+    [...measurementDirectEntries, ...directEntries].map((entry) => entry.header.toLowerCase())
+  );
+  if (exactPinnedHeaders.size > 0) {
+    const top = reRanked.filter((cmd) => exactPinnedHeaders.has(cmd.header.toLowerCase()));
+    const rest = reRanked.filter((cmd) => !exactPinnedHeaders.has(cmd.header.toLowerCase()));
+    reRanked = [...top, ...rest];
+  }
+
+  const total = reRanked.length;
+  const final = reRanked.slice(offset, offset + limit);
+  const hasMore = offset + final.length < total;
+  const nextOffset = hasMore ? offset + final.length : undefined;
 
   return {
     ok: true,
-    data: final.map((e) => serializeCommandResult(e)),
-    sourceMeta: final.map((e) => ({
-      file: e.sourceFile,
-      commandId: e.commandId,
-      section: e.group,
-    })),
+    data: final.map((e) =>
+      input.verbosity === 'full' ? serializeCommandResult(e) : serializeCommandSearchResult(e)
+    ),
+    sourceMeta: buildSearchSourceMeta(final, input.sourceMetaMode || 'compact'),
     warnings: final.length ? [] : ['No commands matched query'],
+    paging: {
+      offset,
+      limit,
+      returned: final.length,
+      nextOffset,
+      hasMore,
+    },
     debug: {
       intent: intent.intent,
       subject: intent.subject,

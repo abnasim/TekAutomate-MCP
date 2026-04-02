@@ -177,6 +177,99 @@ describe('behavioral.searchScpi', () => {
     expect(headers).toContain('MEASUrement:MEAS<x>:JITTERSummary:TIE');
   });
 
+  it('returns compact search summaries and leaves rich details to exact lookup', async () => {
+    const result = await searchScpi({
+      query: 'trigger mode',
+      modelFamily: 'MSO4/5/6 Series',
+      limit: 5,
+    });
+
+    expect(result.ok).toBe(true);
+    expect(Array.isArray(result.data)).toBe(true);
+    const first = (result.data as Array<Record<string, unknown>>)[0];
+    expect(first).toBeTruthy();
+    expect(first.header).toBeTruthy();
+    expect(first.commandType).toBeTruthy();
+    expect(first.shortDescription).toBeTruthy();
+    expect(first.lookupHint).toEqual({
+      tool: 'get_command_by_header',
+      header: first.header,
+    });
+    expect(first).not.toHaveProperty('syntax');
+    expect(first).not.toHaveProperty('arguments');
+    expect(first).not.toHaveProperty('examples');
+    expect(first).not.toHaveProperty('description');
+  });
+
+  it('can still return full search results when explicitly requested', async () => {
+    const result = await searchScpi({
+      query: 'trigger mode',
+      modelFamily: 'MSO4/5/6 Series',
+      limit: 1,
+      verbosity: 'full',
+    });
+
+    expect(result.ok).toBe(true);
+    const first = (result.data as Array<Record<string, unknown>>)[0];
+    expect(first).toHaveProperty('syntax');
+    expect(first).toHaveProperty('arguments');
+  });
+
+  it('defaults search_scpi to 5 results when limit is omitted', async () => {
+    const result = await searchScpi({
+      query: 'trigger',
+      modelFamily: 'MSO4/5/6 Series',
+    });
+
+    expect(result.ok).toBe(true);
+    expect(Array.isArray(result.data)).toBe(true);
+    expect((result.data as unknown[]).length).toBeLessThanOrEqual(5);
+  });
+
+  it('supports offset paging so follow-up searches can continue past the first page', async () => {
+    const firstPage = await searchScpi({
+      query: 'trigger',
+      modelFamily: 'MSO4/5/6 Series',
+      limit: 5,
+      offset: 0,
+    });
+    const secondPage = await searchScpi({
+      query: 'trigger',
+      modelFamily: 'MSO4/5/6 Series',
+      limit: 5,
+      offset: 5,
+    });
+
+    expect(firstPage.ok).toBe(true);
+    expect(secondPage.ok).toBe(true);
+    const firstHeaders = new Set((firstPage.data as Array<{ header?: string }>).map((row) => String(row.header || '')));
+    const secondHeaders = (secondPage.data as Array<{ header?: string }>).map((row) => String(row.header || ''));
+
+    expect((firstPage.paging as { hasMore?: boolean; nextOffset?: number })?.hasMore).toBe(true);
+    expect((firstPage.paging as { nextOffset?: number })?.nextOffset).toBe(5);
+    expect(secondHeaders.length).toBeGreaterThan(0);
+    expect(secondHeaders.some((header) => !firstHeaders.has(header))).toBe(true);
+  });
+
+  it('returns compact sourceMeta by default and full sourceMeta on request', async () => {
+    const compact = await searchScpi({
+      query: 'trigger mode',
+      modelFamily: 'MSO4/5/6 Series',
+      limit: 5,
+    });
+    const full = await searchScpi({
+      query: 'trigger mode',
+      modelFamily: 'MSO4/5/6 Series',
+      limit: 5,
+      sourceMetaMode: 'full',
+    });
+
+    expect(compact.ok).toBe(true);
+    expect(full.ok).toBe(true);
+    expect((compact.sourceMeta || []).every((row) => !('commandId' in row))).toBe(true);
+    expect((full.sourceMeta || []).some((row) => 'commandId' in row)).toBe(true);
+  });
+
   it('prefers legacy manual override records over the legacy vendor extract when headers collide', async () => {
     const tmpDir = await mkdtemp(path.join(os.tmpdir(), 'tek-command-index-'));
     try {

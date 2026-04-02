@@ -91,3 +91,23 @@ export function serializeCommandResult(entry: CommandRecord): Record<string, unk
     conditions: normalizeConditions(entry.raw),
   };
 }
+
+export function serializeCommandSearchResult(entry: CommandRecord): Record<string, unknown> {
+  return {
+    commandId: entry.commandId,
+    sourceFile: entry.sourceFile,
+    group: entry.group,
+    category: entry.category,
+    header: entry.header,
+    commandType: entry.commandType,
+    shortDescription: entry.shortDescription,
+    manualReference: serializeManualReference(entry.manualReference),
+    hasSyntax: Boolean(entry.syntax?.set || entry.syntax?.query),
+    hasArguments: Array.isArray(entry.arguments) && entry.arguments.length > 0,
+    hasExamples: Array.isArray(entry.codeExamples) && entry.codeExamples.length > 0,
+    lookupHint: {
+      tool: 'get_command_by_header',
+      header: entry.header,
+    },
+  };
+}
