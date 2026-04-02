@@ -1049,7 +1049,6 @@ export function OpenAiChatKitPanel({
         : 'Ask about measurements, debugging, scope setup...',
       attachments: ({
         enabled: true,
-        uploadStrategy: { type: 'hosted' },
         maxCount: 4,
         accept: {
           'image/*': ['.png', '.jpg', '.jpeg', '.webp'],
