@@ -60,6 +60,7 @@ const MAX_ATTACHMENT_COUNT = 6;
 const MAX_ATTACHMENT_BYTES = 8 * 1024 * 1024;
 const MAX_TEXT_EXCERPT = 12000;
 const INSTRUMENT_OUTPUT_MODE_STORAGE = 'tekautomate.ai.instrument_output_mode';
+const OPENAI_CHAT_SURFACE_STORAGE = 'tekautomate.openai.chat.surface';
 
 const TEXT_MIME_PREFIXES = ['text/'];
 const TEXT_EXTENSIONS = new Set([
@@ -158,6 +159,14 @@ export function AiChatPanel({
       return 'verbose';
     }
   });
+  const [openAiChatSurface, setOpenAiChatSurface] = useState<'chatkit' | 'native'>(() => {
+    if (typeof window === 'undefined') return 'chatkit';
+    try {
+      return window.localStorage.getItem(OPENAI_CHAT_SURFACE_STORAGE) === 'native' ? 'native' : 'chatkit';
+    } catch {
+      return 'chatkit';
+    }
+  });
   const [transientUiNow, setTransientUiNow] = useState(() => Date.now());
   const CHATKIT_WORKFLOW_ID_KEY = 'tekautomate.chatkit.workflow_id';
   const CHATKIT_LIVE_WORKFLOW_ID = 'wf_69ccc162bc34819089705162201bc4b80128ecc0657c5932';
@@ -252,6 +261,14 @@ export function AiChatPanel({
       // Ignore storage failures.
     }
   }, [instrumentOutputMode]);
+
+  useEffect(() => {
+    try {
+      window.localStorage.setItem(OPENAI_CHAT_SURFACE_STORAGE, openAiChatSurface);
+    } catch {
+      // Ignore storage failures.
+    }
+  }, [openAiChatSurface]);
 
   useEffect(() => {
     if (!state.apiKey.trim()) return; // need key for live
@@ -434,6 +451,7 @@ export function AiChatPanel({
     : CHATKIT_DEFAULT_USER_ID;
   const useChatKitEmbed =
     state.provider === 'openai'
+    && openAiChatSurface === 'chatkit'
     && (state.tekMode === 'ai' || state.tekMode === 'live')
     && activeChatKitWorkflowId.length > 0;
 
@@ -1536,6 +1554,33 @@ export function AiChatPanel({
                 </button>
                 {isActive && (
                   <div className="px-3 pb-2.5 space-y-2 border-t border-slate-100 dark:border-white/5 pt-2">
+                    {pid === 'openai' && (
+                      <div className="space-y-1">
+                        <div className="text-[10px] text-slate-500 dark:text-white/50">Chat surface</div>
+                        <div className="inline-flex rounded-full border border-slate-200 dark:border-white/10 bg-slate-100 dark:bg-white/5 p-0.5">
+                          {([
+                            { id: 'chatkit', label: 'ChatKit' },
+                            { id: 'native', label: 'Native Chat' },
+                          ] as const).map((surface) => {
+                            const selected = openAiChatSurface === surface.id;
+                            return (
+                              <button
+                                key={surface.id}
+                                type="button"
+                                onClick={() => setOpenAiChatSurface(surface.id)}
+                                className={`px-2.5 py-1 rounded-full text-[10px] font-semibold transition-colors ${
+                                  selected
+                                    ? 'bg-violet-500/15 text-violet-700 dark:text-violet-200'
+                                    : 'text-slate-500 dark:text-white/55 hover:text-slate-800 dark:hover:text-white/85'
+                                }`}
+                              >
+                                {surface.label}
+                              </button>
+                            );
+                          })}
+                        </div>
+                      </div>
+                    )}
                     <select
                       value={state.model}
                       onChange={(e) => setModel(e.target.value)}
@@ -1627,7 +1672,7 @@ export function AiChatPanel({
                   />
                 </div>
                 <p className="mt-0.5 text-[9px] text-slate-400 dark:text-white/30">
-                  Sets the OpenAI AI Chat workflow. Live mode uses its own dedicated ChatKit workflow automatically.
+                  Used when the OpenAI chat surface is set to ChatKit. Native Chat uses TekAutomate&apos;s built-in panel instead.
                 </p>
               </label>
               <label className="block">
