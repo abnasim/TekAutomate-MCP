@@ -9,7 +9,7 @@
  * No AI proxy through MCP. Keys stay in browser.
  */
 
-import { resolveMcpHost } from './mcpClient';
+import { resolveMcpHost, type McpChatAttachment } from './mcpClient';
 import { trimConversationHistory } from './historyTrim';
 
 // ── Types ──
@@ -27,6 +27,7 @@ export interface LiveToolLoopParams {
   systemPrompt: string;
   userMessage: string;
   history?: Array<{ role: string; content: string }>;
+  attachments?: McpChatAttachment[];
   tools: LiveToolDef[];
   instrumentEndpoint?: {
     executorUrl: string;
@@ -61,6 +62,69 @@ interface ScreenshotPayload {
   analysisBase64?: string;
   analysisMimeType?: string;
   analysisSizeBytes?: number;
+}
+
+function getImageAttachments(attachments?: McpChatAttachment[]): McpChatAttachment[] {
+  return Array.isArray(attachments)
+    ? attachments
+        .filter((file) =>
+          String(file?.mimeType || '').startsWith('image/')
+          && typeof file?.dataUrl === 'string'
+          && String(file.dataUrl).startsWith('data:')
+        )
+        .slice(0, 4)
+    : [];
+}
+
+function buildAttachmentContext(attachments?: McpChatAttachment[]): string {
+  const files = Array.isArray(attachments) ? attachments : [];
+  if (!files.length) return '';
+  const lines: string[] = [];
+  files.slice(0, 6).forEach((file, index) => {
+    const name = String(file?.name || `file_${index + 1}`);
+    const textExcerpt = String(file?.textExcerpt || '').trim();
+    if (textExcerpt) {
+      lines.push(`Attachment ${index + 1}: ${name}`);
+      lines.push(textExcerpt.slice(0, 4000));
+    }
+  });
+  return lines.length ? `Attached file context:\n${lines.join('\n')}` : '';
+}
+
+function buildOpenAiInputContent(userMessage: string, attachments?: McpChatAttachment[]): string | Array<Record<string, unknown>> {
+  const images = getImageAttachments(attachments);
+  const attachmentContext = buildAttachmentContext(attachments);
+  const text = attachmentContext ? `${userMessage}\n\n${attachmentContext}` : userMessage;
+  if (!images.length) return text;
+  return [
+    { type: 'input_text', text },
+    ...images.map((file) => ({
+      type: 'input_image',
+      image_url: String(file.dataUrl),
+      detail: 'auto',
+    })),
+  ];
+}
+
+function buildAnthropicInputContent(userMessage: string, attachments?: McpChatAttachment[]): string | Array<Record<string, unknown>> {
+  const images = getImageAttachments(attachments);
+  const attachmentContext = buildAttachmentContext(attachments);
+  const text = attachmentContext ? `${userMessage}\n\n${attachmentContext}` : userMessage;
+  if (!images.length) return text;
+  const blocks: Array<Record<string, unknown>> = [{ type: 'text', text }];
+  images.forEach((file) => {
+    const match = String(file.dataUrl || '').match(/^data:([^;]+);base64,(.+)$/);
+    if (!match) return;
+    blocks.push({
+      type: 'image',
+      source: {
+        type: 'base64',
+        media_type: match[1],
+        data: match[2],
+      },
+    });
+  });
+  return blocks;
 }
 
 // ── Tool Execution ──
@@ -420,7 +484,7 @@ export async function prepareFlowActionsViaMcp(params: {
 
 async function runAnthropicLoop(params: LiveToolLoopParams): Promise<LiveToolLoopResult> {
   const {
-    apiKey, model, systemPrompt, userMessage, history = [],
+    apiKey, model, systemPrompt, userMessage, history = [], attachments = [],
     tools, instrumentEndpoint, flowContext,
     maxIterations = 8, onChunk, onToolCall, onToolResult,
   } = params;
@@ -436,7 +500,7 @@ async function runAnthropicLoop(params: LiveToolLoopParams): Promise<LiveToolLoo
       role: h.role,
       content: h.content,
     })),
-    { role: 'user', content: userMessage },
+    { role: 'user', content: buildAnthropicInputContent(userMessage, attachments) },
   ];
   // Track how many messages existed before the tool loop started, so we can
   // apply a sliding window that only keeps recent tool round-trips.
@@ -603,7 +667,7 @@ async function runAnthropicLoop(params: LiveToolLoopParams): Promise<LiveToolLoo
 
 async function runOpenAiLoop(params: LiveToolLoopParams): Promise<LiveToolLoopResult> {
   const {
-    apiKey, model, systemPrompt, userMessage, history = [],
+    apiKey, model, systemPrompt, userMessage, history = [], attachments = [],
     tools, instrumentEndpoint, flowContext,
     maxIterations = 8, onChunk, onToolCall, onToolResult,
   } = params;
@@ -621,7 +685,7 @@ async function runOpenAiLoop(params: LiveToolLoopParams): Promise<LiveToolLoopRe
       role: h.role === 'assistant' ? 'assistant' : 'user',
       content: h.content,
     })),
-    { role: 'user', content: userMessage },
+    { role: 'user', content: buildOpenAiInputContent(userMessage, attachments) },
   ];
 
   const toolCallLog: LiveToolLoopResult['toolCalls'] = [];

@@ -826,6 +826,7 @@ export function useAiChat(params: {
           model: state.model,
           systemPrompt,
           userMessage: effectiveMessage,
+          attachments: options?.attachments || [],
           history: trimConversationHistory(state.history, 3, 4000),
           tools: liveTools,
           instrumentEndpoint: params.instrumentEndpoint ?? undefined,
