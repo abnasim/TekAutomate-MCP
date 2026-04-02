@@ -999,10 +999,10 @@ export function OpenAiChatKitPanel({
         };
       }
 
-      // ── Client-only tool: propose_workflow_actions ──
-      // Primary structured proposal path for ChatKit.
-      // The agent should call this instead of emitting raw ACTIONS_JSON in transcript text.
-      if (name === 'propose_workflow_actions') {
+      // ── Client-only proposal tools ──
+      // Capture structured workflow proposals directly in the UI.
+      // Support both the legacy ChatKit tool name and the newer MCP staging name.
+      if (name === 'propose_workflow_actions' || name === 'stage_workflow_proposal') {
         const accepted = setStructuredProposal({
           summary: typeof params.summary === 'string' ? params.summary : '',
           findings: Array.isArray(params.findings) ? params.findings : [],
