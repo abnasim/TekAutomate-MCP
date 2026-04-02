@@ -10,6 +10,7 @@ import threading
 import urllib.request
 import json
 
+from app.code_runner import run_executor_action
 from app.http_server import HTTPServerThread
 from app.instrument_scanner import InstrumentScanThread
 from app.system_tray import SystemTray
@@ -53,10 +54,12 @@ class MainWindow:
         # Centre: Instruments
         self.instr_panel = InstrumentPanel(main)
         self.instr_panel.scan_requested.connect(self._run_scan)
+        self.instr_panel.clear_requested.connect(self._clear_instrument_buffer)
         self.instr_panel.grid(row=0, column=1, sticky="nsew", padx=(0, 10))
 
         # Right: Activity Log
         self.log_panel = LogPanel(main)
+        self.log_panel.clear_buffer_requested = self._clear_visible_instrument_buffers
         self.log_panel.grid(row=0, column=2, sticky="nsew")
 
         # ── Plugin bar ────────────────────────────────────────────────
@@ -156,6 +159,61 @@ class MainWindow:
         self._scan_thread.scan_error.connect(
             lambda m: self.log_panel.log(f"Scan error: {m}", "error"))
         self._scan_thread.start()
+
+    def _clear_instrument_buffer(self, resource: str, label: str):
+        self.instr_panel.set_clear_busy(resource, True)
+        self.log_panel.log(f"Clearing transport buffers for {label}...", "dim")
+
+        def _job():
+            result = run_executor_action(
+                "device_clear",
+                {"keep_alive": True},
+                timeout_sec=10,
+                scope_visa=resource,
+            )
+            self.root.after(0, lambda: self._finish_clear_instrument_buffer(resource, label, result))
+
+        threading.Thread(target=_job, daemon=True).start()
+
+    def _finish_clear_instrument_buffer(self, resource: str, label: str, result: dict):
+        self.instr_panel.set_clear_busy(resource, False)
+        if result.get("ok"):
+            self.log_panel.log(f"Buffer clear complete for {label}", "success")
+            return
+        error = result.get("error") or "Unknown error"
+        self.log_panel.log(f"Buffer clear failed for {label}: {error}", "error")
+
+    def _clear_visible_instrument_buffers(self):
+        instruments = [info for info in getattr(self.instr_panel, "_instruments", []) if getattr(info, "reachable", False)]
+        if not instruments:
+            self.log_panel.log("No reachable instruments to clear.", "warning")
+            return
+
+        self.log_panel.set_clear_buffer_busy(True)
+        self.log_panel.log(f"Clearing transport buffers for {len(instruments)} instrument(s)...", "dim")
+
+        def _job():
+            results: list[tuple[str, str, dict]] = []
+            for info in instruments:
+                result = run_executor_action(
+                    "device_clear",
+                    {"keep_alive": True},
+                    timeout_sec=10,
+                    scope_visa=info.resource,
+                )
+                results.append((info.resource, info.display_name, result))
+            self.root.after(0, lambda: self._finish_clear_visible_instrument_buffers(results))
+
+        threading.Thread(target=_job, daemon=True).start()
+
+    def _finish_clear_visible_instrument_buffers(self, results: list[tuple[str, str, dict]]):
+        self.log_panel.set_clear_buffer_busy(False)
+        for resource, label, result in results:
+            if result.get("ok"):
+                self.log_panel.log(f"Buffer clear complete for {label}", "success")
+                continue
+            error = result.get("error") or "Unknown error"
+            self.log_panel.log(f"Buffer clear failed for {label}: {error}", "error")
 
     def _show_window(self):
         self.root.deiconify()

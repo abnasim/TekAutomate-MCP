@@ -28,7 +28,9 @@ class InstrumentPanel(ttk.Frame):
     def __init__(self, parent=None):
         super().__init__(parent)
         self.scan_requested = TkSignal()
+        self.clear_requested = TkSignal()
         self._instruments: list[InstrumentInfo] = []
+        self._clear_buttons: dict[str, ttk.Button] = {}
         self._build()
 
     def _build(self):
@@ -84,6 +86,7 @@ class InstrumentPanel(ttk.Frame):
 
     def clear(self):
         self._instruments.clear()
+        self._clear_buttons.clear()
         for widget in self._inner.winfo_children():
             widget.destroy()
         self._count.configure(text="(0)")
@@ -109,7 +112,10 @@ class InstrumentPanel(ttk.Frame):
         pip.create_oval(0, 0, 8, 8, fill=pip_color, outline="")
         pip.pack(side=tk.RIGHT)
 
-        # Identity line
+        # Identity row + actions
+        info_row = ttk.Frame(card)
+        info_row.pack(fill=tk.X, padx=8, pady=(0, 6))
+
         if info.model:
             id_text = f"{info.manufacturer} {info.model}"
             if info.serial:
@@ -119,9 +125,26 @@ class InstrumentPanel(ttk.Frame):
         else:
             id_text = "Unknown"
 
-        ttk.Label(card, text=id_text).pack(fill=tk.X, padx=8, pady=(0, 6))
+        ttk.Label(info_row, text=id_text).pack(side=tk.LEFT, fill=tk.X, expand=True)
+
+        clear_btn = ttk.Button(
+            info_row,
+            text="Clear Buffer",
+            command=lambda resource=info.resource, label=info.display_name: self.clear_requested.emit(resource, label),
+        )
+        clear_btn.pack(side=tk.RIGHT, padx=(8, 0))
+        self._clear_buttons[info.resource] = clear_btn
 
         self._count.configure(text=f"({len(self._instruments)})")
+
+    def set_clear_busy(self, resource: str, busy: bool):
+        btn = self._clear_buttons.get(resource)
+        if not btn:
+            return
+        btn.configure(
+            state=tk.DISABLED if busy else tk.NORMAL,
+            text="Clearing..." if busy else "Clear Buffer",
+        )
 
     def on_scan_finished(self, count: int):
         self._scan_btn.configure(state=tk.NORMAL, text="Scan")

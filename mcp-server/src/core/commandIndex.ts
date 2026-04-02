@@ -216,6 +216,28 @@ function normalizeHeaderKey(header: string): string {
   return tokens.join(':');
 }
 
+function normalizeSearchDedupKey(header: string): string {
+  const canonical = String(header || '')
+    .trim()
+    .replace(/\?$/g, '')
+    .replace(/\bCH\d+_D\d+\b/gi, 'CH<x>_D<x>')
+    .replace(/\bCH\d+\b/gi, 'CH<x>')
+    .replace(/\bB\d+\b/gi, 'B<x>')
+    .replace(/\bREF\d+\b/gi, 'REF<x>')
+    .replace(/\bMATH\d+\b/gi, 'MATH<x>')
+    .replace(/\bBUS\d+\b/gi, 'BUS<x>')
+    .replace(/\bMEAS\d+\b/gi, 'MEAS<x>')
+    .replace(/\bSEARCH\d+\b/gi, 'SEARCH<x>')
+    .replace(/\bZOOM\d+\b/gi, 'ZOOM<x>')
+    .replace(/\bPLOT\d+\b/gi, 'PLOT<x>')
+    .replace(/\bVIEW\d+\b/gi, 'VIEW<x>')
+    .replace(/\bSOURCE\d+\b/gi, 'SOURCE<x>')
+    .replace(/\bEDGE\d+\b/gi, 'EDGE<x>')
+    .replace(/\bREFLEVELS\d+\b/gi, 'REFLevels<x>')
+    .replace(/(^|:)(A|B)(?=:|$)/gi, '$1{A|B}');
+  return normalizeHeaderKey(canonical);
+}
+
 function expandHeaderKeys(header: string): string[] {
   const tokens = tokenizeHeader(header);
   if (!tokens.length) return [];
@@ -248,6 +270,14 @@ function normalizeText(input: string): string[] {
 
 function sourceFilePriority(sourceFile: string): number {
   return /manual_overrides\.json$/i.test(String(sourceFile || '')) ? 0 : 1;
+}
+
+function searchSourceFilePriority(sourceFile: string): number {
+  const name = String(sourceFile || '');
+  if (/mso_2_4_5_6_7\.json$/i.test(name)) return 0;
+  if (/MSO_DPO_5k_7k_70K\.json$/i.test(name)) return 0;
+  if (/manual_overrides\.json$/i.test(name)) return 1;
+  return 2;
 }
 
 function extractHeader(raw: Record<string, unknown>): string {
@@ -799,8 +829,9 @@ export class CommandIndex {
 
     return null;
   }
-  searchByQuery(query: string, family?: string, limit = 10, commandType?: CommandType): CommandRecord[] {
-    const scored = this.bm25.search(query, Math.max(limit * 4, 25));
+  searchByQuery(query: string, family?: string, limit = 10, commandType?: CommandType, offset = 0): CommandRecord[] {
+    const normalizedOffset = Math.max(0, offset || 0);
+    const scored = this.bm25.search(query, Math.max((normalizedOffset + limit) * 4, 25));
     const q = query.toLowerCase();
     const wantsFastframeCount =
       q.includes('fastframe') && /(count|frames|frame|number)/.test(q);
@@ -809,6 +840,7 @@ export class CommandIndex {
         const entry = this.entries[item.index];
         if (!entry) return item;
         let bonus = 0;
+        bonus -= searchSourceFilePriority(entry.sourceFile) * 2;
         if (wantsFastframeCount) {
           const h = entry.header.toLowerCase();
           if (h.includes('fastframe:count')) bonus += 50;
@@ -819,14 +851,19 @@ export class CommandIndex {
       .sort((a, b) => b.score - a.score);
     const results: CommandRecord[] = [];
     const seen = new Set<string>();
+    let skipped = 0;
     for (const item of reranked) {
       const entry = this.entries[item.index];
       if (!entry) continue;
       if (!familyMatches(entry, family)) continue;
       if (!commandTypeMatches(entry.commandType, commandType)) continue;
-      const key = `${entry.sourceFile}:${entry.commandId}`;
+      const key = normalizeSearchDedupKey(entry.header) || normalizeHeaderKey(entry.header) || `${entry.sourceFile}:${entry.commandId}`;
       if (seen.has(key)) continue;
       seen.add(key);
+      if (skipped < normalizedOffset) {
+        skipped++;
+        continue;
+      }
       results.push(entry);
       if (results.length >= limit) break;
     }
@@ -860,6 +897,7 @@ function toCommandRecord(
   const manual = raw._manualEntry as Record<string, unknown> | undefined;
   let header = extractHeader(raw);
   if (!header) return null;
+  header = header.replace(/\?$/, '');
   // Prefer explicit group from the command data over the file-level default
   // Check both 'group' and 'commandGroup' fields (legacy overrides use 'commandGroup')
   const effectiveGroup =

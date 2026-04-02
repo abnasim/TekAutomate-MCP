@@ -23,6 +23,7 @@ CYAN     = "#00D4FF"
 class LogPanel(ttk.Frame):
     def __init__(self, parent=None):
         super().__init__(parent)
+        self.clear_buffer_requested = None
         self._verbose = False
         self._build()
 
@@ -35,6 +36,9 @@ class LogPanel(ttk.Frame):
 
         self._verbose_btn = ttk.Button(hdr, text="Verbose off", command=self.toggle_verbose)
         self._verbose_btn.pack(side=tk.RIGHT, padx=(0, 8))
+
+        self._clear_buffer_btn = ttk.Button(hdr, text="Clear Buffer", command=self._on_clear_buffer)
+        self._clear_buffer_btn.pack(side=tk.RIGHT, padx=(0, 8))
 
         clear_btn = ttk.Button(hdr, text="Clear", command=self.clear)
         clear_btn.pack(side=tk.RIGHT)
@@ -97,6 +101,17 @@ class LogPanel(ttk.Frame):
         self._log.configure(state=tk.NORMAL)
         self._log.delete("1.0", tk.END)
         self._log.configure(state=tk.DISABLED)
+
+    def _on_clear_buffer(self):
+        callback = self.clear_buffer_requested
+        if callable(callback):
+            callback()
+
+    def set_clear_buffer_busy(self, busy: bool):
+        self._clear_buffer_btn.configure(
+            state=tk.DISABLED if busy else tk.NORMAL,
+            text="Clearing..." if busy else "Clear Buffer",
+        )
 
     def toggle_verbose(self):
         self._verbose = not self._verbose

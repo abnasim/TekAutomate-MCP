@@ -822,6 +822,15 @@ function normalizeQuery(value: string): string {
     .trim();
 }
 
+function containsAlias(normalizedQuery: string, aliasText: string): boolean {
+  if (!aliasText) return false;
+  if (aliasText.length <= 3) {
+    const escaped = aliasText.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+    return new RegExp(`\\b${escaped}\\b`).test(normalizedQuery);
+  }
+  return normalizedQuery.includes(aliasText);
+}
+
 export function findMeasurementCatalogMatches(query: string): MeasurementCatalogMatch[] {
   const normalized = normalizeQuery(query);
   if (!normalized) return [];
@@ -835,7 +844,7 @@ export function findMeasurementCatalogMatches(query: string): MeasurementCatalog
     const sectionText = normalizeQuery(entry.section);
     const labelText = normalizeQuery(entry.label);
 
-    if (normalized.includes(labelText)) {
+    if (containsAlias(normalized, labelText)) {
       score += 8;
       matchedAliases.push(entry.label);
     }
@@ -845,7 +854,7 @@ export function findMeasurementCatalogMatches(query: string): MeasurementCatalog
     entry.aliases.forEach((alias) => {
       const aliasText = normalizeQuery(alias);
       if (!aliasText) return;
-      if (normalized.includes(aliasText)) {
+      if (containsAlias(normalized, aliasText)) {
         score += Math.max(4, aliasText.split(' ').length + 3);
         matchedAliases.push(alias);
       }

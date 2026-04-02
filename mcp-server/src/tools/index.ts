@@ -156,14 +156,17 @@ export function getToolDefinitions() {
     },
     {
       name: 'search_scpi',
-      description: 'Search SCPI commands by feature or keyword (e.g. "FastFrame", "trigger edge", "measurement frequency"). Use for normal scope SCPI work when backend is pyvisa/vxi11/tekhsi or when the user wants SCPI. Do not overfit exact submodels; the scope corpus is already split into modern MSO 2/4/5/6/7 vs legacy 5k/7k/70k families.',
+      description: 'Search SCPI commands by feature or keyword (e.g. "FastFrame", "trigger edge", "measurement frequency"). Returns compact discovery results by default for token efficiency: header, command type, group, short description, and an exact-lookup hint. Use get_command_by_header for full syntax, arguments, and examples after you pick a match. Pass verbosity:"full" only when you explicitly need rich command blobs.',
       parameters: {
         type: 'object',
         properties: {
           query: { type: 'string', description: 'Feature or command to search, e.g. FastFrame.' },
           modelFamily: { type: 'string', description: 'Instrument model family filter, e.g. mso_5_series.' },
-          limit: { type: 'number', description: 'Max results to return (default 10).' },
+          limit: { type: 'number', description: 'Max results to return (default 5).' },
+          offset: { type: 'number', description: 'Result offset for pagination (default 0).' },
           commandType: { type: 'string', enum: ['set', 'query', 'both'], description: 'Optional command type filter.' },
+          verbosity: { type: 'string', enum: ['summary', 'full'], description: 'Response detail level (default summary).' },
+          sourceMetaMode: { type: 'string', enum: ['compact', 'full'], description: 'Source metadata detail level (default compact).' },
         },
         required: ['query'],
         additionalProperties: false,

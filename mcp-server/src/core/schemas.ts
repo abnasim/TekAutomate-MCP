@@ -10,6 +10,13 @@ export interface ToolResult<T = unknown> {
   data: T;
   sourceMeta: ToolSourceMeta[];
   warnings: string[];
+  paging?: {
+    offset: number;
+    limit: number;
+    returned: number;
+    nextOffset?: number;
+    hasMore: boolean;
+  };
 }
 
 export type InstrumentOutputMode = 'clean' | 'verbose';

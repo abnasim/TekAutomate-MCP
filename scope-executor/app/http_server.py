@@ -197,7 +197,7 @@ class _Handler(BaseHTTPRequestHandler):
 
         action = data.get("action")
         action_label = str(action or "unknown")
-        if data.get("protocol_version") != PROTOCOL_VERSION or action not in {"run_python", "capture_screenshot", "send_scpi", "disconnect"}:
+        if data.get("protocol_version") != PROTOCOL_VERSION or action not in {"run_python", "capture_screenshot", "send_scpi", "disconnect", "device_clear"}:
             self._json_response(400, {"ok": False, "error": "Bad request"})
             self._emit("POST", "/run", 400, f"bad protocol action={action_label}")
             return
@@ -209,7 +209,7 @@ class _Handler(BaseHTTPRequestHandler):
         scope_visa = data.get("scope_visa") if isinstance(data.get("scope_visa"), str) else None
         # scope_visa is required for send_scpi, capture_screenshot, disconnect
         # but NOT for run_python (which handles its own connection in generated code)
-        if not scope_visa and action in {"send_scpi", "capture_screenshot", "disconnect"}:
+        if not scope_visa and action in {"send_scpi", "capture_screenshot", "disconnect", "device_clear"}:
             self._json_response(400, {"ok": False, "error": "Missing scope_visa"})
             self._emit("POST", "/run", 400, f"missing scope_visa action={action_label}")
             return
@@ -250,7 +250,7 @@ class _Handler(BaseHTTPRequestHandler):
                 if len(commands) > 5:
                     cmd_preview += f" ... (+{len(commands) - 5} more)"
                 self._emit("POST", "/run", 0, f"\033[34m[REQ]\033[0m send_scpi visa={scope_visa} cmds={len(commands)} timeout={timeout_ms}ms [{cmd_preview}]")
-        # disconnect: no commands needed, just scope_visa (already validated above)
+        # disconnect/device_clear: no commands needed, just scope_visa (already validated above)
 
         self._emit_status("busy")
         _sse_broadcast("status", json.dumps({"status": "running"}))
@@ -268,6 +268,8 @@ class _Handler(BaseHTTPRequestHandler):
 
             if action == "disconnect":
                 result = run_executor_action("disconnect", {}, timeout_sec, scope_visa, on_line=_on_line)
+            elif action == "device_clear":
+                result = run_executor_action("device_clear", {"keep_alive": keep_alive}, timeout_sec, scope_visa, on_line=_on_line)
             elif action == "run_python":
                 result = run_python_code(code, timeout_sec, scope_visa, on_line=_on_line)
             elif action == "capture_screenshot":
@@ -320,6 +322,8 @@ class _Handler(BaseHTTPRequestHandler):
                     self._emit("POST", "/run", 200, f"OK ({elapsed:.1f}s) action=capture_screenshot visa={scope_visa} scope={scope_type}{size_text}")
                 elif action == "disconnect":
                     self._emit("POST", "/run", 200, f"OK ({elapsed:.1f}s) action=disconnect visa={scope_visa}")
+                elif action == "device_clear":
+                    self._emit("POST", "/run", 200, f"OK ({elapsed:.1f}s) action=device_clear visa={scope_visa}")
                 else:
                     self._emit("POST", "/run", 200, f"OK ({elapsed:.1f}s) action=run_python visa={scope_visa or '-'}")
             else:

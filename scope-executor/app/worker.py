@@ -302,36 +302,36 @@ def _handle_capture_screenshot(job: dict) -> dict:
                 sock.set_timeout(capture_timeout_ms / 1000.0)
                 data = sock.fetch_screen("temp_screenshot.png")
             else:
+                scpi = _open_fresh_scope_session(visa)
                 try:
-                    scpi = _get_scope_session(visa)
-                except Exception:
-                    _reset_scope_session(visa)
-                    _reset_resource_manager()
-                    scpi = _get_scope_session(visa)
+                    scpi.timeout = capture_timeout_ms
+                    scpi.write_termination = "\n"
+                    scpi.read_termination = None
 
-                scpi.timeout = capture_timeout_ms
-                scpi.write_termination = "\n"
-                scpi.read_termination = None
-
-                if scope_type == "legacy":
-                    scpi.write('HARDCOPY:PORT FILE')
-                    scpi.write('HARDCOPY:FORMAT PNG')
-                    scpi.write('HARDCOPY:FILENAME "C:/TekScope/Temp/screenshot.png"')
-                    scpi.write('HARDCOPY START')
-                    if str(scpi.query('*OPC?')).strip() != '1':
-                        raise RuntimeError("HARDCOPY START did not complete")
-                    scpi.write('FILESYSTEM:READFILE "C:/TekScope/Temp/screenshot.png"')
-                    data = scpi.read_raw()
-                    scpi.write('FILESYSTEM:DELETE "C:/TekScope/Temp/screenshot.png"')
-                    scpi.query('*OPC?')
-                else:
-                    scpi.write('SAVE:IMAGE "C:/Temp/screenshot.png"')
-                    if str(scpi.query('*OPC?')).strip() != '1':
-                        raise RuntimeError("SAVE:IMAGE did not complete")
-                    scpi.write('FILESYSTEM:READFILE "C:/Temp/screenshot.png"')
-                    data = scpi.read_raw()
-                    scpi.write('FILESYSTEM:DELETE "C:/Temp/screenshot.png"')
-                    scpi.query('*OPC?')
+                    if scope_type == "legacy":
+                        scpi.write('HARDCOPY:PORT FILE')
+                        scpi.write('HARDCOPY:FORMAT PNG')
+                        scpi.write('HARDCOPY:FILENAME "C:/TekScope/Temp/screenshot.png"')
+                        scpi.write('HARDCOPY START')
+                        if str(scpi.query('*OPC?')).strip() != '1':
+                            raise RuntimeError("HARDCOPY START did not complete")
+                        scpi.write('FILESYSTEM:READFILE "C:/TekScope/Temp/screenshot.png"')
+                        data = scpi.read_raw()
+                        scpi.write('FILESYSTEM:DELETE "C:/TekScope/Temp/screenshot.png"')
+                        scpi.query('*OPC?')
+                    else:
+                        temp_path = 'C:/Temp_Screen.png'
+                        scpi.write(f'SAVE:IMAGE "{temp_path}"')
+                        if str(scpi.query('*OPC?')).strip() != '1':
+                            raise RuntimeError("SAVE:IMAGE did not complete")
+                        scpi.write(f'FILESYSTEM:READFILE "{temp_path}"')
+                        data = scpi.read_raw()
+                        scpi.write(f'FILESYSTEM:DELETE "{temp_path}"')
+                finally:
+                    try:
+                        scpi.close()
+                    except Exception:
+                        pass
 
             import base64
 
@@ -362,6 +362,35 @@ def _get_recent_capture_result(visa: str, max_age_sec: float = _BUSY_CAPTURE_CAC
     reused["cached"] = True
     reused["busySkipped"] = True
     return reused
+
+
+def _handle_device_clear(job: dict) -> dict:
+    visa = job.get("visa")
+    if not isinstance(visa, str) or not visa:
+        raise RuntimeError("device_clear requires visa")
+
+    if _is_socket_resource(visa):
+        try:
+            session = _get_socket_session(visa)
+        except Exception:
+            _reset_socket_session(visa)
+            session = _get_socket_session(visa)
+        session.clear()
+        transport = "socket"
+    else:
+        try:
+            session = _get_scope_session(visa)
+        except Exception:
+            _reset_scope_session(visa)
+            _reset_resource_manager()
+            session = _get_scope_session(visa)
+        session.clear()
+        transport = "visa"
+
+    return {
+        "cleared": visa,
+        "transport": transport,
+    }
 
 
 def _handle_send_scpi(job: dict) -> dict:
@@ -579,6 +608,16 @@ def _run_job(job: dict):
                 result = _handle_capture_screenshot(job)
             finally:
                 lock.release()
+            _emit({"id": job_id, "done": True, "ok": True, "exit_code": 0, "error": None, "result_data": result})
+            if not keep_alive and visa:
+                if _is_socket_resource(visa):
+                    _reset_socket_session(visa)
+                else:
+                    _reset_scope_session(visa)
+            return
+        if action == "device_clear":
+            with _visa_lock_for(visa):
+                result = _handle_device_clear(job)
             _emit({"id": job_id, "done": True, "ok": True, "exit_code": 0, "error": None, "result_data": result})
             if not keep_alive and visa:
                 if _is_socket_resource(visa):
