@@ -145,11 +145,16 @@ function getQuickActions(isLiveMode: boolean): QuickAction[] {
     : [];
 }
 
+const CHATKIT_FONT_SOURCES = [
+  { family: 'Inter', source: 'https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap' },
+  { family: 'JetBrains Mono', source: 'https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600;700&display=swap' },
+];
+
 function getChatKitThemeOptions(theme: 'dark' | 'light'): ThemeOption {
   return (theme === 'dark'
     ? {
         colorScheme: 'dark',
-        typography: { baseSize: 16, fontFamily: 'Inter', fontFamilyMono: 'JetBrains Mono' },
+        typography: { baseSize: 16, fontFamily: 'Inter', fontFamilyMono: 'JetBrains Mono', fontSources: CHATKIT_FONT_SOURCES },
         radius: 'soft',
         density: 'normal',
         color: {
@@ -159,7 +164,7 @@ function getChatKitThemeOptions(theme: 'dark' | 'light'): ThemeOption {
       }
     : {
         colorScheme: 'light',
-        typography: { baseSize: 16, fontFamily: 'Inter', fontFamilyMono: 'JetBrains Mono' },
+        typography: { baseSize: 16, fontFamily: 'Inter', fontFamilyMono: 'JetBrains Mono', fontSources: CHATKIT_FONT_SOURCES },
         radius: 'soft',
         density: 'normal',
         color: {
