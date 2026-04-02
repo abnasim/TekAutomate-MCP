@@ -146,8 +146,8 @@ function getQuickActions(isLiveMode: boolean): QuickAction[] {
 }
 
 const CHATKIT_FONT_SOURCES = [
-  { family: 'Inter', source: 'https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap' },
-  { family: 'JetBrains Mono', source: 'https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600;700&display=swap' },
+  { family: 'Inter', src: 'https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap' },
+  { family: 'JetBrains Mono', src: 'https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600;700&display=swap' },
 ];
 
 function getChatKitThemeOptions(theme: 'dark' | 'light'): ThemeOption {
