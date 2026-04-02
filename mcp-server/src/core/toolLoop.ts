@@ -7671,13 +7671,14 @@ async function runOpenAiToolLoop(
           totalLiveToolCalls += 1;
 
           // Handle screenshot results: extract image for UI, only send to AI if analyze=true
-          const imageData = extractImageFromToolResult(result);
+          const imageData = extractImageFromToolResult(result, 'ui');
           if (imageData) {
             const wantsAnalysis = toolArgs.analyze === true;
             console.log(`[MCP] OpenAI live screenshot: ${imageData.base64.length} b64 chars, analyze=${wantsAnalysis}`);
             // Always collect for UI update
             liveScreenshots.push({ base64: imageData.base64, mimeType: imageData.mimeType, capturedAt: new Date().toISOString() });
             if (wantsAnalysis) {
+              const analysisImageData = extractImageFromToolResult(result, 'analysis') || imageData;
               // AI wants to see the image — inject it
               const textSummary = buildImageToolResultSummary(result);
               liveMessages.push({ role: 'tool', tool_call_id: toolId, content: textSummary });
@@ -7685,7 +7686,7 @@ async function runOpenAiToolLoop(
                 role: 'user',
                 content: [
                   { type: 'text', text: 'Here is the screenshot you just captured. Describe what you see on the scope display.' },
-                  { type: 'image_url', image_url: { url: `data:${imageData.mimeType};base64,${imageData.base64}`, detail: 'low' } },
+                  { type: 'image_url', image_url: { url: `data:${analysisImageData.mimeType};base64,${analysisImageData.base64}`, detail: 'high' } },
                 ],
               });
             } else {
@@ -7853,12 +7854,23 @@ function extractAnthropicText(content: Array<Record<string, unknown>>): string {
  * Extract base64 image data from a tool result, if present.
  * Handles ToolResult shapes where data contains base64/mimeType (e.g. capture_screenshot).
  */
-function extractImageFromToolResult(result: unknown): { base64: string; mimeType: string } | null {
+function extractImageFromToolResult(
+  result: unknown,
+  mode: 'ui' | 'analysis' = 'ui',
+): { base64: string; mimeType: string } | null {
   if (!result || typeof result !== 'object') return null;
   const r = result as Record<string, unknown>;
 
   // Check in result.data (ToolResult shape from captureScreenshotProxy)
   const data = r.data && typeof r.data === 'object' ? r.data as Record<string, unknown> : null;
+  if (mode === 'analysis') {
+    if (data && typeof data.analysisBase64 === 'string' && typeof data.analysisMimeType === 'string' && data.analysisBase64.length > 100) {
+      return { base64: data.analysisBase64 as string, mimeType: data.analysisMimeType as string };
+    }
+    if (typeof r.analysisBase64 === 'string' && typeof r.analysisMimeType === 'string' && (r.analysisBase64 as string).length > 100) {
+      return { base64: r.analysisBase64 as string, mimeType: r.analysisMimeType as string };
+    }
+  }
   if (data && typeof data.base64 === 'string' && typeof data.mimeType === 'string' && data.base64.length > 100) {
     return { base64: data.base64 as string, mimeType: data.mimeType as string };
   }

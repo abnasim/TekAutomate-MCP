@@ -56,11 +56,11 @@ async function compressAnalyzedScreenshotPayload(
 
     return {
       ...payload,
-      mimeType: 'image/jpeg',
-      sizeBytes: best.length,
+      analysisMimeType: 'image/jpeg',
+      analysisSizeBytes: best.length,
       originalMimeType: mimeType,
       originalSizeBytes: rawBuffer.length,
-      base64: best.toString('base64'),
+      analysisBase64: best.toString('base64'),
     };
   } catch {
     return payload;

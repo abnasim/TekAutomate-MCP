@@ -58,6 +58,9 @@ interface ScreenshotPayload {
   mimeType: string;
   capturedAt?: string;
   sizeBytes?: number;
+  analysisBase64?: string;
+  analysisMimeType?: string;
+  analysisSizeBytes?: number;
 }
 
 // ── Tool Execution ──
@@ -113,6 +116,9 @@ function extractScreenshotPayload(result: unknown): ScreenshotPayload | null {
     mimeType: typeof candidate.mimeType === 'string' ? candidate.mimeType : 'image/png',
     capturedAt: typeof candidate.capturedAt === 'string' ? candidate.capturedAt : undefined,
     sizeBytes: typeof candidate.sizeBytes === 'number' ? candidate.sizeBytes : undefined,
+    analysisBase64: typeof candidate.analysisBase64 === 'string' ? candidate.analysisBase64 : undefined,
+    analysisMimeType: typeof candidate.analysisMimeType === 'string' ? candidate.analysisMimeType : undefined,
+    analysisSizeBytes: typeof candidate.analysisSizeBytes === 'number' ? candidate.analysisSizeBytes : undefined,
   };
 }
 
@@ -167,9 +173,9 @@ async function compressScreenshotForAnalysis(result: unknown, analyze?: boolean)
     if (!match) return result;
     const compressedPayload: ScreenshotPayload = {
       ...screenshot,
-      mimeType: match[1],
-      base64: match[2],
-      sizeBytes: bestBytes,
+      analysisMimeType: match[1],
+      analysisBase64: match[2],
+      analysisSizeBytes: bestBytes,
     };
 
     if (result && typeof result === 'object') {
@@ -177,9 +183,9 @@ async function compressScreenshotForAnalysis(result: unknown, analyze?: boolean)
       if (typeof record.base64 === 'string') {
         return {
           ...record,
-          mimeType: compressedPayload.mimeType,
-          base64: compressedPayload.base64,
-          sizeBytes: compressedPayload.sizeBytes,
+          analysisMimeType: compressedPayload.analysisMimeType,
+          analysisBase64: compressedPayload.analysisBase64,
+          analysisSizeBytes: compressedPayload.analysisSizeBytes,
           originalSizeBytes: originalBytes,
           originalMimeType: screenshot.mimeType,
         };
@@ -189,9 +195,9 @@ async function compressScreenshotForAnalysis(result: unknown, analyze?: boolean)
           ...record,
           data: {
             ...(record.data as Record<string, unknown>),
-            mimeType: compressedPayload.mimeType,
-            base64: compressedPayload.base64,
-            sizeBytes: compressedPayload.sizeBytes,
+            analysisMimeType: compressedPayload.analysisMimeType,
+            analysisBase64: compressedPayload.analysisBase64,
+            analysisSizeBytes: compressedPayload.analysisSizeBytes,
             originalSizeBytes: originalBytes,
             originalMimeType: screenshot.mimeType,
           },
@@ -200,10 +206,13 @@ async function compressScreenshotForAnalysis(result: unknown, analyze?: boolean)
     }
 
     return {
-      mimeType: compressedPayload.mimeType,
-      base64: compressedPayload.base64,
-      sizeBytes: compressedPayload.sizeBytes,
+      mimeType: screenshot.mimeType,
+      base64: screenshot.base64,
+      sizeBytes: screenshot.sizeBytes,
       capturedAt: compressedPayload.capturedAt,
+      analysisMimeType: compressedPayload.analysisMimeType,
+      analysisBase64: compressedPayload.analysisBase64,
+      analysisSizeBytes: compressedPayload.analysisSizeBytes,
       originalSizeBytes: originalBytes,
       originalMimeType: screenshot.mimeType,
     };
@@ -707,6 +716,8 @@ async function runOpenAiLoop(params: LiveToolLoopParams): Promise<LiveToolLoopRe
           const screenshotPayload = extractScreenshotPayload(result);
 
           if (screenshotPayload && toolArgs.analyze === true) {
+            const visionBase64 = screenshotPayload.analysisBase64 || screenshotPayload.base64;
+            const visionMimeType = screenshotPayload.analysisMimeType || screenshotPayload.mimeType;
             // Send screenshot for AI analysis
             toolResultsInput.push({
               type: 'function_call_output',
@@ -718,8 +729,8 @@ async function runOpenAiLoop(params: LiveToolLoopParams): Promise<LiveToolLoopRe
               content: [
                 {
                   type: 'input_image',
-                  image_url: `data:${screenshotPayload.mimeType};base64,${screenshotPayload.base64}`,
-                  detail: 'low',
+                  image_url: `data:${visionMimeType};base64,${visionBase64}`,
+                  detail: 'high',
                 },
                 { type: 'input_text', text: 'Only mention what CHANGED or is relevant to the user\'s last request. Do NOT re-describe the entire display.' },
               ],
