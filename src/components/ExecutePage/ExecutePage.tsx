@@ -21,6 +21,7 @@ export interface ExecutePageProps {
   runStatus: 'idle' | 'connecting' | 'running' | 'done' | 'error';
   executorEndpoint: { host: string; port: number } | null;
   instrumentEndpoint?: { executorUrl: string; visaResource: string; backend: string; liveMode?: boolean } | null;
+  latestLiveScreenshot?: { dataUrl: string; mimeType: string; sizeBytes: number; capturedAt: string } | null;
   chatContextAttachments?: Array<{ name: string; mimeType: string; size: number; dataUrl?: string; textExcerpt?: string }>;
   flowContext?: {
     backend?: string;
@@ -199,6 +200,7 @@ function ExecutePageContent({
   runStatus,
   executorEndpoint,
   instrumentEndpoint,
+  latestLiveScreenshot,
   chatContextAttachments,
   flowContext,
   onRun,
@@ -391,6 +393,7 @@ function ExecutePageContent({
           flowContext={flowContext}
           executorEndpoint={executorEndpoint}
           instrumentEndpoint={instrumentEndpoint}
+          latestLiveScreenshot={latestLiveScreenshot}
           contextAttachments={chatContextAttachments}
           onApplyAiActions={onApplyAiActions}
           onWorkflowProposal={handleProposalDetected}

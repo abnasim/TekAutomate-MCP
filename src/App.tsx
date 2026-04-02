@@ -9496,6 +9496,7 @@ Keep under 120 words. No headings. Bullets only. Stay on this command. Do not de
               backend: activeInstrumentConfig.backend,
               liveMode: true,
             } : null}
+            latestLiveScreenshot={liveModeCapture}
             chatContextAttachments={[]}
             flowContext={{
               backend: activeInstrumentConfig.backend,

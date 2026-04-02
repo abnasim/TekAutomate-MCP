@@ -46,6 +46,7 @@ interface AiChatPanelProps {
   };
   executorEndpoint?: { host: string; port: number } | null;
   instrumentEndpoint?: { executorUrl: string; visaResource: string; backend: string; liveMode?: boolean } | null;
+  latestLiveScreenshot?: { dataUrl: string; mimeType: string; sizeBytes: number; capturedAt: string } | null;
   contextAttachments?: McpChatAttachment[];
   lastAuditReport?: ExecutionAuditReport | null;
   onApplyAiActions?: (actions: AiAction[]) => Promise<{ applied: number; rerunStarted: boolean; changed: boolean }>;
@@ -122,6 +123,7 @@ export function AiChatPanel({
   flowContext,
   executorEndpoint,
   instrumentEndpoint,
+  latestLiveScreenshot,
   contextAttachments = [],
   lastAuditReport,
   onApplyAiActions,
@@ -1681,6 +1683,7 @@ export function AiChatPanel({
             autoApply={false}
             flowContext={flowContext}
             instrumentEndpoint={instrumentEndpoint}
+            latestLiveScreenshot={latestLiveScreenshot}
             onActionsDetected={handleChatKitActionsDetected}
             onProposalDetected={onWorkflowProposal}
             onLiveScreenshot={onLiveScreenshot}

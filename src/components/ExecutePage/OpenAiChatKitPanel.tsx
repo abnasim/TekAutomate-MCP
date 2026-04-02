@@ -54,6 +54,7 @@ interface OpenAiChatKitPanelProps {
     backend: string;
     liveMode?: boolean;
   } | null;
+  latestLiveScreenshot?: LatestScreenshotState | null;
   onLiveScreenshot?: (screenshot: { dataUrl: string; mimeType: string; sizeBytes: number; capturedAt: string }) => void;
   onActionsDetected?: (actions: AiAction[], summary?: string) => void | Promise<unknown>;
   onProposalDetected?: (proposal: ParsedActionsPreview | null) => void;
@@ -548,6 +549,7 @@ export function OpenAiChatKitPanel({
   autoApply = false,
   flowContext,
   instrumentEndpoint,
+  latestLiveScreenshot,
   onLiveScreenshot,
   onActionsDetected,
   onProposalDetected,
@@ -579,6 +581,11 @@ export function OpenAiChatKitPanel({
   const responseScanTimersRef = useRef<number[]>([]);
   const seenProposalIdRef = useRef('');
   const proposalSessionStartedAtRef = useRef(Date.now());
+
+  useEffect(() => {
+    if (!latestLiveScreenshot) return;
+    setLatestScreenshot(latestLiveScreenshot);
+  }, [latestLiveScreenshot]);
 
   useEffect(() => {
     if (typeof document === 'undefined') return;
