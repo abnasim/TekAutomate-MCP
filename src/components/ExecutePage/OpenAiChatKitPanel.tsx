@@ -117,15 +117,15 @@ function getStartScreenGreeting(isLiveMode: boolean): string {
 function getStartScreenPrompts(isLiveMode: boolean): Array<{ label: string; prompt: string }> {
   return isLiveMode
     ? [
-        { label: 'What is Instrument Co-Pilot?', prompt: 'Respond directly without extended thinking. What is TekAutomate Instrument Co-Pilot? Briefly explain what you can do in Live mode.' },
-        { label: 'Check connection', prompt: 'Respond directly without extended thinking. Immediately call get_instrument_info to check the connected instrument and report what scope is online.' },
-        { label: 'Set scope to default', prompt: 'Respond directly without extended thinking. Immediately send *RST via send_scpi to reset the scope to defaults, then confirm.' },
-        { label: 'Discover SCPI commands', prompt: 'Respond directly without extended thinking. What SCPI commands are available on the connected instrument? Help me discover and explore them.' },
+        { label: 'What is Instrument Co-Pilot?', prompt: 'What is TekAutomate Instrument Co-Pilot? What can you do in Live mode?' },
+        { label: 'Check connection', prompt: 'Check the connected instrument and tell me what scope is online.' },
+        { label: 'Set scope to default', prompt: 'Reset the scope to its default factory settings.' },
+        { label: 'Discover SCPI commands', prompt: 'What SCPI commands are available on the connected instrument?' },
       ]
     : [
-        { label: 'What is TekAutomate?', prompt: 'Respond directly without extended thinking. What is TekAutomate? Briefly explain what you are and how you help with test automation workflows.' },
-        { label: 'Build me a flow', prompt: 'Respond directly without extended thinking. Help me build a new test automation workflow. Ask me what instrument and measurements I need.' },
-        { label: 'Check instrument', prompt: 'Respond directly without extended thinking. Immediately call get_instrument_info to check the connected instrument and report its identity and status.' },
+        { label: 'What is TekAutomate?', prompt: 'What is TekAutomate? How can you help me?' },
+        { label: 'Build me a flow', prompt: 'Build me a new test automation workflow.' },
+        { label: 'Check instrument', prompt: 'Check the connected instrument and tell me its status.' },
       ];
 }
 
