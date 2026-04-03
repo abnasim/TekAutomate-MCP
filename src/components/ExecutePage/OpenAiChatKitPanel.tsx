@@ -111,16 +111,16 @@ function getOrCreateLiveSessionKey(workflowId?: string, userId?: string): string
 function getStartScreenGreeting(isLiveMode: boolean): string {
   return isLiveMode
     ? 'What would you like to do?'
-    : 'What can you do?';
+    : 'How can I help?';
 }
 
 function getStartScreenPrompts(isLiveMode: boolean): Array<{ label: string; prompt: string }> {
   return isLiveMode
     ? [
-        { label: 'What is Instrument Co-Pilot?', prompt: 'What is TekAutomate Instrument Co-Pilot? Explain what you can do in Live mode and how you help control the scope in real time.' },
-        { label: 'Check connection', prompt: 'Check the connected instrument and tell me what scope is online right now.' },
-        { label: 'Set scope to default', prompt: 'Reset the scope to its default factory settings using *RST and confirm the state.' },
-        { label: 'Discover SCPI commands', prompt: 'What SCPI commands are available on the connected instrument? Help me discover and explore them.' },
+        { label: 'Check connection', prompt: 'Check the connected instrument, capture a baseline snapshot, and tell me what scope is online.' },
+        { label: 'Capture scope state', prompt: 'Take a snapshot of the current scope configuration and summarize what is configured.' },
+        { label: 'Set scope to default', prompt: 'Reset the scope to factory defaults using *RST and confirm the reset state.' },
+        { label: 'What can you do?', prompt: 'What can you do in Live mode? Give me a brief overview.' },
       ]
     : [
         { label: 'What is TekAutomate?', prompt: 'What is TekAutomate? Explain what you are and how you help with test automation workflows for Tektronix instruments.' },
