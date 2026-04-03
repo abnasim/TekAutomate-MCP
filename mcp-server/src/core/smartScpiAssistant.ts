@@ -969,7 +969,7 @@ Which category would you like to explore?`;
       codeExamples: cmd.codeExamples,
       relatedCommands: cmd.relatedCommands,
       usage: this.generateUsageExample(cmd),
-      fullEntry: cmd // Complete command record for AI
+      // fullEntry removed — saves ~5KB per command in AI responses
     }));
 
     // Build mode (no conversationalPrompt) should NOT add conversational menus —
