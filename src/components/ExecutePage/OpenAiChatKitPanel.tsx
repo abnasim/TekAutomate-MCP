@@ -117,10 +117,10 @@ function getStartScreenGreeting(isLiveMode: boolean): string {
 function getStartScreenPrompts(isLiveMode: boolean): Array<{ label: string; prompt: string }> {
   return isLiveMode
     ? [
+        { label: 'Learn Scope', prompt: 'Send *LRN? via send_scpi to capture the full instrument state. Keep the entire response as your session context — every command and value. Then briefly summarize: what channels are active, trigger config, horizontal settings, any measurements or buses configured.' },
+        { label: 'Discover SCPI', prompt: 'Start SCPI discovery mode. Send *LRN? via send_scpi and store the response as your baseline. Then tell me to go make any changes I want on the scope. When I say done, send *LRN? again and diff against the baseline to show me the exact SCPI commands for everything I changed.' },
+        { label: 'Reset scope', prompt: 'Reset the scope to factory defaults. Send *RST via send_scpi, then *OPC? to confirm completion. Then send *LRN? to capture the reset state as your new baseline.' },
         { label: 'What can you do?', prompt: 'What can you do in Live mode? Give me a brief overview of your capabilities.' },
-        { label: 'Discover SCPI', prompt: 'Start SCPI discovery mode. I want to make changes on the scope and have you tell me the exact SCPI commands. Take a baseline if you do not have one yet, then tell me to go ahead.' },
-        { label: 'Reset scope', prompt: 'Reset the scope to factory defaults using *RST, confirm with *OPC?, and update your baseline.' },
-        { label: 'Show scope state', prompt: 'Summarize the current scope state from your baseline — channels, trigger, horizontal, acquisition, any active measurements or buses.' },
       ]
     : [
         { label: 'What is TekAutomate?', prompt: 'What is TekAutomate? Explain what you are and how you help with test automation workflows for Tektronix instruments.' },
