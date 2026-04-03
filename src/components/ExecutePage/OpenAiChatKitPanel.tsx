@@ -117,7 +117,7 @@ function getStartScreenGreeting(isLiveMode: boolean): string {
 function getStartScreenPrompts(isLiveMode: boolean): Array<{ label: string; prompt: string }> {
   return isLiveMode
     ? [
-        { label: 'Check Instrument', prompt: 'Check the connected instrument. Send *IDN? via send_scpi to identify it, *ESR? and ALLEV? to check errors, then *LRN? to capture full instrument state. Keep the *LRN? response as your session context. Report identity, status, and any errors briefly.' },
+        { label: 'Check Instrument', prompt: 'Quick instrument check. Send *IDN? via send_scpi to identify the scope, then *ESR? and ALLEV? to check for errors. Report identity, status, and any errors. Do NOT send *LRN? — use existing session context.' },
         { label: 'Discover SCPI', prompt: 'Start SCPI discovery mode. Send *LRN? via send_scpi and keep the response as your baseline. Then tell me to go make any changes on the scope. When I say done, send *LRN? again via send_scpi and diff the two responses to show me the exact SCPI commands that changed.' },
         { label: 'Reset Scope', prompt: 'Reset the scope to factory defaults. Send *RST via send_scpi, poll *OPC? until it returns 1, then send *LRN? to capture the reset state as your new session context.' },
         { label: 'What can you do?', prompt: 'What can you do in Live mode? Brief overview.' },
@@ -145,7 +145,7 @@ interface QuickAction {
 function getQuickActions(isLiveMode: boolean): QuickAction[] {
   return isLiveMode
     ? [
-        { id: 'check_instrument', label: 'Check Instrument', icon: '🔗', type: 'button', prompt: 'Send *IDN? via send_scpi to identify the scope, *ESR? and ALLEV? to check errors, then *LRN? to capture full state. Keep *LRN? as session context. Summarize briefly.' },
+        { id: 'check_instrument', label: 'Check Instrument', icon: '🔗', type: 'button', prompt: 'Quick instrument check. Send *IDN? via send_scpi to identify, *ESR? and ALLEV? for errors. Report identity and any errors. Do NOT send *LRN? — use existing session context.' },
         { id: 'discover_scpi', label: 'Discover SCPI', icon: '🔍', type: 'button', prompt: 'Send *LRN? via send_scpi and keep as baseline. Then tell me to make changes on the scope. When I say done, send *LRN? again and diff to show exact SCPI commands that changed.' },
       ]
     : [];
