@@ -132,6 +132,7 @@ function buildAnthropicInputContent(userMessage: string, attachments?: McpChatAt
 export const EXECUTOR_TOOLS = new Set([
   'send_scpi', 'capture_screenshot', 'get_instrument_state',
   'probe_command', 'get_visa_resources', 'get_environment',
+  'discover_scpi',
 ]);
 
 function splitScpiCommandString(command: string): string[] {
@@ -339,56 +340,6 @@ export async function executeMcpTool(
   instrumentEndpoint?: LiveToolLoopParams['instrumentEndpoint'],
   flowContext?: LiveToolLoopParams['flowContext']
 ): Promise<unknown> {
-  // discover_scpi: use send_scpi path (which works) to get *LRN?, then forward to MCP
-  if (toolName === 'discover_scpi') {
-    const discoverAction = String(args.action || 'snapshot');
-    if (discoverAction === 'snapshot' || discoverAction === 'diff') {
-      // Step 1: Call send_scpi *LRN? through the same path that already works
-      const lrnResult = await executeMcpTool(
-        'send_scpi',
-        { commands: ['*LRN?'], timeout_ms: 15000 },
-        instrumentEndpoint,
-        flowContext,
-      );
-
-      // Step 2: Forward to MCP for storage/diff
-      const mcpHost = resolveMcpHost();
-      if (mcpHost) {
-        try {
-          const mcpRes = await fetch(`${mcpHost.replace(/\/$/, '')}/tools/execute`, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-              tool: 'discover_scpi',
-              args: { ...args, _lrnResponse: JSON.stringify(lrnResult) },
-              instrumentEndpoint,
-              flowContext,
-            }),
-          });
-          if (mcpRes.ok) {
-            const mcpJson = await mcpRes.json() as { ok: boolean; result: unknown };
-            if (mcpJson.ok) {
-              const mcpResult = mcpJson.result as Record<string, unknown>;
-              if (discoverAction === 'snapshot') {
-                // Include raw *LRN? so AI has full instrument context
-                const data = (lrnResult as Record<string, unknown>)?.data ?? lrnResult;
-                const responses = ((data as Record<string, unknown>)?.responses ?? (data as Record<string, unknown>)?.results ?? []) as Array<{ response?: string }>;
-                const rawLrn = responses[0]?.response || String((data as Record<string, unknown>)?.stdout || '');
-                if (rawLrn) {
-                  (mcpResult as Record<string, unknown>).lrnCommands = rawLrn;
-                }
-              }
-              return mcpResult;
-            }
-          }
-        } catch { /* fall through */ }
-      }
-      // Fallback: return raw *LRN? result
-      return { ok: true, action: discoverAction, data: lrnResult };
-    }
-    // inspect: falls through to MCP path below
-  }
-
   // Instrument tools: call executor directly from browser (no MCP needed)
   if (EXECUTOR_TOOLS.has(toolName) && instrumentEndpoint?.executorUrl) {
     const execUrl = instrumentEndpoint.executorUrl.replace(/\/$/, '');
@@ -462,6 +413,38 @@ export async function executeMcpTool(
     const directResult = json.result_data ?? (json.base64 ? json : json.responses ? json : json);
     if (toolName === 'capture_screenshot') {
       return compressScreenshotForAnalysis(directResult, args.analyze === true);
+    }
+    // discover_scpi: forward *LRN? result to MCP for storage/diff
+    if (toolName === 'discover_scpi') {
+      const mcpHost = resolveMcpHost();
+      if (mcpHost) {
+        try {
+          const mcpRes = await fetch(`${mcpHost.replace(/\/$/, '')}/tools/execute`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              tool: 'discover_scpi',
+              args: { ...args, _lrnResponse: JSON.stringify(directResult) },
+              instrumentEndpoint,
+              flowContext,
+            }),
+          });
+          if (mcpRes.ok) {
+            const mcpJson = await mcpRes.json() as { ok: boolean; result: unknown };
+            if (mcpJson.ok) {
+              const mcpResult = mcpJson.result as Record<string, unknown>;
+              // For snapshot: include raw *LRN? so AI has full context
+              if (String(args.action) === 'snapshot') {
+                const responses = ((directResult as Record<string, unknown>)?.responses ?? []) as Array<{ response?: string }>;
+                const rawLrn = responses[0]?.response || '';
+                if (rawLrn) (mcpResult as Record<string, unknown>).lrnCommands = rawLrn;
+              }
+              return mcpResult;
+            }
+          }
+        } catch { /* fall through to raw result */ }
+      }
+      return { ok: true, action: String(args.action), data: directResult };
     }
     return directResult;
   }
