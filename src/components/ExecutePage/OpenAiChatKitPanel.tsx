@@ -119,6 +119,7 @@ function getStartScreenPrompts(isLiveMode: boolean): Array<{ label: string; prom
     ? [
         { label: 'Check connection', prompt: 'Check the connected instrument, capture a baseline snapshot, and tell me what scope is online.' },
         { label: 'Capture scope state', prompt: 'Take a snapshot of the current scope configuration and summarize what is configured.' },
+        { label: 'Discover SCPI', prompt: 'I want to discover SCPI commands. Explain how: you can take a snapshot of the scope, I make changes on the scope manually, then you diff to find the exact SCPI commands for what I changed. Walk me through it.' },
         { label: 'Set scope to default', prompt: 'Reset the scope to factory defaults using *RST and confirm the reset state.' },
         { label: 'What can you do?', prompt: 'What can you do in Live mode? Give me a brief overview.' },
       ]
