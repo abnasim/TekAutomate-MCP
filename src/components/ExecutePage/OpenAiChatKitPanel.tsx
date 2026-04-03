@@ -147,7 +147,6 @@ function getQuickActions(isLiveMode: boolean): QuickAction[] {
   return isLiveMode
     ? [
         { id: 'discover_scpi', label: 'Discover SCPI', icon: '🔍', type: 'button', prompt: 'Start SCPI discovery mode. Take a baseline snapshot of the scope now. Then explain to me that I can go make any changes I want on the scope — adjust settings, configure triggers, add measurements, set up decode, anything — and when I tell you I am done, you will capture the scope state again and show me the exact SCPI commands for everything I changed.' },
-        { id: 'attach_screenshot', label: 'Screenshot', icon: '📷', type: 'button', prompt: '__ATTACH_SCREENSHOT__' },
       ]
     : [];
 }
