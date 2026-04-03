@@ -11,9 +11,33 @@ interface SmartScpiRequest {
   mode?: 'build' | 'chat';
 }
 
-interface SmartScpiToolResult extends ToolResult<CommandSuggestion[]> {
+interface SmartScpiToolResult extends ToolResult<string[]> {
   conversationalPrompt?: string;
   summary: string;
+}
+
+/** Convert a CommandSuggestion to compact text (~150 tokens vs ~500 for JSON) */
+function commandSuggestionToText(cmd: CommandSuggestion): string {
+  const lines: string[] = [];
+  lines.push(`Command: ${cmd.header}`);
+  if (cmd.shortDescription) lines.push(`Description: ${cmd.shortDescription}`);
+  if (cmd.syntax?.set) lines.push(`Set: ${cmd.syntax.set}`);
+  if (cmd.syntax?.query) lines.push(`Query: ${cmd.syntax.query}`);
+  if (cmd.arguments?.length) {
+    lines.push('Parameters:');
+    for (const arg of cmd.arguments.slice(0, 6)) {
+      const desc = (arg.description || '').slice(0, 80);
+      lines.push(`  ${arg.name} (${arg.type}${arg.required ? ', required' : ''}): ${desc}`);
+    }
+  }
+  if (cmd.codeExamples?.[0]?.scpi?.code) {
+    const ex = cmd.codeExamples[0];
+    lines.push(`Example: ${ex.scpi!.code}${ex.description ? ' — ' + ex.description : ''}`);
+  }
+  if (cmd.relatedCommands?.length) {
+    lines.push(`Related: ${cmd.relatedCommands.slice(0, 5).join(', ')}`);
+  }
+  return lines.join('\n');
 }
 
 interface SmartScpiResult {
@@ -969,7 +993,7 @@ Which category would you like to explore?`;
       codeExamples: cmd.codeExamples,
       relatedCommands: cmd.relatedCommands,
       usage: this.generateUsageExample(cmd),
-      fullEntry: cmd // Complete command record for AI
+      // fullEntry removed — saves ~5KB per command in AI responses
     }));
 
     // Build mode (no conversationalPrompt) should NOT add conversational menus —
@@ -1218,11 +1242,11 @@ export async function smartScpiLookup(input: SmartScpiRequest): Promise<SmartScp
 
     return {
       ok: true,
-      data: formatted.commands,
+      data: formatted.commands.map(commandSuggestionToText),
       sourceMeta: [],
       warnings: [],
       summary: formatted.summary,
-      conversationalPrompt: result.conversationalPrompt
+      conversationalPrompt: formatted.conversationalPrompt
     };
   } catch (error) {
     return {
