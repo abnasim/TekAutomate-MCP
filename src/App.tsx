@@ -13534,7 +13534,7 @@ scpi.query('*OPC?')`;
                 {/* Description */}
                 <div className="p-4 border-b border-gray-200 dark:border-gray-700">
                   <h4 className="text-xs font-semibold text-gray-700 dark:text-gray-300 uppercase mb-2">Description</h4>
-                  <p className="text-sm text-gray-600 dark:text-gray-400 leading-relaxed">
+                  <p className="text-sm text-gray-600 dark:text-gray-400 leading-relaxed break-words overflow-hidden">
                     {selectedLibraryCommand.description || 'No description available.'}
                   </p>
                 </div>
@@ -13548,7 +13548,7 @@ scpi.query('*OPC?')`;
                       <div className="space-y-2">
                         {fixedSyntax.set && (
                           <div>
-                            <span className="text-xs font-medium text-emerald-700">Set Command:</span>
+                            <span className="text-xs font-medium text-emerald-700 dark:text-emerald-400">Set Command:</span>
                             <div className="font-mono text-xs bg-gray-900 text-green-400 px-2 py-1.5 rounded mt-1 break-all">
                               {fixedSyntax.set}
                             </div>
@@ -13556,7 +13556,7 @@ scpi.query('*OPC?')`;
                         )}
                         {fixedSyntax.query && (
                           <div>
-                            <span className="text-xs font-medium text-blue-700">Query Command:</span>
+                            <span className="text-xs font-medium text-blue-700 dark:text-blue-400">Query Command:</span>
                             <div className="font-mono text-xs bg-gray-900 text-blue-400 px-2 py-1.5 rounded mt-1 break-all">
                               {fixedSyntax.query}
                             </div>
