@@ -119,7 +119,7 @@ function getStartScreenPrompts(isLiveMode: boolean): Array<{ label: string; prom
     ? [
         { label: 'Check Instrument', prompt: 'Quick instrument check. Send *IDN? via send_scpi to identify the scope, then *ESR? and ALLEV? to check for errors. Report identity, status, and any errors. Do NOT send *LRN? — use existing session context.' },
         { label: 'Discover SCPI', prompt: 'Start SCPI discovery mode. Send *LRN? via send_scpi and keep the response as your baseline. Then tell me to go make any changes on the scope. When I say done, send *LRN? again via send_scpi and diff the two responses to show me the exact SCPI commands that changed.' },
-        { label: 'Reset Scope', prompt: 'Reset the scope to factory defaults. Send *RST via send_scpi, poll *OPC? until it returns 1, then send *LRN? to capture the reset state as your new session context.' },
+        { label: 'Reset Instrument', prompt: 'Full instrument reset and reconnection. Send *RST via send_scpi, poll *OPC? until 1, then *CLS to clear status. Then send device_clear to clear the I/O buffer. Then disconnect to close the connection. Then send *IDN? to reconnect and verify. Finally send *LRN? to capture the fresh reset state as your new session context. Report when complete.' },
         { label: 'What can you do?', prompt: 'What can you do in Live mode? Brief overview.' },
       ]
     : [
@@ -147,6 +147,7 @@ function getQuickActions(isLiveMode: boolean): QuickAction[] {
     ? [
         { id: 'check_instrument', label: 'Check Instrument', icon: '🔗', type: 'button', prompt: 'Quick instrument check. Send *IDN? via send_scpi to identify, *ESR? and ALLEV? for errors. Report identity and any errors. Do NOT send *LRN? — use existing session context.' },
         { id: 'discover_scpi', label: 'Discover SCPI', icon: '🔍', type: 'button', prompt: 'Send *LRN? via send_scpi and keep as baseline. Then tell me to make changes on the scope. When I say done, send *LRN? again and diff to show exact SCPI commands that changed.' },
+        { id: 'reset_instrument', label: 'Reset Instrument', icon: '🔄', type: 'button', prompt: 'Full instrument reset. Send *RST via send_scpi, poll *OPC? until 1, *CLS to clear status, device_clear for I/O buffer, disconnect to close connection, *IDN? to reconnect, *LRN? for fresh state. Report when complete.' },
       ]
     : [];
 }
