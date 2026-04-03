@@ -560,15 +560,10 @@ function extractManualReference(raw: Record<string, unknown>): ManualReference |
 }
 
 function extractCommandType(raw: Record<string, unknown>, header: string): CommandType {
-  const explicit =
-    (typeof raw.commandType === 'string' && raw.commandType) ||
-    (typeof (raw._manualEntry as Record<string, unknown> | undefined)?.commandType === 'string'
-      ? String((raw._manualEntry as Record<string, unknown>).commandType)
-      : '');
-  const normalized = explicit.toLowerCase();
-  if (normalized === 'set' || normalized === 'query' || normalized === 'both') return normalized;
-
-  const syntax = raw.syntax;
+  // Check syntax FIRST — it's the most reliable source of truth.
+  // _manualEntry.commandType is often wrong (e.g. "query" when command has both set and query forms).
+  const syntax = raw.syntax
+    || (raw._manualEntry as Record<string, unknown> | undefined)?.syntax;
   if (syntax && typeof syntax === 'object' && !Array.isArray(syntax)) {
     const syn = syntax as Record<string, unknown>;
     const hasSet = typeof syn.set === 'string' && syn.set.trim().length > 0;
@@ -577,6 +572,15 @@ function extractCommandType(raw: Record<string, unknown>, header: string): Comma
     if (hasQuery) return 'query';
     if (hasSet) return 'set';
   }
+
+  // Fall back to explicit commandType if syntax didn't resolve
+  const explicit =
+    (typeof raw.commandType === 'string' && raw.commandType) ||
+    (typeof (raw._manualEntry as Record<string, unknown> | undefined)?.commandType === 'string'
+      ? String((raw._manualEntry as Record<string, unknown>).commandType)
+      : '');
+  const normalized = explicit.toLowerCase();
+  if (normalized === 'set' || normalized === 'query' || normalized === 'both') return normalized;
 
   if (header.endsWith('?')) return 'query';
   return 'both';

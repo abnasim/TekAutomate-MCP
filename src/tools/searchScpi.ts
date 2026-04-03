@@ -598,6 +598,10 @@ export async function searchScpi(input: SearchScpiInput): Promise<ToolResult<unk
       'MEASUrement:MEAS<x>:DISPlaystat:ENABle', 'MEASUrement:STATIstics:CYCLEMode',
       'MEASUrement:STATIstics:COUNt', 'MEASUrement:STATIstics:MODe',
     ],
+    add_measurement: [
+      'MEASUrement:ADDMEAS', 'MEASUrement:ADDNew',
+      'MEASUrement:MEAS<x>:TYPe', 'MEASUrement:MEAS<x>:SOUrce<x>',
+    ],
     rise_time: [
       'MEASUrement:ADDMEAS', 'MEASUrement:MEAS<x>:TYPe',
     ],
