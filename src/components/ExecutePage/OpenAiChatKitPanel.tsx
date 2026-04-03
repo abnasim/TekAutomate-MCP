@@ -143,12 +143,8 @@ interface QuickAction {
   toolName?: string;
 }
 
-function getQuickActions(isLiveMode: boolean): QuickAction[] {
-  return isLiveMode
-    ? [
-        { id: 'discover_scpi', label: 'Discover SCPI', icon: '🔍', type: 'button', prompt: 'Start SCPI discovery mode. Run discover_scpi with action:"snapshot" to capture a baseline. Then tell me I can go make any changes I want on the scope — adjust settings, configure triggers, add measurements, set up decode, anything. When I say done, run discover_scpi with action:"diff" to show me the exact SCPI commands for everything I changed.' },
-      ]
-    : [];
+function getQuickActions(_isLiveMode: boolean): QuickAction[] {
+  return [];
 }
 
 function getChatKitThemeOptions(theme: 'dark' | 'light'): ThemeOption {
