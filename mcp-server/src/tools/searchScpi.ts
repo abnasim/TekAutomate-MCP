@@ -602,6 +602,19 @@ export async function searchScpi(input: SearchScpiInput): Promise<ToolResult<unk
       'MEASUrement:ADDMEAS', 'MEASUrement:ADDNew',
       'MEASUrement:MEAS<x>:TYPe', 'MEASUrement:MEAS<x>:SOUrce<x>',
     ],
+    add_bus: [
+      'BUS:B<x>:TYPe', 'BUS:ADDNew',
+      'DISplay:WAVEView<x>:BUS:B<x>:STATE',
+    ],
+    add_math: [
+      'MATH:ADDNew', 'MATH<x>:DEFine', 'MATH<x>:TYPe',
+    ],
+    add_plot: [
+      'PLOTView<x>:PLOT<x>:TYPe', 'HISTogram:HISTogram<x>:SOUrce',
+    ],
+    add_search: [
+      'SEARCH:ADDNew', 'SEARCH:SEARCH<x>:TRIGger:A:TYPe',
+    ],
     rise_time: [
       'MEASUrement:ADDMEAS', 'MEASUrement:MEAS<x>:TYPe',
     ],

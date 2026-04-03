@@ -434,6 +434,26 @@ export function classifyIntent(query: string): IntentResult {
     }
   }
 
+  // ── Keyword bag matching — catches natural language variations ──
+  // If query contains an action word + target word in any order, infer intent.
+  const qLower = q.toLowerCase();
+  const hasAdd = /\b(add|new|create|insert|addnew)\b/i.test(qLower);
+  const hasDelete = /\b(delete|remove|clear|drop)\b/i.test(qLower);
+  const hasMeas = /\b(meas|measurement|measure)\b/i.test(qLower);
+  const hasBus = /\b(bus|decode|protocol)\b/i.test(qLower);
+  const hasMath = /\b(math|fft|expression)\b/i.test(qLower);
+  const hasPlot = /\b(plot|histogram|trend)\b/i.test(qLower);
+  const hasTable = /\b(table|results?\s*table)\b/i.test(qLower);
+  const hasSearch = /\b(search|mark|find\s*event)\b/i.test(qLower);
+
+  if (hasAdd && hasMeas) return { groups: ['Measurement'], intent: 'measurement', subject: 'add_measurement', action, confidence: 'medium' };
+  if (hasDelete && hasMeas) return { groups: ['Measurement'], intent: 'measurement', subject: 'clear_measurements', action, confidence: 'medium' };
+  if (hasAdd && hasBus) return { groups: ['Bus'], intent: 'bus', subject: 'add_bus', action, confidence: 'medium' };
+  if (hasAdd && hasMath) return { groups: ['Math'], intent: 'math', subject: 'add_math', action, confidence: 'medium' };
+  if (hasAdd && hasPlot) return { groups: ['Measurement'], intent: 'measurement', subject: 'add_plot', action, confidence: 'medium' };
+  if (hasAdd && hasTable) return { groups: ['Measurement'], intent: 'measurement', subject: 'custom_table', action, confidence: 'medium' };
+  if (hasAdd && hasSearch) return { groups: ['Search and Mark'], intent: 'search', subject: 'add_search', action, confidence: 'medium' };
+
   // Fallback: use existing suggestCommandGroups from commandGroups.ts
   const suggested = suggestCommandGroups(q, 3);
   if (suggested.length > 0) {
