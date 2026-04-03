@@ -176,17 +176,18 @@ const SUBJECT_GROUP_MAP: Array<{
   { pattern: /\b(area|cycle\s*area)\b/i, groups: ['Measurement'], intent: 'measurement', subject: 'area' },
   { pattern: /\b(phase)\b/i, groups: ['Measurement'], intent: 'measurement', subject: 'phase' },
   { pattern: /\b(result|results\s*table|detailed\s*results|statistics)\b/i, groups: ['Measurement'], intent: 'measurement', subject: 'results' },
-  { pattern: /\b(measurement|measure|meas)\b/i, groups: ['Measurement'], intent: 'measurement', subject: 'measurement' },
-  { pattern: /\b(clear\s*measurements|clear\s*meas|reset\s*measurements|delete\s*measurements)\b/i, groups: ['Measurement'], intent: 'measurement', subject: 'clear_measurements' },
-  { pattern: /\b(clear|delete|remove)\b(?!.*\bmath\b)/i, groups: ['Measurement'], intent: 'measurement', subject: 'clear' },
 
-  // ── Specific Measurement Table Commands ──
+  // ── Specific measurement actions — MUST come before generic "measurement" catchall ──
+  { pattern: /\b(clear\s*measurements|clear\s*meas|reset\s*measurements|delete\s*measurements)\b/i, groups: ['Measurement'], intent: 'measurement', subject: 'clear_measurements' },
   { pattern: /\b(add\s*measurement\s*table|measurement\s*table|results\s*table|meas\s*table)\b/i, groups: ['Measurement'], intent: 'measurement', subject: 'measurement_table' },
   { pattern: /\b(custom\s*table|add\s*table|new\s*table)\b/i, groups: ['Measurement'], intent: 'measurement', subject: 'custom_table' },
   { pattern: /\b(delete\s*table|remove\s*table|clear\s*table)\b/i, groups: ['Measurement'], intent: 'measurement', subject: 'delete_table' },
   { pattern: /\b(list\s*tables|show\s*tables)\b/i, groups: ['Measurement'], intent: 'measurement', subject: 'list_tables' },
+  { pattern: /\b(add\s*measurement|new\s*measurement|create\s*measurement)\b/i, groups: ['Measurement'], intent: 'measurement', subject: 'add_measurement' },
 
-  // ── Specific Measurement Types (nested commands) ──
+  // ── Generic measurement catchall — comes AFTER specific patterns ──
+  { pattern: /\b(measurement|measure|meas)\b/i, groups: ['Measurement'], intent: 'measurement', subject: 'measurement' },
+  { pattern: /\b(clear|delete|remove)\b(?!.*\bmath\b)/i, groups: ['Measurement'], intent: 'measurement', subject: 'clear' },
   { pattern: /\b(add\s*measurement|new\s*measurement|create\s*measurement)\b/i, groups: ['Measurement'], intent: 'measurement', subject: 'add_measurement' },
   { pattern: /\b(thd|total\s*harmonic\s*distortion|harmonics|distortion)\b/i, groups: ['Measurement', 'Power'], intent: 'measurement', subject: 'thd' },
   { pattern: /\b(acpr|adjacent\s*channel\s*power\s*ratio)\b/i, groups: ['Measurement'], intent: 'measurement', subject: 'acpr' },
