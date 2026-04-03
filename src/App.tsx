@@ -7085,8 +7085,8 @@ if __name__ == "__main__":
       // Strategy 3: Match if ALL keywords are found individually (e.g., "search" AND "option" both present)
       const matchesAllKeywords = searchKeywords.length > 0 && searchKeywords.every(keyword => {
         const normalizedKeyword = keyword.replace(/[\s:]/g, '');
-        // Also try replacing numbers with <x> pattern
-        const keywordWithParam = normalizedKeyword.replace(/(\d+)/g, '(?:\\d+|<[xn]>)');
+        const escapedKeyword = normalizedKeyword.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+        const keywordWithParam = escapedKeyword.replace(/(\d+)/g, '(?:\\d+|<[xn]>)');
         const keywordRegex = new RegExp(keywordWithParam, 'i');
         return combinedText.includes(keyword) || normalizedText.includes(normalizedKeyword) || keywordRegex.test(normalizedText);
       });
@@ -7158,7 +7158,8 @@ if __name__ == "__main__":
     if (Object.keys(indices).length === 0) return scpi;
     let s = scpi;
     for (const [param, index] of Object.entries(indices)) {
-      s = s.replace(new RegExp(`(${param})<[xXnN]>`, 'gi'), `$1${index}`);
+      const escapedParam = param.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+      s = s.replace(new RegExp(`(${escapedParam})<[xXnN]>`, 'gi'), `$1${index}`);
     }
     return s;
   };
@@ -13714,7 +13715,7 @@ scpi.query('*OPC?')`;
                         {visible.map((ex, idx) => (
                           <div key={idx} className="bg-gray-50 dark:bg-gray-800 rounded-lg overflow-hidden border border-gray-200 dark:border-gray-700">
                             {ex.scpiCode && (
-                              <div className="font-mono text-xs bg-gray-900 text-green-400 px-3 py-2">
+                              <div className="font-mono text-xs bg-gray-900 text-green-400 px-3 py-2 break-all">
                                 {ex.scpiCode}
                               </div>
                             )}
