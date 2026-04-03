@@ -10,7 +10,7 @@ interface GetCommandByHeaderInput {
 
 export async function getCommandByHeader(
   input: GetCommandByHeaderInput
-): Promise<ToolResult<Record<string, unknown> | null>> {
+): Promise<ToolResult<Record<string, unknown> | string | null>> {
   const header = (input.header || '').trim();
   if (!header) {
     return { ok: false, data: null, sourceMeta: [], warnings: ['Missing header'] };
