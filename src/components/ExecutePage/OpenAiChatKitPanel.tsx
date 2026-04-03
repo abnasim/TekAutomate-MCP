@@ -141,7 +141,7 @@ interface QuickAction {
 function getQuickActions(isLiveMode: boolean): QuickAction[] {
   return isLiveMode
     ? [
-        { id: 'discover_scpi', label: 'Discover SCPI', icon: '🔍', placeholder: 'e.g. horizontal, trigger, channel, measurement...', toolName: 'discover_scpi' },
+        { id: 'discover_scpi', label: 'Discover SCPI', icon: '🔍', placeholder: 'e.g. horizontal, trigger, channel... or leave empty to start discovery mode', toolName: 'search_scpi' },
       ]
     : [];
 }
@@ -1569,19 +1569,26 @@ function OpenAiChatKitPanelInner({
                       onSubmit={(e) => {
                         e.preventDefault();
                         const val = quickActionInputRef.current?.value?.trim();
-                        if (!val) return;
                         setActiveQuickAction(null);
+
+                        if (!val) {
+                          // Empty input → start interactive discover mode
+                          void handleStarterPrompt('Start SCPI discovery mode. Take a baseline snapshot of the scope now. Then explain to me that I can go make any changes I want on the scope — adjust settings, configure triggers, add measurements, set up decode, anything — and when I tell you I am done, you will capture the scope state again and show me the exact SCPI commands for everything I changed.');
+                          return;
+                        }
+
+                        // Typed input → search for that keyword
                         void (async () => {
                           try {
                             const result = await executeMcpTool(
-                              qa.toolName,
-                              { query: val },
+                              'search_scpi',
+                              { query: val, limit: 10 },
                               instrumentEndpoint || undefined,
                               { modelFamily: flowContext?.modelFamily, deviceDriver: flowContext?.deviceDriver },
                             );
-                            void handleStarterPrompt(`I ran Discover SCPI for "${val}". Here are the results:\n\n${JSON.stringify(result, null, 2)}\n\nSummarize what was found and list the relevant commands.`);
+                            void handleStarterPrompt(`I searched SCPI commands for "${val}". Here are the results:\n\n${JSON.stringify(result, null, 2)}\n\nSummarize what was found and list the relevant commands with their syntax.`);
                           } catch (err) {
-                            void handleStarterPrompt(`SCPI discovery for "${val}" failed: ${err instanceof Error ? err.message : 'Unknown error'}. Can you help troubleshoot?`);
+                            void handleStarterPrompt(`SCPI search for "${val}" failed: ${err instanceof Error ? err.message : 'Unknown error'}. Can you help troubleshoot?`);
                           }
                         })();
                       }}
