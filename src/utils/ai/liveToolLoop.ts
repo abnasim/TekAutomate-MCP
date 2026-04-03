@@ -398,7 +398,7 @@ export async function executeMcpTool(
     // Detect legacy scope for screenshot method
     if (isScreenshotAction && !payload.scope_type) {
       const familyHint = `${flowContext?.modelFamily || ''} ${flowContext?.deviceDriver || ''}`.toLowerCase();
-      payload.scope_type = /\b(dpo|mdo|5k|7k|70k)\b/i.test(familyHint) ? 'legacy' : 'modern';
+      payload.scope_type = /dpo|mdo/i.test(familyHint) ? 'legacy' : 'modern';
     }
 
     const res = await fetch(`${execUrl}/run`, {
