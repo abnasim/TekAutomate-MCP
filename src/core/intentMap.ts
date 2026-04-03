@@ -156,6 +156,9 @@ const SUBJECT_GROUP_MAP: Array<{
   { pattern: /\b(mil.?std|1553)\b/i, groups: ['Bus', 'Trigger'], intent: 'bus', subject: 'milstd1553' },
   { pattern: /\b(spacewire|spw)\b/i, groups: ['Bus', 'Trigger'], intent: 'bus', subject: 'spacewire' },
   { pattern: /\b(i3c)\b/i, groups: ['Bus', 'Trigger'], intent: 'bus', subject: 'i3c' },
+  // ── Bus action patterns — MUST come before generic "bus" catchall ──
+  { pattern: /\b(add\s*bus|new\s*bus|create\s*bus)\b/i, groups: ['Bus'], intent: 'bus', subject: 'add_bus' },
+  { pattern: /\b(delete\s*bus|remove\s*bus)\b/i, groups: ['Bus'], intent: 'bus', subject: 'delete_bus' },
   { pattern: /\b(bus|decode|protocol)\b/i, groups: ['Bus'], intent: 'bus', subject: 'bus' },
 
   // ── Measurement types (specific before generic) ──
@@ -188,7 +191,7 @@ const SUBJECT_GROUP_MAP: Array<{
   // ── Generic measurement catchall — comes AFTER specific patterns ──
   { pattern: /\b(measurement|measure|meas)\b/i, groups: ['Measurement'], intent: 'measurement', subject: 'measurement' },
   { pattern: /\b(clear|delete|remove)\b(?!.*\bmath\b)/i, groups: ['Measurement'], intent: 'measurement', subject: 'clear' },
-  { pattern: /\b(add\s*measurement|new\s*measurement|create\s*measurement)\b/i, groups: ['Measurement'], intent: 'measurement', subject: 'add_measurement' },
+  // NOTE: add_measurement pattern is above the generic catchall — do not duplicate here
   { pattern: /\b(thd|total\s*harmonic\s*distortion|harmonics|distortion)\b/i, groups: ['Measurement', 'Power'], intent: 'measurement', subject: 'thd' },
   { pattern: /\b(acpr|adjacent\s*channel\s*power\s*ratio)\b/i, groups: ['Measurement'], intent: 'measurement', subject: 'acpr' },
   { pattern: /\b(snr|signal\s*to\s*noise\s*ratio|noise)\b/i, groups: ['Measurement'], intent: 'measurement', subject: 'snr' },
@@ -196,19 +199,18 @@ const SUBJECT_GROUP_MAP: Array<{
   { pattern: /\b(enob|effective\s*number\s*of\s*bits)\b/i, groups: ['Measurement'], intent: 'measurement', subject: 'enob' },
   { pattern: /\b(sfdr|spurious\s*free\s*dynamic\s*range)\b/i, groups: ['Measurement'], intent: 'measurement', subject: 'sfdr' },
 
-  // ── Math / FFT ── (must come before general channel to catch "math channel")
+  // ── Math / FFT ── (specific actions FIRST, then generic catchall)
   { pattern: /\b(fft|spectrum)\b/i, groups: ['Math'], intent: 'math', subject: 'fft' },
   { pattern: /\b(math\s*channel|math\s*trace|math\s*waveform)\b/i, groups: ['Math'], intent: 'math', subject: 'math_channel' },
   { pattern: /\b(add\s*math\s*channel|new\s*math)\b/i, groups: ['Math'], intent: 'math', subject: 'math_channel' },
-  { pattern: /\b(math|expression|equation)\b/i, groups: ['Math'], intent: 'math', subject: 'math' },
-
-  // ── Specific Math Commands (nested) ──
   { pattern: /\b(delete\s*math\s*channel|remove\s*math\s*channel|clear\s*math\s*channel)\b/i, groups: ['Math'], intent: 'math', subject: 'delete_math_channel' },
   { pattern: /\b(add\s*math|create\s*math|new\s*math\s*expression|math\s*add)\b/i, groups: ['Math'], intent: 'math', subject: 'add_math' },
   { pattern: /\b(delete\s*math|remove\s*math|clear\s*math|math\s*delete)\b/i, groups: ['Math'], intent: 'math', subject: 'delete_math' },
   { pattern: /\b(math\s*source|math\s*input|math\s*sourcing)\b/i, groups: ['Math'], intent: 'math', subject: 'math_source' },
   { pattern: /\b(math\s*expression|math\s*formula|math\s*definition)\b/i, groups: ['Math'], intent: 'math', subject: 'math_expression' },
   { pattern: /\b(spectrum\s*view|fft\s*view|frequency\s*analysis|spectral)\b/i, groups: ['Math', 'Spectrum view'], intent: 'math', subject: 'spectrum_view' },
+  // Generic math catchall — AFTER specific patterns
+  { pattern: /\b(math|expression|equation)\b/i, groups: ['Math'], intent: 'math', subject: 'math' },
 
   // ── Fallback Math Patterns ──
   { pattern: /\b(math1|math2|math3|math4)\b/i, groups: ['Math'], intent: 'math', subject: 'math_channel' },
