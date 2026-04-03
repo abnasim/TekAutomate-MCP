@@ -7100,6 +7100,16 @@ if __name__ == "__main__":
       const scpi = (cmd.scpi || '').toLowerCase();
       const name = (cmd.name || '').toLowerCase();
       const desc = (cmd.description || '').toLowerCase();
+      // Exact SCPI header match — massive boost
+      if (scpi === q || scpi === `*${q}` || scpi === q.replace(/^\*/, '')) {
+        score += 100;
+        matchedBy.push('exact');
+      }
+      // SCPI header starts with query
+      if (scpi.startsWith(q) || scpi.startsWith(`*${q}`)) {
+        score += 50;
+        matchedBy.push('header-start');
+      }
       if (scpi.includes(q)) {
         score += 25;
         matchedBy.push('header');
