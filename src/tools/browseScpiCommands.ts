@@ -1,6 +1,6 @@
 import { getCommandIndex, type CommandRecord } from '../core/commandIndex';
 import { GROUP_NAMES, GROUP_COMMANDS, GROUP_DESCRIPTIONS, resolveCommandGroupName } from '../core/commandGroups';
-import { serializeCommandCompact } from './commandResultShape';
+import { serializeCommandCompactText } from './commandResultShape';
 import type { ToolResult } from '../core/schemas';
 
 interface BrowseScpiInput {
@@ -49,7 +49,7 @@ export async function browseScpiCommands(input: BrowseScpiInput): Promise<ToolRe
       ok: true,
       data: {
         level: 'command_detail',
-        command: serializeCommandCompact(entry),
+        command: serializeCommandCompactText(entry),
       },
       sourceMeta: [{ file: entry.sourceFile, commandId: entry.commandId, section: entry.group }],
       warnings: [],

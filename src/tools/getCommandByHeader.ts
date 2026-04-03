@@ -1,6 +1,6 @@
 import { getCommandIndex } from '../core/commandIndex';
 import type { ToolResult } from '../core/schemas';
-import { serializeCommandResult, serializeCommandCompact } from './commandResultShape';
+import { serializeCommandResult, serializeCommandCompactText } from './commandResultShape';
 
 interface GetCommandByHeaderInput {
   header: string;
@@ -10,7 +10,7 @@ interface GetCommandByHeaderInput {
 
 export async function getCommandByHeader(
   input: GetCommandByHeaderInput
-): Promise<ToolResult<Record<string, unknown> | null>> {
+): Promise<ToolResult<Record<string, unknown> | string | null>> {
   const header = (input.header || '').trim();
   if (!header) {
     return { ok: false, data: null, sourceMeta: [], warnings: ['Missing header'] };
@@ -20,11 +20,18 @@ export async function getCommandByHeader(
   if (!entry) {
     return { ok: false, data: null, sourceMeta: [], warnings: ['No command matched header'] };
   }
-  const serialize = input.verbosity === 'full' ? serializeCommandResult : serializeCommandCompact;
+  if (input.verbosity === 'full') {
+    return {
+      ok: true,
+      data: serializeCommandResult(entry),
+      sourceMeta: [{ file: entry.sourceFile, commandId: entry.commandId, section: entry.group }],
+      warnings: [],
+    };
+  }
   return {
     ok: true,
-    data: serialize(entry),
-    sourceMeta: [{ file: entry.sourceFile, commandId: entry.commandId, section: entry.group }],
+    data: serializeCommandCompactText(entry),
+    sourceMeta: [],
     warnings: [],
   };
 }
