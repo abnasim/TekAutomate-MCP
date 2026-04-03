@@ -2,15 +2,17 @@ import { sendScpiProxy } from '../core/instrumentProxy';
 import type { ToolResult } from '../core/schemas';
 
 interface Input {
-  action: 'snapshot' | 'diff';
+  action: 'snapshot' | 'diff' | 'inspect';
   executorUrl: string;
   visaResource: string;
   backend: string;
   liveMode?: boolean;
   timeoutMs?: number;
   modelFamily?: string;
-  /** Optional filter — only return changes under this SCPI root (e.g. "TRIGGER", "BUS", "MEASUREMENT") */
+  /** Optional filter — only return commands/changes under this SCPI root (e.g. "TRIGGER", "BUS", "MEASUREMENT") */
   filter?: string;
+  /** For inspect: max commands to return (default 50) */
+  limit?: number;
 }
 
 // ── In-memory snapshot store (per instrument) ───────────────────────
@@ -195,8 +197,8 @@ export async function discoverScpi(input: Input): Promise<ToolResult<Record<stri
   if (!input.liveMode) {
     return { ok: false, data: { error: 'NOT_LIVE', message: 'liveMode must be true.' }, sourceMeta: [], warnings: ['liveMode is not enabled.'] };
   }
-  if (!input.action || !['snapshot', 'diff'].includes(input.action)) {
-    return { ok: false, data: { error: 'INVALID_ACTION', message: 'action must be "snapshot" or "diff".' }, sourceMeta: [], warnings: ['Valid actions: snapshot, diff'] };
+  if (!input.action || !['snapshot', 'diff', 'inspect'].includes(input.action)) {
+    return { ok: false, data: { error: 'INVALID_ACTION', message: 'action must be "snapshot", "diff", or "inspect".' }, sourceMeta: [], warnings: ['Valid actions: snapshot, diff, inspect'] };
   }
 
   const key = input.visaResource || 'default';
@@ -240,6 +242,48 @@ export async function discoverScpi(input: Input): Promise<ToolResult<Record<stri
         message: `Captured ${commands.size} instrument settings. Use action:"diff" after making changes to see what changed.`,
       },
       sourceMeta: [{ type: 'lrn_snapshot', instrument: lrn.instrument }],
+      warnings: [],
+    };
+  }
+
+  // ── INSPECT — return stored commands from last snapshot ────────────
+  if (input.action === 'inspect') {
+    const stored = snapshots.get(key);
+    if (!stored) {
+      return {
+        ok: false,
+        data: { error: 'NO_SNAPSHOT', message: 'No snapshot found. Run action:"snapshot" first.' },
+        sourceMeta: [],
+        warnings: ['Take a snapshot first with action:"snapshot".'],
+      };
+    }
+
+    const filterUpper = input.filter?.toUpperCase();
+    const limit = Math.min(input.limit ?? 50, 200);
+    const entries: Array<{ command: string; value: string }> = [];
+
+    for (const [header, value] of stored.commands) {
+      if (filterUpper && !header.startsWith(filterUpper)) continue;
+      entries.push({ command: header, value });
+      if (entries.length >= limit) break;
+    }
+
+    // Format as compact text — one line per command
+    const text = entries.map(e => e.value ? `${e.command} ${e.value}` : e.command).join('\n');
+
+    return {
+      ok: true,
+      data: {
+        action: 'inspect',
+        instrument: stored.instrument,
+        snapshotTimestamp: stored.timestamp,
+        filter: input.filter || null,
+        returned: entries.length,
+        totalInSnapshot: stored.commands.size,
+        commands: text,
+        message: `Returned ${entries.length} commands${filterUpper ? ` under ${filterUpper}` : ''} from stored snapshot.`,
+      },
+      sourceMeta: [{ type: 'lrn_inspect', instrument: stored.instrument }],
       warnings: [],
     };
   }

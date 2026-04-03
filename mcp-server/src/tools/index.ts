@@ -860,9 +860,10 @@ export function getToolDefinitions() {
       name: 'discover_scpi',
       description:
         'Instrument State Discovery — captures and diffs scope settings using *LRN? command.\n\n' +
-        'Two actions:\n' +
+        'Three actions:\n' +
         '- action:"snapshot" — Captures full instrument state via *LRN? and stores it as baseline.\n' +
-        '- action:"diff" — Captures current state and diffs against baseline. Returns exact SCPI commands that changed.\n\n' +
+        '- action:"diff" — Captures current state and diffs against baseline. Returns exact SCPI commands that changed.\n' +
+        '- action:"inspect" — Returns stored commands from last snapshot. Use filter to narrow (e.g. filter:"TRIGGER"). Use with get_command_by_header for full details on specific commands.\n\n' +
         'Use cases:\n' +
         '- Take a snapshot on connect to establish baseline instrument state\n' +
         '- After AI sends commands, diff to verify what changed and detect side effects\n' +
@@ -879,8 +880,12 @@ export function getToolDefinitions() {
         properties: {
           action: {
             type: 'string',
-            enum: ['snapshot', 'diff'],
-            description: 'snapshot = capture baseline, diff = compare against baseline.',
+            enum: ['snapshot', 'diff', 'inspect'],
+            description: 'snapshot = capture baseline, diff = compare against baseline, inspect = browse stored commands.',
+          },
+          limit: {
+            type: 'number',
+            description: 'For inspect: max commands to return (default 50, max 200).',
           },
           filter: {
             type: 'string',
