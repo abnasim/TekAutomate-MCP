@@ -100,3 +100,26 @@ export function serializeCommandSearchResult(entry: CommandRecord): Record<strin
     group: entry.group,
   };
 }
+
+/** Compact serialization — syntax, args, one example, valid values. No raw/conditions/notes bloat. */
+export function serializeCommandCompact(entry: CommandRecord): Record<string, unknown> {
+  const firstValidValues = entry.arguments?.[0]?.validValues as Record<string, unknown> | undefined;
+  const normalizedValues =
+    (Array.isArray(firstValidValues?.values) ? (firstValidValues.values as unknown[]) : undefined) ||
+    (Array.isArray(firstValidValues?.options) ? (firstValidValues.options as unknown[]) : undefined);
+
+  return {
+    header: entry.header,
+    commandType: entry.commandType,
+    shortDescription: entry.shortDescription,
+    syntax: entry.syntax,
+    example: entry.codeExamples?.[0]
+      ? { description: entry.codeExamples[0].description || undefined, scpi: entry.codeExamples[0].scpi?.code }
+      : undefined,
+    validValues: normalizedValues
+      ? normalizedValues.filter((v): v is string | number | boolean => ['string', 'number', 'boolean'].includes(typeof v))
+      : undefined,
+    arguments: serializeArguments(entry.arguments),
+    relatedCommands: entry.relatedCommands?.length ? entry.relatedCommands.slice(0, 5) : undefined,
+  };
+}
