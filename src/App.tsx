@@ -2302,7 +2302,7 @@ function AppInner() {
         type === 'write' ? { command: '', cmdParams: [], paramValues: {} } :
         type === 'set_and_query' ? { command: '', cmdParams: [], paramValues: {} } :
         type === 'save_waveform' ? { source: 'CH1', filename: 'waveform.bin', command: '', width: 1, encoding: 'RIBinary', start: 1, stop: null, format: 'bin', performance: 'fastest' } :
-        type === 'save_screenshot' ? { filename: 'screenshot.png', scopeType: /\b(dpo|5k|7k|70k)\b/i.test(`${activeInstrumentConfig?.modelFamily || ''} ${activeInstrumentConfig?.deviceDriver || ''}`) ? 'legacy' : 'modern', method: 'pc_transfer' } :
+        type === 'save_screenshot' ? { filename: 'screenshot.png', scopeType: /\b(dpo|mdo|5k|7k|70k)\b/i.test(`${activeInstrumentConfig?.modelFamily || ''} ${activeInstrumentConfig?.deviceDriver || ''}`) ? 'legacy' : 'modern', method: 'pc_transfer' } :
         type === 'error_check' ? { command: 'ALLEV?' } :
         type === 'connect' ? { instrumentId: devices[0]?.id || '', instrumentIds: [], printIdn: false } :
         type === 'disconnect' ? { instrumentId: '', instrumentIds: [] } :
@@ -6432,7 +6432,7 @@ if __name__ == "__main__":
 
     const visaResource = getVisaResourceString(activeInstrumentConfig);
     const familyHint = `${activeInstrumentConfig.modelFamily || ''} ${activeInstrumentConfig.deviceDriver || ''}`.toLowerCase();
-    const scopeType = /\b(dpo|5k|7k|70k)\b/.test(familyHint) ? 'legacy' : 'modern';
+    const scopeType = /\b(dpo|mdo|5k|7k|70k)\b/i.test(familyHint) ? 'legacy' : 'modern';
     setLiveModeCapturing(true);
     setLiveModeError(null);
     try {
@@ -8843,9 +8843,15 @@ Keep under 120 words. No headings. Bullets only. Stay on this command. Do not de
                                                         <span className="text-gray-500 dark:text-zinc-400">Conn:</span>
                                                         <span className="ml-1 font-medium text-gray-900 dark:text-zinc-100">{node.connectionType.toUpperCase()}</span>
                                                         <span className="mx-1 text-gray-400 dark:text-zinc-500">|</span>
-                                                        <span className="font-mono text-gray-900 dark:text-zinc-200">{node.host || 'N/A'}</span>
-                                                        {node.port && node.connectionType !== 'tcpip' && (
-                                                          <span className="text-gray-500 dark:text-zinc-400">:{node.port}</span>
+                                                        {node.connectionType === 'gpib' ? (
+                                                          <span className="font-mono text-gray-900 dark:text-zinc-200">Board {node.gpibBoard ?? 0}, Addr {node.gpibAddress ?? 1}</span>
+                                                        ) : (
+                                                          <>
+                                                            <span className="font-mono text-gray-900 dark:text-zinc-200">{node.host || 'N/A'}</span>
+                                                            {node.port && node.connectionType !== 'tcpip' && (
+                                                              <span className="text-gray-500 dark:text-zinc-400">:{node.port}</span>
+                                                            )}
+                                                          </>
                                                         )}
                                                       </div>
                                                       <div className="text-[10px] font-mono text-gray-600 dark:text-zinc-400 truncate" title={nodeVisaResourceString}>
@@ -9286,9 +9292,15 @@ Keep under 120 words. No headings. Bullets only. Stay on this command. Do not de
                                               <span className="text-gray-500 dark:text-zinc-400">Conn:</span>
                                               <span className="ml-1 font-medium text-gray-900 dark:text-zinc-100">{node.connectionType.toUpperCase()}</span>
                                               <span className="mx-1 text-gray-400 dark:text-zinc-500">|</span>
-                                              <span className="font-mono text-gray-900 dark:text-zinc-200">{node.host || 'N/A'}</span>
-                                              {node.port && node.connectionType !== 'tcpip' && (
-                                                <span className="text-gray-500 dark:text-zinc-400">:{node.port}</span>
+                                              {node.connectionType === 'gpib' ? (
+                                                <span className="font-mono text-gray-900 dark:text-zinc-200">Board {node.gpibBoard ?? 0}, Addr {node.gpibAddress ?? 1}</span>
+                                              ) : (
+                                                <>
+                                                  <span className="font-mono text-gray-900 dark:text-zinc-200">{node.host || 'N/A'}</span>
+                                                  {node.port && node.connectionType !== 'tcpip' && (
+                                                    <span className="text-gray-500 dark:text-zinc-400">:{node.port}</span>
+                                                  )}
+                                                </>
                                               )}
                                             </div>
                                             <div className="text-[10px] font-mono text-gray-600 dark:text-zinc-400 truncate" title={visaResourceString}>
