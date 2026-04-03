@@ -134,14 +134,20 @@ interface QuickAction {
   id: string;
   label: string;
   icon: string;
-  placeholder: string;
-  toolName: string;
+  type: 'button' | 'input';
+  /** For button type: prompt to send on click */
+  prompt?: string;
+  /** For input type: placeholder text */
+  placeholder?: string;
+  /** For input type: tool to call */
+  toolName?: string;
 }
 
 function getQuickActions(isLiveMode: boolean): QuickAction[] {
   return isLiveMode
     ? [
-        { id: 'discover_scpi', label: 'Discover SCPI', icon: '🔍', placeholder: 'e.g. horizontal, trigger, channel... or leave empty to start discovery mode', toolName: 'search_scpi' },
+        { id: 'discover_scpi', label: 'Discover SCPI', icon: '🔍', type: 'button', prompt: 'Start SCPI discovery mode. Take a baseline snapshot of the scope now. Then explain to me that I can go make any changes I want on the scope — adjust settings, configure triggers, add measurements, set up decode, anything — and when I tell you I am done, you will capture the scope state again and show me the exact SCPI commands for everything I changed.' },
+        { id: 'attach_screenshot', label: 'Screenshot', icon: '📷', type: 'button', prompt: '__ATTACH_SCREENSHOT__' },
       ]
     : [];
 }
@@ -1523,6 +1529,49 @@ function OpenAiChatKitPanelInner({
             background: chatKitTheme === 'dark' ? 'rgba(255,255,255,0.02)' : 'rgba(0,0,0,0.01)',
           }}>
             {quickActions.map((qa) => {
+              // Button type — simple click action
+              if (qa.type === 'button') {
+                return (
+                  <button
+                    key={qa.id}
+                    type="button"
+                    onClick={() => {
+                      if (qa.prompt === '__ATTACH_SCREENSHOT__') {
+                        // Screenshot attach — send latest screenshot as message
+                        const screenshot = latestLiveScreenshot;
+                        if (!screenshot?.dataUrl) {
+                          void handleStarterPrompt('No screenshot available yet. Take a screenshot first by asking me to capture one, or run a command on the scope.');
+                          return;
+                        }
+                        void handleStarterPrompt(`Here is the current scope screenshot. Analyze what you see and describe the waveforms, measurements, and any issues visible.\n\n![Scope Screenshot](${screenshot.dataUrl})`);
+                      } else if (qa.prompt) {
+                        void handleStarterPrompt(qa.prompt);
+                      }
+                    }}
+                    disabled={isSendingPrompt}
+                    style={{
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: 4,
+                      padding: '4px 10px',
+                      fontSize: 12,
+                      fontWeight: 500,
+                      borderRadius: 6,
+                      border: `1px solid ${chatKitTheme === 'dark' ? 'rgba(255,255,255,0.1)' : 'rgba(0,0,0,0.1)'}`,
+                      color: chatKitTheme === 'dark' ? '#94a3b8' : '#64748b',
+                      background: 'transparent',
+                      cursor: isSendingPrompt ? 'default' : 'pointer',
+                      opacity: isSendingPrompt ? 0.5 : 1,
+                      whiteSpace: 'nowrap',
+                    }}
+                  >
+                    <span>{qa.icon}</span>
+                    <span>{qa.label}</span>
+                  </button>
+                );
+              }
+
+              // Input type — toggle with text input (kept for future use)
               const isActive = activeQuickAction === qa.id;
               return (
                 <div key={qa.id} style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
@@ -1569,26 +1618,19 @@ function OpenAiChatKitPanelInner({
                       onSubmit={(e) => {
                         e.preventDefault();
                         const val = quickActionInputRef.current?.value?.trim();
+                        if (!val || !qa.toolName) return;
                         setActiveQuickAction(null);
-
-                        if (!val) {
-                          // Empty input → start interactive discover mode
-                          void handleStarterPrompt('Start SCPI discovery mode. Take a baseline snapshot of the scope now. Then explain to me that I can go make any changes I want on the scope — adjust settings, configure triggers, add measurements, set up decode, anything — and when I tell you I am done, you will capture the scope state again and show me the exact SCPI commands for everything I changed.');
-                          return;
-                        }
-
-                        // Typed input → search for that keyword
                         void (async () => {
                           try {
                             const result = await executeMcpTool(
-                              'search_scpi',
+                              qa.toolName!,
                               { query: val, limit: 10 },
                               instrumentEndpoint || undefined,
                               { modelFamily: flowContext?.modelFamily, deviceDriver: flowContext?.deviceDriver },
                             );
-                            void handleStarterPrompt(`I searched SCPI commands for "${val}". Here are the results:\n\n${JSON.stringify(result, null, 2)}\n\nSummarize what was found and list the relevant commands with their syntax.`);
+                            void handleStarterPrompt(`Search results for "${val}":\n\n${JSON.stringify(result, null, 2)}\n\nSummarize what was found.`);
                           } catch (err) {
-                            void handleStarterPrompt(`SCPI search for "${val}" failed: ${err instanceof Error ? err.message : 'Unknown error'}. Can you help troubleshoot?`);
+                            void handleStarterPrompt(`Search for "${val}" failed: ${err instanceof Error ? err.message : 'Unknown error'}`);
                           }
                         })();
                       }}
