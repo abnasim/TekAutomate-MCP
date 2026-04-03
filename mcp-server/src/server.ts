@@ -897,7 +897,7 @@ function filterTools(q) {
         }
         // Inject instrument endpoint for live tools
         let args = body.args || {};
-        const liveTools = ['get_instrument_state', 'probe_command', 'send_scpi', 'capture_screenshot', 'get_visa_resources', 'get_environment'];
+        const liveTools = ['get_instrument_state', 'probe_command', 'send_scpi', 'capture_screenshot', 'get_visa_resources', 'get_environment', 'discover_scpi'];
         if (liveTools.includes(toolName) && body.instrumentEndpoint) {
           args = {
             executorUrl: body.instrumentEndpoint.executorUrl,
