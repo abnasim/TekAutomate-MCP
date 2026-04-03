@@ -146,7 +146,7 @@ function getQuickActions(isLiveMode: boolean): QuickAction[] {
   return isLiveMode
     ? [
         { id: 'check_instrument', label: 'Check Instrument', icon: '🔗', type: 'button', prompt: 'Check the connected instrument and capture full state. Call get_instrument_info, then discover_scpi action:"snapshot". Keep lrnCommands as session context. Summarize briefly.' },
-        { id: 'discover_scpi', label: 'Discover SCPI', icon: '🔍', type: 'button', prompt: 'Start SCPI discovery mode. Run discover_scpi action:"snapshot" for baseline if you do not have one. Then tell me to go make changes on the scope. When I say done, run discover_scpi action:"diff" to show the exact SCPI commands that changed.' },
+        { id: 'discover_scpi', label: 'Discover SCPI', icon: '🔍', type: 'button', prompt: 'Start SCPI discovery mode. Run discover_scpi action:"snapshot" for baseline. Then tell me to go make changes on the scope. When I say done, send *LRN? via send_scpi and compare against the baseline lrnCommands you already have to show me the exact SCPI commands that changed.' },
       ]
     : [];
 }
