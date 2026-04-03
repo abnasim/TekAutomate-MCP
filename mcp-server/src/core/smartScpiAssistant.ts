@@ -55,7 +55,6 @@ export interface CommandSuggestion {
   }>;
   relatedCommands: string[];
   usage: string;
-  fullEntry: any; // Complete command record for AI
 }
 
 /**
@@ -929,7 +928,7 @@ Which category would you like to explore?`;
         codeExamples: this.generateCodeExamples(cmd), // Generate proper examples
         relatedCommands: this.findRelatedCommands(cmd, result.commands), // Find related commands
         usage: cmd.syntax.set || cmd.syntax.query || 'No syntax available',
-        fullEntry: cmd
+        // fullEntry removed — saves ~5KB per command in AI responses
       }));
       return {
         summary: `Found ${result.commands.length} commands ready to apply`,
