@@ -1,5 +1,5 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
-import { Code, Terminal, Copy, Pencil, Sparkles, Play, RotateCcw, RotateCw, Trash2 } from 'lucide-react';
+import { Code, Terminal, Copy, Pencil, Sparkles, Play, RotateCcw, RotateCw, Trash2, Mail } from 'lucide-react';
 import { streamMcpChat } from '../../utils/ai/mcpClient';
 import { StepsListPreview } from './StepsListPreview';
 import type { StepPreview } from './StepsListPreview';
@@ -454,9 +454,7 @@ function ExecutePageContent({
                 <span className="inline-flex items-center gap-2">
                   Proposals
                   {workflowProposal?.actions?.length ? (
-                    <span className="rounded-full bg-cyan-500/15 px-2 py-0.5 text-[10px] font-semibold text-cyan-700 dark:text-cyan-300">
-                      {workflowProposal.actions.length}
-                    </span>
+                    <Mail size={14} className="text-cyan-600 dark:text-cyan-400" />
                   ) : null}
                 </span>
               </button>
