@@ -1,6 +1,6 @@
 import { getCommandIndex } from '../core/commandIndex';
 import type { ToolResult } from '../core/schemas';
-import { serializeCommandResult, serializeCommandCompact } from './commandResultShape';
+import { serializeCommandResult, serializeCommandCompactText } from './commandResultShape';
 
 interface GetCommandByHeaderInput {
   header: string;
@@ -20,11 +20,18 @@ export async function getCommandByHeader(
   if (!entry) {
     return { ok: false, data: null, sourceMeta: [], warnings: ['No command matched header'] };
   }
-  const serialize = input.verbosity === 'full' ? serializeCommandResult : serializeCommandCompact;
+  if (input.verbosity === 'full') {
+    return {
+      ok: true,
+      data: serializeCommandResult(entry),
+      sourceMeta: [{ file: entry.sourceFile, commandId: entry.commandId, section: entry.group }],
+      warnings: [],
+    };
+  }
   return {
     ok: true,
-    data: serialize(entry),
-    sourceMeta: [{ file: entry.sourceFile, commandId: entry.commandId, section: entry.group }],
+    data: serializeCommandCompactText(entry),
+    sourceMeta: [],
     warnings: [],
   };
 }

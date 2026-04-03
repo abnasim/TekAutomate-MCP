@@ -139,7 +139,36 @@ export function serializeCommandSearchResult(entry: CommandRecord): Record<strin
   };
 }
 
-/** Compact serialization - syntax, args, one example. Deduplicates enum lists. */
+/** Compact text serialization — human-readable, token-efficient. ~150 tokens vs ~400 for JSON. */
+export function serializeCommandCompactText(entry: CommandRecord): string {
+  const lines: string[] = [];
+  lines.push(`Command: ${entry.header}`);
+  if (entry.shortDescription) lines.push(`Description: ${entry.shortDescription}`);
+  if (entry.syntax?.set) lines.push(`Set: ${entry.syntax.set}`);
+  if (entry.syntax?.query) lines.push(`Query: ${entry.syntax.query}`);
+
+  const args = entry.arguments?.slice(0, 8);
+  if (args?.length) {
+    lines.push('Parameters:');
+    for (const arg of args) {
+      const desc = arg.description?.slice(0, 80) || '';
+      lines.push(`  ${arg.name} (${arg.type}${arg.required ? ', required' : ''}): ${desc}`);
+    }
+  }
+
+  const ex = entry.codeExamples?.[0];
+  if (ex?.scpi?.code) {
+    lines.push(`Example: ${ex.scpi.code}${ex.description ? ' — ' + ex.description : ''}`);
+  }
+
+  if (entry.relatedCommands?.length) {
+    lines.push(`Related: ${entry.relatedCommands.slice(0, 5).join(', ')}`);
+  }
+
+  return lines.join('\n');
+}
+
+/** Compact JSON serialization — syntax, args, one example. Deduplicates enum lists. */
 export function serializeCommandCompact(entry: CommandRecord): Record<string, unknown> {
   const firstValidValues = entry.arguments?.[0]?.validValues as Record<string, unknown> | undefined;
   const normalizedValues = normalizeScalarValues(
