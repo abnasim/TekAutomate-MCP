@@ -144,9 +144,11 @@ function buildCommandCard(record: CommandRecord): string {
       lines.push(`  ${arg.name} (${arg.type}${arg.required ? ', required' : ''}): ${desc}`);
     }
   }
-  const ex = record.codeExamples?.[0];
-  if (ex?.scpi?.code) {
-    lines.push(`Example: ${ex.scpi.code}${ex.description ? ' — ' + ex.description : ''}`);
+  const examples = record.codeExamples?.slice(0, 3).filter(e => e?.scpi?.code);
+  if (examples?.length) {
+    for (const ex of examples) {
+      lines.push(`Example: ${ex.scpi!.code}${ex.description ? ' — ' + ex.description : ''}`);
+    }
   }
   return lines.join('\n');
 }
