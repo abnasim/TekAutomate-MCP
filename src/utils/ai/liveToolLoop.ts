@@ -329,10 +329,6 @@ async function verifyScpiCommands(
   }
 }
 
-// Cache the last known executor URL for discover_scpi bridge
-let _cachedExecutorUrl: string | null = null;
-let _cachedScopeVisa: string | null = null;
-
 /**
  * Execute a tool call. Instrument tools go directly to the executor (browser → executor).
  * Knowledge/search tools go through MCP server (/tools/execute).
@@ -343,41 +339,19 @@ export async function executeMcpTool(
   instrumentEndpoint?: LiveToolLoopParams['instrumentEndpoint'],
   flowContext?: LiveToolLoopParams['flowContext']
 ): Promise<unknown> {
-  // Cache executor URL for discover_scpi bridge
-  if (instrumentEndpoint?.executorUrl) {
-    _cachedExecutorUrl = instrumentEndpoint.executorUrl;
-    _cachedScopeVisa = instrumentEndpoint.visaResource;
-  }
-
-  // discover_scpi snapshot/diff: browser fetches *LRN? from local executor,
-  // then forwards to MCP server for storage/diff.
-  const discoverExecUrl = instrumentEndpoint?.executorUrl || _cachedExecutorUrl;
-  const discoverVisa = instrumentEndpoint?.visaResource || _cachedScopeVisa;
+  // discover_scpi: use send_scpi path (which works) to get *LRN?, then forward to MCP
   if (toolName === 'discover_scpi') {
-    console.log('[discover_scpi] executorUrl:', discoverExecUrl || 'MISSING', 'source:', instrumentEndpoint?.executorUrl ? 'live' : (_cachedExecutorUrl ? 'cached' : 'none'));
-  }
-  if (toolName === 'discover_scpi' && discoverExecUrl) {
     const discoverAction = String(args.action || 'snapshot');
     if (discoverAction === 'snapshot' || discoverAction === 'diff') {
-      const execUrl = discoverExecUrl.replace(/\/$/, '');
-      const scopeVisa = discoverVisa;
-      const res = await fetch(`${execUrl}/run`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          protocol_version: 1,
-          action: 'send_scpi',
-          timeout_sec: 20,
-          scope_visa: scopeVisa,
-          liveMode: true,
-          commands: ['*LRN?'],
-          timeout_ms: 15000,
-        }),
-      });
-      if (!res.ok) throw new Error(`Executor error ${res.status}: *LRN? failed`);
-      const lrnResult = await res.json() as Record<string, unknown>;
+      // Step 1: Call send_scpi *LRN? through the same path that already works
+      const lrnResult = await executeMcpTool(
+        'send_scpi',
+        { commands: ['*LRN?'], timeout_ms: 15000 },
+        instrumentEndpoint,
+        flowContext,
+      );
 
-      // Forward to MCP for storage/diff
+      // Step 2: Forward to MCP for storage/diff
       const mcpHost = resolveMcpHost();
       if (mcpHost) {
         try {
@@ -395,9 +369,9 @@ export async function executeMcpTool(
             const mcpJson = await mcpRes.json() as { ok: boolean; result: unknown };
             if (mcpJson.ok) {
               const mcpResult = mcpJson.result as Record<string, unknown>;
-              // For snapshot: include raw *LRN? so AI has full context
               if (discoverAction === 'snapshot') {
-                const data = lrnResult?.data ?? lrnResult;
+                // Include raw *LRN? so AI has full instrument context
+                const data = (lrnResult as Record<string, unknown>)?.data ?? lrnResult;
                 const responses = ((data as Record<string, unknown>)?.responses ?? (data as Record<string, unknown>)?.results ?? []) as Array<{ response?: string }>;
                 const rawLrn = responses[0]?.response || String((data as Record<string, unknown>)?.stdout || '');
                 if (rawLrn) {
@@ -409,6 +383,7 @@ export async function executeMcpTool(
           }
         } catch { /* fall through */ }
       }
+      // Fallback: return raw *LRN? result
       return { ok: true, action: discoverAction, data: lrnResult };
     }
     // inspect: falls through to MCP path below
