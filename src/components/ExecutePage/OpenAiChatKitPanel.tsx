@@ -117,10 +117,10 @@ function getStartScreenGreeting(isLiveMode: boolean): string {
 function getStartScreenPrompts(isLiveMode: boolean): Array<{ label: string; prompt: string }> {
   return isLiveMode
     ? [
-        { label: 'Check connection', prompt: 'Check the connected instrument, capture a baseline snapshot, and tell me what scope is online.' },
-        { label: 'Capture scope state', prompt: 'Take a snapshot of the current scope configuration and summarize what is configured.' },
-        { label: 'Discover SCPI', prompt: 'Start SCPI discovery mode. Take a baseline snapshot of the scope now. Then explain to me that I can go make any changes I want on the scope — adjust settings, configure triggers, add measurements, set up decode, anything — and when I tell you I am done, you will capture the scope state again and show me the exact SCPI commands for everything I changed.' },
-        { label: 'Set scope to default', prompt: 'Reset the scope to factory defaults using *RST and confirm the reset state.' },
+        { label: 'Check connection', prompt: 'Check the connected instrument. Send *IDN? via send_scpi to identify it. Then send *LRN? via send_scpi to capture the full instrument state — keep that response as your session context for all commands and current values.' },
+        { label: 'Capture scope state', prompt: 'Send *LRN? via send_scpi to capture the full current scope configuration. Keep the response as your context. Summarize the key settings: channels, trigger, horizontal, acquisition, any active measurements or buses.' },
+        { label: 'Discover SCPI', prompt: 'Start SCPI discovery mode. Send *LRN? via send_scpi to capture a baseline of the scope state. Then tell me I can go make any changes I want on the scope — adjust settings, configure triggers, add measurements, set up decode, anything. When I say done, send *LRN? again and diff against the baseline to show me the exact SCPI commands for everything I changed.' },
+        { label: 'Set scope to default', prompt: 'Reset the scope to factory defaults. Send *RST via send_scpi, then *OPC? to wait for completion, then *LRN? to capture the reset state as your session context.' },
         { label: 'What can you do?', prompt: 'What can you do in Live mode? Give me a brief overview.' },
       ]
     : [
