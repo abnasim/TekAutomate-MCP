@@ -7037,7 +7037,8 @@ if __name__ == "__main__":
     const normalizedQuery = q.replace(/[\s:]/g, ''); // Remove spaces/colons from full query
     
     // For parameterized matching - replace numbers with pattern to match <x>
-    const parameterizedQuery = normalizedQuery.replace(/(\d+)/g, '(?:\\d+|<[xn]>)');
+    const escapeRegex = (s: string) => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+    const parameterizedQuery = escapeRegex(normalizedQuery).replace(/(\d+)/g, '(?:\\d+|<[xn]>)');
     const parameterizedRegex = new RegExp(parameterizedQuery, 'i');
     
     const scored = commandLibrary.map((cmd) => {
