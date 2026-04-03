@@ -859,46 +859,40 @@ export function getToolDefinitions() {
     {
       name: 'discover_scpi',
       description:
-        'SCPI Command Tree Discovery — systematically probes a live instrument to find valid command paths.\n\n' +
-        'Two-pass adaptive approach:\n' +
-        '1. Depth-1: Probes base path + ~50 universal & context-aware suffixes (0.8s timeout)\n' +
-        '2. Depth-2: Auto-expands hits with semicolons (multi-channel responses) into :CH1-:CH8 sub-paths\n\n' +
-        'Context-aware: detects keywords in basePath (trigger, sv, ch, measurement, display, etc.) ' +
-        'and adds relevant suffixes automatically.\n\n' +
-        'Use when:\n' +
-        '- search_scpi / smart_scpi_lookup returns no results for a known feature\n' +
-        '- You suspect undocumented or mode-specific commands exist\n' +
-        '- You need to map the command tree under a subsystem\n\n' +
-        'Examples:\n' +
-        '- discover_scpi({basePath: "TRIGger:A:LEVel"}) → finds :CH1, :MAGnitude, :MAGnitude:CH1, etc.\n' +
-        '- discover_scpi({basePath: "SV:CH1"}) → finds Spectrum View sub-paths\n' +
-        '- discover_scpi({basePath: "CH<x>:SV"}) → expands CH1-CH4 and probes all\n\n' +
-        'Key insight: invalid SCPI queries timeout (no response), valid ones return in <200ms. ' +
-        'So timeout = invalid, response = valid.\n\n' +
-        'Requires liveMode=true. Read-only (only sends queries, never sets values). Max 100 probes.',
+        'Instrument State Discovery — captures and diffs scope settings using *LRN? command.\n\n' +
+        'Two actions:\n' +
+        '- action:"snapshot" — Captures full instrument state via *LRN? and stores it as baseline.\n' +
+        '- action:"diff" — Captures current state and diffs against baseline. Returns exact SCPI commands that changed.\n\n' +
+        'Use cases:\n' +
+        '- Take a snapshot on connect to establish baseline instrument state\n' +
+        '- After AI sends commands, diff to verify what changed and detect side effects\n' +
+        '- User configures scope manually, then diff to capture the exact SCPI recipe\n\n' +
+        'The diff returns:\n' +
+        '- Changed commands (before → after values)\n' +
+        '- Added commands (new settings)\n' +
+        '- Removed commands\n' +
+        '- scpiCommands array with exact set commands to reproduce all changes\n\n' +
+        'Optional filter parameter narrows diff to a specific SCPI root (e.g. "TRIGGER", "BUS", "MEASUREMENT").\n\n' +
+        'Safe: only sends *LRN? and *IDN? queries. Never sends set commands. No risk to instrument.',
       parameters: {
         type: 'object',
         properties: {
-          basePath: {
+          action: {
             type: 'string',
-            description: 'Base SCPI path to explore. e.g. "TRIGger:A:LEVel", "SV:CH1", "CH<x>:BANdwidth". Use <x> for channel placeholders.',
+            enum: ['snapshot', 'diff'],
+            description: 'snapshot = capture baseline, diff = compare against baseline.',
+          },
+          filter: {
+            type: 'string',
+            description: 'Optional SCPI root filter for diff results. e.g. "TRIGGER", "BUS", "MEASUREMENT", "CH1".',
           },
           timeoutMs: {
             type: 'number',
-            description: 'Per-command timeout in ms (default 800, range 300-2000). Valid SCPI returns in 50-200ms, so 800ms is generous. Lower = faster.',
+            description: 'Timeout for *LRN? query in ms (default 10000, max 30000). Large scopes may need more time.',
           },
-          maxProbes: {
-            type: 'number',
-            description: 'Max total probes including depth-2 expansion (default 100, max 150). Prevents accidental long waits.',
-          },
-          executorUrl: { type: 'string' },
-          visaResource: { type: 'string' },
-          backend: { type: 'string' },
-          liveMode: { type: 'boolean' },
-          modelFamily: { type: 'string' },
         },
-        required: ['basePath'],
-        additionalProperties: false,
+        required: ['action'],
+        additionalProperties: true,
       },
     },
   ];

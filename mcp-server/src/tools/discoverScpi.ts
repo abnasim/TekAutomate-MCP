@@ -2,123 +2,147 @@ import { sendScpiProxy } from '../core/instrumentProxy';
 import type { ToolResult } from '../core/schemas';
 
 interface Input {
-  basePath: string;
+  action: 'snapshot' | 'diff';
   executorUrl: string;
   visaResource: string;
   backend: string;
   liveMode?: boolean;
   timeoutMs?: number;
-  maxProbes?: number;
   modelFamily?: string;
+  /** Optional filter — only return changes under this SCPI root (e.g. "TRIGGER", "BUS", "MEASUREMENT") */
+  filter?: string;
 }
 
-// ── Universal suffixes (always tried) ────────────────────────────────
-const UNIVERSAL_SUFFIXES = [
-  '', // base path itself
-  ':CH1', ':CH2', ':CH3', ':CH4', ':CH5', ':CH6', ':CH7', ':CH8',
-  ':STATE', ':STATe', ':MODe', ':TYPe', ':ENABle',
-  ':SOUrce', ':SOUrce1', ':SOUrce2',
-  ':VALue', ':LEVel',
-  ':MAGnitude', ':FREQuency', ':PHASe',
-  ':HIGh', ':LOW', ':THReshold',
-  ':SCAle', ':OFFSet', ':POSition',
-  ':FORMat', ':UNIts',
-  ':COUNt', ':NUMAVg',
-  ':SELect',
-];
-
-// ── Context-aware suffix tables ──────────────────────────────────────
-// Activated based on keywords in the base path
-const CONTEXT_SUFFIXES: Record<string, string[]> = {
-  trigger: [
-    ':LEVel', ':SLOPe', ':EDGE', ':HOLDoff', ':PULse', ':WIDth', ':RUNt',
-    ':LOGIc', ':SETLevel', ':COUPling', ':SOUrce', ':MAGnitude',
-    ':FREQuency', ':PHASe', ':MAG_VS_TIME', ':FREQ_VS_TIME', ':PHASE_VS_TIME',
-  ],
-  sv: [
-    ':CENTERFrequency', ':SPAN', ':RBW', ':NUMAVg', ':WINDow',
-    ':STARTFrequency', ':STOPFrequency',
-    ':RF_MAGnitude', ':RF_FREQuency', ':RF_PHASe', ':RF_AVErage',
-    ':SELect:RF_MAGnitude', ':SELect:RF_FREQuency', ':SELect:RF_PHASe',
-    ':SPANRBWRatio', ':SPECTRogram',
-  ],
-  ch: [
-    ':SCAle', ':BANDWidth', ':TERmination', ':DESKew',
-    ':COUPling', ':OFFSet', ':POSition', ':INVert',
-    ':LABel', ':PRObe', ':SV:STATE', ':SV:CENTERFrequency',
-  ],
-  measurement: [
-    ':TYPe', ':SOUrce1', ':SOUrce2', ':RESUlts',
-    ':RESUlts:CURRentacq:MEAN', ':RESUlts:CURRentacq:MAXimum',
-    ':RESUlts:CURRentacq:MINimum', ':RESUlts:ALLAcqs:MEAN',
-    ':STATIstics:ENABle', ':STATIstics:COUNt',
-    ':GAting:TYPe', ':GAting:STARTtime', ':GAting:ENDtime',
-  ],
-  display: [
-    ':WAVEform', ':PERSistence', ':SELect', ':INTENSity',
-    ':WAVEView1:ZOOM', ':GRAticule', ':COLors',
-  ],
-  horizontal: [
-    ':SCAle', ':RECOrdlength', ':SAMPLERate', ':POSition',
-    ':MODe', ':DELay:MODe', ':DELay:TIMe', ':FASTframe',
-    ':FASTframe:STATE', ':FASTframe:COUNt',
-  ],
-  acquire: [
-    ':MODe', ':NUMAVg', ':STOPAfter', ':STATE',
-    ':NUMEnv', ':MAGNivu',
-  ],
-  math: [
-    ':FUNCtion', ':SOUrce1', ':SOUrce2', ':SPECTral',
-    ':TYPe', ':DEFine', ':VERTical:SCAle', ':VERTical:POSition',
-  ],
-  bus: [
-    ':TYPe', ':I2C', ':SPI', ':UART', ':CAN', ':LIN', ':SENT',
-    ':I2C:ADDRess', ':I2C:SCLK', ':I2C:SDA',
-    ':SPI:SCLK', ':SPI:SS', ':SPI:MOSI', ':SPI:MISO',
-  ],
-  afg: [
-    ':FUNCtion', ':FREQuency', ':AMPLitude', ':OFFSet',
-    ':SYMMetry', ':PHASe', ':OUTPUT:STATE',
-  ],
-  plot: [
-    ':TYPe', ':SOUrce1', ':CURVe', ':VIEW',
-  ],
-};
-
-// ── Clamp timeout to safe range ──────────────────────────────────────
-function clampTimeout(ms: number | undefined): number {
-  const t = ms ?? 800;
-  return Math.max(300, Math.min(2000, t));
+// ── In-memory snapshot store (per instrument) ───────────────────────
+interface Snapshot {
+  instrument: string;
+  timestamp: string;
+  commands: Map<string, string>; // header → value
+  raw: string;
 }
 
-// ── Get context suffixes based on base path ──────────────────────────
-function getContextSuffixes(basePath: string): string[] {
-  const lower = basePath.toLowerCase();
-  const extra: string[] = [];
-  for (const [key, suffixes] of Object.entries(CONTEXT_SUFFIXES)) {
-    if (lower.includes(key)) {
-      extra.push(...suffixes);
+const snapshots = new Map<string, Snapshot>(); // keyed by visaResource
+
+// ── Parse *LRN? response into command → value map ───────────────────
+function parseLrnResponse(raw: string): Map<string, string> {
+  const commands = new Map<string, string>();
+  // Split on semicolons, handle leading colons
+  const parts = raw.split(';').map(s => s.trim()).filter(Boolean);
+
+  for (const part of parts) {
+    // Remove leading colon
+    const clean = part.startsWith(':') ? part.slice(1) : part;
+    if (!clean) continue;
+
+    // Split into header and value at the first space
+    const spaceIdx = clean.indexOf(' ');
+    if (spaceIdx === -1) {
+      // Command with no value (like *RST)
+      commands.set(clean.toUpperCase(), '');
+    } else {
+      const header = clean.slice(0, spaceIdx).toUpperCase();
+      const value = clean.slice(spaceIdx + 1).trim();
+      commands.set(header, value);
     }
   }
-  return extra;
+
+  return commands;
 }
 
-// ── Check if a response indicates a multi-channel aggregate ──────────
-// Semicolons in response = per-channel data = tree node worth expanding
-function isMultiValueResponse(response: string): boolean {
-  return response.includes(';') && response.split(';').length >= 2;
+// ── Diff two snapshots ──────────────────────────────────────────────
+interface DiffEntry {
+  command: string;
+  type: 'changed' | 'added' | 'removed';
+  before?: string;
+  after?: string;
+  /** Full set command to reproduce the change */
+  scpi: string;
 }
 
-// ── Probe a batch of queries ─────────────────────────────────────────
-async function probeBatch(
-  queries: string[],
-  input: Input,
-  timeoutMs: number,
-): Promise<{ responded: { command: string; response: string }[]; failed: string[] }> {
-  const responded: { command: string; response: string }[] = [];
-  const failed: string[] = [];
+function diffSnapshots(
+  before: Map<string, string>,
+  after: Map<string, string>,
+  filter?: string,
+): DiffEntry[] {
+  const changes: DiffEntry[] = [];
+  const filterUpper = filter?.toUpperCase();
 
-  const result = await sendScpiProxy(
+  // Find changed and added
+  for (const [header, afterValue] of after) {
+    if (filterUpper && !header.startsWith(filterUpper)) continue;
+
+    const beforeValue = before.get(header);
+    if (beforeValue === undefined) {
+      changes.push({
+        command: header,
+        type: 'added',
+        after: afterValue,
+        scpi: afterValue ? `${header} ${afterValue}` : header,
+      });
+    } else if (beforeValue !== afterValue) {
+      changes.push({
+        command: header,
+        type: 'changed',
+        before: beforeValue,
+        after: afterValue,
+        scpi: afterValue ? `${header} ${afterValue}` : header,
+      });
+    }
+  }
+
+  // Find removed
+  for (const [header, beforeValue] of before) {
+    if (filterUpper && !header.startsWith(filterUpper)) continue;
+    if (!after.has(header)) {
+      changes.push({
+        command: header,
+        type: 'removed',
+        before: beforeValue,
+        scpi: '',
+      });
+    }
+  }
+
+  return changes;
+}
+
+// ── Format diff as compact text ─────────────────────────────────────
+function formatDiffText(changes: DiffEntry[]): string {
+  if (changes.length === 0) return 'No changes detected.';
+
+  const lines: string[] = [];
+  const changed = changes.filter(c => c.type === 'changed');
+  const added = changes.filter(c => c.type === 'added');
+  const removed = changes.filter(c => c.type === 'removed');
+
+  if (changed.length) {
+    lines.push(`Changed (${changed.length}):`);
+    for (const c of changed) {
+      lines.push(`  ${c.command}: ${c.before} → ${c.after}`);
+    }
+  }
+  if (added.length) {
+    lines.push(`Added (${added.length}):`);
+    for (const c of added) {
+      lines.push(`  ${c.scpi}`);
+    }
+  }
+  if (removed.length) {
+    lines.push(`Removed (${removed.length}):`);
+    for (const c of removed) {
+      lines.push(`  ${c.command} (was: ${c.before})`);
+    }
+  }
+
+  return lines.join('\n');
+}
+
+// ── Send *LRN? and get response ─────────────────────────────────────
+async function queryLrn(input: Input): Promise<{ ok: boolean; response: string; instrument: string; error?: string }> {
+  const timeoutMs = Math.max(3000, Math.min(input.timeoutMs ?? 10000, 30000));
+
+  // Pre-flight check
+  const idnResult = await sendScpiProxy(
     {
       executorUrl: input.executorUrl,
       visaResource: input.visaResource,
@@ -126,169 +150,151 @@ async function probeBatch(
       liveMode: true,
       outputMode: 'clean',
     },
-    queries,
+    ['*IDN?'],
+    3000,
+  );
+
+  const idnData = idnResult.data as Record<string, unknown>;
+  const idnResponses = (idnData?.responses ?? idnData?.results ?? []) as Array<{ response?: string; error?: string }>;
+  const instrument = idnResponses[0]?.response?.trim() || '';
+
+  if (!instrument) {
+    return { ok: false, response: '', instrument: '', error: 'Instrument not reachable. *IDN? did not respond.' };
+  }
+
+  // Send *LRN?
+  const lrnResult = await sendScpiProxy(
+    {
+      executorUrl: input.executorUrl,
+      visaResource: input.visaResource,
+      backend: input.backend,
+      liveMode: true,
+      outputMode: 'clean',
+    },
+    ['*LRN?'],
     timeoutMs,
   );
 
-  const data = result.data as Record<string, unknown>;
-  const responses = (data?.responses ?? data?.results ?? []) as Array<{
-    command?: string;
-    response?: string;
-    error?: string;
-    status?: string;
-  }>;
+  const lrnData = lrnResult.data as Record<string, unknown>;
+  const lrnResponses = (lrnData?.responses ?? lrnData?.results ?? []) as Array<{ response?: string; error?: string }>;
+  const lrnResponse = lrnResponses[0]?.response?.trim()
+    || String(lrnData?.stdout || '').trim();
 
-  if (Array.isArray(responses) && responses.length > 0) {
-    for (const r of responses) {
-      const cmd = r.command || '';
-      if (r.error || r.status === 'error' || r.status === 'timeout') {
-        failed.push(cmd);
-      } else if (r.response !== undefined && r.response !== null) {
-        responded.push({ command: cmd, response: String(r.response).trim() });
-      }
-    }
-  } else if (result.ok) {
-    const stdout = String(data?.stdout || '');
-    if (stdout.trim()) {
-      responded.push({ command: queries.join('; '), response: stdout.trim() });
-    }
-  } else {
-    failed.push(...queries);
+  if (!lrnResponse) {
+    return { ok: false, response: '', instrument, error: '*LRN? returned empty response.' };
   }
 
-  return { responded, failed };
+  return { ok: true, response: lrnResponse, instrument };
 }
 
-// ── Main discover function ───────────────────────────────────────────
+// ── Main discover function ──────────────────────────────────────────
 export async function discoverScpi(input: Input): Promise<ToolResult<Record<string, unknown>>> {
   if (!input.executorUrl) {
-    return { ok: false, data: { error: 'NO_INSTRUMENT', message: 'No instrument connected. Connect to a scope via the Execute page first.' }, sourceMeta: [], warnings: ['No executorUrl — instrument not connected.'] };
+    return { ok: false, data: { error: 'NO_INSTRUMENT', message: 'No instrument connected.' }, sourceMeta: [], warnings: ['No executorUrl.'] };
   }
   if (!input.liveMode) {
-    return { ok: false, data: { error: 'NOT_LIVE', message: 'liveMode must be true. discover_scpi probes a live instrument.' }, sourceMeta: [], warnings: ['liveMode is not enabled.'] };
+    return { ok: false, data: { error: 'NOT_LIVE', message: 'liveMode must be true.' }, sourceMeta: [], warnings: ['liveMode is not enabled.'] };
   }
-  if (!input.basePath?.trim()) {
-    return { ok: false, data: { error: 'NO_BASE_PATH' }, sourceMeta: [], warnings: ['basePath is required. Example: "TRIGger:A:LEVel" or "CH1:SV"'] };
-  }
-
-  const base = input.basePath.trim().replace(/\?$/, '');
-  const timeoutMs = clampTimeout(input.timeoutMs);
-  const maxProbes = Math.min(input.maxProbes ?? 100, 150);
-  const BATCH_SIZE = 10;
-
-  // ── Phase 1: Build depth-1 probe list ──────────────────────────
-  const contextSuffixes = getContextSuffixes(base);
-  const allSuffixes = [...new Set([...UNIVERSAL_SUFFIXES, ...contextSuffixes])];
-
-  // Expand <x> placeholders
-  let basePaths = [base];
-  if (/<x>/i.test(base)) {
-    basePaths = ['CH1', 'CH2', 'CH3', 'CH4'].map(ch =>
-      base.replace(/CH<x>/gi, ch).replace(/<x>/gi, ch.replace('CH', ''))
-    );
+  if (!input.action || !['snapshot', 'diff'].includes(input.action)) {
+    return { ok: false, data: { error: 'INVALID_ACTION', message: 'action must be "snapshot" or "diff".' }, sourceMeta: [], warnings: ['Valid actions: snapshot, diff'] };
   }
 
-  const depth1Queries: string[] = [];
-  for (const bp of basePaths) {
-    for (const suffix of allSuffixes) {
-      const cmd = `${bp}${suffix}?`;
-      if (!depth1Queries.includes(cmd) && depth1Queries.length < maxProbes) {
-        depth1Queries.push(cmd);
-      }
+  const key = input.visaResource || 'default';
+
+  // ── SNAPSHOT ──────────────────────────────────────────────────────
+  if (input.action === 'snapshot') {
+    const lrn = await queryLrn(input);
+    if (!lrn.ok) {
+      return { ok: false, data: { error: lrn.error }, sourceMeta: [], warnings: [lrn.error || 'Failed to capture snapshot.'] };
     }
-  }
 
-  // ── Pre-flight: verify instrument is reachable ─────────────────
-  const preCheck = await probeBatch(['*IDN?'], input, 3000);
-  if (preCheck.responded.length === 0) {
+    const commands = parseLrnResponse(lrn.response);
+    const snapshot: Snapshot = {
+      instrument: lrn.instrument,
+      timestamp: new Date().toISOString(),
+      commands,
+      raw: lrn.response,
+    };
+    snapshots.set(key, snapshot);
+
+    // Group commands by root mnemonic for summary
+    const groups = new Map<string, number>();
+    for (const header of commands.keys()) {
+      const root = header.split(':')[0] || header;
+      groups.set(root, (groups.get(root) || 0) + 1);
+    }
+    const groupSummary = Array.from(groups.entries())
+      .sort((a, b) => b[1] - a[1])
+      .slice(0, 15)
+      .map(([root, count]) => `${root}: ${count}`)
+      .join(', ');
+
     return {
-      ok: false,
-      data: { error: 'Instrument not reachable. *IDN? did not respond.' },
-      sourceMeta: [],
-      warnings: ['Could not reach instrument — check connection.'],
+      ok: true,
+      data: {
+        action: 'snapshot',
+        instrument: lrn.instrument,
+        timestamp: snapshot.timestamp,
+        commandCount: commands.size,
+        groupSummary,
+        message: `Captured ${commands.size} instrument settings. Use action:"diff" after making changes to see what changed.`,
+      },
+      sourceMeta: [{ type: 'lrn_snapshot', instrument: lrn.instrument }],
+      warnings: [],
     };
   }
-  const instrumentId = preCheck.responded[0]?.response || 'unknown';
 
-  // ── Phase 2: Depth-1 probing ───────────────────────────────────
-  const allResponded: { command: string; response: string }[] = [];
-  const allFailed: string[] = [];
-  let totalProbed = 0;
-
-  for (let i = 0; i < depth1Queries.length; i += BATCH_SIZE) {
-    const batch = depth1Queries.slice(i, i + BATCH_SIZE);
-    const { responded, failed } = await probeBatch(batch, input, timeoutMs);
-    allResponded.push(...responded);
-    allFailed.push(...failed);
-    totalProbed += batch.length;
+  // ── DIFF ──────────────────────────────────────────────────────────
+  const baseline = snapshots.get(key);
+  if (!baseline) {
+    return {
+      ok: false,
+      data: { error: 'NO_BASELINE', message: 'No baseline snapshot found. Run action:"snapshot" first.' },
+      sourceMeta: [],
+      warnings: ['Take a snapshot first with action:"snapshot".'],
+    };
   }
 
-  // ── Phase 3: Adaptive depth-2 expansion ────────────────────────
-  // For depth-1 hits with multi-value (semicolon) responses,
-  // automatically probe :CH1 through :CH8 sub-paths
-  const depth2Queries: string[] = [];
-  for (const hit of allResponded) {
-    if (isMultiValueResponse(hit.response)) {
-      const hitBase = hit.command.replace(/\?$/, '');
-      for (let ch = 1; ch <= 8; ch++) {
-        const d2cmd = `${hitBase}:CH${ch}?`;
-        if (!depth1Queries.includes(d2cmd) && !depth2Queries.includes(d2cmd)) {
-          depth2Queries.push(d2cmd);
-        }
-      }
-    }
+  const lrn = await queryLrn(input);
+  if (!lrn.ok) {
+    return { ok: false, data: { error: lrn.error }, sourceMeta: [], warnings: [lrn.error || 'Failed to capture current state.'] };
   }
 
-  // Cap total probes
-  const depth2Capped = depth2Queries.slice(0, Math.max(0, maxProbes - totalProbed));
+  const currentCommands = parseLrnResponse(lrn.response);
+  const changes = diffSnapshots(baseline.commands, currentCommands, input.filter);
 
-  if (depth2Capped.length > 0) {
-    for (let i = 0; i < depth2Capped.length; i += BATCH_SIZE) {
-      const batch = depth2Capped.slice(i, i + BATCH_SIZE);
-      const { responded, failed } = await probeBatch(batch, input, timeoutMs);
-      allResponded.push(...responded);
-      allFailed.push(...failed);
-      totalProbed += batch.length;
-    }
-  }
+  // Update stored snapshot to current state
+  snapshots.set(key, {
+    instrument: lrn.instrument,
+    timestamp: new Date().toISOString(),
+    commands: currentCommands,
+    raw: lrn.response,
+  });
 
-  // ── Post-check: verify instrument still connected ──────────────
-  const postCheck = await probeBatch(['*IDN?'], input, 3000);
-  const stillConnected = postCheck.responded.length > 0;
-
-  // ── Build results ──────────────────────────────────────────────
-  const discoveredPaths = allResponded
-    .filter(r => r.command !== '*IDN?')
-    .map(r => ({
-      path: r.command.replace(/\?$/, ''),
-      response: r.response,
-      isTreeNode: isMultiValueResponse(r.response),
-    }));
+  const diffText = formatDiffText(changes);
+  const scpiCommands = changes
+    .filter(c => c.type !== 'removed' && c.scpi)
+    .map(c => c.scpi);
 
   return {
     ok: true,
     data: {
-      basePath: base,
-      instrument: instrumentId,
-      timeoutMs,
-      totalProbed,
-      depth1Count: depth1Queries.length,
-      depth2Count: depth2Capped.length,
-      discoveredCount: discoveredPaths.length,
-      failedCount: allFailed.length,
-      stillConnected,
-      discovered: discoveredPaths,
-      discoveredHeaders: discoveredPaths.map(d => d.path),
-      treeNodes: discoveredPaths.filter(d => d.isTreeNode).map(d => d.path),
-      leafNodes: discoveredPaths.filter(d => !d.isTreeNode).map(d => d.path),
-      suggestion: discoveredPaths.length > 0
-        ? `Found ${discoveredPaths.length} valid paths under "${base}". ` +
-          `${discoveredPaths.filter(d => d.isTreeNode).length} are tree nodes (have sub-paths), ` +
-          `${discoveredPaths.filter(d => !d.isTreeNode).length} are leaf nodes. ` +
-          `Use get_command_by_header to check which are in the database.`
-        : `No valid paths found under "${base}". Try a broader base path.`,
+      action: 'diff',
+      instrument: lrn.instrument,
+      baselineTimestamp: baseline.timestamp,
+      currentTimestamp: new Date().toISOString(),
+      totalChanges: changes.length,
+      changed: changes.filter(c => c.type === 'changed').length,
+      added: changes.filter(c => c.type === 'added').length,
+      removed: changes.filter(c => c.type === 'removed').length,
+      diffText,
+      scpiCommands,
+      filter: input.filter || null,
+      message: changes.length > 0
+        ? `Detected ${changes.length} changes since baseline. scpiCommands contains the exact SCPI to reproduce them.`
+        : 'No changes detected since baseline.',
     },
-    sourceMeta: [{ type: 'live_discovery', basePath: base, instrument: instrumentId }],
-    warnings: stillConnected ? [] : ['WARNING: Instrument may have disconnected during probing.'],
+    sourceMeta: [{ type: 'lrn_diff', instrument: lrn.instrument }],
+    warnings: [],
   };
 }
