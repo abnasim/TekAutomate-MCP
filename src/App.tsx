@@ -13626,8 +13626,8 @@ scpi.query('*OPC?')`;
                   if (uniqueOptions.length === 0) return null;
                   
                   return (
-                    <div className="p-4 border-b">
-                      <h4 className="text-xs font-semibold text-gray-700 uppercase mb-2">
+                    <div className="p-4 border-b border-gray-200 dark:border-gray-700">
+                      <h4 className="text-xs font-semibold text-gray-700 dark:text-gray-300 uppercase mb-2">
                         Available Options ({uniqueOptions.length})
                       </h4>
                       <div className="flex flex-wrap gap-1 max-h-48 overflow-y-auto">
@@ -13667,17 +13667,17 @@ scpi.query('*OPC?')`;
 
                 {/* Query Response */}
                 {selectedLibraryCommand.manualEntry?.queryResponse && (
-                  <div className="p-4 border-b">
-                    <h4 className="text-xs font-semibold text-gray-700 uppercase mb-2">Query Response</h4>
+                  <div className="p-4 border-b border-gray-200 dark:border-gray-700">
+                    <h4 className="text-xs font-semibold text-gray-700 dark:text-gray-300 uppercase mb-2">Query Response</h4>
                     <div className="space-y-1">
                       {selectedLibraryCommand.manualEntry.queryResponse.type && (
-                        <div className="text-xs"><span className="font-medium text-gray-700">Type:</span> {selectedLibraryCommand.manualEntry.queryResponse.type}</div>
+                        <div className="text-xs text-gray-600 dark:text-gray-300"><span className="font-medium text-gray-700 dark:text-gray-200">Type:</span> {selectedLibraryCommand.manualEntry.queryResponse.type}</div>
                       )}
                       {selectedLibraryCommand.manualEntry.queryResponse.format && (
-                        <div className="text-xs"><span className="font-medium text-gray-700">Format:</span> {selectedLibraryCommand.manualEntry.queryResponse.format}</div>
+                        <div className="text-xs text-gray-600 dark:text-gray-300"><span className="font-medium text-gray-700 dark:text-gray-200">Format:</span> {selectedLibraryCommand.manualEntry.queryResponse.format}</div>
                       )}
                       {selectedLibraryCommand.manualEntry.queryResponse.example && (
-                        <div className="font-mono text-xs bg-gray-50 px-2 py-1 rounded mt-1">{selectedLibraryCommand.manualEntry.queryResponse.example}</div>
+                        <div className="font-mono text-xs bg-gray-50 dark:bg-gray-800 text-gray-700 dark:text-gray-300 px-2 py-1 rounded mt-1">{selectedLibraryCommand.manualEntry.queryResponse.example}</div>
                       )}
                     </div>
                   </div>
@@ -13708,19 +13708,19 @@ scpi.query('*OPC?')`;
                   if (visible.length === 0) return null;
 
                   return (
-                    <div className="p-4 border-b">
-                      <h4 className="text-xs font-semibold text-gray-700 uppercase mb-2">Examples</h4>
+                    <div className="p-4 border-b border-gray-200 dark:border-gray-700">
+                      <h4 className="text-xs font-semibold text-gray-700 dark:text-gray-300 uppercase mb-2">Examples</h4>
                       <div className="space-y-3">
                         {visible.map((ex, idx) => (
-                          <div key={idx} className="bg-gray-50 rounded-lg overflow-hidden border border-gray-200">
+                          <div key={idx} className="bg-gray-50 dark:bg-gray-800 rounded-lg overflow-hidden border border-gray-200 dark:border-gray-700">
                             {ex.scpiCode && (
                               <div className="font-mono text-xs bg-gray-900 text-green-400 px-3 py-2">
                                 {ex.scpiCode}
                               </div>
                             )}
                             {ex.description && (
-                              <div className="px-3 py-2 bg-gray-50">
-                                <p className="text-xs text-gray-600 leading-relaxed italic">
+                              <div className="px-3 py-2 bg-gray-50 dark:bg-gray-800">
+                                <p className="text-xs text-gray-600 dark:text-gray-300 leading-relaxed italic">
                                   {ex.description}
                                 </p>
                               </div>
@@ -13733,7 +13733,7 @@ scpi.query('*OPC?')`;
                 })()}
 
                 {/* Action Buttons */}
-                <div className="p-4 mt-auto border-t bg-gray-50">
+                <div className="p-4 mt-auto border-t border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-800">
                   <div className="flex gap-2">
                     <button
                       onClick={() => addCommandFromLibrary(selectedLibraryCommand)}
@@ -13741,9 +13741,47 @@ scpi.query('*OPC?')`;
                     >
                       <Plus size={16} /> Add to Flow
                     </button>
+                    {executorEndpoint && (
+                      <button
+                        onClick={async () => {
+                          const cmd = selectedLibraryCommand.scpi.replace(/<[xXnN]>/g, '1');
+                          const isQuery = cmd.trim().endsWith('?');
+                          try {
+                            const url = `http://${executorEndpoint.host}:${executorEndpoint.port}/run`;
+                            const res = await fetch(url, {
+                              method: 'POST',
+                              headers: { 'Content-Type': 'application/json' },
+                              body: JSON.stringify({
+                                protocol_version: 1,
+                                action: 'send_scpi',
+                                timeout_sec: 10,
+                                scope_visa: getVisaResourceString(activeInstrumentConfig),
+                                liveMode: true,
+                                commands: [isQuery ? cmd : `${cmd};${cmd}?`],
+                                timeout_ms: 5000,
+                              }),
+                            });
+                            if (res.ok) {
+                              const json = await res.json();
+                              const responses = json?.responses || json?.results || [];
+                              const result = responses[0]?.response || 'OK';
+                              alert(`${cmd}\n→ ${result}`);
+                            } else {
+                              alert(`Error: ${res.status}`);
+                            }
+                          } catch (err) {
+                            alert(`Failed: ${err instanceof Error ? err.message : 'Unknown error'}`);
+                          }
+                        }}
+                        className="px-4 py-2 bg-green-600 text-white text-sm font-medium rounded hover:bg-green-700 transition"
+                        title="Run this command on the connected scope"
+                      >
+                        <Play size={16} />
+                      </button>
+                    )}
                     <button
                       onClick={() => setShowLibraryDetailModal(true)}
-                      className="px-4 py-2 bg-gray-200 text-gray-700 text-sm font-medium rounded hover:bg-gray-300 transition"
+                      className="px-4 py-2 bg-gray-200 dark:bg-gray-700 text-gray-700 dark:text-gray-200 text-sm font-medium rounded hover:bg-gray-300 dark:hover:bg-gray-600 transition"
                       title="View full details"
                     >
                       <BookOpen size={16} />
