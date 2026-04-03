@@ -145,9 +145,8 @@ interface QuickAction {
 function getQuickActions(isLiveMode: boolean): QuickAction[] {
   return isLiveMode
     ? [
-        { id: 'check_instrument', label: 'Check Instrument', icon: '🔗', type: 'button', prompt: 'Call get_instrument_info to identify the scope, then run discover_scpi with action:"snapshot" to capture the full instrument state. Keep the full lrnCommands as your session context. Summarize: instrument model, what channels are active, trigger config, horizontal settings, any measurements or buses.' },
-        { id: 'learn_scope', label: 'Learn Scope', icon: '🎓', type: 'button', prompt: 'Run discover_scpi with action:"snapshot" to capture the full instrument state. Keep the full lrnCommands as your session context — this is your SCPI reference for the rest of the session. Summarize key settings briefly.' },
-        { id: 'discover_scpi', label: 'Discover SCPI', icon: '🔍', type: 'button', prompt: 'Start SCPI discovery mode. Run discover_scpi with action:"snapshot" to capture a baseline. Then tell me to go make any changes I want on the scope. When I say done, run discover_scpi with action:"diff" to show me the exact SCPI commands for everything I changed.' },
+        { id: 'check_instrument', label: 'Check Instrument', icon: '🔗', type: 'button', prompt: 'Check the connected instrument and capture full state. Call get_instrument_info, then discover_scpi action:"snapshot". Keep lrnCommands as session context. Summarize briefly.' },
+        { id: 'discover_scpi', label: 'Discover SCPI', icon: '🔍', type: 'button', prompt: 'Start SCPI discovery mode. Run discover_scpi action:"snapshot" for baseline if you do not have one. Then tell me to go make changes on the scope. When I say done, run discover_scpi action:"diff" to show the exact SCPI commands that changed.' },
       ]
     : [];
 }
