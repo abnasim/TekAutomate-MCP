@@ -395,6 +395,12 @@ export async function executeMcpTool(
       || (toolName === 'send_scpi' && payload.timeout_ms && Number(payload.timeout_ms) > 10000);
     const scriptTimeout = isScreenshotAction ? 75 : (isSlowAction ? 20 : 8);
 
+    // Detect legacy scope for screenshot method
+    if (isScreenshotAction && !payload.scope_type) {
+      const familyHint = `${flowContext?.modelFamily || ''} ${flowContext?.deviceDriver || ''}`.toLowerCase();
+      payload.scope_type = /\b(dpo|5k|7k|70k|mso_dpo|dpo5|dpo7)\b/.test(familyHint) ? 'legacy' : 'modern';
+    }
+
     const res = await fetch(`${execUrl}/run`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
