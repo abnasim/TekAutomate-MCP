@@ -1119,6 +1119,7 @@ function OpenAiChatKitPanelInner({
     // Instrument tools (send_scpi, capture_screenshot, etc.) → browser calls executor directly
     // Knowledge tools (search_scpi, verify, browse, etc.) → browser calls MCP /tools/execute
     onClientTool: async ({ name, params }: { name: string; params: Record<string, unknown> }) => {
+      console.log(`[onClientTool] ${name} — instrumentEndpoint:`, instrumentEndpointRef.current?.executorUrl || 'NULL');
       // ── Client-only tool: get_current_workflow ──
       // Returns current flow state directly from the browser — no MCP needed.
       // Agent calls this to see what steps exist, selected step, validation errors.
