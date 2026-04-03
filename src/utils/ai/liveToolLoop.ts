@@ -379,7 +379,19 @@ export async function executeMcpTool(
         });
         if (mcpRes.ok) {
           const mcpJson = await mcpRes.json() as { ok: boolean; result: unknown };
-          if (mcpJson.ok) return mcpJson.result;
+          if (mcpJson.ok) {
+            const mcpResult = mcpJson.result as Record<string, unknown>;
+            // For snapshot: include raw *LRN? so AI has full instrument context
+            if (discoverAction === 'snapshot') {
+              const data = lrnResult?.data ?? lrnResult;
+              const responses = ((data as Record<string, unknown>)?.responses ?? (data as Record<string, unknown>)?.results ?? []) as Array<{ response?: string }>;
+              const rawLrn = responses[0]?.response || String((data as Record<string, unknown>)?.stdout || '');
+              if (rawLrn) {
+                (mcpResult as Record<string, unknown>).lrnCommands = rawLrn;
+              }
+            }
+            return mcpResult;
+          }
         }
       }
       // Fallback: return raw *LRN? if MCP forwarding fails
