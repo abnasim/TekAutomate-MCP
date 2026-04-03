@@ -117,11 +117,10 @@ function getStartScreenGreeting(isLiveMode: boolean): string {
 function getStartScreenPrompts(isLiveMode: boolean): Array<{ label: string; prompt: string }> {
   return isLiveMode
     ? [
-        { label: 'Check connection', prompt: 'Check the connected instrument. Call get_instrument_info, then run discover_scpi with action:"snapshot" to capture the full instrument state as your session context.' },
-        { label: 'Capture scope state', prompt: 'Run discover_scpi with action:"snapshot" to capture the full current scope configuration. Then use discover_scpi with action:"inspect" to summarize key settings: channels, trigger, horizontal, acquisition, measurements, buses.' },
-        { label: 'Discover SCPI', prompt: 'Start SCPI discovery mode. Run discover_scpi with action:"snapshot" to capture a baseline. Then tell me I can go make any changes I want on the scope — adjust settings, configure triggers, add measurements, set up decode, anything. When I say done, run discover_scpi with action:"diff" to show me the exact SCPI commands for everything I changed.' },
-        { label: 'Set scope to default', prompt: 'Reset the scope to factory defaults using *RST via send_scpi, then *OPC? to confirm. Then run discover_scpi with action:"snapshot" to capture the reset state as your session context.' },
-        { label: 'What can you do?', prompt: 'What can you do in Live mode? Give me a brief overview.' },
+        { label: 'What can you do?', prompt: 'What can you do in Live mode? Give me a brief overview of your capabilities.' },
+        { label: 'Discover SCPI', prompt: 'Start SCPI discovery mode. I want to make changes on the scope and have you tell me the exact SCPI commands. Take a baseline if you do not have one yet, then tell me to go ahead.' },
+        { label: 'Reset scope', prompt: 'Reset the scope to factory defaults using *RST, confirm with *OPC?, and update your baseline.' },
+        { label: 'Show scope state', prompt: 'Summarize the current scope state from your baseline — channels, trigger, horizontal, acquisition, any active measurements or buses.' },
       ]
     : [
         { label: 'What is TekAutomate?', prompt: 'What is TekAutomate? Explain what you are and how you help with test automation workflows for Tektronix instruments.' },
