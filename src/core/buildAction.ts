@@ -131,38 +131,26 @@ function detectQueryMode(query: string): QueryMode {
   return 'action';
 }
 
-function buildCommandCard(record: CommandRecord): CommandCard {
-  return {
-    header: record.header,
-    commandId: record.commandId,
-    commandType: record.commandType,
-    group: record.group,
-    groupDescription: GROUP_DESCRIPTIONS[record.group] || '',
-    category: record.category,
-    shortDescription: record.shortDescription,
-    description: record.description,
-    families: record.families,
-    models: record.models,
-    syntax: record.syntax,
-    arguments: record.arguments.map((argument) => ({
-      name: argument.name,
-      type: argument.type,
-      required: argument.required,
-      description: argument.description,
-      validValues: argument.validValues,
-      defaultValue: argument.defaultValue,
-    })),
-    queryResponse: record.queryResponse,
-    examples: record.codeExamples.map((example) => ({
-      description: example.description,
-      scpi: example.scpi?.code,
-      python: example.python?.code,
-      tm_devices: example.tm_devices?.code,
-    })),
-    relatedCommands: record.relatedCommands,
-    notes: record.notes,
-    manualReference: record.manualReference,
-  };
+/** Compact text card for build results — ~150 tokens vs ~3K for full JSON */
+function buildCommandCard(record: CommandRecord): string {
+  const lines: string[] = [];
+  lines.push(`Command: ${record.header}`);
+  if (record.shortDescription) lines.push(`Description: ${record.shortDescription}`);
+  if (record.syntax?.set) lines.push(`Set: ${record.syntax.set}`);
+  if (record.syntax?.query) lines.push(`Query: ${record.syntax.query}`);
+  if (record.arguments?.length) {
+    for (const arg of record.arguments.slice(0, 4)) {
+      const desc = (arg.description || '').slice(0, 60);
+      lines.push(`  ${arg.name} (${arg.type}${arg.required ? ', required' : ''}): ${desc}`);
+    }
+  }
+  const examples = record.codeExamples?.slice(0, 3).filter(e => e?.scpi?.code);
+  if (examples?.length) {
+    for (const ex of examples) {
+      lines.push(`Example: ${ex.scpi!.code}${ex.description ? ' — ' + ex.description : ''}`);
+    }
+  }
+  return lines.join('\n');
 }
 
 function normalizeChannelToken(value: string): string | undefined {
@@ -593,7 +581,7 @@ function extractInfoTargets(query: string): string[] {
 async function handleInfoMode(query: string, family?: string): Promise<MicroToolResult> {
   const commandIndex = await getCommandIndex();
   const targets = extractInfoTargets(query);
-  const cards: CommandCard[] = [];
+  const cards: string[] = [];
   const seen = new Set<string>();
 
   for (const target of targets) {
@@ -621,18 +609,6 @@ async function handleInfoMode(query: string, family?: string): Promise<MicroTool
     }
   }
 
-  if (cards.length && cards[0].relatedCommands.length) {
-    for (const relatedHeader of cards[0].relatedCommands.slice(0, 5)) {
-      if (seen.has(relatedHeader)) continue;
-      const record =
-        commandIndex.getByHeader(relatedHeader, family) ||
-        commandIndex.getByHeader(relatedHeader.toUpperCase(), family);
-      if (!record) continue;
-      seen.add(record.header);
-      cards.push(buildCommandCard(record));
-    }
-  }
-
   if (!cards.length) {
     return {
       ok: true,
@@ -642,42 +618,17 @@ async function handleInfoMode(query: string, family?: string): Promise<MicroTool
   }
 
   const primary = cards[0];
-  const argumentLines = primary.arguments.length
-    ? primary.arguments.map((argument) => {
-        const values = Array.isArray(argument.validValues?.values)
-          ? (argument.validValues.values as string[]).join(', ')
-          : '';
-        return `  ${argument.name}${argument.required ? ' (required)' : ''}: ${argument.description}${values ? ` [${values}]` : ''}`;
-      }).join('\n')
-    : '  (no arguments)';
-
-  const lines = [
-    `${primary.header} - ${primary.shortDescription || primary.description}`,
-    `Type: ${primary.commandType} | Group: ${primary.group} | Families: ${primary.families.join(', ') || 'all'}`,
-    `Syntax set: ${primary.syntax.set || 'N/A'}`,
-    `Syntax query: ${primary.syntax.query || 'N/A'}`,
-    `Arguments:\n${argumentLines}`,
-  ];
-
-  if (primary.examples.length) {
-    lines.push(`Examples: ${primary.examples.slice(0, 3).map((example) => example.scpi || example.description).join(', ')}`);
-  }
-  if (primary.notes.length) {
-    lines.push(`Notes: ${primary.notes.slice(0, 3).join('; ')}`);
-  }
-  if (primary.relatedCommands.length) {
-    lines.push(`Related: ${primary.relatedCommands.slice(0, 8).join(', ')}`);
-  }
+  const primaryHeader = (primary.match(/^Command:\s*(.+)$/m)?.[1] || '').trim();
 
   return {
     ok: true,
     data: {
       mode: 'info',
       commands: cards,
-      primaryHeader: primary.header,
+      primaryHeader,
       totalCards: cards.length,
     },
-    text: lines.join('\n'),
+    text: primary,
   };
 }
 

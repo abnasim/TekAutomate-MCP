@@ -156,9 +156,11 @@ export function serializeCommandCompactText(entry: CommandRecord): string {
     }
   }
 
-  const ex = entry.codeExamples?.[0];
-  if (ex?.scpi?.code) {
-    lines.push(`Example: ${ex.scpi.code}${ex.description ? ' — ' + ex.description : ''}`);
+  const examples = entry.codeExamples?.slice(0, 3).filter(e => e?.scpi?.code);
+  if (examples?.length) {
+    for (const ex of examples) {
+      lines.push(`Example: ${ex.scpi!.code}${ex.description ? ' — ' + ex.description : ''}`);
+    }
   }
 
   if (entry.relatedCommands?.length) {
