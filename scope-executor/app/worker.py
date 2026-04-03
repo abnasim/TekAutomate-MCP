@@ -410,15 +410,13 @@ def _handle_capture_screenshot(job: dict) -> dict:
 
                             if scope_type == "legacy":
                                 scpi.write('HARDCOPY:PORT FILE')
-                                scpi.write('HARDCOPY:FORMAT PNG')
-                                scpi.write('HARDCOPY:FILENAME "C:/TekScope/Temp/screenshot.png"')
+                                scpi.write('HARDCOPY:FILENAME "C:/Temp/screenshot.png"')
                                 scpi.write('HARDCOPY START')
-                                if str(scpi.query('*OPC?')).strip() != '1':
-                                    raise RuntimeError("HARDCOPY START did not complete")
-                                scpi.write('FILESYSTEM:READFILE "C:/TekScope/Temp/screenshot.png"')
+                                scpi.write('*WAI')
+                                scpi.write('FILESYSTEM:READFILE "C:/Temp/screenshot.png"')
                                 data = scpi.read_raw()
-                                scpi.write('FILESYSTEM:DELETE "C:/TekScope/Temp/screenshot.png"')
-                                scpi.query('*OPC?')
+                                scpi.write('FILESYSTEM:DELETE "C:/Temp/screenshot.png"')
+                                scpi.write('*WAI')
                             else:
                                 temp_path = 'C:/Temp_Screen.png'
                                 scpi.write(f'SAVE:IMAGE "{temp_path}"')
