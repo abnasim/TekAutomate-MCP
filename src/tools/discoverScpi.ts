@@ -3,9 +3,9 @@ import type { ToolResult } from '../core/schemas';
 
 interface Input {
   action: 'snapshot' | 'diff' | 'inspect';
-  executorUrl: string;
-  visaResource: string;
-  backend: string;
+  executorUrl?: string;
+  visaResource?: string;
+  backend?: string;
   liveMode?: boolean;
   timeoutMs?: number;
   modelFamily?: string;
@@ -13,6 +13,8 @@ interface Input {
   filter?: string;
   /** For inspect: max commands to return (default 50) */
   limit?: number;
+  /** Pre-fetched *LRN? response from browser executor (bypasses sendScpiProxy) */
+  _lrnResponse?: string;
 }
 
 // ── In-memory snapshot store (per instrument) ───────────────────────
@@ -139,8 +141,26 @@ function formatDiffText(changes: DiffEntry[]): string {
   return lines.join('\n');
 }
 
-// ── Send *LRN? and get response ─────────────────────────────────────
+// ── Get *LRN? response — either pre-fetched from browser or via proxy ──
 async function queryLrn(input: Input): Promise<{ ok: boolean; response: string; instrument: string; error?: string }> {
+  // If browser already fetched *LRN? and passed it, use that directly
+  if (input._lrnResponse) {
+    try {
+      const parsed = JSON.parse(input._lrnResponse);
+      const data = parsed?.data ?? parsed;
+      const responses = (data?.responses ?? data?.results ?? []) as Array<{ command?: string; response?: string }>;
+      const lrnEntry = responses.find(r => r.command?.includes('LRN') || r.response?.includes('RST'));
+      const lrnText = lrnEntry?.response || String(data?.stdout || '');
+      if (lrnText) {
+        return { ok: true, response: lrnText.trim(), instrument: input.visaResource || 'browser-executor' };
+      }
+    } catch { /* fall through to proxy path */ }
+  }
+
+  if (!input.executorUrl) {
+    return { ok: false, response: '', instrument: '', error: 'No executorUrl — instrument not connected.' };
+  }
+
   const timeoutMs = Math.max(3000, Math.min(input.timeoutMs ?? 10000, 30000));
 
   // Pre-flight check
