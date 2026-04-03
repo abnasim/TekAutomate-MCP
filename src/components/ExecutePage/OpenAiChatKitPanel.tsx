@@ -1167,6 +1167,54 @@ function OpenAiChatKitPanelInner({
         };
       }
 
+      // ── Client-only tool: discover_scpi ──
+      // Routes snapshot/diff through send_scpi *LRN? (which works) then forwards to MCP
+      if (name === 'discover_scpi') {
+        const discoverAction = String(params.action || 'snapshot');
+        if (discoverAction === 'snapshot' || discoverAction === 'diff') {
+          try {
+            // Use send_scpi path which is proven to work
+            const lrnResult = await executeMcpTool(
+              'send_scpi',
+              { commands: ['*LRN?'], timeout_ms: 15000 },
+              instrumentEndpointRef.current || undefined,
+              { modelFamily: flowContextRef.current?.modelFamily, deviceDriver: flowContextRef.current?.deviceDriver },
+            );
+            // Forward to MCP for storage/diff
+            const mcpHost = resolveMcpHost();
+            if (mcpHost) {
+              const mcpRes = await fetch(`${mcpHost.replace(/\/$/, '')}/tools/execute`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                  tool: 'discover_scpi',
+                  args: { ...params, _lrnResponse: JSON.stringify(lrnResult) },
+                }),
+              });
+              if (mcpRes.ok) {
+                const mcpJson = await mcpRes.json() as { ok: boolean; result: Record<string, unknown> };
+                if (mcpJson.ok) {
+                  const mcpResult = mcpJson.result;
+                  // For snapshot: include raw *LRN? so AI has full context
+                  if (discoverAction === 'snapshot') {
+                    const data = (lrnResult as Record<string, unknown>)?.data ?? lrnResult;
+                    const responses = ((data as Record<string, unknown>)?.responses ?? []) as Array<{ response?: string }>;
+                    const rawLrn = responses[0]?.response || '';
+                    if (rawLrn) mcpResult.lrnCommands = rawLrn;
+                  }
+                  return mcpResult;
+                }
+              }
+            }
+            // Fallback: return raw *LRN?
+            return { ok: true, action: discoverAction, data: lrnResult };
+          } catch (err) {
+            return { ok: false, error: err instanceof Error ? err.message : 'discover_scpi failed' };
+          }
+        }
+        // inspect: fall through to MCP path
+      }
+
       // ── MCP + executor tools ──
       try {
         const result = await executeMcpTool(
