@@ -131,38 +131,24 @@ function detectQueryMode(query: string): QueryMode {
   return 'action';
 }
 
-function buildCommandCard(record: CommandRecord): CommandCard {
-  return {
-    header: record.header,
-    commandId: record.commandId,
-    commandType: record.commandType,
-    group: record.group,
-    groupDescription: GROUP_DESCRIPTIONS[record.group] || '',
-    category: record.category,
-    shortDescription: record.shortDescription,
-    description: record.description,
-    families: record.families,
-    models: record.models,
-    syntax: record.syntax,
-    arguments: record.arguments.map((argument) => ({
-      name: argument.name,
-      type: argument.type,
-      required: argument.required,
-      description: argument.description,
-      validValues: argument.validValues,
-      defaultValue: argument.defaultValue,
-    })),
-    queryResponse: record.queryResponse,
-    examples: record.codeExamples.map((example) => ({
-      description: example.description,
-      scpi: example.scpi?.code,
-      python: example.python?.code,
-      tm_devices: example.tm_devices?.code,
-    })),
-    relatedCommands: record.relatedCommands,
-    notes: record.notes,
-    manualReference: record.manualReference,
-  };
+/** Compact text card for build results — ~150 tokens vs ~3K for full JSON */
+function buildCommandCard(record: CommandRecord): string {
+  const lines: string[] = [];
+  lines.push(`Command: ${record.header}`);
+  if (record.shortDescription) lines.push(`Description: ${record.shortDescription}`);
+  if (record.syntax?.set) lines.push(`Set: ${record.syntax.set}`);
+  if (record.syntax?.query) lines.push(`Query: ${record.syntax.query}`);
+  if (record.arguments?.length) {
+    for (const arg of record.arguments.slice(0, 4)) {
+      const desc = (arg.description || '').slice(0, 60);
+      lines.push(`  ${arg.name} (${arg.type}${arg.required ? ', required' : ''}): ${desc}`);
+    }
+  }
+  const ex = record.codeExamples?.[0];
+  if (ex?.scpi?.code) {
+    lines.push(`Example: ${ex.scpi.code}${ex.description ? ' — ' + ex.description : ''}`);
+  }
+  return lines.join('\n');
 }
 
 function normalizeChannelToken(value: string): string | undefined {
