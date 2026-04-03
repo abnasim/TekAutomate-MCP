@@ -159,6 +159,18 @@ export function serializeCommandCompactText(entry: CommandRecord): string {
   const ex = entry.codeExamples?.[0];
   if (ex?.scpi?.code) {
     lines.push(`Example: ${ex.scpi.code}${ex.description ? ' — ' + ex.description : ''}`);
+  } else if (entry.syntax?.set) {
+    // Auto-generate a concrete example from syntax by replacing <x> placeholders
+    const concrete = entry.syntax.set
+      .replace(/\s*\{[^}]+\}/, '')  // remove enum list from syntax
+      .replace(/<x>/g, '1')
+      .replace(/<y>/g, '0')
+      .replace(/<NR[123f]?>/g, '1')
+      .replace(/<QString>/g, '"value"')
+      .trim();
+    if (concrete !== entry.header) {
+      lines.push(`Example: ${concrete}`);
+    }
   }
 
   if (entry.relatedCommands?.length) {

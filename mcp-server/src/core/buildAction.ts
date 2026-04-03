@@ -147,6 +147,17 @@ function buildCommandCard(record: CommandRecord): string {
   const ex = record.codeExamples?.[0];
   if (ex?.scpi?.code) {
     lines.push(`Example: ${ex.scpi.code}${ex.description ? ' — ' + ex.description : ''}`);
+  } else if (record.syntax?.set) {
+    const concrete = record.syntax.set
+      .replace(/\s*\{[^}]+\}/, '')
+      .replace(/<x>/g, '1')
+      .replace(/<y>/g, '0')
+      .replace(/<NR[123f]?>/g, '1')
+      .replace(/<QString>/g, '"value"')
+      .trim();
+    if (concrete !== record.header) {
+      lines.push(`Example: ${concrete}`);
+    }
   }
   return lines.join('\n');
 }
