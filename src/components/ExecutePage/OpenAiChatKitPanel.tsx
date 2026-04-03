@@ -142,8 +142,13 @@ interface QuickAction {
   toolName?: string;
 }
 
-function getQuickActions(_isLiveMode: boolean): QuickAction[] {
-  return [];
+function getQuickActions(isLiveMode: boolean): QuickAction[] {
+  return isLiveMode
+    ? [
+        { id: 'learn_scope', label: 'Learn Scope', icon: '🎓', type: 'button', prompt: 'Run discover_scpi with action:"snapshot" to capture the full instrument state. Then summarize: what channels are active, trigger config, horizontal settings, any measurements or buses configured.' },
+        { id: 'discover_scpi', label: 'Discover SCPI', icon: '🔍', type: 'button', prompt: 'Start SCPI discovery mode. Run discover_scpi with action:"snapshot" to capture a baseline. Then tell me to go make any changes I want on the scope. When I say done, run discover_scpi with action:"diff" to show me the exact SCPI commands for everything I changed.' },
+      ]
+    : [];
 }
 
 function getChatKitThemeOptions(theme: 'dark' | 'light'): ThemeOption {
