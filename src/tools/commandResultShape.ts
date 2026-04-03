@@ -35,6 +35,44 @@ function serializeArguments(args: CommandArgument[], limit = 8): Array<Record<st
   return items.length ? items : undefined;
 }
 
+function normalizeScalarValues(values: unknown[] | undefined): Array<string | number | boolean> | undefined {
+  if (!Array.isArray(values)) return undefined;
+  const filtered = values.filter((v): v is string | number | boolean =>
+    ['string', 'number', 'boolean'].includes(typeof v)
+  );
+  return filtered.length ? filtered : undefined;
+}
+
+function syntaxAlreadyCarriesValues(
+  syntaxSet: string | undefined,
+  values: Array<string | number | boolean> | undefined
+): boolean {
+  if (!syntaxSet || !values?.length) return false;
+  return values.every((value) => syntaxSet.includes(String(value)));
+}
+
+function serializeCompactArguments(
+  args: CommandArgument[],
+  omitFirstArgValidValues = false,
+  limit = 8
+): Array<Record<string, unknown>> | undefined {
+  if (!Array.isArray(args) || !args.length) return undefined;
+  const items = args.slice(0, limit).map((arg, index) => {
+    const item: Record<string, unknown> = {
+      name: arg.name,
+      type: arg.type,
+      required: arg.required,
+      description: arg.description,
+      defaultValue: arg.defaultValue,
+    };
+    if (!(omitFirstArgValidValues && index === 0)) {
+      item.validValues = arg.validValues;
+    }
+    return item;
+  });
+  return items.length ? items : undefined;
+}
+
 function serializeExamples(examples: CommandCodeExample[], limit = 4): Array<Record<string, unknown>> | undefined {
   if (!Array.isArray(examples) || !examples.length) return undefined;
   const items = examples.slice(0, limit).map((example) => ({
@@ -104,9 +142,11 @@ export function serializeCommandSearchResult(entry: CommandRecord): Record<strin
 /** Compact serialization — syntax, args, one example, valid values. No raw/conditions/notes bloat. */
 export function serializeCommandCompact(entry: CommandRecord): Record<string, unknown> {
   const firstValidValues = entry.arguments?.[0]?.validValues as Record<string, unknown> | undefined;
-  const normalizedValues =
+  const normalizedValues = normalizeScalarValues(
     (Array.isArray(firstValidValues?.values) ? (firstValidValues.values as unknown[]) : undefined) ||
-    (Array.isArray(firstValidValues?.options) ? (firstValidValues.options as unknown[]) : undefined);
+    (Array.isArray(firstValidValues?.options) ? (firstValidValues.options as unknown[]) : undefined)
+  );
+  const valuesCoveredBySyntax = syntaxAlreadyCarriesValues(entry.syntax?.set, normalizedValues);
 
   return {
     header: entry.header,
@@ -116,10 +156,8 @@ export function serializeCommandCompact(entry: CommandRecord): Record<string, un
     example: entry.codeExamples?.[0]
       ? { description: entry.codeExamples[0].description || undefined, scpi: entry.codeExamples[0].scpi?.code }
       : undefined,
-    validValues: normalizedValues
-      ? normalizedValues.filter((v): v is string | number | boolean => ['string', 'number', 'boolean'].includes(typeof v))
-      : undefined,
-    arguments: serializeArguments(entry.arguments),
+    validValues: valuesCoveredBySyntax ? undefined : normalizedValues,
+    arguments: serializeCompactArguments(entry.arguments, valuesCoveredBySyntax),
     relatedCommands: entry.relatedCommands?.length ? entry.relatedCommands.slice(0, 5) : undefined,
   };
 }
