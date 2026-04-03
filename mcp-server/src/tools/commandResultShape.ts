@@ -101,12 +101,30 @@ export function serializeCommandSearchResult(entry: CommandRecord): Record<strin
   };
 }
 
-/** Compact serialization — syntax, args, one example, valid values. No raw/conditions/notes bloat. */
+/** Compact serialization — syntax, args, one example. Deduplicates enum lists. */
 export function serializeCommandCompact(entry: CommandRecord): Record<string, unknown> {
-  const firstValidValues = entry.arguments?.[0]?.validValues as Record<string, unknown> | undefined;
-  const normalizedValues =
-    (Array.isArray(firstValidValues?.values) ? (firstValidValues.values as unknown[]) : undefined) ||
-    (Array.isArray(firstValidValues?.options) ? (firstValidValues.options as unknown[]) : undefined);
+  // Check if syntax.set already contains the enum values (e.g. "{EDGE|WIDth|...}")
+  const syntaxHasEnum = !!(entry.syntax?.set && entry.syntax.set.includes('{') && entry.syntax.set.includes('|'));
+
+  // Only include validValues if syntax doesn't already show them
+  let validValues: unknown[] | undefined;
+  if (!syntaxHasEnum) {
+    const firstValidValues = entry.arguments?.[0]?.validValues as Record<string, unknown> | undefined;
+    const normalizedValues =
+      (Array.isArray(firstValidValues?.values) ? (firstValidValues.values as unknown[]) : undefined) ||
+      (Array.isArray(firstValidValues?.options) ? (firstValidValues.options as unknown[]) : undefined);
+    validValues = normalizedValues
+      ? normalizedValues.filter((v): v is string | number | boolean => ['string', 'number', 'boolean'].includes(typeof v))
+      : undefined;
+  }
+
+  // Strip validValues from arguments to avoid triple duplication
+  const args = entry.arguments?.slice(0, 8).map((arg) => ({
+    name: arg.name,
+    type: arg.type,
+    required: arg.required,
+    description: arg.description?.slice(0, 80) || undefined,
+  }));
 
   return {
     header: entry.header,
@@ -116,10 +134,8 @@ export function serializeCommandCompact(entry: CommandRecord): Record<string, un
     example: entry.codeExamples?.[0]
       ? { description: entry.codeExamples[0].description || undefined, scpi: entry.codeExamples[0].scpi?.code }
       : undefined,
-    validValues: normalizedValues
-      ? normalizedValues.filter((v): v is string | number | boolean => ['string', 'number', 'boolean'].includes(typeof v))
-      : undefined,
-    arguments: serializeArguments(entry.arguments),
+    validValues,
+    arguments: args?.length ? args : undefined,
     relatedCommands: entry.relatedCommands?.length ? entry.relatedCommands.slice(0, 5) : undefined,
   };
 }
