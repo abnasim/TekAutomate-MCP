@@ -7100,41 +7100,79 @@ if __name__ == "__main__":
       const scpi = (cmd.scpi || '').toLowerCase();
       const name = (cmd.name || '').toLowerCase();
       const desc = (cmd.description || '').toLowerCase();
-      // Exact SCPI header match — massive boost
-      if (scpi === q || scpi === `*${q}` || scpi === q.replace(/^\*/, '')) {
-        score += 100;
+      const shortDesc = (cmd.manualEntry?.shortDescription || '').toLowerCase();
+
+      // ── Tier 1: Exact or near-exact SCPI header match (highest priority) ──
+      if (scpi === q || scpi === `*${q}`) {
+        score += 200;
         matchedBy.push('exact');
-      }
-      // SCPI header starts with query
-      if (scpi.startsWith(q) || scpi.startsWith(`*${q}`)) {
-        score += 50;
+      } else if (scpi.startsWith(q) || scpi.startsWith(`*${q}`)) {
+        score += 100;
         matchedBy.push('header-start');
-      }
-      if (scpi.includes(q)) {
-        score += 25;
+      } else if (scpi.includes(q) && q.length >= 3) {
+        score += 40;
         matchedBy.push('header');
+      }
+
+      // ── Tier 2: Description/name contain the full query as a phrase ──
+      if (desc.includes(q) && q.length >= 3) {
+        score += 30;
+        matchedBy.push('description');
+      }
+      if (shortDesc.includes(q) && q.length >= 3) {
+        score += 25;
+        matchedBy.push('short-desc');
       }
       if (name.includes(q)) {
         score += 20;
         matchedBy.push('name');
       }
-      if (desc.includes(q)) {
-        score += 8;
-        matchedBy.push('description');
+
+      // ── Tier 3: Individual keyword matches — each keyword found adds points ──
+      if (searchKeywords.length > 1) {
+        let keywordHits = 0;
+        for (const kw of searchKeywords) {
+          if (scpi.includes(kw)) keywordHits += 3;
+          else if (desc.includes(kw) || shortDesc.includes(kw)) keywordHits += 2;
+          else if (combinedText.includes(kw)) keywordHits += 1;
+        }
+        score += keywordHits * 5;
+        if (keywordHits > 0) matchedBy.push('keywords');
       }
-      if (normalizedText.includes(normalizedQuery)) {
-        score += 12;
-        matchedBy.push('fuzzy');
+
+      // ── Tier 4: Word boundary bonus — prefer "RST" as a whole word over "buRSTedgtype" ──
+      try {
+        const wordBoundaryRegex = new RegExp(`\\b${escapeRegex(q)}\\b`, 'i');
+        if (wordBoundaryRegex.test(scpi)) {
+          score += 30;
+          matchedBy.push('word-boundary');
+        } else if (wordBoundaryRegex.test(desc) || wordBoundaryRegex.test(name)) {
+          score += 15;
+        }
+      } catch { /* skip if regex fails */ }
+
+      // ── Tier 5: Category/group match bonus ──
+      if ((cmd.category || '').toLowerCase().includes(q)) {
+        score += 5;
+        matchedBy.push('category');
       }
+
+      // ── Minimum score filter — avoid noise from weak substring matches ──
+      if (score === 0 && matchesSearch) score = 1;
+
+      // ── Args match bonus ──
       if (
         cmd.params?.some((p) =>
           `${p.name || ''} ${p.description || ''} ${(p.options || []).join(' ')}`.toLowerCase().includes(q)
         ) ||
         String(cmd.manualEntry?.arguments || '').toLowerCase().includes(q)
       ) {
+        score += 10;
         matchedBy.push('args');
       }
-      score += Math.max(0, 5 - scpi.indexOf(q)); // earlier matches are better
+      // Earlier position in SCPI header = slightly better
+      const headerPos = scpi.indexOf(q);
+      if (headerPos >= 0) score += Math.max(0, 5 - headerPos);
       return { cmd, score, matchedBy: Array.from(new Set(matchedBy)) };
     });
 
