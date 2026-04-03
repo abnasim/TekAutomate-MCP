@@ -1240,13 +1240,20 @@ export async function smartScpiLookup(input: SmartScpiRequest): Promise<SmartScp
     const result = await assistant.smartLookup(input);
     const formatted = assistant.formatResults(result);
 
+    // Cap to 3 commands max — the model only needs the top matches
+    const topCommands = formatted.commands.slice(0, 3);
+
+    // Omit conversationalPrompt when we have commands (build/action mode)
+    // It's only useful for chat exploration menus, not workflow building
+    const includePrompt = topCommands.length === 0 && formatted.conversationalPrompt;
+
     return {
       ok: true,
-      data: formatted.commands.map(commandSuggestionToText),
+      data: topCommands.map(commandSuggestionToText),
       sourceMeta: [],
       warnings: [],
       summary: formatted.summary,
-      conversationalPrompt: formatted.conversationalPrompt
+      ...(includePrompt ? { conversationalPrompt: formatted.conversationalPrompt } : {}),
     };
   } catch (error) {
     return {
