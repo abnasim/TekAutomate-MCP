@@ -117,10 +117,10 @@ function getStartScreenGreeting(isLiveMode: boolean): string {
 function getStartScreenPrompts(isLiveMode: boolean): Array<{ label: string; prompt: string }> {
   return isLiveMode
     ? [
-        { label: 'Learn Scope', prompt: 'Send *LRN? via send_scpi to capture the full instrument state. Keep the entire response as your session context — every command and value. Then briefly summarize: what channels are active, trigger config, horizontal settings, any measurements or buses configured.' },
-        { label: 'Discover SCPI', prompt: 'Start SCPI discovery mode. Send *LRN? via send_scpi and store the response as your baseline. Then tell me to go make any changes I want on the scope. When I say done, send *LRN? again and diff against the baseline to show me the exact SCPI commands for everything I changed.' },
-        { label: 'Reset scope', prompt: 'Reset the scope to factory defaults. Send *RST via send_scpi, then *OPC? to confirm completion. Then send *LRN? to capture the reset state as your new baseline.' },
-        { label: 'What can you do?', prompt: 'What can you do in Live mode? Give me a brief overview of your capabilities.' },
+        { label: 'Check Instrument', prompt: 'Check the connected instrument. Get identity with *IDN?, check errors with *ESR? and ALLEV?, and capture full state with discover_scpi action:"snapshot". Keep lrnCommands as session context. Report identity, status, and any errors.' },
+        { label: 'Discover SCPI', prompt: 'Start SCPI discovery mode. Run discover_scpi action:"snapshot" for baseline. Then tell me to go make any changes on the scope. When I say done, run discover_scpi action:"diff" to show the exact SCPI commands that changed.' },
+        { label: 'Reset Scope', prompt: 'Reset the scope to factory defaults. Send *RST via send_scpi, *OPC? to confirm, then discover_scpi action:"snapshot" to capture the reset state.' },
+        { label: 'What can you do?', prompt: 'What can you do in Live mode? Brief overview.' },
       ]
     : [
         { label: 'What is TekAutomate?', prompt: 'What is TekAutomate? Explain what you are and how you help with test automation workflows for Tektronix instruments.' },
