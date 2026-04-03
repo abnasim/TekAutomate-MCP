@@ -340,14 +340,15 @@ export async function executeMcpTool(
   instrumentEndpoint?: LiveToolLoopParams['instrumentEndpoint'],
   flowContext?: LiveToolLoopParams['flowContext']
 ): Promise<unknown> {
-  // discover_scpi snapshot/diff: send *LRN? through browser executor directly
-  // Remote MCP server can't reach local executor — browser can.
-  // The AI gets the raw *LRN? response and handles storage/diff in conversation.
+  // discover_scpi snapshot/diff: browser fetches *LRN? from local executor,
+  // then forwards to MCP server for storage/diff. This bridges the gap where
+  // the remote MCP server can't reach the local executor directly.
   if (toolName === 'discover_scpi' && instrumentEndpoint?.executorUrl) {
     const discoverAction = String(args.action || 'snapshot');
     if (discoverAction === 'snapshot' || discoverAction === 'diff') {
+      // Step 1: Browser sends *LRN? to local executor
       const execUrl = instrumentEndpoint.executorUrl.replace(/\/$/, '');
-      const res = await fetch(`${execUrl}/run`, {
+      const execRes = await fetch(`${execUrl}/run`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -360,16 +361,29 @@ export async function executeMcpTool(
           timeout_ms: 15000,
         }),
       });
-      if (!res.ok) throw new Error(`Executor error ${res.status}: *LRN? failed`);
-      const json = await res.json() as Record<string, unknown>;
-      return {
-        ok: true,
-        action: discoverAction,
-        data: json,
-        message: discoverAction === 'snapshot'
-          ? 'Captured instrument state via *LRN?. Use this as your baseline.'
-          : 'Captured current instrument state via *LRN?. Diff against your stored baseline.',
-      };
+      if (!execRes.ok) throw new Error(`Executor error ${execRes.status}: *LRN? failed`);
+      const lrnResult = await execRes.json() as Record<string, unknown>;
+
+      // Step 2: Forward *LRN? response to MCP server for storage/diff
+      const mcpHost = resolveMcpHost();
+      if (mcpHost) {
+        const mcpRes = await fetch(`${mcpHost.replace(/\/$/, '')}/tools/execute`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            tool: 'discover_scpi',
+            args: { ...args, _lrnResponse: JSON.stringify(lrnResult) },
+            instrumentEndpoint,
+            flowContext,
+          }),
+        });
+        if (mcpRes.ok) {
+          const mcpJson = await mcpRes.json() as { ok: boolean; result: unknown };
+          if (mcpJson.ok) return mcpJson.result;
+        }
+      }
+      // Fallback: return raw *LRN? if MCP forwarding fails
+      return { ok: true, action: discoverAction, data: lrnResult };
     }
     // inspect: falls through to MCP path below
   }
