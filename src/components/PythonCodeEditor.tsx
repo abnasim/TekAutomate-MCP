@@ -91,7 +91,7 @@ export const PythonCodeEditor: React.FC<PythonCodeEditorProps> = ({
 
   return (
     <div className={className}>
-      <div ref={editorRef} className="border border-gray-300 rounded-lg overflow-hidden" />
+      <div ref={editorRef} className="border border-gray-300 dark:border-gray-600 rounded-lg overflow-auto max-h-[70vh]" />
       {placeholder && !value && (
         <div className="absolute inset-0 pointer-events-none text-gray-400 text-sm p-4 font-mono">
           {placeholder}
