@@ -2302,7 +2302,7 @@ function AppInner() {
         type === 'write' ? { command: '', cmdParams: [], paramValues: {} } :
         type === 'set_and_query' ? { command: '', cmdParams: [], paramValues: {} } :
         type === 'save_waveform' ? { source: 'CH1', filename: 'waveform.bin', command: '', width: 1, encoding: 'RIBinary', start: 1, stop: null, format: 'bin', performance: 'fastest' } :
-        type === 'save_screenshot' ? { filename: 'screenshot.png', scopeType: /dpo|mdo/i.test(`${activeInstrumentConfig?.modelFamily || ''} ${activeInstrumentConfig?.deviceDriver || ''}`) ? 'legacy' : 'modern', method: 'pc_transfer' } :
+        type === 'save_screenshot' ? { filename: 'screenshot.png', scopeType: /dpo|mdo|tds/i.test(`${activeInstrumentConfig?.modelFamily || ''} ${activeInstrumentConfig?.deviceDriver || ''}`) ? 'legacy' : 'modern', method: 'pc_transfer' } :
         type === 'error_check' ? { command: 'ALLEV?' } :
         type === 'connect' ? { instrumentId: devices[0]?.id || '', instrumentIds: [], printIdn: false } :
         type === 'disconnect' ? { instrumentId: '', instrumentIds: [] } :
@@ -6432,7 +6432,7 @@ if __name__ == "__main__":
 
     const visaResource = getVisaResourceString(activeInstrumentConfig);
     const familyHint = `${activeInstrumentConfig.modelFamily || ''} ${activeInstrumentConfig.deviceDriver || ''}`.toLowerCase();
-    const scopeType = /dpo|mdo/i.test(familyHint) ? 'legacy' : 'modern';
+    const scopeType = /dpo|mdo|tds/i.test(familyHint) ? 'legacy' : 'modern';
     setLiveModeCapturing(true);
     setLiveModeError(null);
     try {
