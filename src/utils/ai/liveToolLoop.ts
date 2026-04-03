@@ -340,6 +340,40 @@ export async function executeMcpTool(
   instrumentEndpoint?: LiveToolLoopParams['instrumentEndpoint'],
   flowContext?: LiveToolLoopParams['flowContext']
 ): Promise<unknown> {
+  // discover_scpi snapshot/diff: send *LRN? through browser executor directly
+  // Remote MCP server can't reach local executor — browser can.
+  // The AI gets the raw *LRN? response and handles storage/diff in conversation.
+  if (toolName === 'discover_scpi' && instrumentEndpoint?.executorUrl) {
+    const discoverAction = String(args.action || 'snapshot');
+    if (discoverAction === 'snapshot' || discoverAction === 'diff') {
+      const execUrl = instrumentEndpoint.executorUrl.replace(/\/$/, '');
+      const res = await fetch(`${execUrl}/run`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          protocol_version: 1,
+          action: 'send_scpi',
+          timeout_sec: 20,
+          scope_visa: instrumentEndpoint.visaResource,
+          liveMode: true,
+          commands: ['*LRN?'],
+          timeout_ms: 15000,
+        }),
+      });
+      if (!res.ok) throw new Error(`Executor error ${res.status}: *LRN? failed`);
+      const json = await res.json() as Record<string, unknown>;
+      return {
+        ok: true,
+        action: discoverAction,
+        data: json,
+        message: discoverAction === 'snapshot'
+          ? 'Captured instrument state via *LRN?. Use this as your baseline.'
+          : 'Captured current instrument state via *LRN?. Diff against your stored baseline.',
+      };
+    }
+    // inspect: falls through to MCP path below
+  }
+
   // Instrument tools: call executor directly from browser (no MCP needed)
   if (EXECUTOR_TOOLS.has(toolName) && instrumentEndpoint?.executorUrl) {
     const execUrl = instrumentEndpoint.executorUrl.replace(/\/$/, '');
@@ -351,6 +385,19 @@ export async function executeMcpTool(
     if (toolName === 'get_instrument_state') {
       action = 'send_scpi';
       payload = { commands: ['*IDN?', '*ESR?', 'ALLEV?'], timeout_ms: 5000 };
+    }
+    // discover_scpi: route through browser executor (not remote MCP)
+    // The MCP server can't reach the local executor — browser can.
+    if (toolName === 'discover_scpi') {
+      const discoverAction = String(args.action || 'snapshot');
+      if (discoverAction === 'snapshot' || discoverAction === 'diff') {
+        action = 'send_scpi';
+        payload = { commands: ['*LRN?'], timeout_ms: 15000 };
+      } else if (discoverAction === 'inspect') {
+        // inspect reads stored data — needs MCP server, but stored data
+        // may not exist if we're routing through executor. Fall through
+        // to MCP path for inspect only.
+      }
     }
     // ── Normalize commands array ──
     // OpenAI sometimes concatenates commands with semicolons into one string
