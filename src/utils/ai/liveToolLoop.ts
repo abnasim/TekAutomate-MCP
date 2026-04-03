@@ -343,58 +343,63 @@ export async function executeMcpTool(
   // discover_scpi snapshot/diff: browser fetches *LRN? from local executor,
   // then forwards to MCP server for storage/diff. This bridges the gap where
   // the remote MCP server can't reach the local executor directly.
+  if (toolName === 'discover_scpi') {
+    console.log('[discover_scpi] instrumentEndpoint:', instrumentEndpoint?.executorUrl || 'MISSING');
+  }
   if (toolName === 'discover_scpi' && instrumentEndpoint?.executorUrl) {
     const discoverAction = String(args.action || 'snapshot');
     if (discoverAction === 'snapshot' || discoverAction === 'diff') {
-      // Step 1: Browser sends *LRN? to local executor
+      // Send *LRN? same way as send_scpi — through EXECUTOR path
       const execUrl = instrumentEndpoint.executorUrl.replace(/\/$/, '');
-      const execRes = await fetch(`${execUrl}/run`, {
+      const scopeVisa = instrumentEndpoint.visaResource;
+      const res = await fetch(`${execUrl}/run`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           protocol_version: 1,
           action: 'send_scpi',
           timeout_sec: 20,
-          scope_visa: instrumentEndpoint.visaResource,
+          scope_visa: scopeVisa,
           liveMode: true,
           commands: ['*LRN?'],
           timeout_ms: 15000,
         }),
       });
-      if (!execRes.ok) throw new Error(`Executor error ${execRes.status}: *LRN? failed`);
-      const lrnResult = await execRes.json() as Record<string, unknown>;
+      if (!res.ok) throw new Error(`Executor error ${res.status}: *LRN? failed`);
+      const lrnResult = await res.json() as Record<string, unknown>;
 
-      // Step 2: Forward *LRN? response to MCP server for storage/diff
+      // Forward to MCP for storage/diff
       const mcpHost = resolveMcpHost();
       if (mcpHost) {
-        const mcpRes = await fetch(`${mcpHost.replace(/\/$/, '')}/tools/execute`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            tool: 'discover_scpi',
-            args: { ...args, _lrnResponse: JSON.stringify(lrnResult) },
-            instrumentEndpoint,
-            flowContext,
-          }),
-        });
-        if (mcpRes.ok) {
-          const mcpJson = await mcpRes.json() as { ok: boolean; result: unknown };
-          if (mcpJson.ok) {
-            const mcpResult = mcpJson.result as Record<string, unknown>;
-            // For snapshot: include raw *LRN? so AI has full instrument context
-            if (discoverAction === 'snapshot') {
-              const data = lrnResult?.data ?? lrnResult;
-              const responses = ((data as Record<string, unknown>)?.responses ?? (data as Record<string, unknown>)?.results ?? []) as Array<{ response?: string }>;
-              const rawLrn = responses[0]?.response || String((data as Record<string, unknown>)?.stdout || '');
-              if (rawLrn) {
-                (mcpResult as Record<string, unknown>).lrnCommands = rawLrn;
+        try {
+          const mcpRes = await fetch(`${mcpHost.replace(/\/$/, '')}/tools/execute`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              tool: 'discover_scpi',
+              args: { ...args, _lrnResponse: JSON.stringify(lrnResult) },
+              instrumentEndpoint,
+              flowContext,
+            }),
+          });
+          if (mcpRes.ok) {
+            const mcpJson = await mcpRes.json() as { ok: boolean; result: unknown };
+            if (mcpJson.ok) {
+              const mcpResult = mcpJson.result as Record<string, unknown>;
+              // For snapshot: include raw *LRN? so AI has full context
+              if (discoverAction === 'snapshot') {
+                const data = lrnResult?.data ?? lrnResult;
+                const responses = ((data as Record<string, unknown>)?.responses ?? (data as Record<string, unknown>)?.results ?? []) as Array<{ response?: string }>;
+                const rawLrn = responses[0]?.response || String((data as Record<string, unknown>)?.stdout || '');
+                if (rawLrn) {
+                  (mcpResult as Record<string, unknown>).lrnCommands = rawLrn;
+                }
               }
+              return mcpResult;
             }
-            return mcpResult;
           }
-        }
+        } catch { /* fall through */ }
       }
-      // Fallback: return raw *LRN? if MCP forwarding fails
       return { ok: true, action: discoverAction, data: lrnResult };
     }
     // inspect: falls through to MCP path below
