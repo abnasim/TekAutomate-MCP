@@ -329,10 +329,13 @@ async function verifyScpiCommands(
   }
 }
 
+// Cache the last known executor URL for discover_scpi bridge
+let _cachedExecutorUrl: string | null = null;
+let _cachedScopeVisa: string | null = null;
+
 /**
  * Execute a tool call. Instrument tools go directly to the executor (browser → executor).
  * Knowledge/search tools go through MCP server (/tools/execute).
- * This means live mode works even when MCP is hosted — browser reaches executor directly.
  */
 export async function executeMcpTool(
   toolName: string,
@@ -340,18 +343,24 @@ export async function executeMcpTool(
   instrumentEndpoint?: LiveToolLoopParams['instrumentEndpoint'],
   flowContext?: LiveToolLoopParams['flowContext']
 ): Promise<unknown> {
-  // discover_scpi snapshot/diff: browser fetches *LRN? from local executor,
-  // then forwards to MCP server for storage/diff. This bridges the gap where
-  // the remote MCP server can't reach the local executor directly.
-  if (toolName === 'discover_scpi') {
-    console.log('[discover_scpi] instrumentEndpoint:', instrumentEndpoint?.executorUrl || 'MISSING');
+  // Cache executor URL for discover_scpi bridge
+  if (instrumentEndpoint?.executorUrl) {
+    _cachedExecutorUrl = instrumentEndpoint.executorUrl;
+    _cachedScopeVisa = instrumentEndpoint.visaResource;
   }
-  if (toolName === 'discover_scpi' && instrumentEndpoint?.executorUrl) {
+
+  // discover_scpi snapshot/diff: browser fetches *LRN? from local executor,
+  // then forwards to MCP server for storage/diff.
+  const discoverExecUrl = instrumentEndpoint?.executorUrl || _cachedExecutorUrl;
+  const discoverVisa = instrumentEndpoint?.visaResource || _cachedScopeVisa;
+  if (toolName === 'discover_scpi') {
+    console.log('[discover_scpi] executorUrl:', discoverExecUrl || 'MISSING', 'source:', instrumentEndpoint?.executorUrl ? 'live' : (_cachedExecutorUrl ? 'cached' : 'none'));
+  }
+  if (toolName === 'discover_scpi' && discoverExecUrl) {
     const discoverAction = String(args.action || 'snapshot');
     if (discoverAction === 'snapshot' || discoverAction === 'diff') {
-      // Send *LRN? same way as send_scpi — through EXECUTOR path
-      const execUrl = instrumentEndpoint.executorUrl.replace(/\/$/, '');
-      const scopeVisa = instrumentEndpoint.visaResource;
+      const execUrl = discoverExecUrl.replace(/\/$/, '');
+      const scopeVisa = discoverVisa;
       const res = await fetch(`${execUrl}/run`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
