@@ -131,11 +131,13 @@ export function serializeCommandResult(entry: CommandRecord): Record<string, unk
 }
 
 export function serializeCommandSearchResult(entry: CommandRecord): Record<string, unknown> {
+  const ex = entry.codeExamples?.[0];
   return {
     header: entry.header,
     type: entry.commandType,
     desc: entry.shortDescription,
     group: entry.group,
+    ...(ex?.scpi?.code ? { example: `${ex.scpi.code}${ex.description ? ' — ' + ex.description : ''}` } : {}),
   };
 }
 
