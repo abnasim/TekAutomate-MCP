@@ -120,6 +120,36 @@
     "source": "mcp-server/rag/corpus/scope_logic/anti-clipping.md"
   },
   {
+    "id": "decode_bringup_md_4_p1",
+    "corpus": "errors",
+    "title": "Notes",
+    "body": "- Decode setup should follow waveform bring-up, not replace it.\n- Bus decode failures are often threshold or source issues, not missing bus commands.\n- Save screenshots or bus tables only after decode is readable.",
+    "tags": [
+      "decode_bringup_md"
+    ],
+    "source": "mcp-server/rag/corpus/scope_logic/decode-bringup.md"
+  },
+  {
+    "id": "invalid_measurement_results_md_3_p1",
+    "corpus": "errors",
+    "title": "Procedure",
+    "body": "1. Treat the value as invalid and do not use it in decisions or pass/fail logic.\n2. Check whether the waveform is clipped, off-screen, or under-ranged.\n3. Fix vertical scale and vertical position before touching the measurement definition.\n4. Verify the measurement source and reference levels after the waveform is visible and stable.\n5. Re-run the measurement only after the signal is no longer clipped or obviously malformed.",
+    "tags": [
+      "invalid_measurement_results_md"
+    ],
+    "source": "mcp-server/rag/corpus/scope_logic/invalid-measurement-results.md"
+  },
+  {
+    "id": "procedure_template_md_2_p1",
+    "corpus": "errors",
+    "title": "Trigger Signals",
+    "body": "- Phrase or symptom the AI should match\n- Common query wording from users\n- Specific sentinels, errors, or readback values",
+    "tags": [
+      "procedure_template_md"
+    ],
+    "source": "mcp-server/rag/corpus/scope_logic/procedure-template.md"
+  },
+  {
     "id": "scpi_hard_knowledge_md_38_p1",
     "corpus": "errors",
     "title": "Miscellaneous",
