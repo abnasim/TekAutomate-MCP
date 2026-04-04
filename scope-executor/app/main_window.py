@@ -9,6 +9,7 @@ from tkinter import ttk
 import threading
 import urllib.request
 import json
+import re
 
 from app.code_runner import run_executor_action
 from app.http_server import HTTPServerThread
@@ -30,6 +31,7 @@ class MainWindow:
         self._server: HTTPServerThread | None = None
         self._server_ready = False
         self._startup_probe_attempts = 0
+        self._last_vnc_summary: dict = {}
 
         self._build()
         self._init_tray()
@@ -52,6 +54,7 @@ class MainWindow:
         self.conn_panel.grid(row=0, column=0, sticky="nsew", padx=(0, 10))
         self.conn_panel.live_token_generate_requested.connect(self._generate_live_token)
         self.conn_panel.live_token_revoke_requested.connect(self._revoke_live_token)
+        self.conn_panel.vnc_test_requested.connect(self._test_vnc_target)
 
         # Centre: Instruments
         self.instr_panel = InstrumentPanel(main)
@@ -127,8 +130,10 @@ class MainWindow:
             return
         try:
             summary = self._server.vnc_summary() if self._server else {}
+            self._last_vnc_summary = summary or {}
             self.conn_panel.set_vnc_status(summary)
         except Exception:
+            self._last_vnc_summary = {}
             self.conn_panel.set_vnc_status({"ok": False})
         finally:
             self.root.after(2000, self._poll_vnc_status)
@@ -251,6 +256,49 @@ class MainWindow:
         status = self._server.revoke_live_token()
         self.conn_panel.set_live_token_status(status)
         self.log_panel.log("Revoked live token.", "warning")
+
+    def _infer_vnc_target(self) -> tuple[str | None, int]:
+        summary = self._last_vnc_summary or {}
+        sessions = summary.get("sessions") or []
+        if sessions:
+            target = sessions[0].get("target") or {}
+            host = str(target.get("host") or "").strip() or None
+            port = int(target.get("port") or 5900)
+            if host:
+                return host, port
+
+        latest_probe = summary.get("latestProbe") or {}
+        target = latest_probe.get("target") or {}
+        host = str(target.get("host") or "").strip() or None
+        port = int(target.get("port") or 5900)
+        if host:
+            return host, port
+
+        for info in getattr(self.instr_panel, "_instruments", []) or []:
+            resource = str(getattr(info, "resource", "") or "")
+            match = re.search(r"TCPIP\d*::([^:]+)::", resource, re.IGNORECASE)
+            if match:
+                return match.group(1).strip(), 5900
+        return None, 5900
+
+    def _test_vnc_target(self):
+        host, port = self._infer_vnc_target()
+        if not host:
+            message = "No VNC target available yet. Run Check first or scan for an instrument."
+            self.conn_panel.set_vnc_test_result(message)
+            self.log_panel.log(message, "warning")
+            return
+
+        uri = f"vnc://{host}:{port}"
+        try:
+            os.startfile(uri)  # type: ignore[attr-defined]
+            message = f"Opened local VNC client for {host}:{port}"
+            self.conn_panel.set_vnc_test_result(message)
+            self.log_panel.log(message, "success")
+        except Exception as exc:
+            message = f"Failed to open local VNC client for {host}:{port}: {exc}"
+            self.conn_panel.set_vnc_test_result(message)
+            self.log_panel.log(message, "error")
 
     def _quit(self):
         if self._really_quit:

@@ -39,6 +39,7 @@ class ConnectionPanel(ttk.Frame):
         self.port_changed = TkSignal()
         self.live_token_generate_requested = TkSignal()
         self.live_token_revoke_requested = TkSignal()
+        self.vnc_test_requested = TkSignal()
         self._clients: dict[str, tuple[ttk.Frame, datetime]] = {}
         self._qr_photo = None  # prevent GC
         self._qr_visible = False
@@ -131,6 +132,19 @@ class ConnectionPanel(ttk.Frame):
         ttk.Label(
             vnc_frame,
             textvariable=self._vnc_detail_var,
+            wraplength=190,
+            anchor=tk.W,
+            justify=tk.LEFT,
+        ).pack(fill=tk.X, padx=8, pady=(0, 6))
+
+        vnc_actions = ttk.Frame(vnc_frame)
+        vnc_actions.pack(fill=tk.X, padx=8, pady=(0, 4))
+        ttk.Button(vnc_actions, text="Test VNC", command=self._request_vnc_test).pack(side=tk.LEFT)
+
+        self._vnc_test_var = tk.StringVar(value="")
+        ttk.Label(
+            vnc_frame,
+            textvariable=self._vnc_test_var,
             wraplength=190,
             anchor=tk.W,
             justify=tk.LEFT,
@@ -299,6 +313,9 @@ class ConnectionPanel(ttk.Frame):
         self._vnc_state_var.set("Idle")
         self._vnc_detail_var.set("No VNC probe or session yet.")
 
+    def set_vnc_test_result(self, message: str):
+        self._vnc_test_var.set(str(message or ""))
+
     def on_client_seen(self, ip: str):
         now = datetime.now()
         if ip in self._clients:
@@ -357,3 +374,6 @@ class ConnectionPanel(ttk.Frame):
             self.update_idletasks()
         except Exception:
             messagebox.showerror("MCP Link", "Failed to copy MCP link to clipboard.")
+
+    def _request_vnc_test(self):
+        self.vnc_test_requested.emit()
