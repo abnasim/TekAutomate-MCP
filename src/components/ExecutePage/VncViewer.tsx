@@ -1,5 +1,4 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
-import { publicAssetUrl } from '../../utils/publicUrl';
 
 interface VncViewerProps {
   wsUrl: string;
@@ -23,7 +22,7 @@ export function VncViewer({ wsUrl, title = 'Scope VNC Viewer' }: VncViewerProps)
   const rfbRef = useRef<any>(null);
   const connectTimeoutRef = useRef<number | null>(null);
   const [viewerState, setViewerState] = useState<ViewerState>(CONNECTING_STATE);
-  const noVncModuleUrl = useMemo(() => publicAssetUrl('vendor/novnc/lib/rfb.js'), []);
+  const noVncModuleUrl = useMemo(() => new URL('vendor/novnc/lib/rfb.js', document.baseURI).toString(), []);
   const loadNoVncModule = useMemo(
     () => new Function('moduleUrl', 'return import(moduleUrl);') as (moduleUrl: string) => Promise<{ default: any }>,
     []
