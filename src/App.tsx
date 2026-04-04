@@ -1511,6 +1511,26 @@ function AppInner() {
   }, [executorEndpoint]);
 
   // Fetch scanned instruments from executor — once per endpoint change (host:port)
+  const getStoredLiveToken = useCallback((): string => {
+    try {
+      return window.localStorage.getItem(EXECUTE_PAGE_LIVE_TOKEN_STORAGE)?.trim() || '';
+    } catch {
+      return '';
+    }
+  }, []);
+
+  const buildExecutorHeaders = useCallback(
+    (baseHeaders?: Record<string, string>): Record<string, string> => {
+      const headers: Record<string, string> = { ...(baseHeaders || {}) };
+      const liveToken = getStoredLiveToken();
+      if (liveToken) {
+        headers['X-Live-Token'] = liveToken;
+      }
+      return headers;
+    },
+    [getStoredLiveToken]
+  );
+
   const lastScannedEndpoint = React.useRef('');
   useEffect(() => {
     if (!executorEndpoint) return;
@@ -6390,26 +6410,6 @@ if __name__ == "__main__":
     // and WinError 10053 when the client aborts the losing socket mid-response.
     return [`http://${host}:${port}/run`];
   }, [executorEndpoint]);
-
-  const getStoredLiveToken = useCallback((): string => {
-    try {
-      return window.localStorage.getItem(EXECUTE_PAGE_LIVE_TOKEN_STORAGE)?.trim() || '';
-    } catch {
-      return '';
-    }
-  }, []);
-
-  const buildExecutorHeaders = useCallback(
-    (baseHeaders?: Record<string, string>): Record<string, string> => {
-      const headers: Record<string, string> = { ...(baseHeaders || {}) };
-      const liveToken = getStoredLiveToken();
-      if (liveToken) {
-        headers['X-Live-Token'] = liveToken;
-      }
-      return headers;
-    },
-    [getStoredLiveToken]
-  );
 
   const postToExecutor = useCallback(async (
     body: string,
