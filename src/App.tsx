@@ -1394,6 +1394,8 @@ function AppInner() {
     }
   }, [devices]);
 
+  const enabledDevices = useMemo(() => devices.filter((device) => device.enabled !== false), [devices]);
+
   // Non-passive wheel listener so mouse wheel horizontally scrolls the navbar
   useEffect(() => {
     const el = navScrollRef.current;
@@ -1605,6 +1607,7 @@ function AppInner() {
     targetHost: string;
     targetPort: number;
   }>(null);
+  const [liveModeDeviceId, setLiveModeDeviceId] = useState<string | null>(null);
   const [liveModeInitialCaptureDone, setLiveModeInitialCaptureDone] = useState(false);
   const liveModeConsecutiveFailures = React.useRef(0);
   const liveModeVncTargetKeyRef = React.useRef('');
@@ -1617,6 +1620,39 @@ function AppInner() {
     }, 5000);
     return () => window.clearTimeout(timeoutId);
   }, [liveModeVncError]);
+
+  useEffect(() => {
+    const handleVncViewerMessage = (event: MessageEvent) => {
+      const data = event.data;
+      if (!data || typeof data !== 'object' || data.source !== 'tekautomate-vnc') {
+        return;
+      }
+      if (data.type === 'connected') {
+        setLiveModeVncError(null);
+        return;
+      }
+      if (data.type === 'error' && typeof data.message === 'string' && data.message.trim()) {
+        setLiveModeVncError(data.message.trim());
+        return;
+      }
+      if (data.type === 'disconnected' && !data.clean) {
+        setLiveModeVncError('VNC connection lost. Please reconnect.');
+      }
+    };
+    window.addEventListener('message', handleVncViewerMessage);
+    return () => window.removeEventListener('message', handleVncViewerMessage);
+  }, []);
+
+  useEffect(() => {
+    if (enabledDevices.length === 0) {
+      setLiveModeDeviceId(null);
+      return;
+    }
+    if (liveModeDeviceId && enabledDevices.some((device) => device.id === liveModeDeviceId)) {
+      return;
+    }
+    setLiveModeDeviceId(enabledDevices[0]?.id || null);
+  }, [enabledDevices, liveModeDeviceId]);
   const [executorScannedInstruments, setExecutorScannedInstruments] = useState<Array<{
     resource: string;
     identity: string;
@@ -4175,16 +4211,38 @@ function AppInner() {
     };
   }, [config, devices]);
 
+  const liveModeInstrumentConfig = useMemo<InstrumentConfig>(() => {
+    const selectedDevice =
+      (liveModeDeviceId ? devices.find((device) => device.id === liveModeDeviceId && device.enabled !== false) : undefined) ||
+      devices.find((device) => device.enabled !== false) ||
+      devices[0];
+    return {
+      ...config,
+      ...(selectedDevice || {}),
+    };
+  }, [config, devices, liveModeDeviceId]);
+
+  const liveModeDeviceOptions = useMemo(
+    () =>
+      enabledDevices.map((device) => ({
+        id: device.id,
+        label: device.alias || device.host || device.id,
+        targetHost: String(device.vncHost || device.host || '').trim(),
+        targetPort: Number(device.vncPort || 5900),
+      })),
+    [enabledDevices]
+  );
+
   const liveModeVncTarget = useMemo(() => {
-    const enabled = activeInstrumentConfig.vncEnabled !== false;
-    const targetHost = String(activeInstrumentConfig.vncHost || activeInstrumentConfig.host || '').trim();
-    const targetPort = Number(activeInstrumentConfig.vncPort || 5900);
+    const enabled = liveModeInstrumentConfig.vncEnabled !== false;
+    const targetHost = String(liveModeInstrumentConfig.vncHost || liveModeInstrumentConfig.host || '').trim();
+    const targetPort = Number(liveModeInstrumentConfig.vncPort || 5900);
     return {
       enabled,
       targetHost,
       targetPort: Number.isFinite(targetPort) && targetPort > 0 ? targetPort : 5900,
     };
-  }, [activeInstrumentConfig]);
+  }, [liveModeInstrumentConfig]);
 
   const probeLiveModeVncAvailability = useCallback(async () => {
     if (!executorEndpoint || !liveModeVncTarget.enabled || !liveModeVncTarget.targetHost) {
@@ -4310,6 +4368,12 @@ function AppInner() {
     }
     setLiveModeVncAvailable(null);
   }, [buildExecutorHeaders, executorEndpoint, liveModeVncSession, liveModeVncTarget]);
+
+  useEffect(() => {
+    setLiveModeCapture(null);
+    setLiveModeInitialCaptureDone(false);
+    liveModeConsecutiveFailures.current = 0;
+  }, [liveModeDeviceId]);
 
   useEffect(() => {
     if (!executorEndpoint || !liveModeVncSession) return undefined;
@@ -6677,9 +6741,9 @@ if __name__ == "__main__":
     }
     if (liveModeCapturing) return;
 
-    const visaResource = getVisaResourceString(activeInstrumentConfig);
-    const familyHint = `${activeInstrumentConfig.modelFamily || ''} ${activeInstrumentConfig.deviceDriver || ''}`.toLowerCase();
-    const scopeType = activeInstrumentConfig.scopeGeneration || (/70[0-9]{3}/i.test(familyHint) ? 'export' : /dpo|mdo|tds/i.test(familyHint) ? 'legacy' : 'modern');
+    const visaResource = getVisaResourceString(liveModeInstrumentConfig);
+    const familyHint = `${liveModeInstrumentConfig.modelFamily || ''} ${liveModeInstrumentConfig.deviceDriver || ''}`.toLowerCase();
+    const scopeType = liveModeInstrumentConfig.scopeGeneration || (/70[0-9]{3}/i.test(familyHint) ? 'export' : /dpo|mdo|tds/i.test(familyHint) ? 'legacy' : 'modern');
     setLiveModeCapturing(true);
     setLiveModeError(null);
     try {
@@ -6754,11 +6818,11 @@ if __name__ == "__main__":
       setLiveModeCapturing(false);
     }
   }, [
-    activeInstrumentConfig,
     executorEndpoint,
     getVisaResourceString,
     liveModeAutoRefresh,
     liveModeCapturing,
+    liveModeInstrumentConfig,
     postToExecutor,
   ]);
 
@@ -9837,21 +9901,21 @@ Keep under 120 words. No headings. Bullets only. Stay on this command. Do not de
             executorEndpoint={executorEndpoint}
             instrumentEndpoint={executorEndpoint ? {
               executorUrl: `http://${executorEndpoint.host}:${executorEndpoint.port}`,
-              visaResource: getVisaResourceString(activeInstrumentConfig),
-              backend: activeInstrumentConfig.backend,
+              visaResource: getVisaResourceString(liveModeInstrumentConfig),
+              backend: liveModeInstrumentConfig.backend,
               liveMode: true,
             } : null}
             latestLiveScreenshot={liveModeCapture}
             chatContextAttachments={[]}
             flowContext={{
-              backend: activeInstrumentConfig.backend,
-              modelFamily: activeInstrumentConfig.modelFamily,
-              connectionType: activeInstrumentConfig.connectionType,
-              host: activeInstrumentConfig.host,
-              deviceType: activeInstrumentConfig.deviceType,
-              deviceDriver: activeInstrumentConfig.deviceDriver,
-              visaBackend: activeInstrumentConfig.visaBackend,
-              alias: activeInstrumentConfig.alias,
+              backend: liveModeInstrumentConfig.backend,
+              modelFamily: liveModeInstrumentConfig.modelFamily,
+              connectionType: liveModeInstrumentConfig.connectionType,
+              host: liveModeInstrumentConfig.host,
+              deviceType: liveModeInstrumentConfig.deviceType,
+              deviceDriver: liveModeInstrumentConfig.deviceDriver,
+              visaBackend: liveModeInstrumentConfig.visaBackend,
+              alias: liveModeInstrumentConfig.alias,
               instrumentMap: (() => {
                 const configuredDevices = (devices.length > 0 ? devices : [{ ...config, id: 'default', enabled: true }]).map((device) => ({
                   alias: device.alias,
@@ -9960,6 +10024,11 @@ Keep under 120 words. No headings. Bullets only. Stay on this command. Do not de
                 }}
                 onToggleVnc={() => {
                   void toggleLiveModeVnc();
+                }}
+                deviceOptions={liveModeDeviceOptions}
+                selectedDeviceId={liveModeDeviceId}
+                onSelectDevice={(deviceId) => {
+                  setLiveModeDeviceId(deviceId);
                 }}
               />
             }

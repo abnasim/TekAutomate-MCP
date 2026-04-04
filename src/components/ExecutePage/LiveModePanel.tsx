@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { Camera, ChevronDown, ChevronRight, Image as ImageIcon, KeyRound, Loader2, MonitorSmartphone, RefreshCw, Terminal } from 'lucide-react';
 import { VncViewer } from './VncViewer';
 
@@ -28,6 +28,9 @@ interface LiveModePanelProps {
   vncSessionInfo?: { wsUrl: string; targetHost: string; targetPort: number; sessionId: string } | null;
   onCheckVnc?: () => void;
   onToggleVnc?: () => void;
+  deviceOptions?: Array<{ id: string; label: string; targetHost?: string; targetPort?: number }>;
+  selectedDeviceId?: string | null;
+  onSelectDevice?: (deviceId: string) => void;
 }
 
 function formatBytes(size: number): string {
@@ -66,12 +69,29 @@ export function LiveModePanel({
   vncSessionInfo = null,
   onCheckVnc,
   onToggleVnc,
+  deviceOptions = [],
+  selectedDeviceId = null,
+  onSelectDevice,
 }: LiveModePanelProps) {
   const [showLogs, setShowLogs] = useState(false);
   const [viewMode, setViewMode] = useState<'screenshot' | 'vnc'>('screenshot');
+  const [showVncReadyCard, setShowVncReadyCard] = useState(false);
   const logLines = (runLog || '').split(/\r?\n/).filter(Boolean);
   const hasLogs = logLines.length > 0;
   const canShowVncTab = Boolean(vncActive || vncAvailable);
+  const selectedDevice = deviceOptions.find((device) => device.id === selectedDeviceId) || null;
+
+  useEffect(() => {
+    if (!vncActive || !vncSessionInfo) {
+      setShowVncReadyCard(false);
+      return undefined;
+    }
+    setShowVncReadyCard(true);
+    const timeoutId = window.setTimeout(() => {
+      setShowVncReadyCard(false);
+    }, 5000);
+    return () => window.clearTimeout(timeoutId);
+  }, [vncActive, vncSessionInfo?.sessionId]);
 
   return (
     <div className="h-full flex flex-col bg-slate-100 dark:bg-slate-950">
@@ -79,6 +99,21 @@ export function LiveModePanel({
       <div className="flex items-center justify-between gap-3 border-b border-slate-200 px-4 py-2.5 dark:border-slate-800/50">
         <div className="text-sm font-semibold text-slate-900 dark:text-white">Live Mode</div>
         <div className="flex items-center gap-2">
+          {deviceOptions.length > 1 && onSelectDevice ? (
+            <select
+              value={selectedDeviceId || ''}
+              onChange={(e) => onSelectDevice(e.target.value)}
+              className="rounded-lg border border-slate-300 bg-white px-2 py-1 text-[11px] font-medium text-slate-700 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-200"
+              title="Select which instrument Live Mode should target"
+              aria-label="Select live-mode instrument"
+            >
+              {deviceOptions.map((device) => (
+                <option key={device.id} value={device.id}>
+                  {device.label}
+                </option>
+              ))}
+            </select>
+          ) : null}
           <div className="flex items-center gap-1">
             <button
               type="button"
@@ -208,7 +243,7 @@ export function LiveModePanel({
           </div>
         )}
 
-        {vncActive && vncSessionInfo && (
+        {showVncReadyCard && vncActive && vncSessionInfo && (
           <div className="rounded-2xl border border-violet-200 bg-violet-50/90 px-4 py-3 text-sm text-violet-900 shadow-sm dark:border-violet-900/60 dark:bg-violet-950/30 dark:text-violet-100">
             <div className="flex items-center gap-2 font-semibold">
               <MonitorSmartphone size={14} />
@@ -218,6 +253,7 @@ export function LiveModePanel({
               Manual session started only after your click. Screenshot mode stays separate, and you can switch into the embedded VNC viewer when ready.
             </div>
             <div className="mt-2 grid gap-1 text-[11px] text-violet-900/80 dark:text-violet-200/80">
+              {selectedDevice ? <div>Instrument: {selectedDevice.label}</div> : null}
               <div>Target: {vncSessionInfo.targetHost}:{vncSessionInfo.targetPort}</div>
               <div>WebSocket: {vncSessionInfo.wsUrl}</div>
               <div>Session: {vncSessionInfo.sessionId}</div>
@@ -271,6 +307,12 @@ export function LiveModePanel({
                   ? 'Click the VNC pill to start a live session. Screenshot mode stays separate.'
                   : 'Capture the scope screen to inspect it here and share with AI.'}
               </div>
+              {selectedDevice ? (
+                <div className="mt-2 text-[11px] text-slate-500 dark:text-slate-400">
+                  Selected instrument: <span className="font-medium">{selectedDevice.label}</span>
+                  {selectedDevice.targetHost ? ` (${selectedDevice.targetHost}:${selectedDevice.targetPort || 5900})` : ''}
+                </div>
+              ) : null}
             </div>
           </div>
         )}

@@ -82,7 +82,7 @@ export function VncViewer({ wsUrl, title = 'Scope VNC Viewer' }: VncViewerProps)
     <div id="root">
       <div id="screen"></div>
       <div id="overlay">
-        <div id="status"><strong>Connecting VNC…</strong>Starting the noVNC session.</div>
+        <div id="status"><strong>Connecting VNC...</strong>Starting the noVNC session.</div>
       </div>
     </div>
     <script type="module">
@@ -93,6 +93,8 @@ export function VncViewer({ wsUrl, title = 'Scope VNC Viewer' }: VncViewerProps)
       const status = document.getElementById('status');
       const wsUrl = ${safeUrl};
       let rfb = null;
+      let connected = false;
+      let connectTimeoutId = null;
 
       function showStatus(title, message) {
         overlay.classList.remove('hidden');
@@ -101,6 +103,13 @@ export function VncViewer({ wsUrl, title = 'Scope VNC Viewer' }: VncViewerProps)
 
       function hideStatus() {
         overlay.classList.add('hidden');
+      }
+
+      function clearConnectTimeout() {
+        if (connectTimeoutId !== null) {
+          window.clearTimeout(connectTimeoutId);
+          connectTimeoutId = null;
+        }
       }
 
       try {
@@ -113,18 +122,35 @@ export function VncViewer({ wsUrl, title = 'Scope VNC Viewer' }: VncViewerProps)
         rfb.focusOnClick = true;
         rfb.background = 'rgb(2, 6, 23)';
 
+        connectTimeoutId = window.setTimeout(() => {
+          if (connected) return;
+          const message = 'The embedded viewer did not complete the noVNC handshake within 5 seconds.';
+          showStatus('VNC connection timed out', message);
+          try {
+            rfb?.disconnect();
+          } catch (_) {}
+          window.parent.postMessage({ source: 'tekautomate-vnc', type: 'error', message }, '*');
+        }, 5000);
+
         rfb.addEventListener('connect', () => {
+          connected = true;
+          clearConnectTimeout();
           hideStatus();
           window.parent.postMessage({ source: 'tekautomate-vnc', type: 'connected' }, '*');
         });
 
         rfb.addEventListener('disconnect', (event) => {
+          clearConnectTimeout();
           const clean = Boolean(event?.detail?.clean);
-          showStatus(clean ? 'VNC disconnected' : 'VNC connection lost', clean ? 'The session ended cleanly.' : 'The viewer lost its connection to the executor bridge.');
+          showStatus(
+            clean ? 'VNC disconnected' : 'VNC connection lost',
+            clean ? 'The session ended cleanly.' : 'The viewer lost its connection to the executor bridge.'
+          );
           window.parent.postMessage({ source: 'tekautomate-vnc', type: 'disconnected', clean }, '*');
         });
 
         rfb.addEventListener('credentialsrequired', () => {
+          clearConnectTimeout();
           const password = window.prompt('Enter VNC password for this scope:', '') || '';
           if (!password) {
             showStatus('Password required', 'The scope requested a VNC password. Reconnect when you are ready.');
@@ -134,17 +160,20 @@ export function VncViewer({ wsUrl, title = 'Scope VNC Viewer' }: VncViewerProps)
         });
 
         rfb.addEventListener('securityfailure', (event) => {
+          clearConnectTimeout();
           const reason = event?.detail?.reason || 'Security negotiation failed.';
           showStatus('VNC security failure', String(reason));
           window.parent.postMessage({ source: 'tekautomate-vnc', type: 'error', message: String(reason) }, '*');
         });
       } catch (error) {
+        clearConnectTimeout();
         const message = error instanceof Error ? error.message : String(error);
         showStatus('Failed to start VNC', message);
         window.parent.postMessage({ source: 'tekautomate-vnc', type: 'error', message }, '*');
       }
 
       window.addEventListener('beforeunload', () => {
+        clearConnectTimeout();
         try {
           rfb?.disconnect();
         } catch (_) {}
