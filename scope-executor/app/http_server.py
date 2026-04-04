@@ -598,6 +598,7 @@ class HTTPServerThread(threading.Thread):
             listen_host="127.0.0.1",
             bind_host="0.0.0.0",
             live_token_status_provider=self.get_live_token_status,
+            log_callback=lambda message: self.request_logged.emit("VNC", "/vnc/bridge", 200, message),
         )
 
         self.server_started = TkSignal()
