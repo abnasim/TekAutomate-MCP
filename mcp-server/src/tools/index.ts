@@ -883,20 +883,16 @@ export function getToolDefinitions() {
       name: 'discover_scpi',
       description:
         'Instrument State Discovery — captures and diffs scope settings using *LRN? command.\n\n' +
-        'Three actions:\n' +
+        'IMPORTANT: This tool requires direct network access to the instrument executor. ' +
+        'In hosted/remote MCP setups where the MCP server cannot reach the local executor, ' +
+        'use send_scpi with commands:["*LRN?"] instead — it routes through the browser which ' +
+        'CAN reach the local executor. The AI should keep the *LRN? response in conversation ' +
+        'context and diff manually when needed.\n\n' +
+        'Three actions (when direct executor access is available):\n' +
         '- action:"snapshot" — Captures full instrument state via *LRN? and stores it as baseline.\n' +
         '- action:"diff" — Captures current state and diffs against baseline. Returns exact SCPI commands that changed.\n' +
-        '- action:"inspect" — Returns stored commands from last snapshot. Use filter to narrow (e.g. filter:"TRIGGER"). Use with get_command_by_header for full details on specific commands.\n\n' +
-        'Use cases:\n' +
-        '- Take a snapshot on connect to establish baseline instrument state\n' +
-        '- After AI sends commands, diff to verify what changed and detect side effects\n' +
-        '- User configures scope manually, then diff to capture the exact SCPI recipe\n\n' +
-        'The diff returns:\n' +
-        '- Changed commands (before → after values)\n' +
-        '- Added commands (new settings)\n' +
-        '- Removed commands\n' +
-        '- scpiCommands array with exact set commands to reproduce all changes\n\n' +
-        'Optional filter parameter narrows diff to a specific SCPI root (e.g. "TRIGGER", "BUS", "MEASUREMENT").\n\n' +
+        '- action:"inspect" — Returns stored commands from last snapshot. Use filter to narrow (e.g. filter:"TRIGGER").\n\n' +
+        'Fallback: If this tool returns NO_INSTRUMENT or connection errors, use send_scpi commands:["*LRN?"] instead.\n\n' +
         'Safe: only sends *LRN? and *IDN? queries. Never sends set commands. No risk to instrument.',
       parameters: {
         type: 'object',
