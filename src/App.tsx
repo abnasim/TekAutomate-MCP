@@ -263,6 +263,19 @@ interface InstrumentConfig {
   tekhsiDevice?: string;
 }
 
+function describeExecutorVncError(error: unknown, fallback: string): string {
+  const raw = error instanceof Error ? error.message : String(error || '').trim();
+  if (!raw) return fallback;
+  const normalized = raw.toLowerCase();
+  if (normalized.includes('signal timed out') || normalized.includes('timed out')) {
+    return 'VNC request timed out. Please try again.';
+  }
+  if (normalized.includes('failed to fetch')) {
+    return 'Could not reach the executor. Please check that the tool is running.';
+  }
+  return raw;
+}
+
 interface Step {
   id: string;
   type: StepType;
@@ -1583,6 +1596,14 @@ function AppInner() {
   const liveModeConsecutiveFailures = React.useRef(0);
   const liveModeVncTargetKeyRef = React.useRef('');
   const [connectedInstrumentIdn, setConnectedInstrumentIdn] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (!liveModeVncError) return undefined;
+    const timeoutId = window.setTimeout(() => {
+      setLiveModeVncError((current) => (current === liveModeVncError ? null : current));
+    }, 5000);
+    return () => window.clearTimeout(timeoutId);
+  }, [liveModeVncError]);
   const [executorScannedInstruments, setExecutorScannedInstruments] = useState<Array<{
     resource: string;
     identity: string;
@@ -4166,7 +4187,7 @@ function AppInner() {
       });
       const res = await fetch(`http://${executorEndpoint.host}:${executorEndpoint.port}/vnc/probe?${params.toString()}`, {
         headers: buildExecutorHeaders(),
-        signal: AbortSignal.timeout(5000),
+        signal: AbortSignal.timeout(8000),
       });
       const json = await res.json() as { ok?: boolean; available?: boolean; error?: string | null };
       setLiveModeVncAvailable(Boolean(json.ok && json.available));
@@ -4177,7 +4198,7 @@ function AppInner() {
       }
     } catch (error) {
       setLiveModeVncAvailable(false);
-      setLiveModeVncError(error instanceof Error ? error.message : 'Failed to probe VNC availability.');
+      setLiveModeVncError(describeExecutorVncError(error, 'Failed to probe VNC availability.'));
     } finally {
       setLiveModeVncChecking(false);
     }
@@ -4200,7 +4221,7 @@ function AppInner() {
         });
         setLiveModeVncSession(null);
       } catch (error) {
-        setLiveModeVncError(error instanceof Error ? error.message : 'Failed to stop VNC session.');
+        setLiveModeVncError(describeExecutorVncError(error, 'Failed to stop VNC session.'));
       } finally {
         setLiveModeVncConnecting(false);
       }
@@ -4220,7 +4241,7 @@ function AppInner() {
           target_host: liveModeVncTarget.targetHost,
           target_port: liveModeVncTarget.targetPort,
         }),
-        signal: AbortSignal.timeout(7000),
+        signal: AbortSignal.timeout(15000),
       });
       const json = await res.json() as {
         ok?: boolean;
@@ -4240,7 +4261,7 @@ function AppInner() {
         targetPort: Number(json.target?.port || liveModeVncTarget.targetPort),
       });
     } catch (error) {
-      setLiveModeVncError(error instanceof Error ? error.message : 'Failed to start VNC session.');
+      setLiveModeVncError(describeExecutorVncError(error, 'Failed to start VNC session.'));
     } finally {
       setLiveModeVncConnecting(false);
     }
@@ -4267,6 +4288,44 @@ function AppInner() {
     }
     void probeLiveModeVncAvailability();
   }, [buildExecutorHeaders, executorEndpoint, liveModeVncSession, liveModeVncTarget, probeLiveModeVncAvailability]);
+
+  useEffect(() => {
+    if (!executorEndpoint || !liveModeVncSession) return undefined;
+    let cancelled = false;
+    const pollStatus = async () => {
+      try {
+        const params = new URLSearchParams({
+          target_host: liveModeVncSession.targetHost,
+          target_port: String(liveModeVncSession.targetPort),
+        });
+        const res = await fetch(`http://${executorEndpoint.host}:${executorEndpoint.port}/vnc/status?${params.toString()}`, {
+          headers: buildExecutorHeaders(),
+          signal: AbortSignal.timeout(5000),
+        });
+        const json = await res.json() as { ok?: boolean; running?: boolean; error?: string; ws_url?: string };
+        if (cancelled) return;
+        if (!json.ok || json.running === false) {
+          setLiveModeVncSession(null);
+          if (json.error) {
+            setLiveModeVncError(json.error);
+          }
+        }
+      } catch (error) {
+        if (!cancelled) {
+          setLiveModeVncError(describeExecutorVncError(error, 'Failed to refresh VNC session status.'));
+        }
+      }
+    };
+
+    void pollStatus();
+    const intervalId = window.setInterval(() => {
+      void pollStatus();
+    }, 15000);
+    return () => {
+      cancelled = true;
+      window.clearInterval(intervalId);
+    };
+  }, [buildExecutorHeaders, executorEndpoint, liveModeVncSession]);
 
   // Live-mode screenshots are available on-demand via the MCP capture_screenshot tool.
   // We no longer auto-attach them to every chat message to avoid excessive token usage.

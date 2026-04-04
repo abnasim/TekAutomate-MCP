@@ -208,6 +208,34 @@ class VncProxyManager:
             sessions = [session.payload() for session in self._sessions_by_id.values() if session.process.poll() is None]
             return {"ok": True, "running": bool(sessions), "sessions": sessions}
 
+    def summary(self) -> dict:
+        with self._lock:
+            self._sweep_locked()
+            latest_probe_key = None
+            latest_probe = None
+            for key, entry in self._probe_cache.items():
+                if latest_probe is None or entry.checked_at > latest_probe.checked_at:
+                    latest_probe_key = key
+                    latest_probe = entry
+
+            sessions = [session.payload() for session in self._sessions_by_id.values() if session.process.poll() is None]
+            result = {
+                "ok": True,
+                "running": bool(sessions),
+                "sessionCount": len(sessions),
+                "sessions": sessions,
+            }
+            if latest_probe_key and latest_probe:
+                host, _, port = latest_probe_key.rpartition(":")
+                result["latestProbe"] = {
+                    "target": {"host": host, "port": int(port or 5900)},
+                    "available": latest_probe.available,
+                    "error": latest_probe.error,
+                    "checkedAt": latest_probe.checked_at,
+                    "ageSec": max(0, int(time.time() - latest_probe.checked_at)),
+                }
+            return result
+
     def _cleanup_loop(self):
         while not self._stop_event.wait(15):
             with self._lock:

@@ -102,6 +102,7 @@ class MainWindow:
         self._server.start()
         self._startup_probe_attempts = 0
         self.root.after(500, self._verify_server_started)
+        self.root.after(1000, self._poll_vnc_status)
 
     def _on_started(self, host, port):
         self._server_ready = True
@@ -120,6 +121,17 @@ class MainWindow:
     def _on_status(self, status):
         self.conn_panel.set_status(status)
         self.tray.set_status(status, self.conn_panel.get_host(), self.conn_panel.get_port())
+
+    def _poll_vnc_status(self):
+        if self._really_quit:
+            return
+        try:
+            summary = self._server.vnc_summary() if self._server else {}
+            self.conn_panel.set_vnc_status(summary)
+        except Exception:
+            self.conn_panel.set_vnc_status({"ok": False})
+        finally:
+            self.root.after(2000, self._poll_vnc_status)
 
     def _on_request(self, method, path, status, detail):
         self.log_panel.log_request(method, path, status, detail)

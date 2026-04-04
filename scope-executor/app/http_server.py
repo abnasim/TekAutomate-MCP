@@ -643,3 +643,6 @@ class HTTPServerThread(threading.Thread):
 
     def vnc_status(self, target_host: str | None = None, target_port: int = 5900):
         return self._vnc_proxy_manager.status(target_host, target_port)
+
+    def vnc_summary(self):
+        return self._vnc_proxy_manager.summary()

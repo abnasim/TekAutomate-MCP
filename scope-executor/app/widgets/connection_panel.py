@@ -121,6 +121,21 @@ class ConnectionPanel(ttk.Frame):
             justify=tk.LEFT,
         ).pack(fill=tk.X, padx=8, pady=(0, 6))
 
+        vnc_frame = ttk.LabelFrame(self, text="VNC STATUS")
+        vnc_frame.pack(fill=tk.X, pady=(0, 8))
+
+        self._vnc_state_var = tk.StringVar(value="Idle")
+        ttk.Label(vnc_frame, textvariable=self._vnc_state_var).pack(fill=tk.X, padx=8, pady=(4, 2))
+
+        self._vnc_detail_var = tk.StringVar(value="No VNC probe or session yet.")
+        ttk.Label(
+            vnc_frame,
+            textvariable=self._vnc_detail_var,
+            wraplength=190,
+            anchor=tk.W,
+            justify=tk.LEFT,
+        ).pack(fill=tk.X, padx=8, pady=(0, 6))
+
         # ── QR TOGGLE BUTTON ──────────────────────────────────────────
         self._qr_toggle_btn = ttk.Button(self, text="Show QR Code", command=self._toggle_qr)
         self._qr_toggle_btn.pack(fill=tk.X, pady=(0, 8))
@@ -246,6 +261,43 @@ class ConnectionPanel(ttk.Frame):
             self._token_status_var.set(f"Active live token. Expires in {ttl}. Paste the MCP link into Claude or paste the token into TekAutomate Live mode.")
         else:
             self._token_status_var.set("Generate a token to allow remote live control.")
+
+    def set_vnc_status(self, summary: dict | None):
+        summary = summary or {}
+        sessions = summary.get("sessions") or []
+        latest_probe = summary.get("latestProbe") or {}
+
+        if sessions:
+            session = sessions[0]
+            target = session.get("target") or {}
+            listen = session.get("listen") or {}
+            self._vnc_state_var.set("Running")
+            self._vnc_detail_var.set(
+                f"Live VNC proxy active.\n"
+                f"Target: {target.get('host', '-')}:{target.get('port', '-')}\n"
+                f"Bridge: {listen.get('host', '-')}:{listen.get('port', '-')}"
+            )
+            return
+
+        if latest_probe:
+            target = latest_probe.get("target") or {}
+            if latest_probe.get("available"):
+                self._vnc_state_var.set("Available")
+                self._vnc_detail_var.set(
+                    f"VNC reachable at {target.get('host', '-')}:{target.get('port', '-')}\n"
+                    f"Checked {int(latest_probe.get('ageSec') or 0)}s ago."
+                )
+            else:
+                error = str(latest_probe.get("error") or "Connection failed.")
+                self._vnc_state_var.set("Unavailable")
+                self._vnc_detail_var.set(
+                    f"VNC not reachable at {target.get('host', '-')}:{target.get('port', '-')}\n"
+                    f"{error}"
+                )
+            return
+
+        self._vnc_state_var.set("Idle")
+        self._vnc_detail_var.set("No VNC probe or session yet.")
 
     def on_client_seen(self, ip: str):
         now = datetime.now()

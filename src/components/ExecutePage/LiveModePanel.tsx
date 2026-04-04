@@ -194,7 +194,7 @@ export function LiveModePanel({
               VNC session ready
             </div>
             <div className="mt-2 text-xs text-violet-800/90 dark:text-violet-200/90">
-              Manual session started only after your click. Viewer embed comes next; for now the executor session is live and reusable.
+              Manual session started only after your click. Screenshot mode stays separate, and you can switch into the embedded VNC viewer when ready.
             </div>
             <div className="mt-2 grid gap-1 text-[11px] text-violet-900/80 dark:text-violet-200/80">
               <div>Target: {vncSessionInfo.targetHost}:{vncSessionInfo.targetPort}</div>
