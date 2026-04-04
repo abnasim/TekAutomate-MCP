@@ -197,7 +197,7 @@ class VncProxyManager:
 
     def status(self, target_host: str | None = None, target_port: int | None = None) -> dict:
         with self._lock:
-            self._sweep_locked()
+            self._prune_exited_locked()
             if target_host:
                 key = self._target_key(str(target_host).strip(), int(target_port or 5900))
                 session = self._sessions_by_target.get(key)
@@ -210,7 +210,7 @@ class VncProxyManager:
 
     def summary(self) -> dict:
         with self._lock:
-            self._sweep_locked()
+            self._prune_exited_locked()
             latest_probe_key = None
             latest_probe = None
             for key, entry in self._probe_cache.items():
@@ -238,8 +238,16 @@ class VncProxyManager:
 
     def _cleanup_loop(self):
         while not self._stop_event.wait(15):
-            with self._lock:
-                self._sweep_locked()
+            try:
+                with self._lock:
+                    self._sweep_locked()
+            except Exception:
+                continue
+
+    def _prune_exited_locked(self):
+        for session in list(self._sessions_by_id.values()):
+            if session.process.poll() is not None:
+                self._remove_session_locked(session)
 
     def _sweep_locked(self):
         live_status = self._live_token_status_provider() or {}

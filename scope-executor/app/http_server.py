@@ -134,6 +134,17 @@ class _Handler(BaseHTTPRequestHandler):
         self.wfile.flush()
         self.close_connection = True
 
+    def _parse_int_param(self, raw_value, *, default: int, name: str) -> int:
+        if raw_value is None:
+            return int(default)
+        text = str(raw_value).strip()
+        if not text:
+            return int(default)
+        try:
+            return int(text)
+        except (TypeError, ValueError) as exc:
+            raise ValueError(f"Invalid {name}: {text}") from exc
+
     def do_OPTIONS(self):
         self.send_response(204)
         self._cors_headers()
@@ -167,21 +178,35 @@ class _Handler(BaseHTTPRequestHandler):
             if not self._require_live_token():
                 return
             target_host = (query.get("target_host") or [""])[0]
-            target_port = int((query.get("target_port") or ["5900"])[0] or "5900")
-            result = self.server_thread.vnc_probe(target_host, target_port) if self.server_thread else {"ok": False, "error": "Server unavailable"}
-            code = 200 if result.get("ok") else 400
-            self._json_response(code, result)
-            self._emit("GET", "/vnc/probe", code, f"target={target_host}:{target_port} available={result.get('available')}")
+            try:
+                target_port = self._parse_int_param((query.get("target_port") or ["5900"])[0], default=5900, name="target_port")
+                result = self.server_thread.vnc_probe(target_host, target_port) if self.server_thread else {"ok": False, "error": "Server unavailable"}
+                code = 200 if result.get("ok") else 400
+                self._json_response(code, result)
+                self._emit("GET", "/vnc/probe", code, f"target={target_host}:{target_port} available={result.get('available')}")
+            except ValueError as exc:
+                self._json_response(400, {"ok": False, "error": str(exc)})
+                self._emit("GET", "/vnc/probe", 400, str(exc))
+            except Exception as exc:
+                self._json_response(500, {"ok": False, "error": str(exc)})
+                self._emit("GET", "/vnc/probe", 500, str(exc))
             return
         if path == "/vnc/status":
             if not self._require_live_token():
                 return
             target_host = (query.get("target_host") or [""])[0] or None
-            target_port = int((query.get("target_port") or ["5900"])[0] or "5900")
-            result = self.server_thread.vnc_status(target_host, target_port) if self.server_thread else {"ok": False, "error": "Server unavailable"}
-            code = 200 if result.get("ok") else 400
-            self._json_response(code, result)
-            self._emit("GET", "/vnc/status", code, f"target={target_host or '*'}:{target_port} running={result.get('running')}")
+            try:
+                target_port = self._parse_int_param((query.get("target_port") or ["5900"])[0], default=5900, name="target_port")
+                result = self.server_thread.vnc_status(target_host, target_port) if self.server_thread else {"ok": False, "error": "Server unavailable"}
+                code = 200 if result.get("ok") else 400
+                self._json_response(code, result)
+                self._emit("GET", "/vnc/status", code, f"target={target_host or '*'}:{target_port} running={result.get('running')}")
+            except ValueError as exc:
+                self._json_response(400, {"ok": False, "error": str(exc)})
+                self._emit("GET", "/vnc/status", 400, str(exc))
+            except Exception as exc:
+                self._json_response(500, {"ok": False, "error": str(exc)})
+                self._emit("GET", "/vnc/status", 500, str(exc))
             return
         self.send_response(404)
         self.end_headers()
