@@ -53,6 +53,7 @@ interface OpenAiChatKitPanelProps {
     visaResource: string;
     backend: string;
     liveMode?: boolean;
+    liveToken?: string;
   } | null;
   latestLiveScreenshot?: LatestScreenshotState | null;
   onLiveScreenshot?: (screenshot: { dataUrl: string; mimeType: string; sizeBytes: number; capturedAt: string }) => void;

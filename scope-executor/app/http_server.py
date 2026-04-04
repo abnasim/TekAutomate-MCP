@@ -16,6 +16,7 @@ from http.server import BaseHTTPRequestHandler, HTTPServer
 from socketserver import ThreadingMixIn
 
 from app.code_runner import run_executor_action, run_python_code
+from app.live_token_manager import LiveTokenManager
 from app.tk_utils import TkSignal
 
 PROTOCOL_VERSION = 1
@@ -76,7 +77,43 @@ class _Handler(BaseHTTPRequestHandler):
     def _cors_headers(self):
         self.send_header("Access-Control-Allow-Origin", "*")
         self.send_header("Access-Control-Allow-Methods", "GET, POST, OPTIONS")
-        self.send_header("Access-Control-Allow-Headers", "Content-Type")
+        self.send_header("Access-Control-Allow-Headers", "Content-Type, Authorization, X-Live-Token")
+
+    def _client_ip(self) -> str:
+        return self.client_address[0] if self.client_address else ""
+
+    def _is_local_request(self) -> bool:
+        ip = self._client_ip()
+        return ip in {"127.0.0.1", "::1", "::ffff:127.0.0.1", "localhost"}
+
+    def _extract_live_token(self) -> str:
+        token = self.headers.get("X-Live-Token", "")
+        if token:
+            return token.strip()
+        auth = self.headers.get("Authorization", "")
+        if auth.lower().startswith("bearer "):
+            return auth[7:].strip()
+        return ""
+
+    def _require_live_token(self) -> bool:
+        srv = self.server_thread
+        if not srv:
+            self._json_response(500, {"ok": False, "error": "Server unavailable"})
+            return False
+        token = self._extract_live_token()
+        valid, message = srv.validate_live_token(token)
+        if valid:
+            return True
+        self._json_response(401, {"ok": False, "error": message, "requiresLiveToken": True})
+        self._emit("AUTH", self.path, 401, message)
+        return False
+
+    def _require_localhost(self) -> bool:
+        if self._is_local_request():
+            return True
+        self._json_response(403, {"ok": False, "error": "Token management is only available from the local executor UI host."})
+        self._emit("AUTH", self.path, 403, "token route requires localhost")
+        return False
 
     def _json_response(self, code: int, body: dict):
         data = json.dumps(body).encode()
@@ -98,10 +135,18 @@ class _Handler(BaseHTTPRequestHandler):
             self._json_response(200, {"status": "ok", "protocol_version": PROTOCOL_VERSION})
             self._emit("GET", self.path, 200, "health check")
             return
+        if self.path == "/token/status":
+            if not self._require_localhost():
+                return
+            self._json_response(200, {"ok": True, **(self.server_thread.get_live_token_status() if self.server_thread else {})})
+            self._emit("GET", "/token/status", 200, "token status")
+            return
         if self.path == "/stream":
             self._handle_sse()
             return
         if self.path == "/scan":
+            if not self._require_live_token():
+                return
             self._handle_scan()
             return
         self.send_response(404)
@@ -176,6 +221,12 @@ class _Handler(BaseHTTPRequestHandler):
 
     def do_POST(self):
         t0 = time.time()
+        if self.path == "/token/generate":
+            self._handle_token_generate()
+            return
+        if self.path == "/token/revoke":
+            self._handle_token_revoke()
+            return
         if self.path != "/run":
             self.send_response(404)
             self.end_headers()
@@ -200,6 +251,9 @@ class _Handler(BaseHTTPRequestHandler):
         if data.get("protocol_version") != PROTOCOL_VERSION or action not in {"run_python", "capture_screenshot", "send_scpi", "disconnect", "device_clear"}:
             self._json_response(400, {"ok": False, "error": "Bad request"})
             self._emit("POST", "/run", 400, f"bad protocol action={action_label}")
+            return
+
+        if action in {"capture_screenshot", "send_scpi", "disconnect", "device_clear"} and not self._require_live_token():
             return
 
         srv = self.server_thread
@@ -379,6 +433,43 @@ class _Handler(BaseHTTPRequestHandler):
     def log_message(self, *args):
         pass
 
+    def _read_json_body(self):
+        content_length = int(self.headers.get("Content-Length", 0))
+        if content_length <= 0 or content_length > 1024 * 1024:
+            raise ValueError("Invalid Content-Length")
+        body = self.rfile.read(content_length)
+        return json.loads(body.decode("utf-8"))
+
+    def _handle_token_generate(self):
+        if not self._require_localhost():
+            return
+        try:
+            data = self._read_json_body()
+        except ValueError as exc:
+            self._json_response(400, {"ok": False, "error": str(exc)})
+            self._emit("POST", "/token/generate", 400, str(exc))
+            return
+        except json.JSONDecodeError:
+            self._json_response(400, {"ok": False, "error": "Invalid JSON"})
+            self._emit("POST", "/token/generate", 400, "invalid JSON")
+            return
+        duration_minutes = data.get("durationMinutes", 30)
+        try:
+            token, status = self.server_thread.generate_live_token(int(duration_minutes))
+        except Exception as exc:
+            self._json_response(500, {"ok": False, "error": str(exc)})
+            self._emit("POST", "/token/generate", 500, str(exc))
+            return
+        self._json_response(200, {"ok": True, "token": token, **status})
+        self._emit("POST", "/token/generate", 200, f"generated live token ({status.get('durationMinutes')} min)")
+
+    def _handle_token_revoke(self):
+        if not self._require_localhost():
+            return
+        status = self.server_thread.revoke_live_token() if self.server_thread else {}
+        self._json_response(200, {"ok": True, **status})
+        self._emit("POST", "/token/revoke", 200, "revoked live token")
+
 
 class HTTPServerThread(threading.Thread):
     def __init__(self, host: str, port: int):
@@ -388,6 +479,7 @@ class HTTPServerThread(threading.Thread):
         self._server: HTTPServer | None = None
         self._prepare_error: str | None = None
         self.get_timeout = lambda: 30
+        self._live_token_manager = LiveTokenManager()
 
         self.server_started = TkSignal()
         self.server_error = TkSignal()
@@ -395,6 +487,7 @@ class HTTPServerThread(threading.Thread):
         self.request_logged = TkSignal()
         self.client_seen = TkSignal()
         self.script_line = TkSignal()
+        self.live_token_changed = TkSignal()
 
     def prepare(self) -> bool:
         if self._server is not None:
@@ -435,3 +528,19 @@ class HTTPServerThread(threading.Thread):
                 self.join(timeout=2.0)
             except Exception:
                 pass
+
+    def get_live_token_status(self):
+        return self._live_token_manager.status()
+
+    def generate_live_token(self, duration_minutes: int):
+        token, status = self._live_token_manager.generate(duration_minutes)
+        self.live_token_changed.emit(status)
+        return token, status
+
+    def revoke_live_token(self):
+        status = self._live_token_manager.revoke()
+        self.live_token_changed.emit(status)
+        return status
+
+    def validate_live_token(self, token: str | None):
+        return self._live_token_manager.validate(token)

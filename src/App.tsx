@@ -8120,7 +8120,16 @@ Keep under 120 words. No headings. Bullets only. Stay on this command. Do not de
             </button>
             <button
               onClick={() => {
-                setExecutionSource(currentView === 'flow-designer' ? 'blockly' : 'steps');
+                if (currentView !== 'execute') {
+                  const savedTab = localStorage.getItem('tekautomate.execute.center_tab');
+                  if (savedTab === 'live') {
+                    setExecutionSource('live');
+                  } else if (savedTab === 'blockly' || currentView === 'flow-designer') {
+                    setExecutionSource('blockly');
+                  } else {
+                    setExecutionSource('steps');
+                  }
+                }
                 setCurrentView('execute');
               }}
               className={`h-7 lg:h-8 px-2 lg:px-3 py-1 lg:py-1.5 rounded text-[11px] lg:text-xs font-medium flex items-center justify-center gap-1.5 whitespace-nowrap flex-shrink-0 ${currentView === 'execute' ? 'bg-blue-600 text-white' : 'bg-gray-100 dark:bg-gray-700 dark:text-gray-200'}`}
