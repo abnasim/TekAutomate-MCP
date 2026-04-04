@@ -35,6 +35,7 @@ export interface LiveToolLoopParams {
     backend: string;
     liveMode?: boolean;
     outputMode?: 'clean' | 'verbose';
+    liveToken?: string;
   };
   flowContext?: {
     backend?: string;
@@ -134,6 +135,20 @@ export const EXECUTOR_TOOLS = new Set([
   'probe_command', 'get_visa_resources', 'get_environment',
   'discover_scpi',
 ]);
+
+function buildExecutorHeaders(instrumentEndpoint?: LiveToolLoopParams['instrumentEndpoint']): Record<string, string> {
+  const headers: Record<string, string> = { 'Content-Type': 'application/json' };
+  const token = String(instrumentEndpoint?.liveToken || '').trim();
+  if (token) headers['X-Live-Token'] = token;
+  return headers;
+}
+
+function buildMcpHeaders(instrumentEndpoint?: LiveToolLoopParams['instrumentEndpoint']): Record<string, string> {
+  const headers: Record<string, string> = { 'Content-Type': 'application/json' };
+  const token = String(instrumentEndpoint?.liveToken || '').trim();
+  if (token) headers.Authorization = `Bearer ${token}`;
+  return headers;
+}
 
 function splitScpiCommandString(command: string): string[] {
   const text = String(command || '');
@@ -303,7 +318,7 @@ async function verifyScpiCommands(
   try {
     const res = await fetch(`${mcpHost.replace(/\/$/, '')}/tools/execute`, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: buildMcpHeaders(),
       body: JSON.stringify({
         tool: 'verify_scpi_commands',
         args: { commands: nonStarCommands, modelFamily: flowContext?.modelFamily },
@@ -403,7 +418,7 @@ export async function executeMcpTool(
 
     const res = await fetch(`${execUrl}/run`, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: buildExecutorHeaders(instrumentEndpoint),
       body: JSON.stringify({
         protocol_version: 1,
         action,
@@ -427,7 +442,7 @@ export async function executeMcpTool(
         try {
           const mcpRes = await fetch(`${mcpHost.replace(/\/$/, '')}/tools/execute`, {
             method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
+            headers: buildMcpHeaders(instrumentEndpoint),
             body: JSON.stringify({
               tool: 'discover_scpi',
               args: { ...args, _lrnResponse: JSON.stringify(directResult) },
@@ -461,7 +476,7 @@ export async function executeMcpTool(
 
   const res = await fetch(`${mcpHost.replace(/\/$/, '')}/tools/execute`, {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
+    headers: buildMcpHeaders(instrumentEndpoint),
     body: JSON.stringify({
       tool: toolName,
       args,

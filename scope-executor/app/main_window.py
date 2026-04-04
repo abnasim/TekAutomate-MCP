@@ -50,6 +50,8 @@ class MainWindow:
         # Left: Connection – fixed width
         self.conn_panel = ConnectionPanel(main)
         self.conn_panel.grid(row=0, column=0, sticky="nsew", padx=(0, 10))
+        self.conn_panel.live_token_generate_requested.connect(self._generate_live_token)
+        self.conn_panel.live_token_revoke_requested.connect(self._revoke_live_token)
 
         # Centre: Instruments
         self.instr_panel = InstrumentPanel(main)
@@ -92,9 +94,11 @@ class MainWindow:
         self._server.request_logged.connect(self._on_request)
         self._server.client_seen.connect(self.conn_panel.on_client_seen)
         self._server.script_line.connect(self._on_script_line)
+        self._server.live_token_changed.connect(lambda status: self.conn_panel.set_live_token_status(status))
         if not self._server.prepare():
             self._on_error(self._server._prepare_error or "Failed to prepare server")
             return
+        self.conn_panel.set_live_token_status(self._server.get_live_token_status())
         self._server.start()
         self._startup_probe_attempts = 0
         self.root.after(500, self._verify_server_started)
@@ -219,6 +223,21 @@ class MainWindow:
         self.root.deiconify()
         self.root.lift()
         self.root.focus_force()
+
+    def _generate_live_token(self, duration_minutes: int):
+        if not self._server:
+            self.log_panel.log("Server is not ready for token generation.", "error")
+            return
+        token, status = self._server.generate_live_token(int(duration_minutes))
+        self.conn_panel.set_live_token_status(status, token=token)
+        self.log_panel.log(f"Generated live token for {status.get('durationMinutes')} minute(s).", "success")
+
+    def _revoke_live_token(self):
+        if not self._server:
+            return
+        status = self._server.revoke_live_token()
+        self.conn_panel.set_live_token_status(status)
+        self.log_panel.log("Revoked live token.", "warning")
 
     def _quit(self):
         if self._really_quit:

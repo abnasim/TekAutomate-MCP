@@ -75,6 +75,7 @@ export interface McpChatRequest {
     backend: string;
     liveMode?: boolean;
     outputMode?: 'clean' | 'verbose';
+    liveToken?: string;
   };
 }
 
@@ -93,14 +94,18 @@ export interface McpChatAttachment {
 export async function disconnectLiveSession(instrumentEndpoint?: {
   executorUrl: string;
   visaResource: string;
+  liveToken?: string;
 } | null): Promise<boolean> {
   if (!instrumentEndpoint?.executorUrl || !instrumentEndpoint?.visaResource) return false;
   const mcpHost = resolveMcpHost();
   if (!mcpHost) return false;
   try {
+    const headers: Record<string, string> = { 'Content-Type': 'application/json' };
+    const token = String(instrumentEndpoint.liveToken || '').trim();
+    if (token) headers.Authorization = `Bearer ${token}`;
     const res = await fetch(`${mcpHost.replace(/\/$/, '')}/tools/disconnect`, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers,
       body: JSON.stringify({ instrumentEndpoint }),
     });
     const json = await res.json() as { ok: boolean };
@@ -138,11 +143,15 @@ export async function executeToolDirect(
   executorUrl: string,
   action: string,
   payload: Record<string, unknown>,
-  scopeVisa?: string
+  scopeVisa?: string,
+  liveToken?: string
 ): Promise<Record<string, unknown>> {
+  const headers: Record<string, string> = { 'Content-Type': 'application/json' };
+  const token = String(liveToken || '').trim();
+  if (token) headers['X-Live-Token'] = token;
   const res = await fetch(`${executorUrl.replace(/\/$/, '')}/run`, {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
+    headers,
     body: JSON.stringify({
       protocol_version: 1,
       action,

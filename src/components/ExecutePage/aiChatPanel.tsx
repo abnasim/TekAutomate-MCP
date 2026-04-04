@@ -45,7 +45,7 @@ interface AiChatPanelProps {
     }>;
   };
   executorEndpoint?: { host: string; port: number } | null;
-  instrumentEndpoint?: { executorUrl: string; visaResource: string; backend: string; liveMode?: boolean } | null;
+  instrumentEndpoint?: { executorUrl: string; visaResource: string; backend: string; liveMode?: boolean; liveToken?: string } | null;
   latestLiveScreenshot?: { dataUrl: string; mimeType: string; sizeBytes: number; capturedAt: string } | null;
   contextAttachments?: McpChatAttachment[];
   lastAuditReport?: ExecutionAuditReport | null;

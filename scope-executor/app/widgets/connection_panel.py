@@ -4,7 +4,7 @@ Tkinter port of the original PySide6 version.
 """
 import socket
 import tkinter as tk
-from tkinter import ttk
+from tkinter import ttk, messagebox
 from datetime import datetime
 
 from app.tk_utils import TkSignal
@@ -36,9 +36,12 @@ class ConnectionPanel(ttk.Frame):
         super().__init__(parent)
         self.host_changed = TkSignal()
         self.port_changed = TkSignal()
+        self.live_token_generate_requested = TkSignal()
+        self.live_token_revoke_requested = TkSignal()
         self._clients: dict[str, tuple[ttk.Frame, datetime]] = {}
         self._qr_photo = None  # prevent GC
         self._qr_visible = False
+        self._active_token = ""
         self._build()
 
     def _build(self):
@@ -73,6 +76,41 @@ class ConnectionPanel(ttk.Frame):
 
         self._status_lbl = ttk.Label(status_row, text="Starting...")
         self._status_lbl.pack(side=tk.LEFT)
+
+        token_frame = ttk.LabelFrame(self, text="LIVE TOKEN")
+        token_frame.pack(fill=tk.X, pady=(0, 8))
+
+        token_controls = ttk.Frame(token_frame)
+        token_controls.pack(fill=tk.X, padx=8, pady=(4, 2))
+
+        self._token_duration_var = tk.StringVar(value="30 min")
+        self._token_duration_combo = ttk.Combobox(
+            token_controls,
+            textvariable=self._token_duration_var,
+            state="readonly",
+            values=["30 min", "60 min", "120 min", "240 min", "480 min", "720 min", "1440 min"],
+            width=10,
+        )
+        self._token_duration_combo.pack(side=tk.LEFT, fill=tk.X, expand=True)
+
+        ttk.Button(token_controls, text="Generate", command=self._generate_token).pack(side=tk.LEFT, padx=(6, 0))
+        ttk.Button(token_controls, text="Revoke", command=self._revoke_token).pack(side=tk.LEFT, padx=(6, 0))
+
+        self._token_var = tk.StringVar(value="No active token")
+        token_row = ttk.Frame(token_frame)
+        token_row.pack(fill=tk.X, padx=8, pady=(2, 2))
+        self._token_entry = ttk.Entry(token_row, textvariable=self._token_var)
+        self._token_entry.pack(side=tk.LEFT, fill=tk.X, expand=True)
+        ttk.Button(token_row, text="Copy", command=self._copy_token).pack(side=tk.LEFT, padx=(6, 0))
+
+        self._token_status_var = tk.StringVar(value="Generate a token to allow remote live control.")
+        ttk.Label(
+            token_frame,
+            textvariable=self._token_status_var,
+            wraplength=190,
+            anchor=tk.W,
+            justify=tk.LEFT,
+        ).pack(fill=tk.X, padx=8, pady=(0, 6))
 
         # ── QR TOGGLE BUTTON ──────────────────────────────────────────
         self._qr_toggle_btn = ttk.Button(self, text="Show QR Code", command=self._toggle_qr)
@@ -133,6 +171,13 @@ class ConnectionPanel(ttk.Frame):
     def get_timeout(self) -> int:
         return 30
 
+    def get_selected_token_duration_minutes(self) -> int:
+        raw = self._token_duration_var.get().strip().split()[0]
+        try:
+            return max(30, min(int(raw), 1440))
+        except ValueError:
+            return 30
+
     def _url(self):
         return f"tekautomate://connect?v=1&host={self.get_host()}&port={self.get_port()}"
 
@@ -157,6 +202,27 @@ class ConnectionPanel(ttk.Frame):
              "starting": "Starting..."}.get(status, status)
         self._pip_canvas.itemconfigure(self._pip_id, fill=c)
         self._status_lbl.configure(text=t)
+
+    def set_live_token_status(self, status: dict | None, token: str | None = None):
+        status = status or {}
+        active = bool(status.get("active"))
+        if token:
+            self._active_token = token
+            self._token_var.set(token)
+        elif active:
+            self._token_var.set(str(status.get("tokenPreview") or "Token active"))
+        else:
+            self._active_token = ""
+            self._token_var.set("No active token")
+
+        remaining = int(status.get("remainingSec") or 0)
+        if active:
+            minutes, seconds = divmod(remaining, 60)
+            hours, minutes = divmod(minutes, 60)
+            ttl = f"{hours:02d}:{minutes:02d}:{seconds:02d}" if hours else f"{minutes:02d}:{seconds:02d}"
+            self._token_status_var.set(f"Active live token. Expires in {ttl}. Paste this into TekAutomate Live mode.")
+        else:
+            self._token_status_var.set("Generate a token to allow remote live control.")
 
     def on_client_seen(self, ip: str):
         now = datetime.now()
@@ -186,3 +252,21 @@ class ConnectionPanel(ttk.Frame):
         ts.pack(side=tk.RIGHT)
 
         self._clients[ip] = (row, now)
+
+    def _generate_token(self):
+        self.live_token_generate_requested.emit(self.get_selected_token_duration_minutes())
+
+    def _revoke_token(self):
+        self.live_token_revoke_requested.emit()
+
+    def _copy_token(self):
+        token = self._active_token or self._token_var.get().strip()
+        if not token or token == "No active token":
+            messagebox.showinfo("Live Token", "Generate a token first.")
+            return
+        try:
+            self.clipboard_clear()
+            self.clipboard_append(token)
+            self.update_idletasks()
+        except Exception:
+            messagebox.showerror("Live Token", "Failed to copy token to clipboard.")

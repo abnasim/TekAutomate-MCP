@@ -20,7 +20,7 @@ export interface ExecutePageProps {
   runLog: string;
   runStatus: 'idle' | 'connecting' | 'running' | 'done' | 'error';
   executorEndpoint: { host: string; port: number } | null;
-  instrumentEndpoint?: { executorUrl: string; visaResource: string; backend: string; liveMode?: boolean } | null;
+  instrumentEndpoint?: { executorUrl: string; visaResource: string; backend: string; liveMode?: boolean; liveToken?: string } | null;
   latestLiveScreenshot?: { dataUrl: string; mimeType: string; sizeBytes: number; capturedAt: string } | null;
   chatContextAttachments?: Array<{ name: string; mimeType: string; size: number; dataUrl?: string; textExcerpt?: string }>;
   flowContext?: {
@@ -68,6 +68,7 @@ interface WorkflowProposalState extends ParsedActionsPreview {
 const EXECUTE_PAGE_PROPOSAL_STORAGE = 'tekautomate.execute.proposal.history';
 const EXECUTE_PAGE_TAB_STORAGE = 'tekautomate.execute.center_tab';
 const EXECUTE_PAGE_AUTO_APPLY_STORAGE = 'tekautomate.execute.proposals.auto_apply';
+const EXECUTE_PAGE_LIVE_TOKEN_STORAGE = 'tekautomate.execute.live_token';
 
 function loadStoredWorkflowProposals(): WorkflowProposalState[] {
   if (typeof window === 'undefined') return [];
@@ -113,6 +114,15 @@ function loadStoredAutoApply(): boolean {
     return window.localStorage.getItem(EXECUTE_PAGE_AUTO_APPLY_STORAGE) === 'true';
   } catch {
     return false;
+  }
+}
+
+function loadStoredLiveToken(): string {
+  if (typeof window === 'undefined') return '';
+  try {
+    return window.localStorage.getItem(EXECUTE_PAGE_LIVE_TOKEN_STORAGE) || '';
+  } catch {
+    return '';
   }
 }
 
@@ -232,6 +242,7 @@ function ExecutePageContent({
   const [workspaceRevision, setWorkspaceRevision] = useState(0);
   const [pendingReapplyProposalId, setPendingReapplyProposalId] = useState<string | null>(null);
   const [autoApplyProposals, setAutoApplyProposals] = useState<boolean>(() => loadStoredAutoApply());
+  const [liveToken, setLiveToken] = useState<string>(() => loadStoredLiveToken());
 
   // ── Step-through debugger ──
   const [stepping, setStepping] = useState(false);
@@ -255,6 +266,25 @@ function ExecutePageContent({
     return flat;
   }, [steps]);
 
+  const securedInstrumentEndpoint = useMemo(() => {
+    if (!instrumentEndpoint) return instrumentEndpoint;
+    const token = liveToken.trim();
+    return token ? { ...instrumentEndpoint, liveToken: token } : instrumentEndpoint;
+  }, [instrumentEndpoint, liveToken]);
+
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    try {
+      if (liveToken.trim()) {
+        window.localStorage.setItem(EXECUTE_PAGE_LIVE_TOKEN_STORAGE, liveToken.trim());
+      } else {
+        window.localStorage.removeItem(EXECUTE_PAGE_LIVE_TOKEN_STORAGE);
+      }
+    } catch {
+      // Ignore storage errors.
+    }
+  }, [liveToken]);
+
   const appendStepLog = useCallback((line: string) => {
     setStepLog(prev => prev + line + '\n');
   }, []);
@@ -273,10 +303,14 @@ function ExecutePageContent({
 
     try {
       const url = `http://${executorEndpoint.host}:${executorEndpoint.port}/run`;
-      const visaResource = instrumentEndpoint?.visaResource || '';
+      const visaResource = securedInstrumentEndpoint?.visaResource || '';
+      const token = String(securedInstrumentEndpoint?.liveToken || '').trim();
       const res = await fetch(url, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: {
+          'Content-Type': 'application/json',
+          ...(token ? { 'X-Live-Token': token } : {}),
+        },
         body: JSON.stringify({
           protocol_version: 1,
           action: 'send_scpi',
@@ -305,7 +339,7 @@ function ExecutePageContent({
       appendStepLog(`  ✗ ${err instanceof Error ? err.message : 'Failed'}`);
     }
     setStepRunning(false);
-  }, [executorEndpoint, instrumentEndpoint, flatSteps, appendStepLog]);
+  }, [executorEndpoint, securedInstrumentEndpoint, flatSteps, appendStepLog]);
 
   const startStepping = useCallback(() => {
     setStepping(true);
@@ -494,7 +528,7 @@ function ExecutePageContent({
           runStatus={runStatus}
           flowContext={flowContext}
           executorEndpoint={executorEndpoint}
-          instrumentEndpoint={instrumentEndpoint}
+          instrumentEndpoint={securedInstrumentEndpoint}
           latestLiveScreenshot={latestLiveScreenshot}
           contextAttachments={chatContextAttachments}
           onApplyAiActions={onApplyAiActions}
@@ -646,6 +680,25 @@ function ExecutePageContent({
               </button>
             </div>
           </div>
+          {securedInstrumentEndpoint?.executorUrl ? (
+            <div className="flex items-center gap-3 border-b border-slate-200 bg-white/70 px-3 py-2 text-xs text-slate-600 dark:border-slate-800/50 dark:bg-slate-900/40 dark:text-slate-300">
+              <span className="font-semibold text-slate-700 dark:text-slate-200">Live Token</span>
+              <input
+                type="password"
+                value={liveToken}
+                onChange={(event) => setLiveToken(event.target.value)}
+                placeholder="Paste token from executor"
+                className="min-w-0 flex-1 rounded-md border border-slate-300 bg-white px-3 py-1.5 text-sm text-slate-900 outline-none focus:border-cyan-500 dark:border-slate-700 dark:bg-slate-950 dark:text-white"
+              />
+              <button
+                type="button"
+                onClick={() => setLiveToken('')}
+                className="rounded-md border border-slate-300 px-2 py-1 text-xs font-medium text-slate-600 hover:bg-slate-100 dark:border-slate-700 dark:text-slate-300 dark:hover:bg-slate-800"
+              >
+                Clear
+              </button>
+            </div>
+          ) : null}
           <div className="flex-1 min-h-0 overflow-hidden">
             {centerTab === 'proposals' ? (
               <div className="h-full overflow-auto bg-slate-100/70 p-4 dark:bg-slate-950/60">
