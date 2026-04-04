@@ -1,4 +1,5 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
+import RFB from '../../vendor/novnc/lib/rfb.js';
 
 interface VncViewerProps {
   wsUrl: string;
@@ -22,11 +23,6 @@ export function VncViewer({ wsUrl, title = 'Scope VNC Viewer' }: VncViewerProps)
   const rfbRef = useRef<any>(null);
   const connectTimeoutRef = useRef<number | null>(null);
   const [viewerState, setViewerState] = useState<ViewerState>(CONNECTING_STATE);
-  const noVncModuleUrl = useMemo(() => new URL('vendor/novnc/lib/rfb.js', document.baseURI).toString(), []);
-  const loadNoVncModule = useMemo(
-    () => new Function('moduleUrl', 'return import(moduleUrl);') as (moduleUrl: string) => Promise<{ default: any }>,
-    []
-  );
 
   const overlayHiddenClass = useMemo(
     () => (viewerState.visible ? '' : 'hidden'),
@@ -59,10 +55,6 @@ export function VncViewer({ wsUrl, title = 'Scope VNC Viewer' }: VncViewerProps)
       showState(CONNECTING_STATE);
 
       try {
-        const mod = await loadNoVncModule(noVncModuleUrl);
-        if (disposed) return;
-
-        const RFB = mod.default;
         const rfb = new RFB(screen, wsUrl, { shared: true });
         rfbRef.current = rfb;
         rfb.scaleViewport = true;
@@ -159,7 +151,7 @@ export function VncViewer({ wsUrl, title = 'Scope VNC Viewer' }: VncViewerProps)
         screenRef.current.innerHTML = '';
       }
     };
-  }, [loadNoVncModule, noVncModuleUrl, wsUrl]);
+  }, [wsUrl]);
 
   return (
     <div className="relative h-full overflow-hidden rounded-2xl border border-slate-200 bg-slate-950 shadow-sm dark:border-slate-800">
