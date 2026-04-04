@@ -1280,41 +1280,41 @@ export function useAiChat(params: {
       label: 'Check Flow',
       promptTemplate:
         'Review the current flow structure from the user perspective. Ignore run logs and environment issues. Call out only real flow blockers or risky design issues, and propose ACTIONS_JSON only if a concrete flow fix is needed.',
-      corporaHint: ['app_logic', 'scpi'],
+      corporaHint: ['scope_logic', 'app_logic', 'scpi'],
     },
     {
       id: 'validate_flow_commands',
       label: 'Verify SCPI in Flow',
       promptTemplate:
         'Verify all SCPI commands currently in the flow against the loaded command JSON/source-of-truth for this model family. Report invalid/missing headers, wrong argument usage, or risky concatenation. Propose ACTIONS_JSON fixes only for clear, safe corrections.',
-      corporaHint: ['scpi', 'app_logic'],
+      corporaHint: ['scpi', 'scope_logic', 'app_logic'],
     },
     {
       id: 'command_lookup',
       label: 'Look Up Command',
       promptTemplate:
         'Look up this command using current model/backend context and return BOTH formats when available: (1) SCPI header/syntax/valid values/examples and (2) tm_devices method/path/example. Include related commands and one concrete TekAutomate step suggestion.',
-      corporaHint: ['scpi', 'tmdevices', 'app_logic', 'pyvisa_tekhsi'],
+      corporaHint: ['scpi', 'tmdevices', 'scope_logic', 'app_logic', 'pyvisa_tekhsi'],
     },
     {
       id: 'tm_devices_lookup',
       label: 'Screenshot Placeholder',
       promptTemplate:
         'Create a temporary screenshot placeholder step for this flow (no execution side effects), and keep it easy to replace later.',
-      corporaHint: ['app_logic'],
+      corporaHint: ['scope_logic', 'app_logic'],
     },
     {
       id: 'check_logs',
       label: 'Check Run Logs',
       promptTemplate:
         'Review the latest run logs and audit only. If execution failed, explain the root cause with concrete evidence and exact remediation steps. If it succeeded, say "Run looks good."',
-      corporaHint: ['errors', 'app_logic'],
+      corporaHint: ['errors', 'scope_logic', 'app_logic'],
     },
     {
       id: 'surprise_me',
       label: 'Surprise me',
       promptTemplate: SURPRISE_PROMPTS[Math.floor(Math.random() * SURPRISE_PROMPTS.length)],
-      corporaHint: ['app_logic', 'scpi', 'tmdevices'],
+      corporaHint: ['scope_logic', 'app_logic', 'scpi', 'tmdevices'],
     },
   ];
 

@@ -1,0 +1,122 @@
+[
+  {
+    "id": "anti_clipping_md_1_p1",
+    "corpus": "scope_logic",
+    "title": "Anti-Clipping Procedure",
+    "body": "Use this procedure when clipping is detected, a measurement or cursor query returns `9.91E+37`, or the waveform is clearly over-ranging.",
+    "tags": [
+      "anti_clipping_md"
+    ],
+    "source": "mcp-server/rag/corpus/scope_logic/anti-clipping.md"
+  },
+  {
+    "id": "anti_clipping_md_2_p1",
+    "corpus": "scope_logic",
+    "title": "Trigger Signals",
+    "body": "- Channel clipping query reports `1`\n- Result values come back as `9.91E+37`\n- DVM or measurement results mention clipping\n- Trace is flattened against the top or bottom of the display",
+    "tags": [
+      "anti_clipping_md"
+    ],
+    "source": "mcp-server/rag/corpus/scope_logic/anti-clipping.md"
+  },
+  {
+    "id": "anti_clipping_md_4_p1",
+    "corpus": "scope_logic",
+    "title": "Notes",
+    "body": "- `9.91E+37` should be treated as an invalid-result sentinel, not a usable numeric value.\n- For automated recovery, prefer fixing vertical scale and position before changing trigger settings.\n- If clipping remains after reasonable scaling changes, suspect the probe attenuation or hardware range.",
+    "tags": [
+      "anti_clipping_md"
+    ],
+    "source": "mcp-server/rag/corpus/scope_logic/anti-clipping.md"
+  },
+  {
+    "id": "auto_setup_scope_md_1_p1",
+    "corpus": "scope_logic",
+    "title": "Auto Setup Scope Procedure",
+    "body": "Use this procedure when the user asks for a quick known-good display setup or when the current view is too mis-scaled to diagnose manually.",
+    "tags": [
+      "auto_setup_scope_md"
+    ],
+    "source": "mcp-server/rag/corpus/scope_logic/auto-setup-scope.md"
+  },
+  {
+    "id": "auto_setup_scope_md_2_p1",
+    "corpus": "scope_logic",
+    "title": "Procedure",
+    "body": "1. Enable only the channels that are relevant to the signal under test.\n2. Set reasonable probe attenuation and termination first.\n3. Run Autoset or front-panel autoset once.\n4. Re-check horizontal scale, trigger source, trigger slope, and trigger level after autoset completes.\n5. If autoset picked the wrong trigger source, correct trigger source manually and leave the acquired scale settings in place.\n6. If the display is still unstable, adjust vertical scale and trigger level manually instead of looping autoset repeatedly.",
+    "tags": [
+      "auto_setup_scope_md"
+    ],
+    "source": "mcp-server/rag/corpus/scope_logic/auto-setup-scope.md"
+  },
+  {
+    "id": "auto_setup_scope_md_3_p1",
+    "corpus": "scope_logic",
+    "title": "Notes",
+    "body": "- Autoset is a starting point, not a final configuration.\n- Repeated autoset can undo careful setup work later in a workflow.\n- In generated flows, place autoset early, before fine trigger and measurement configuration.",
+    "tags": [
+      "auto_setup_scope_md"
+    ],
+    "source": "mcp-server/rag/corpus/scope_logic/auto-setup-scope.md"
+  },
+  {
+    "id": "probe_compensation_md_1_p1",
+    "corpus": "scope_logic",
+    "title": "Probe Compensation Check",
+    "body": "Use this when probe compensation, probe integrity, or passive-probe setup is suspected.",
+    "tags": [
+      "probe_compensation_md"
+    ],
+    "source": "mcp-server/rag/corpus/scope_logic/probe-compensation.md"
+  },
+  {
+    "id": "probe_compensation_md_2_p1",
+    "corpus": "scope_logic",
+    "title": "Procedure",
+    "body": "1. Confirm the selected probe attenuation matches the physical probe switch.\n2. Run the probe compensation procedure for the target channel if the scope and probe support it.\n3. Inspect the compensation waveform and adjust the probe if the square wave is under- or over-compensated.\n4. Re-check vertical scale and offset after compensation.\n5. Repeat any critical edge or amplitude measurements after compensation completes.",
+    "tags": [
+      "probe_compensation_md"
+    ],
+    "source": "mcp-server/rag/corpus/scope_logic/probe-compensation.md"
+  },
+  {
+    "id": "probe_compensation_md_3_p1",
+    "corpus": "scope_logic",
+    "title": "Notes",
+    "body": "- Compensation issues can look like ringing, overshoot, or bandwidth problems.\n- Fix compensation before spending time tuning trigger or measurement settings.",
+    "tags": [
+      "probe_compensation_md"
+    ],
+    "source": "mcp-server/rag/corpus/scope_logic/probe-compensation.md"
+  },
+  {
+    "id": "signal_integrity_md_1_p1",
+    "corpus": "scope_logic",
+    "title": "Signal Integrity Triage",
+    "body": "Use this when the user mentions ringing, overshoot, undershoot, unstable edges, or poor signal quality.",
+    "tags": [
+      "signal_integrity_md"
+    ],
+    "source": "mcp-server/rag/corpus/scope_logic/signal-integrity.md"
+  },
+  {
+    "id": "signal_integrity_md_2_p1",
+    "corpus": "scope_logic",
+    "title": "Procedure",
+    "body": "1. Verify the channel is not clipping before interpreting overshoot or ringing.\n2. Confirm probe attenuation, grounding, and compensation are correct.\n3. Reduce loop area in the probe ground connection if a passive probe is used.\n4. Check whether bandwidth limiting should be enabled for the measurement goal.\n5. Use a shorter time scale to inspect the edge directly.\n6. Add overshoot, rise time, fall time, or pk-to-pk measurements only after the displayed edge is trustworthy.",
+    "tags": [
+      "signal_integrity_md"
+    ],
+    "source": "mcp-server/rag/corpus/scope_logic/signal-integrity.md"
+  },
+  {
+    "id": "signal_integrity_md_3_p1",
+    "corpus": "scope_logic",
+    "title": "Notes",
+    "body": "- Apparent overshoot on a clipped waveform is not trustworthy.\n- Bad probe setup often looks like a signal problem.\n- For quantitative edge analysis, stabilize the display first and measure second.",
+    "tags": [
+      "signal_integrity_md"
+    ],
+    "source": "mcp-server/rag/corpus/scope_logic/signal-integrity.md"
+  }
+]

@@ -504,13 +504,13 @@ export function getToolDefinitions() {
     },
     {
       name: 'retrieve_rag_chunks',
-      description: 'Retrieve docs from local knowledge base. corpus: "scpi"|"tmdevices"|"templates"|"pyvisa_tekhsi"|"app_logic"|"error_patterns". Use for architecture questions, workflow patterns, known bugs, connection examples.',
+      description: 'Retrieve docs from local knowledge base. corpus: "scpi"|"tmdevices"|"templates"|"pyvisa_tekhsi"|"app_logic"|"errors"|"scope_logic". Use for exact procedures, known bugs, workflow patterns, connection examples, and scope troubleshooting playbooks.',
       parameters: {
         type: 'object',
         properties: {
           corpus: {
             type: 'string',
-            enum: ['scpi', 'tmdevices', 'app_logic', 'errors', 'templates', 'pyvisa_tekhsi'],
+            enum: ['scpi', 'tmdevices', 'app_logic', 'errors', 'templates', 'pyvisa_tekhsi', 'scope_logic'],
           },
           query: { type: 'string', description: 'Search query text.' },
           topK: { type: 'number', description: 'Max chunks to return (default 5).' },
