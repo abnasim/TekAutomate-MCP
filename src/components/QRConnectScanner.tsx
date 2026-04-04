@@ -64,14 +64,14 @@ export function QRConnectScanner({ onSuccess, onCancel }: QRConnectScannerProps)
         }, 800);
       } else {
         setStatus('failed');
-        setError(`Executor responded with status ${res.status}. Check if it's running.`);
+        setError(`Executor not ready yet (status ${res.status}). Please check the tool is running.`);
       }
     } catch (err) {
       setStatus('failed');
       if (err instanceof Error && err.name === 'TimeoutError') {
-        setError('Connection timed out. Check IP and ensure executor is running.');
+        setError('Executor not found/open. Please check the tool is running.');
       } else {
-        setError('Could not reach executor. Check IP, port, and network.');
+        setError('Executor not found/open. Please check the tool is running.');
       }
     }
   }, [onSuccess, stopCamera]);

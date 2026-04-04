@@ -6443,8 +6443,7 @@ if __name__ == "__main__":
       clearTimeout(masterTimeout);
       const isAbort = controllers.some(c => c.signal.aborted);
       if (isAbort) throw new Error('Request timed out.');
-      const msg = err instanceof Error ? err.message : String(err);
-      throw new Error(`Could not reach executor (${urls.join(' | ')}): ${msg}`);
+      throw new Error('Executor not found/open. Please check the tool is running.');
     }
   }, [buildExecutorHeaders, buildExecutorRunUrls]);
 

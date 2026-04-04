@@ -85,12 +85,12 @@ class ConnectionPanel(ttk.Frame):
         token_controls = ttk.Frame(token_frame)
         token_controls.pack(fill=tk.X, padx=8, pady=(4, 2))
 
-        self._token_duration_var = tk.StringVar(value="30 min")
+        self._token_duration_var = tk.StringVar(value="1 hr")
         self._token_duration_combo = ttk.Combobox(
             token_controls,
             textvariable=self._token_duration_var,
             state="readonly",
-            values=["30 min", "60 min", "120 min", "240 min", "480 min", "720 min", "1440 min"],
+            values=["1 hr", "1 day", "1 week", "1 month", "1 year"],
             width=10,
         )
         self._token_duration_combo.pack(side=tk.LEFT, fill=tk.X, expand=True)
@@ -181,11 +181,15 @@ class ConnectionPanel(ttk.Frame):
         return 30
 
     def get_selected_token_duration_minutes(self) -> int:
-        raw = self._token_duration_var.get().strip().split()[0]
-        try:
-            return max(30, min(int(raw), 1440))
-        except ValueError:
-            return 30
+        label = self._token_duration_var.get().strip().lower()
+        mapping = {
+            "1 hr": 60,
+            "1 day": 1440,
+            "1 week": 10080,
+            "1 month": 43200,
+            "1 year": 525600,
+        }
+        return mapping.get(label, 60)
 
     def _url(self):
         return f"tekautomate://connect?v=1&host={self.get_host()}&port={self.get_port()}"

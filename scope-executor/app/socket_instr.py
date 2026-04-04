@@ -132,3 +132,15 @@ class SocketInstr:
         self.write(f'filesystem:delete "{temp_file}"')
         self.query('*opc?')
         return bytes(dat)
+
+    def read_file(self, remote_file: str) -> bytes:
+        """Read a scope file over raw socket using the same binary path as screenshots."""
+        size = self.get_file_size(remote_file)
+        cmd = f'filesystem:readfile "{remote_file}"\n'
+        self.socket.send(cmd.encode('latin_1'))
+        self.socket.send(b'!r\n')  # Flag for scope read to buffer
+        dat = self.read_bytes(size)
+        r = self.socket.recv(512)
+        if r != b'\n':
+            raise RuntimeError('File bytes request did not end with linefeed')
+        return bytes(dat)

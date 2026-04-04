@@ -265,7 +265,7 @@ def _set_session_timeout(session, timeout_ms: int, use_socket: bool):
 
 
 def _requires_raw_read(cmd: str) -> bool:
-    upper = cmd.strip().upper()
+    upper = cmd.strip().lstrip(":").upper()
     return any(upper.startswith(prefix) for prefix in _RAW_READ_PREFIXES)
 
 
@@ -603,9 +603,15 @@ def _handle_send_scpi(job: dict) -> dict:
                 _emit({"log": "scpi", "level": "send", "msg": f"[SCPI TX] {cmd}"})
 
             try:
-                if _requires_raw_read(cmd) and not use_socket:
-                    scpi.write(cmd)
-                    raw_result = _raw_payload_to_result(scpi.read_raw())
+                if _requires_raw_read(cmd):
+                    if use_socket:
+                        remote_file = cmd.strip().lstrip(":")[len("FILESYSTEM:READFILE"):].strip()
+                        remote_file = remote_file.lstrip("?").strip()
+                        remote_file = remote_file.strip('"').strip("'")
+                        raw_result = _raw_payload_to_result(scpi.read_file(remote_file))
+                    else:
+                        scpi.write(cmd)
+                        raw_result = _raw_payload_to_result(scpi.read_raw())
                     response = raw_result.pop("response", "")
                 elif cmd.strip().endswith("?"):
                     response = str(scpi.query(cmd)).strip()
@@ -626,9 +632,15 @@ def _handle_send_scpi(job: dict) -> dict:
                                 pass
                             _reset_resource_manager()
                             scpi, close_scpi = _open_command_session(visa, command_timeout_ms, False)
-                        if _requires_raw_read(cmd) and not use_socket:
-                            scpi.write(cmd)
-                            raw_result = _raw_payload_to_result(scpi.read_raw())
+                        if _requires_raw_read(cmd):
+                            if use_socket:
+                                remote_file = cmd.strip().lstrip(":")[len("FILESYSTEM:READFILE"):].strip()
+                                remote_file = remote_file.lstrip("?").strip()
+                                remote_file = remote_file.strip('"').strip("'")
+                                raw_result = _raw_payload_to_result(scpi.read_file(remote_file))
+                            else:
+                                scpi.write(cmd)
+                                raw_result = _raw_payload_to_result(scpi.read_raw())
                             response = raw_result.pop("response", "")
                         elif cmd.strip().endswith("?"):
                             response = str(scpi.query(cmd)).strip()
