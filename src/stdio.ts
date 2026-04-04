@@ -120,18 +120,9 @@ async function main() {
       const result = await runTool(name, (args as Record<string, unknown>) ?? {});
       const safeResult = sanitizeToolResultForExternalMcp(name, result);
 
-      let text = typeof safeResult === 'string'
+      const text = typeof safeResult === 'string'
         ? safeResult
         : JSON.stringify(safeResult, null, 2);
-
-      // Cap response size for MCP clients
-      const MAX_MCP_RESPONSE = 70000;
-      if (text.length > MAX_MCP_RESPONSE) {
-        const truncated = text.slice(0, MAX_MCP_RESPONSE);
-        const lastNewline = truncated.lastIndexOf('\n');
-        text = (lastNewline > MAX_MCP_RESPONSE * 0.8 ? truncated.slice(0, lastNewline) : truncated)
-          + `\n\n[Response truncated from ${text.length} to ${MAX_MCP_RESPONSE} chars. Use more specific queries.]`;
-      }
 
       return {
         content: [{ type: 'text' as const, text }],
