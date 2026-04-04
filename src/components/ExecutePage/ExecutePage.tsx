@@ -459,7 +459,7 @@ function ExecutePageContent({
                 </span>
               </button>
             </div>
-            <div className="flex items-center gap-2 py-2">
+            <div className="flex items-center gap-2 py-2 overflow-x-auto flex-nowrap min-w-0 nav-tabs-scroll">
               <button
                 type="button"
                 onClick={() => setAutoApplyProposals((value) => !value)}
