@@ -110,7 +110,7 @@ export function QRConnectScanner({ onSuccess, onCancel }: QRConnectScannerProps)
         const scanner = new Html5Qrcode('qr-reader');
         await scanner.start(
           { facingMode: 'environment' },
-          { fps: 10, qrbox: { width: 200, height: 200 }, aspectRatio: 1 },
+          { fps: 10, qrbox: { width: 200, height: 200 } } as any,
           async (decodedText: string) => {
             if (decodedText && (decodedText.startsWith('tekautomate://') || decodedText.startsWith('{"v"') || decodedText.startsWith('{"host"'))) {
               await scanner.stop().catch(() => {});
