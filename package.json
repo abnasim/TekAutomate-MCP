@@ -4,7 +4,10 @@
   "version": "0.1.0",
   "type": "module",
   "scripts": {
+    "build:rag": "tsx scripts/buildRagIndex.ts",
+    "prestart": "npm run build:rag",
     "start": "tsx src/index.ts",
+    "predev": "npm run build:rag",
     "start:stdio": "tsx src/stdio.ts",
     "dev": "tsx src/index.ts",
     "eval:router": "tsx tests/router_smoke.ts",

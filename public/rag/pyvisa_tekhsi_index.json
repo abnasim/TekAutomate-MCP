@@ -11,7 +11,7 @@
       "visa",
       "backend_guide"
     ],
-    "source": "AI_RAG/corpus/pyvisa_tekhsi/pyvisa_tekhsi_index.json"
+    "source": "rag/corpus/pyvisa_tekhsi/pyvisa_tekhsi_index.json"
   },
   {
     "id": "conn_resource_manager",
@@ -25,7 +25,7 @@
       "backend_selection",
       "connection_pattern"
     ],
-    "source": "AI_RAG/corpus/pyvisa_tekhsi/pyvisa_tekhsi_index.json"
+    "source": "rag/corpus/pyvisa_tekhsi/pyvisa_tekhsi_index.json"
   },
   {
     "id": "conn_visa_resource_strings",
@@ -42,7 +42,7 @@
       "format",
       "connection_pattern"
     ],
-    "source": "AI_RAG/corpus/pyvisa_tekhsi/pyvisa_tekhsi_index.json"
+    "source": "rag/corpus/pyvisa_tekhsi/pyvisa_tekhsi_index.json"
   },
   {
     "id": "conn_vxi11_protocol",
@@ -57,7 +57,7 @@
       "auto_discovery",
       "protocol_detail"
     ],
-    "source": "AI_RAG/corpus/pyvisa_tekhsi/pyvisa_tekhsi_index.json"
+    "source": "rag/corpus/pyvisa_tekhsi/pyvisa_tekhsi_index.json"
   },
   {
     "id": "conn_socket_connection",
@@ -71,7 +71,7 @@
       "raw_socket",
       "connection_pattern"
     ],
-    "source": "AI_RAG/corpus/pyvisa_tekhsi/pyvisa_tekhsi_index.json"
+    "source": "rag/corpus/pyvisa_tekhsi/pyvisa_tekhsi_index.json"
   },
   {
     "id": "conn_timeout_handling",
@@ -85,7 +85,7 @@
       "default_values",
       "connection_pattern"
     ],
-    "source": "AI_RAG/corpus/pyvisa_tekhsi/pyvisa_tekhsi_index.json"
+    "source": "rag/corpus/pyvisa_tekhsi/pyvisa_tekhsi_index.json"
   },
   {
     "id": "conn_write_query_pattern",
@@ -100,7 +100,7 @@
       "scpi",
       "connection_pattern"
     ],
-    "source": "AI_RAG/corpus/pyvisa_tekhsi/pyvisa_tekhsi_index.json"
+    "source": "rag/corpus/pyvisa_tekhsi/pyvisa_tekhsi_index.json"
   },
   {
     "id": "conn_binary_data_transfer",
@@ -115,7 +115,7 @@
       "read_raw",
       "connection_pattern"
     ],
-    "source": "AI_RAG/corpus/pyvisa_tekhsi/pyvisa_tekhsi_index.json"
+    "source": "rag/corpus/pyvisa_tekhsi/pyvisa_tekhsi_index.json"
   },
   {
     "id": "conn_termination_characters",
@@ -129,7 +129,7 @@
       "read_termination",
       "connection_pattern"
     ],
-    "source": "AI_RAG/corpus/pyvisa_tekhsi/pyvisa_tekhsi_index.json"
+    "source": "rag/corpus/pyvisa_tekhsi/pyvisa_tekhsi_index.json"
   },
   {
     "id": "conn_error_handling",
@@ -144,7 +144,7 @@
       "try_except",
       "connection_pattern"
     ],
-    "source": "AI_RAG/corpus/pyvisa_tekhsi/pyvisa_tekhsi_index.json"
+    "source": "rag/corpus/pyvisa_tekhsi/pyvisa_tekhsi_index.json"
   },
   {
     "id": "conn_pyvisa_py_backend",
@@ -158,7 +158,7 @@
       "linux",
       "backend_guide"
     ],
-    "source": "AI_RAG/corpus/pyvisa_tekhsi/pyvisa_tekhsi_index.json"
+    "source": "rag/corpus/pyvisa_tekhsi/pyvisa_tekhsi_index.json"
   },
   {
     "id": "conn_resource_discovery",
@@ -172,7 +172,7 @@
       "find_instruments",
       "connection_pattern"
     ],
-    "source": "AI_RAG/corpus/pyvisa_tekhsi/pyvisa_tekhsi_index.json"
+    "source": "rag/corpus/pyvisa_tekhsi/pyvisa_tekhsi_index.json"
   },
   {
     "id": "conn_tekhsi_overview",
@@ -187,7 +187,7 @@
       "waveform",
       "backend_guide"
     ],
-    "source": "AI_RAG/corpus/pyvisa_tekhsi/pyvisa_tekhsi_index.json"
+    "source": "rag/corpus/pyvisa_tekhsi/pyvisa_tekhsi_index.json"
   },
   {
     "id": "conn_tekhsi_connection",
@@ -201,7 +201,7 @@
       "port_5000",
       "connection_pattern"
     ],
-    "source": "AI_RAG/corpus/pyvisa_tekhsi/pyvisa_tekhsi_index.json"
+    "source": "rag/corpus/pyvisa_tekhsi/pyvisa_tekhsi_index.json"
   },
   {
     "id": "conn_tekhsi_when_to_use",
@@ -216,7 +216,7 @@
       "when_to_use",
       "backend_guide"
     ],
-    "source": "AI_RAG/corpus/pyvisa_tekhsi/pyvisa_tekhsi_index.json"
+    "source": "rag/corpus/pyvisa_tekhsi/pyvisa_tekhsi_index.json"
   },
   {
     "id": "conn_tekhsi_when_not",
@@ -229,7 +229,7 @@
       "not_for_scpi",
       "backend_guide"
     ],
-    "source": "AI_RAG/corpus/pyvisa_tekhsi/pyvisa_tekhsi_index.json"
+    "source": "rag/corpus/pyvisa_tekhsi/pyvisa_tekhsi_index.json"
   },
   {
     "id": "conn_tekhsi_hybrid",
@@ -244,7 +244,7 @@
       "best_of_both",
       "connection_pattern"
     ],
-    "source": "AI_RAG/corpus/pyvisa_tekhsi/pyvisa_tekhsi_index.json"
+    "source": "rag/corpus/pyvisa_tekhsi/pyvisa_tekhsi_index.json"
   },
   {
     "id": "conn_raw_socket_overview",
@@ -258,7 +258,7 @@
       "performance",
       "socket_pattern"
     ],
-    "source": "AI_RAG/corpus/pyvisa_tekhsi/pyvisa_tekhsi_index.json"
+    "source": "rag/corpus/pyvisa_tekhsi/pyvisa_tekhsi_index.json"
   },
   {
     "id": "conn_socket_instr_class",
@@ -272,7 +272,7 @@
       "mimics_pyvisa",
       "socket_pattern"
     ],
-    "source": "AI_RAG/corpus/pyvisa_tekhsi/pyvisa_tekhsi_index.json"
+    "source": "rag/corpus/pyvisa_tekhsi/pyvisa_tekhsi_index.json"
   },
   {
     "id": "conn_socket_screenshot_state_machine",
@@ -287,7 +287,7 @@
       "readfile",
       "socket_pattern"
     ],
-    "source": "AI_RAG/corpus/pyvisa_tekhsi/pyvisa_tekhsi_index.json"
+    "source": "rag/corpus/pyvisa_tekhsi/pyvisa_tekhsi_index.json"
   },
   {
     "id": "conn_binary_transfer_pitfalls",
@@ -302,7 +302,7 @@
       "readfile",
       "troubleshooting"
     ],
-    "source": "AI_RAG/corpus/pyvisa_tekhsi/pyvisa_tekhsi_index.json"
+    "source": "rag/corpus/pyvisa_tekhsi/pyvisa_tekhsi_index.json"
   },
   {
     "id": "conn_socket_vs_pyvisa",
@@ -317,7 +317,7 @@
       "comparison",
       "backend_guide"
     ],
-    "source": "AI_RAG/corpus/pyvisa_tekhsi/pyvisa_tekhsi_index.json"
+    "source": "rag/corpus/pyvisa_tekhsi/pyvisa_tekhsi_index.json"
   },
   {
     "id": "conn_tekexpress_socket",
@@ -332,7 +332,7 @@
       "pyvisa_socket",
       "connection_pattern"
     ],
-    "source": "AI_RAG/corpus/pyvisa_tekhsi/pyvisa_tekhsi_index.json"
+    "source": "rag/corpus/pyvisa_tekhsi/pyvisa_tekhsi_index.json"
   },
   {
     "id": "conn_tekexpress_no_opc",
@@ -347,7 +347,7 @@
       "state_machine",
       "connection_pattern"
     ],
-    "source": "AI_RAG/corpus/pyvisa_tekhsi/pyvisa_tekhsi_index.json"
+    "source": "rag/corpus/pyvisa_tekhsi/pyvisa_tekhsi_index.json"
   },
   {
     "id": "conn_tekexpress_popup",
@@ -361,7 +361,7 @@
       "user_interaction",
       "connection_pattern"
     ],
-    "source": "AI_RAG/corpus/pyvisa_tekhsi/pyvisa_tekhsi_index.json"
+    "source": "rag/corpus/pyvisa_tekhsi/pyvisa_tekhsi_index.json"
   },
   {
     "id": "conn_tekexpress_generator_rules",
@@ -375,7 +375,7 @@
       "never_raw_socket",
       "backend_guide"
     ],
-    "source": "AI_RAG/corpus/pyvisa_tekhsi/pyvisa_tekhsi_index.json"
+    "source": "rag/corpus/pyvisa_tekhsi/pyvisa_tekhsi_index.json"
   },
   {
     "id": "conn_decision_matrix",
@@ -388,7 +388,7 @@
       "comparison",
       "backend_guide"
     ],
-    "source": "AI_RAG/corpus/pyvisa_tekhsi/pyvisa_tekhsi_index.json"
+    "source": "rag/corpus/pyvisa_tekhsi/pyvisa_tekhsi_index.json"
   },
   {
     "id": "conn_pyvisa_default_choice",
@@ -402,7 +402,7 @@
       "compatibility",
       "backend_guide"
     ],
-    "source": "AI_RAG/corpus/pyvisa_tekhsi/pyvisa_tekhsi_index.json"
+    "source": "rag/corpus/pyvisa_tekhsi/pyvisa_tekhsi_index.json"
   },
   {
     "id": "conn_tm_devices_when",
@@ -417,7 +417,7 @@
       "command_validation",
       "backend_guide"
     ],
-    "source": "AI_RAG/corpus/pyvisa_tekhsi/pyvisa_tekhsi_index.json"
+    "source": "rag/corpus/pyvisa_tekhsi/pyvisa_tekhsi_index.json"
   },
   {
     "id": "conn_tekhsi_only_data",
@@ -432,7 +432,7 @@
       "fastacq",
       "backend_guide"
     ],
-    "source": "AI_RAG/corpus/pyvisa_tekhsi/pyvisa_tekhsi_index.json"
+    "source": "rag/corpus/pyvisa_tekhsi/pyvisa_tekhsi_index.json"
   },
   {
     "id": "conn_hybrid_mixed",
@@ -446,7 +446,7 @@
       "simultaneous",
       "backend_guide"
     ],
-    "source": "AI_RAG/corpus/pyvisa_tekhsi/pyvisa_tekhsi_index.json"
+    "source": "rag/corpus/pyvisa_tekhsi/pyvisa_tekhsi_index.json"
   },
   {
     "id": "conn_transport_rules",
@@ -461,7 +461,7 @@
       "authoritative",
       "protocol_detail"
     ],
-    "source": "AI_RAG/corpus/pyvisa_tekhsi/pyvisa_tekhsi_index.json"
+    "source": "rag/corpus/pyvisa_tekhsi/pyvisa_tekhsi_index.json"
   },
   {
     "id": "conn_readfile_deep_dive",
@@ -476,7 +476,7 @@
       "eoi",
       "protocol_detail"
     ],
-    "source": "AI_RAG/corpus/pyvisa_tekhsi/pyvisa_tekhsi_index.json"
+    "source": "rag/corpus/pyvisa_tekhsi/pyvisa_tekhsi_index.json"
   },
   {
     "id": "conn_generated_code_pattern",
@@ -490,7 +490,7 @@
       "multi_device",
       "connection_pattern"
     ],
-    "source": "AI_RAG/corpus/pyvisa_tekhsi/pyvisa_tekhsi_index.json"
+    "source": "rag/corpus/pyvisa_tekhsi/pyvisa_tekhsi_index.json"
   },
   {
     "id": "conn_troubleshoot_screenshot_timeout",
@@ -505,7 +505,7 @@
       "readfile",
       "troubleshooting"
     ],
-    "source": "AI_RAG/corpus/pyvisa_tekhsi/pyvisa_tekhsi_index.json"
+    "source": "rag/corpus/pyvisa_tekhsi/pyvisa_tekhsi_index.json"
   },
   {
     "id": "conn_troubleshoot_tekexpress",
@@ -520,7 +520,7 @@
       "timeout",
       "troubleshooting"
     ],
-    "source": "AI_RAG/corpus/pyvisa_tekhsi/pyvisa_tekhsi_index.json"
+    "source": "rag/corpus/pyvisa_tekhsi/pyvisa_tekhsi_index.json"
   },
   {
     "id": "conn_waveform_transfer_pyvisa",
@@ -535,7 +535,7 @@
       "scaling",
       "connection_pattern"
     ],
-    "source": "AI_RAG/corpus/pyvisa_tekhsi/pyvisa_tekhsi_index.json"
+    "source": "rag/corpus/pyvisa_tekhsi/pyvisa_tekhsi_index.json"
   },
   {
     "id": "conn_backend_compatibility_matrix",
@@ -549,6 +549,6 @@
       "device_support",
       "backend_guide"
     ],
-    "source": "AI_RAG/corpus/pyvisa_tekhsi/pyvisa_tekhsi_index.json"
+    "source": "rag/corpus/pyvisa_tekhsi/pyvisa_tekhsi_index.json"
   }
 ]

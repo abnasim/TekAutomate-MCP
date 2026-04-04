@@ -53,7 +53,7 @@
       "required_fields",
       "template_rule"
     ],
-    "source": "AI_RAG/corpus/templates/templates_index.json"
+    "source": "rag/corpus/templates/templates_index.json"
   },
   {
     "id": "tpl_required_pattern",
@@ -68,7 +68,7 @@
       "validation",
       "template_rule"
     ],
-    "source": "AI_RAG/corpus/templates/templates_index.json"
+    "source": "rag/corpus/templates/templates_index.json"
   },
   {
     "id": "tpl_step_type_reference",
@@ -81,7 +81,7 @@
       "schema",
       "template_rule"
     ],
-    "source": "AI_RAG/corpus/templates/templates_index.json"
+    "source": "rag/corpus/templates/templates_index.json"
   },
   {
     "id": "tpl_golden_all_step_types_flat",
@@ -96,7 +96,7 @@
       "single_device",
       "template_example"
     ],
-    "source": "AI_RAG/corpus/templates/templates_index.json"
+    "source": "rag/corpus/templates/templates_index.json"
   },
   {
     "id": "tpl_golden_all_types_grouped",
@@ -111,7 +111,7 @@
       "organized",
       "template_example"
     ],
-    "source": "AI_RAG/corpus/templates/templates_index.json"
+    "source": "rag/corpus/templates/templates_index.json"
   },
   {
     "id": "tpl_golden_single_device",
@@ -126,7 +126,7 @@
       "scope",
       "template_example"
     ],
-    "source": "AI_RAG/corpus/templates/templates_index.json"
+    "source": "rag/corpus/templates/templates_index.json"
   },
   {
     "id": "tpl_screenshot_modern",
@@ -142,7 +142,7 @@
       "python_block",
       "template_example"
     ],
-    "source": "AI_RAG/corpus/templates/templates_index.json"
+    "source": "rag/corpus/templates/templates_index.json"
   },
   {
     "id": "tpl_screenshot_legacy",
@@ -159,7 +159,7 @@
       "python_block",
       "template_example"
     ],
-    "source": "AI_RAG/corpus/templates/templates_index.json"
+    "source": "rag/corpus/templates/templates_index.json"
   },
   {
     "id": "tpl_screenshot_70k",
@@ -174,7 +174,7 @@
       "python_block",
       "template_example"
     ],
-    "source": "AI_RAG/corpus/templates/templates_index.json"
+    "source": "rag/corpus/templates/templates_index.json"
   },
   {
     "id": "tpl_scope_screenshot_commands",
@@ -189,7 +189,7 @@
       "mso70k",
       "template_rule"
     ],
-    "source": "AI_RAG/corpus/templates/templates_index.json"
+    "source": "rag/corpus/templates/templates_index.json"
   },
   {
     "id": "tpl_recall_factory",
@@ -202,7 +202,7 @@
       "reset",
       "template_example"
     ],
-    "source": "AI_RAG/corpus/templates/templates_index.json"
+    "source": "rag/corpus/templates/templates_index.json"
   },
   {
     "id": "tpl_recall_setup",
@@ -215,7 +215,7 @@
       "set_file",
       "template_example"
     ],
-    "source": "AI_RAG/corpus/templates/templates_index.json"
+    "source": "rag/corpus/templates/templates_index.json"
   },
   {
     "id": "tpl_recall_session",
@@ -228,7 +228,7 @@
       "tss_file",
       "template_example"
     ],
-    "source": "AI_RAG/corpus/templates/templates_index.json"
+    "source": "rag/corpus/templates/templates_index.json"
   },
   {
     "id": "tpl_recall_waveform",
@@ -242,7 +242,7 @@
       "reference",
       "template_example"
     ],
-    "source": "AI_RAG/corpus/templates/templates_index.json"
+    "source": "rag/corpus/templates/templates_index.json"
   },
   {
     "id": "tpl_save_waveform",
@@ -256,7 +256,7 @@
       "csv",
       "template_example"
     ],
-    "source": "AI_RAG/corpus/templates/templates_index.json"
+    "source": "rag/corpus/templates/templates_index.json"
   },
   {
     "id": "tpl_save_screenshot_step",
@@ -269,7 +269,7 @@
       "step_type",
       "template_example"
     ],
-    "source": "AI_RAG/corpus/templates/templates_index.json"
+    "source": "rag/corpus/templates/templates_index.json"
   },
   {
     "id": "tpl_multi_device_pattern",
@@ -284,7 +284,7 @@
       "smu",
       "template_example"
     ],
-    "source": "AI_RAG/corpus/templates/templates_index.json"
+    "source": "rag/corpus/templates/templates_index.json"
   },
   {
     "id": "tpl_tekexpress_pattern",
@@ -299,7 +299,7 @@
       "polling",
       "template_example"
     ],
-    "source": "AI_RAG/corpus/templates/templates_index.json"
+    "source": "rag/corpus/templates/templates_index.json"
   },
   {
     "id": "tpl_groups_organization",
@@ -313,7 +313,7 @@
       "acquisition",
       "template_example"
     ],
-    "source": "AI_RAG/corpus/templates/templates_index.json"
+    "source": "rag/corpus/templates/templates_index.json"
   },
   {
     "id": "tpl_measurement_sweep",
@@ -328,7 +328,7 @@
       "iteration",
       "template_example"
     ],
-    "source": "AI_RAG/corpus/templates/templates_index.json"
+    "source": "rag/corpus/templates/templates_index.json"
   },
   {
     "id": "tpl_session_recall_validate",
@@ -343,7 +343,7 @@
       "assert",
       "template_example"
     ],
-    "source": "AI_RAG/corpus/templates/templates_index.json"
+    "source": "rag/corpus/templates/templates_index.json"
   },
   {
     "id": "tpl_tm_devices",
@@ -356,7 +356,7 @@
       "mso6b",
       "template_example"
     ],
-    "source": "AI_RAG/corpus/templates/templates_index.json"
+    "source": "rag/corpus/templates/templates_index.json"
   },
   {
     "id": "tpl_sweep_pattern",
@@ -371,7 +371,7 @@
       "loop",
       "template_example"
     ],
-    "source": "AI_RAG/corpus/templates/templates_index.json"
+    "source": "rag/corpus/templates/templates_index.json"
   },
   {
     "id": "tpl_validation_rules",
@@ -385,7 +385,7 @@
       "checklist",
       "template_rule"
     ],
-    "source": "AI_RAG/corpus/templates/templates_index.json"
+    "source": "rag/corpus/templates/templates_index.json"
   },
   {
     "id": "tpl_file_type_reference",
@@ -401,7 +401,7 @@
       "save",
       "template_rule"
     ],
-    "source": "AI_RAG/corpus/templates/templates_index.json"
+    "source": "rag/corpus/templates/templates_index.json"
   },
   {
     "id": "tpl_backend_specification",
@@ -416,7 +416,7 @@
       "hybrid",
       "template_rule"
     ],
-    "source": "AI_RAG/corpus/templates/templates_index.json"
+    "source": "rag/corpus/templates/templates_index.json"
   },
   {
     "id": "tpl_common_patterns",
@@ -429,7 +429,7 @@
       "best_practice",
       "template_pattern"
     ],
-    "source": "AI_RAG/corpus/templates/templates_index.json"
+    "source": "rag/corpus/templates/templates_index.json"
   },
   {
     "id": "tpl_xml_basic_scope",
@@ -444,7 +444,7 @@
       "waveform",
       "xml_example"
     ],
-    "source": "AI_RAG/corpus/templates/templates_index.json"
+    "source": "rag/corpus/templates/templates_index.json"
   },
   {
     "id": "tpl_xml_voltage_sweep",
@@ -460,7 +460,7 @@
       "tm_devices",
       "xml_example"
     ],
-    "source": "AI_RAG/corpus/templates/templates_index.json"
+    "source": "rag/corpus/templates/templates_index.json"
   },
   {
     "id": "tpl_xml_tekexpress",
@@ -476,7 +476,7 @@
       "displayport",
       "xml_example"
     ],
-    "source": "AI_RAG/corpus/templates/templates_index.json"
+    "source": "rag/corpus/templates/templates_index.json"
   },
   {
     "id": "tpl_xml_validation",
@@ -490,7 +490,7 @@
       "common_errors",
       "template_rule"
     ],
-    "source": "AI_RAG/corpus/templates/templates_index.json"
+    "source": "rag/corpus/templates/templates_index.json"
   },
   {
     "id": "tpl_device_binding",
@@ -504,7 +504,7 @@
       "alias",
       "template_rule"
     ],
-    "source": "AI_RAG/corpus/templates/templates_index.json"
+    "source": "rag/corpus/templates/templates_index.json"
   },
   {
     "id": "tpl_creation_checklist",
@@ -517,7 +517,7 @@
       "quality",
       "template_rule"
     ],
-    "source": "AI_RAG/corpus/templates/templates_index.json"
+    "source": "rag/corpus/templates/templates_index.json"
   },
   {
     "id": "tpl_common_pitfalls",
@@ -531,7 +531,7 @@
       "common_mistakes",
       "template_rule"
     ],
-    "source": "AI_RAG/corpus/templates/templates_index.json"
+    "source": "rag/corpus/templates/templates_index.json"
   },
   {
     "id": "tpl_save_patterns",
@@ -546,7 +546,7 @@
       "image",
       "template_pattern"
     ],
-    "source": "AI_RAG/corpus/templates/templates_index.json"
+    "source": "rag/corpus/templates/templates_index.json"
   },
   {
     "id": "tpl_scope_type_detection",
@@ -561,6 +561,6 @@
       "mso70k",
       "template_rule"
     ],
-    "source": "AI_RAG/corpus/templates/templates_index.json"
+    "source": "rag/corpus/templates/templates_index.json"
   }
 ]
