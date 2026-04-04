@@ -124,6 +124,90 @@ At startup, the server initializes:
 
 Command sources include modern and legacy scope families plus AFG, AWG, SMU, DPOJET, TekExpress, and RSA datasets.
 
+## RAG corpora
+
+RAG source content now lives inside this repo so the MCP package is self-contained.
+
+- Source corpus: `rag/corpus/`
+- Built shards: `public/rag/*.json`
+- Build script: `scripts/buildRagIndex.ts`
+
+Current corpora:
+
+- `scpi`
+- `tmdevices`
+- `app_logic`
+- `scope_logic`
+- `errors`
+- `templates`
+- `pyvisa_tekhsi`
+
+### What each corpus is for
+
+- `scpi`: command/reference content
+- `tmdevices`: tm_devices API usage
+- `app_logic`: TekAutomate app behavior, workflow rules, generator logic
+- `scope_logic`: procedural scope knowledge such as clipping recovery, autoset-first setup, trigger stabilization, and decode bring-up
+- `errors`: curated bug/fix records
+- `templates`: workflow examples
+- `pyvisa_tekhsi`: connection/runtime guidance
+
+### How retrieval works
+
+- `retrieve_rag_chunks` searches a specific corpus directly
+- `tek_router` and other server paths can auto-inject RAG for question-style queries
+- RAG chunks are not hydrated as standalone tools at startup anymore
+- Hosted startup should show `0 RAG` in hydrated tool count; that is expected and means chunk tools are no longer materialized individually
+
+### Adding new corpus content
+
+Add files under `rag/corpus/<corpus-name>/`.
+
+For `scope_logic`, prefer one procedure per markdown file with headings like:
+
+- `# Title`
+- `## Trigger Signals`
+- `## Procedure`
+- `## Notes`
+
+Example:
+
+```md
+# Trigger Stabilization Procedure
+
+Use this procedure when the waveform is rolling or the trigger is unstable.
+
+## Trigger Signals
+
+- rolling waveform
+- unstable trigger
+- jittery display
+
+## Procedure
+
+1. Set the trigger source to the active signal channel.
+2. Start with edge trigger.
+3. Put trigger level near the midpoint.
+4. Switch from AUTO to NORMAL once the signal is understood.
+
+## Notes
+
+- Stabilize trigger before troubleshooting measurements or decode.
+```
+
+### Building RAG shards
+
+The hosted MCP environment should consume prebuilt shards from `public/rag`.
+
+That means the expected workflow is:
+
+1. Add or edit files in `rag/corpus/...`
+2. Run `npm run build:rag` locally
+3. Commit both the source files and the regenerated `public/rag/*.json`
+4. Push the repo
+
+This is intentional. Railway/hosted deploys do not need to author corpus content interactively; contributors can build locally and push generated shards.
+
 ## Frontend integration
 
 Current app integration resolves MCP host from:
@@ -178,6 +262,7 @@ Copy `.env.example` to `.env` and set what you need.
 ## Scripts and verification
 
 - `npm run start` / `npm run dev`
+- `npm run build:rag`
 - `npm run eval:comprehensive`
 - `npm run eval:levels`
 - `npm run verify:command-groups`
