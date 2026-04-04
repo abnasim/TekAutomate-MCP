@@ -302,6 +302,34 @@ def _raw_payload_to_result(data: bytes) -> dict:
     }
 
 
+def _readfile_payload_via_visa_stream(scpi, chunk_size: int = 65536) -> bytes:
+    """Read FILESystem:READFile payload via low-level VISA reads.
+
+    FILESystem:READFile is not IEEE 488.2 compliant and may not terminate in a
+    way that MessageBasedResource.read_raw() can consume reliably. We therefore
+    read low-level chunks until the driver reports the transfer completed, or
+    a timeout occurs after at least some bytes were received.
+    """
+    data = bytearray()
+    success_max = getattr(pyvisa.constants.StatusCode, "success_max_count_read", None) if pyvisa else None
+    error_timeout = getattr(pyvisa.constants.StatusCode, "error_timeout", None) if pyvisa else None
+
+    while True:
+        try:
+            chunk, status = scpi.visalib.read(scpi.session, chunk_size)
+            if chunk:
+                data.extend(bytes(chunk))
+            if status != success_max:
+                break
+        except Exception as exc:
+            error_code = getattr(exc, "error_code", None)
+            if data and error_timeout is not None and error_code == error_timeout:
+                break
+            raise
+
+    return bytes(data)
+
+
 def _open_command_session(visa: str, timeout_ms: int, use_socket: bool):
     if use_socket:
         session = _get_socket_session(visa)
@@ -611,7 +639,7 @@ def _handle_send_scpi(job: dict) -> dict:
                         raw_result = _raw_payload_to_result(scpi.read_file(remote_file))
                     else:
                         scpi.write(cmd)
-                        raw_result = _raw_payload_to_result(scpi.read_raw())
+                        raw_result = _raw_payload_to_result(_readfile_payload_via_visa_stream(scpi))
                     response = raw_result.pop("response", "")
                 elif cmd.strip().endswith("?"):
                     response = str(scpi.query(cmd)).strip()
@@ -640,7 +668,7 @@ def _handle_send_scpi(job: dict) -> dict:
                                 raw_result = _raw_payload_to_result(scpi.read_file(remote_file))
                             else:
                                 scpi.write(cmd)
-                                raw_result = _raw_payload_to_result(scpi.read_raw())
+                                raw_result = _raw_payload_to_result(_readfile_payload_via_visa_stream(scpi))
                             response = raw_result.pop("response", "")
                         elif cmd.strip().endswith("?"):
                             response = str(scpi.query(cmd)).strip()
