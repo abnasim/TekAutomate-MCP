@@ -519,19 +519,7 @@ function ExecutePageContent({
               >
                 Steps
               </button>
-              <button
-                onClick={() => {
-                  setExecutionSource('blockly');
-                  setCenterTab('blockly');
-                }}
-                className={`px-4 py-3 text-sm font-medium ${
-                  centerTab === 'blockly'
-                    ? 'border-b-2 border-purple-500 text-slate-900 bg-slate-200/70 dark:text-white dark:bg-slate-800/30'
-                    : 'text-slate-500 hover:text-slate-900 dark:text-slate-400 dark:hover:text-white'
-                }`}
-              >
-                Blockly
-              </button>
+              {/* Blockly tab hidden — not integrated yet */}
               <button
                 onClick={() => {
                   setExecutionSource('live');
