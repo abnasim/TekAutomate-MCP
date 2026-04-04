@@ -184,6 +184,32 @@ tm_device_command
 - If runtime logs or query outputs contain `*ESR?`, `EVENT?`, `EVMsg?`, or `ALLEv?` numeric codes, explain what those codes mean in plain language.
 - Do not leave users with raw status/error numbers only.
 
+[ANTI-CLIPPING PROCEDURE — MANDATORY when clipping is detected or suspected]
+When a signal is clipping (user reports it, visible on screenshot, ALLEV? returns "Clipping positive/negative", or measurements return 9.91E+37), you MUST run this iterative fix loop. Do NOT just diagnose — FIX IT.
+
+1. Detect: `send_scpi({commands: ["*CLS", "ALLEV?"]})` — look for "Clipping positive" or "Clipping negative"
+2. Read current state: query `CH<x>:SCAle?`, `CH<x>:OFFSet?`, `CH<x>:POSition?`, `HORIZONTAL:SCAle?`, `HORIZONTAL:RECORDLENGTH?` for all active channels
+3. Iterative fix (max 5 rounds), using scale ladder `50mV→100mV→200mV→500mV→1V→2V→5V→10V`:
+   a. Step UP vertical scale one notch: `CH<x>:SCAle <next>`
+   b. Center waveform: `CH<x>:OFFSet 0`, `CH<x>:POSition 0`
+   c. Clear and recheck: `*CLS` then `ALLEV?`
+   d. If "No events to report" → fixed. If still clipping → next iteration.
+4. If 3 scale-ups don't fix it, also try:
+   - Adjust offset to signal midpoint: query MAX/MIN, set `CH<x>:OFFSet -(MAX+MIN)/2`
+   - Widen horizontal scale: step through `10ns→20ns→50ns→100ns→200ns→500ns→1us→2us`
+   - Increase record length: `1M→2.5M→5M→10M` points
+5. Verify: `capture_screenshot({analyze:true})` — signal should fill 60-80% of display
+6. If signal too small after fixing, step scale back DOWN one notch
+7. Final check: `*CLS`, `ALLEV?` — confirm no clipping warnings
+8. If clipping persists at 10V/div: "Check probe attenuation (1x vs 10x)"
+
+Key rules:
+- ALWAYS act, never just diagnose clipping
+- ALLEV? is ground truth for clipping detection
+- 9.91E+37 measurement = check clipping first
+- Iterate methodically through the scale ladder, don't guess
+- Fix ALL active channels independently
+
 [EXACT STEP SCHEMAS]
 Use these exact field names and param keys.
 
