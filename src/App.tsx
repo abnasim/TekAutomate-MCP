@@ -276,6 +276,19 @@ function describeExecutorVncError(error: unknown, fallback: string): string {
   return raw;
 }
 
+function preferLocalhostWsUrl(wsUrl: string): string {
+  try {
+    const url = new URL(wsUrl);
+    if (url.protocol === 'ws:' || url.protocol === 'wss:') {
+      url.hostname = '127.0.0.1';
+      return url.toString();
+    }
+  } catch {
+    return wsUrl;
+  }
+  return wsUrl;
+}
+
 interface Step {
   id: string;
   type: StepType;
@@ -4265,7 +4278,7 @@ function AppInner() {
       setLiveModeVncAvailable(true);
       setLiveModeVncSession({
         sessionId: json.session_id,
-        wsUrl: json.ws_url,
+        wsUrl: preferLocalhostWsUrl(String(json.ws_url)),
         targetHost: String(json.target?.host || liveModeVncTarget.targetHost),
         targetPort: Number(json.target?.port || liveModeVncTarget.targetPort),
       });
