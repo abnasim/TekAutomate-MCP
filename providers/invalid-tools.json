@@ -1,6 +1,6 @@
 [
   {
-    "id": "bad tool id",
+    "id": "bad_tool_id",
     "name": "Broken Provider Entry",
     "description": "Too short",
     "triggers": ["broken provider"],
