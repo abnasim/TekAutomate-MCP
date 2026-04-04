@@ -236,19 +236,17 @@ function ExecutePageContent({
   // ── Step-through debugger ──
   const [stepping, setStepping] = useState(false);
   const [stepIndex, setStepIndex] = useState(0);
-  const [stepResult, setStepResult] = useState<string | null>(null);
-  const [stepError, setStepError] = useState<string | null>(null);
+  const [stepLog, setStepLog] = useState('');
   const [stepRunning, setStepRunning] = useState(false);
 
-  // Flatten steps (including group children) into a linear list of SCPI steps
+  // Flatten steps (including group children) into a linear list of executable steps
   const flatSteps = useMemo(() => {
     const flat: Array<{ id: string; type: string; label: string; command?: string }> = [];
     const walk = (items: StepPreview[]) => {
       for (const s of items) {
         if (s.type === 'group' && s.children) {
-          flat.push({ id: s.id, type: 'group', label: s.label || 'Group' });
           walk(s.children);
-        } else {
+        } else if (s.type === 'write' || s.type === 'query' || s.type === 'set_and_query') {
           flat.push({ id: s.id, type: s.type, label: s.label || s.type, command: s.params?.command as string });
         }
       }
@@ -257,22 +255,23 @@ function ExecutePageContent({
     return flat;
   }, [steps]);
 
+  const appendStepLog = useCallback((line: string) => {
+    setStepLog(prev => prev + line + '\n');
+  }, []);
+
   const executeStep = useCallback(async (index: number) => {
     if (!executorEndpoint || index >= flatSteps.length) return;
     const step = flatSteps[index];
-    setStepRunning(true);
-    setStepResult(null);
-    setStepError(null);
-
-    // Skip non-executable steps
-    if (step.type === 'group' || step.type === 'connect' || step.type === 'disconnect' || step.type === 'comment' || !step.command) {
-      setStepResult(`⏭ Skipped: ${step.label} (${step.type})`);
-      setStepRunning(false);
+    if (!step.command) {
+      appendStepLog(`⏭ [${index + 1}/${flatSteps.length}] Skip: ${step.label}`);
       return;
     }
 
+    setStepRunning(true);
+    appendStepLog(`▶ [${index + 1}/${flatSteps.length}] ${step.label}`);
+    appendStepLog(`  → ${step.command}`);
+
     try {
-      const isQuery = step.command.trim().endsWith('?');
       const url = `http://${executorEndpoint.host}:${executorEndpoint.port}/run`;
       const visaResource = instrumentEndpoint?.visaResource || '';
       const res = await fetch(url, {
@@ -289,49 +288,45 @@ function ExecutePageContent({
         }),
       });
       if (!res.ok) {
-        setStepError(`HTTP ${res.status}`);
+        appendStepLog(`  ✗ HTTP ${res.status}`);
       } else {
         const json = await res.json();
         const responses = json?.responses || json?.results || [];
         const resp = responses[0];
         if (resp?.error || resp?.status === 'error') {
-          setStepError(`${step.command} → ERROR: ${resp.error || 'Failed'}`);
-        } else if (isQuery && resp?.response !== undefined) {
-          setStepResult(`${step.command} → ${resp.response}`);
+          appendStepLog(`  ✗ ${resp.error || 'Error'}`);
+        } else if (resp?.response !== undefined && resp.response !== '') {
+          appendStepLog(`  = ${resp.response}`);
         } else {
-          setStepResult(`${step.command} → OK`);
+          appendStepLog(`  ✓ OK`);
         }
       }
     } catch (err) {
-      setStepError(`${step.command} → ${err instanceof Error ? err.message : 'Failed'}`);
+      appendStepLog(`  ✗ ${err instanceof Error ? err.message : 'Failed'}`);
     }
     setStepRunning(false);
-  }, [executorEndpoint, instrumentEndpoint, flatSteps]);
+  }, [executorEndpoint, instrumentEndpoint, flatSteps, appendStepLog]);
 
   const startStepping = useCallback(() => {
     setStepping(true);
     setStepIndex(0);
-    setStepResult(null);
-    setStepError(null);
+    setStepLog('── Step-through started ──\n');
   }, []);
 
   const nextStep = useCallback(() => {
-    const next = stepIndex + 1;
-    if (next >= flatSteps.length) {
+    if (stepIndex >= flatSteps.length) {
+      appendStepLog('── All steps complete ──');
       setStepping(false);
-      setStepResult('✓ All steps complete');
       return;
     }
-    setStepIndex(next);
-    void executeStep(next);
-  }, [stepIndex, flatSteps.length, executeStep]);
+    void executeStep(stepIndex);
+    setStepIndex(prev => prev + 1);
+  }, [stepIndex, flatSteps.length, executeStep, appendStepLog]);
 
   const stopStepping = useCallback(() => {
+    appendStepLog('── Stopped ──');
     setStepping(false);
-    setStepIndex(0);
-    setStepResult(null);
-    setStepError(null);
-  }, []);
+  }, [appendStepLog]);
   const workflowProposal = useMemo(
     () => proposalHistory.find((proposal) => proposal.id === activeProposalId) || proposalHistory[0] || null,
     [activeProposalId, proposalHistory]
@@ -378,8 +373,11 @@ function ExecutePageContent({
   }, [autoApplyProposals]);
 
   const runLogLines = useMemo(
-    () => (runLog || 'Logs will appear here when you run the flow.').split(/\r?\n/),
-    [runLog]
+    () => {
+      const logText = stepping || stepLog ? stepLog : (runLog || 'Logs will appear here when you run the flow.');
+      return logText.split(/\r?\n/);
+    },
+    [runLog, stepLog, stepping]
   );
 
   const copyCode = () => {
@@ -614,6 +612,39 @@ function ExecutePageContent({
                 <Sparkles size={16} />
                 {applyingProposal ? 'Applying...' : 'Apply'}
               </button>
+              {executorEndpoint && (
+                stepping ? (
+                  <>
+                    <button
+                      type="button"
+                      onClick={nextStep}
+                      disabled={stepRunning || stepIndex >= flatSteps.length}
+                      className="inline-flex h-9 w-9 items-center justify-center rounded-lg bg-amber-500 text-white hover:bg-amber-600 disabled:cursor-not-allowed disabled:opacity-40"
+                      title={stepIndex >= flatSteps.length ? 'Done' : `Step ${stepIndex + 1}/${flatSteps.length}`}
+                    >
+                      <SkipForward size={16} />
+                    </button>
+                    <button
+                      type="button"
+                      onClick={stopStepping}
+                      className="inline-flex h-9 w-9 items-center justify-center rounded-lg border border-red-300 text-red-600 hover:bg-red-50 dark:border-red-700 dark:text-red-400 dark:hover:bg-red-900/20"
+                      title="Stop stepping"
+                    >
+                      <Square size={14} />
+                    </button>
+                  </>
+                ) : (
+                  <button
+                    type="button"
+                    onClick={startStepping}
+                    disabled={runStatus === 'running' || flatSteps.length === 0}
+                    className="inline-flex h-9 w-9 items-center justify-center rounded-lg border border-amber-300 text-amber-600 hover:bg-amber-50 dark:border-amber-600 dark:text-amber-400 dark:hover:bg-amber-900/20 disabled:cursor-not-allowed disabled:opacity-40"
+                    title="Step through workflow"
+                  >
+                    <SkipForward size={16} />
+                  </button>
+                )
+              )}
               <button
                 type="button"
                 onClick={onRun}
@@ -621,63 +652,12 @@ function ExecutePageContent({
                 className={`inline-flex items-center gap-2 rounded-lg px-3 py-2 text-sm font-semibold text-white disabled:cursor-not-allowed disabled:opacity-40 ${
                   executorEndpoint ? 'bg-green-600 hover:bg-green-700' : 'bg-gray-500'
                 }`}
-                title={executorEndpoint ? 'Run on scope' : 'Connect to executor first'}
+                title={executorEndpoint ? 'Run all on scope' : 'Connect to executor first'}
               >
                 <Play size={16} />
-                {runStatus === 'running' || runStatus === 'connecting' ? 'Running...' : executorEndpoint ? 'Run on Scope' : 'Not Connected'}
+                {runStatus === 'running' || runStatus === 'connecting' ? 'Running...' : executorEndpoint ? 'Run' : 'Not Connected'}
               </button>
-              {executorEndpoint && !stepping && (
-                <button
-                  type="button"
-                  onClick={() => { startStepping(); void executeStep(0); }}
-                  disabled={runStatus === 'running' || flatSteps.length === 0}
-                  className="inline-flex items-center gap-1.5 rounded-lg border border-amber-400/50 bg-amber-500/15 px-3 py-2 text-sm font-semibold text-amber-700 hover:bg-amber-500/25 disabled:cursor-not-allowed disabled:opacity-40 dark:border-amber-500/40 dark:text-amber-300"
-                  title="Step through workflow one command at a time"
-                >
-                  <SkipForward size={16} />
-                  Step
-                </button>
-              )}
-              {stepping && (
-                <>
-                  <button
-                    type="button"
-                    onClick={nextStep}
-                    disabled={stepRunning}
-                    className="inline-flex items-center gap-1.5 rounded-lg bg-amber-500 px-3 py-2 text-sm font-semibold text-white hover:bg-amber-600 disabled:cursor-not-allowed disabled:opacity-40"
-                    title="Execute next step"
-                  >
-                    <SkipForward size={16} />
-                    {stepRunning ? 'Running...' : 'Next Step'}
-                  </button>
-                  <button
-                    type="button"
-                    onClick={stopStepping}
-                    className="inline-flex h-9 w-9 items-center justify-center rounded-lg border border-red-300 text-red-600 hover:bg-red-50 dark:border-red-700 dark:text-red-400 dark:hover:bg-red-900/20"
-                    title="Stop stepping"
-                  >
-                    <Square size={14} />
-                  </button>
-                </>
-              )}
             </div>
-            {/* Step-through status bar */}
-            {stepping && (
-              <div className="flex items-center gap-3 px-4 py-1.5 border-b border-slate-200 dark:border-slate-700 bg-amber-50 dark:bg-amber-900/10 text-xs">
-                <span className="font-semibold text-amber-700 dark:text-amber-300">
-                  Step {stepIndex + 1}/{flatSteps.length}
-                </span>
-                <span className="text-slate-600 dark:text-slate-300 truncate">
-                  {flatSteps[stepIndex]?.label || ''}
-                </span>
-                {stepResult && (
-                  <span className="ml-auto font-mono text-green-700 dark:text-green-400 truncate max-w-[300px]">{stepResult}</span>
-                )}
-                {stepError && (
-                  <span className="ml-auto font-mono text-red-600 dark:text-red-400 truncate max-w-[300px]">{stepError}</span>
-                )}
-              </div>
-            )}
           </div>
           <div className="flex-1 min-h-0 overflow-hidden">
             {centerTab === 'proposals' ? (
