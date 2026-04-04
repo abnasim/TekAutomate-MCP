@@ -38,6 +38,7 @@ class ConnectionPanel(ttk.Frame):
         self.port_changed = TkSignal()
         self._clients: dict[str, tuple[ttk.Frame, datetime]] = {}
         self._qr_photo = None  # prevent GC
+        self._qr_visible = False
         self._build()
 
     def _build(self):
@@ -73,14 +74,18 @@ class ConnectionPanel(ttk.Frame):
         self._status_lbl = ttk.Label(status_row, text="Starting...")
         self._status_lbl.pack(side=tk.LEFT)
 
-        # ── QR CARD ───────────────────────────────────────────────────
-        qr_frame = ttk.LabelFrame(self, text="QR CODE")
-        qr_frame.pack(fill=tk.X, pady=(0, 8))
+        # ── QR TOGGLE BUTTON ──────────────────────────────────────────
+        self._qr_toggle_btn = ttk.Button(self, text="Show QR Code", command=self._toggle_qr)
+        self._qr_toggle_btn.pack(fill=tk.X, pady=(0, 8))
 
-        self._qr_lbl = ttk.Label(qr_frame, text="", anchor=tk.CENTER)
+        # ── QR CARD (hidden by default) ──────────────────────────────
+        self._qr_frame = ttk.LabelFrame(self, text="QR CODE")
+        # Not packed initially — hidden
+
+        self._qr_lbl = ttk.Label(self._qr_frame, text="", anchor=tk.CENTER)
         self._qr_lbl.pack(fill=tk.X, padx=8, pady=4)
 
-        self._url_lbl = ttk.Label(qr_frame, text="", wraplength=180, anchor=tk.CENTER)
+        self._url_lbl = ttk.Label(self._qr_frame, text="", wraplength=180, anchor=tk.CENTER)
         self._url_lbl.pack(fill=tk.X, padx=8, pady=(0, 4))
 
         # ── CONNECTED CLIENTS CARD ────────────────────────────────────
@@ -101,6 +106,17 @@ class ConnectionPanel(ttk.Frame):
             return ttk.Style().lookup("TFrame", "background") or BG
         except Exception:
             return BG
+
+    def _toggle_qr(self):
+        if self._qr_visible:
+            self._qr_frame.pack_forget()
+            self._qr_toggle_btn.configure(text="Show QR Code")
+            self._qr_visible = False
+        else:
+            self._qr_frame.pack(fill=tk.X, pady=(0, 8), before=self._clients_container.master if hasattr(self._clients_container, 'master') else None)
+            self._qr_toggle_btn.configure(text="Hide QR Code")
+            self._qr_visible = True
+            self._refresh_qr()
 
     def _port_changed(self):
         try:

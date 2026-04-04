@@ -18,6 +18,8 @@ WHITE    = "#FFFFFF"
 MUTED    = "#777777"
 DIM      = "#444444"
 CYAN     = "#00D4FF"
+MAGENTA  = "#FF79C6"
+ORANGE   = "#FFB86C"
 
 
 class LogPanel(ttk.Frame):
@@ -69,6 +71,8 @@ class LogPanel(ttk.Frame):
         self._log.tag_configure("stdout", foreground=MUTED)
         self._log.tag_configure("stderr", foreground=YELLOW)
         self._log.tag_configure("prefix", foreground=DIM)
+        self._log.tag_configure("step", foreground=MAGENTA)
+        self._log.tag_configure("resp", foreground=ORANGE)
 
     def log(self, message: str, level: str = "info"):
         tag = level if level in ("info", "success", "warning", "error",
@@ -87,9 +91,19 @@ class LogPanel(ttk.Frame):
             return
         tag = "stdout" if stream == "stdout" else "stderr"
         prefix = "  > " if stream == "stdout" else "  ! "
+        # Color-code STEP and RESP lines for visibility
+        text = line or ""
+        if "[STEP]" in text:
+            tag = "step"
+        elif "[RESP]" in text:
+            tag = "resp"
+        elif "[OK]" in text:
+            tag = "success"
+        elif "[ERR]" in text or "[ERROR]" in text:
+            tag = "error"
         self._log.configure(state=tk.NORMAL)
         self._log.insert(tk.END, prefix, "prefix")
-        self._log.insert(tk.END, (line or "") + "\n", tag)
+        self._log.insert(tk.END, text + "\n", tag)
         self._log.configure(state=tk.DISABLED)
         self._log.see(tk.END)
 
