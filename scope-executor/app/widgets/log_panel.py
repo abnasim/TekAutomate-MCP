@@ -2,9 +2,13 @@
 Activity log panel – true terminal look, header with inline Clear.
 Three verbosity modes: Summary (default), Verbose, Debug (numpad 5595).
 """
+import re
 import tkinter as tk
 from tkinter import ttk
 from datetime import datetime
+
+# Strip ANSI escape codes from strings
+_ANSI_RE = re.compile(r'\x1b\[[0-9;]*m')
 
 TERMINAL = "#0D0D0D"
 CARD     = "#1E1E1E"
@@ -130,7 +134,7 @@ class LogPanel(ttk.Frame):
 
     def log_raw(self, stream: str, line: str):
         """Stream a live stdout/stderr line from the running script."""
-        text = line or ""
+        text = _ANSI_RE.sub('', line or '').rstrip()
 
         # Debug mode: show everything raw
         if self._mode == MODE_DEBUG:
@@ -141,21 +145,44 @@ class LogPanel(ttk.Frame):
             self._log.see(tk.END)
             return
 
-        # Verbose mode: show colored STEP/RESP/OK/ERR
+        # Verbose mode: parse and color-code output
         if self._mode == MODE_VERBOSE:
+            if not text:
+                return
             tag = "stdout" if stream == "stdout" else "stderr"
-            prefix = "  > " if stream == "stdout" else "  ! "
-            if "[STEP]" in text:
+            display = text
+
+            # Parse common executor output patterns into clean format
+            if "→" in text and "=" in text:
+                # Command with response: "→ *IDN? = TEKTRONIX,..."
+                parts = text.split("=", 1)
+                cmd = parts[0].replace("→", "").strip()
+                resp = parts[1].strip() if len(parts) > 1 else ""
+                self._log.configure(state=tk.NORMAL)
+                self._log.insert(tk.END, f"  → {cmd}", "step")
+                if resp:
+                    self._log.insert(tk.END, f"  =  {resp}", "resp")
+                self._log.insert(tk.END, "\n")
+                self._log.configure(state=tk.DISABLED)
+                self._log.see(tk.END)
+                return
+            elif "→" in text and "[OK]" in text:
+                cmd = text.split("→")[-1].replace("[OK]", "").strip()
+                display = f"  → {cmd}  ✓"
+                tag = "success"
+            elif "[STEP]" in text:
+                display = text.replace("[STEP]", "▶").strip()
                 tag = "step"
             elif "[RESP]" in text:
+                display = text.replace("[RESP]", "◀").strip()
                 tag = "resp"
             elif "[OK]" in text:
                 tag = "success"
             elif "[ERR]" in text or "[ERROR]" in text:
                 tag = "error"
+
             self._log.configure(state=tk.NORMAL)
-            self._log.insert(tk.END, prefix, "prefix")
-            self._log.insert(tk.END, text + "\n", tag)
+            self._log.insert(tk.END, display + "\n", tag)
             self._log.configure(state=tk.DISABLED)
             self._log.see(tk.END)
             return
