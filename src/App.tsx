@@ -4189,7 +4189,12 @@ function AppInner() {
         headers: buildExecutorHeaders(),
         signal: AbortSignal.timeout(8000),
       });
-      const json = await res.json() as { ok?: boolean; available?: boolean; error?: string | null };
+      const json = await res.json() as { ok?: boolean; available?: boolean; error?: string | null; requiresLiveToken?: boolean };
+      if (res.status === 401 && json.requiresLiveToken) {
+        setLiveModeVncAvailable(null);
+        setLiveModeVncError('Enter a live token to check VNC availability.');
+        return;
+      }
       setLiveModeVncAvailable(Boolean(json.ok && json.available));
       if (json.ok && json.available) {
         setLiveModeVncError(null);
@@ -4246,10 +4251,14 @@ function AppInner() {
       const json = await res.json() as {
         ok?: boolean;
         error?: string;
+        requiresLiveToken?: boolean;
         session_id?: string;
         ws_url?: string;
         target?: { host?: string; port?: number };
       };
+      if (res.status === 401 && json.requiresLiveToken) {
+        throw new Error('Enter a live token before starting VNC.');
+      }
       if (!json.ok || !json.session_id || !json.ws_url) {
         throw new Error(json.error || 'Failed to start VNC session.');
       }
