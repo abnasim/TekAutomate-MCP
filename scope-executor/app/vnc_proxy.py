@@ -207,6 +207,10 @@ class VncProxyManager:
             raise ValueError("Missing target_host")
 
         key = self._target_key(host, port)
+
+        # Probe BEFORE acquiring the lock — probe() also acquires self._lock internally.
+        probe_result = self.probe(host, port)
+
         with self._lock:
             self._sweep_locked()
             existing = self._sessions_by_target.get(key)
@@ -214,7 +218,6 @@ class VncProxyManager:
                 existing.last_touched_at = _utc_now()
                 return {"ok": True, **existing.payload(), "reused": True}
 
-            probe_result = self.probe(host, port)
             if not probe_result.get("available"):
                 return {"ok": False, "error": probe_result.get("error") or "VNC not available for target.", "available": False}
 
