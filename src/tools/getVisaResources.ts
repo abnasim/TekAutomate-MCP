@@ -7,6 +7,7 @@ interface Input {
   backend: string;
   liveMode?: boolean;
   outputMode?: 'clean' | 'verbose';
+  liveToken?: string;
 }
 
 interface ScannedInstrument {
@@ -34,7 +35,10 @@ export async function getVisaResources(input: Input): Promise<ToolResult<Record<
   try {
     const scanRes = await fetch(`${input.executorUrl.replace(/\/$/, '')}/scan`, {
       method: 'GET',
-      headers: { 'Content-Type': 'application/json' },
+      headers: {
+        'Content-Type': 'application/json',
+        ...(String(input.liveToken || '').trim() ? { 'X-Live-Token': String(input.liveToken).trim() } : {}),
+      },
       signal: AbortSignal.timeout(35000),
     });
     const scanJson = (await scanRes.json()) as { ok?: boolean; instruments?: ScannedInstrument[]; count?: number; error?: string };

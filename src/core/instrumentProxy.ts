@@ -10,6 +10,14 @@ interface Endpoint {
   scopeType?: 'modern' | 'legacy';
   modelFamily?: string;
   deviceDriver?: string;
+  liveToken?: string;
+}
+
+function buildExecutorHeaders(endpoint: Endpoint): Record<string, string> {
+  const headers: Record<string, string> = { 'Content-Type': 'application/json' };
+  const token = String(endpoint.liveToken || '').trim();
+  if (token) headers['X-Live-Token'] = token;
+  return headers;
 }
 
 interface RunPythonResult {
@@ -94,7 +102,7 @@ async function runPython(
   try {
     const res = await fetch(`${endpoint.executorUrl.replace(/\/$/, '')}/run`, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: buildExecutorHeaders(endpoint),
       body: JSON.stringify({
         protocol_version: 1,
         action: 'run_python',
@@ -138,7 +146,7 @@ async function runExecutorAction(
   try {
     const res = await fetch(`${endpoint.executorUrl.replace(/\/$/, '')}/run`, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: buildExecutorHeaders(endpoint),
       body: JSON.stringify({
         protocol_version: 1,
         action,
