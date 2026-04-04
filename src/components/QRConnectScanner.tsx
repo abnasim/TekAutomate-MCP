@@ -51,16 +51,9 @@ export function QRConnectScanner({ onSuccess, onCancel }: QRConnectScannerProps)
     setStatus('verifying');
     setError(null);
     try {
-      const url = `http://${h}:${p}/run`;
+      const url = `http://${h}:${p}/health`;
       const res = await fetch(url, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          protocol_version: 1,
-          action: 'run_python',
-          timeout_sec: 5,
-          code: 'print("ok")',
-        }),
+        method: 'GET',
         signal: AbortSignal.timeout(5000),
       });
       if (res.ok || res.status === 200) {
