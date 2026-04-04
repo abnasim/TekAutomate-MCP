@@ -252,7 +252,7 @@ interface InstrumentConfig {
   modelFamily: string;
   deviceType: 'SCOPE' | 'AWG' | 'AFG' | 'PSU' | 'SMU' | 'DMM' | 'DAQ' | 'MT' | 'MF' | 'SS' | 'TEKSCOPE_PC';
   deviceDriver: string;
-  scopeGeneration: 'modern' | 'legacy';
+  scopeGeneration: 'modern' | 'legacy' | 'export';
   alias: string;
   visaBackend: 'system' | 'pyvisa-py';
   tekhsiDevice?: string;
@@ -2304,7 +2304,7 @@ function AppInner() {
         type === 'write' ? { command: '', cmdParams: [], paramValues: {} } :
         type === 'set_and_query' ? { command: '', cmdParams: [], paramValues: {} } :
         type === 'save_waveform' ? { source: 'CH1', filename: 'waveform.bin', command: '', width: 1, encoding: 'RIBinary', start: 1, stop: null, format: 'bin', performance: 'fastest' } :
-        type === 'save_screenshot' ? { filename: 'screenshot.png', scopeType: activeInstrumentConfig?.scopeGeneration || (/dpo|mdo|tds/i.test(`${activeInstrumentConfig?.modelFamily || ''} ${activeInstrumentConfig?.deviceDriver || ''}`) ? 'legacy' : 'modern'), method: 'pc_transfer' } :
+        type === 'save_screenshot' ? { filename: 'screenshot.png', scopeType: activeInstrumentConfig?.scopeGeneration || (/70[0-9]{3}/i.test(`${activeInstrumentConfig?.modelFamily || ''} ${activeInstrumentConfig?.deviceDriver || ''}`) ? 'export' : /dpo|mdo|tds/i.test(`${activeInstrumentConfig?.modelFamily || ''} ${activeInstrumentConfig?.deviceDriver || ''}`) ? 'legacy' : 'modern'), method: 'pc_transfer' } :
         type === 'error_check' ? { command: 'ALLEV?' } :
         type === 'connect' ? { instrumentId: devices[0]?.id || '', instrumentIds: [], printIdn: false } :
         type === 'disconnect' ? { instrumentId: '', instrumentIds: [] } :
@@ -6434,7 +6434,7 @@ if __name__ == "__main__":
 
     const visaResource = getVisaResourceString(activeInstrumentConfig);
     const familyHint = `${activeInstrumentConfig.modelFamily || ''} ${activeInstrumentConfig.deviceDriver || ''}`.toLowerCase();
-    const scopeType = activeInstrumentConfig.scopeGeneration || (/dpo|mdo|tds/i.test(familyHint) ? 'legacy' : 'modern');
+    const scopeType = activeInstrumentConfig.scopeGeneration || (/70[0-9]{3}/i.test(familyHint) ? 'export' : /dpo|mdo|tds/i.test(familyHint) ? 'legacy' : 'modern');
     setLiveModeCapturing(true);
     setLiveModeError(null);
     try {
@@ -8553,10 +8553,11 @@ Keep under 120 words. No headings. Bullets only. Stay on this command. Do not de
                                             value={device.scopeGeneration || 'modern'}
                                             onChange={(e) => updateDeviceField('scopeGeneration', e.target.value)}
                                             className="px-1 py-0.5 text-[10px] border border-gray-300 dark:border-zinc-600 rounded bg-white dark:bg-zinc-700 text-gray-900 dark:text-zinc-100"
-                                            title="Scope generation: Modern (MSO 2/4/5/6) or Legacy (DPO/MDO/TDS)"
+                                            title="Screenshot method: Modern (MSO 2/4/5/6), Legacy (DPO 5k/7k), Export (70000 series)"
                                           >
                                             <option value="modern">Modern</option>
                                             <option value="legacy">Legacy</option>
+                                            <option value="export">Export (70K)</option>
                                           </select>
                                           <span className={`inline-block px-1.5 py-0.5 rounded text-[10px] font-medium whitespace-nowrap ${
                                             device.backend === 'tm_devices' ? 'bg-orange-100 dark:bg-orange-950/50 text-orange-700 dark:text-orange-200' :
@@ -15201,7 +15202,7 @@ scpi.query('*OPC?')`;
             modelFamily: modelFamily,
             deviceType: deviceType,
             deviceDriver: deviceDriver,
-            scopeGeneration: /dpo|mdo|tds/i.test(modelFamily) ? 'legacy' : 'modern',
+            scopeGeneration: /70[0-9]{3}/i.test(modelFamily) ? 'export' : /dpo|mdo|tds/i.test(modelFamily) ? 'legacy' : 'modern',
             alias: `${deviceType.toLowerCase()}1`,
             visaBackend: 'system',
             enabled: true,

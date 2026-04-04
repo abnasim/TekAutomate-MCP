@@ -227,7 +227,7 @@ class _Handler(BaseHTTPRequestHandler):
                 return
         elif action == "capture_screenshot":
             scope_type = data.get("scope_type") if isinstance(data.get("scope_type"), str) else "modern"
-            if scope_type not in {"modern", "legacy"}:
+            if scope_type not in {"modern", "legacy", "export"}:
                 scope_type = "modern"
         elif action == "send_scpi":
             commands = data.get("commands")
