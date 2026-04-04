@@ -12,7 +12,7 @@ import json
 
 from app.code_runner import run_executor_action
 from app.http_server import HTTPServerThread
-from app.instrument_scanner import InstrumentScanThread, _extract_host
+from app.instrument_scanner import InstrumentScanThread
 from app.system_tray import SystemTray
 from app.widgets.connection_panel import ConnectionPanel
 from app.widgets.instrument_panel import InstrumentPanel
@@ -169,7 +169,6 @@ class MainWindow:
         self._scan_thread = InstrumentScanThread(query_idn=True, timeout_ms=3000)
         self._scan_thread.instrument_found.connect(self.instr_panel.add_instrument)
         self._scan_thread.scan_finished.connect(self.instr_panel.on_scan_finished)
-        self._scan_thread.scan_finished.connect(self._probe_vnc_after_scan)
         self._scan_thread.scan_finished.connect(
             lambda n: self.log_panel.log(f"Scan complete: {n} instrument(s) found", "success"))
         self._scan_thread.scan_error.connect(self.instr_panel.on_scan_error)
@@ -232,33 +231,6 @@ class MainWindow:
             error = result.get("error") or "Unknown error"
             self.log_panel.log(f"Buffer clear failed for {label}: {error}", "error")
 
-    def _probe_vnc_after_scan(self, _count: int):
-        if not self._server:
-            return
-        target_host = ""
-        for info in getattr(self.instr_panel, "_instruments", []):
-            if getattr(info, "reachable", False) and str(getattr(info, "conn_type", "")).lower() == "tcpip":
-                target_host = _extract_host(str(getattr(info, "resource", "")))
-                if target_host:
-                    break
-        if not target_host:
-            self.conn_panel.set_vnc_status({"ok": True, "running": False})
-            return
-
-        def _job():
-            summary = self._server.vnc_probe(target_host, 5900)
-            full_summary = self._server.vnc_summary()
-            self.root.after(0, lambda: self._finish_probe_vnc_after_scan(target_host, summary, full_summary))
-
-        threading.Thread(target=_job, daemon=True).start()
-
-    def _finish_probe_vnc_after_scan(self, target_host: str, probe_result: dict, summary: dict):
-        self.conn_panel.set_vnc_status(summary)
-        if probe_result.get("available"):
-            self.log_panel.log(f"VNC available at {target_host}:5900", "success")
-        else:
-            error = probe_result.get("error") or "Connection failed"
-            self.log_panel.log(f"VNC unavailable at {target_host}:5900 - {error}", "warning")
 
     def _show_window(self):
         self.root.deiconify()

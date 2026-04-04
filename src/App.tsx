@@ -4305,11 +4305,11 @@ function AppInner() {
     liveModeVncTargetKeyRef.current = targetKey;
     setLiveModeVncError(null);
     if (!executorEndpoint || !liveModeVncTarget.enabled || !liveModeVncTarget.targetHost) {
-      setLiveModeVncAvailable(false);
+      setLiveModeVncAvailable(null);
       return;
     }
-    void probeLiveModeVncAvailability();
-  }, [buildExecutorHeaders, executorEndpoint, liveModeVncSession, liveModeVncTarget, probeLiveModeVncAvailability]);
+    setLiveModeVncAvailable(null);
+  }, [buildExecutorHeaders, executorEndpoint, liveModeVncSession, liveModeVncTarget]);
 
   useEffect(() => {
     if (!executorEndpoint || !liveModeVncSession) return undefined;
@@ -9955,6 +9955,9 @@ Keep under 120 words. No headings. Bullets only. Stay on this command. Do not de
                 vncConnecting={liveModeVncConnecting}
                 vncError={liveModeVncError}
                 vncSessionInfo={liveModeVncSession}
+                onCheckVnc={() => {
+                  void probeLiveModeVncAvailability();
+                }}
                 onToggleVnc={() => {
                   void toggleLiveModeVnc();
                 }}
