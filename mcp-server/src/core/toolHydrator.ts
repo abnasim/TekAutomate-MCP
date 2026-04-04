@@ -679,12 +679,11 @@ export async function hydrateAllTools(sources: HydrationSources): Promise<Hydrat
   }
 
   if (sources.ragIndexes) {
-    const corpora: RagCorpus[] = ['scpi', 'tmdevices', 'app_logic', 'errors', 'templates', 'pyvisa_tekhsi'];
-    for (const corpus of corpora) {
-      const ragTools = hydrateRagCorpus(sources.ragIndexes, corpus);
-      registry.registerBatch(ragTools);
-      ragCount += ragTools.length;
-    }
+    // Do not register every RAG chunk as a first-class tool.
+    // Large corpora can create tens of thousands of synthetic tools and exhaust
+    // startup memory, while retrieve_rag_chunks and router-managed auto-RAG
+    // already provide the actual retrieval path AI uses.
+    ragCount = 0;
   }
 
   const shortcuts = hydrateBuiltinShortcuts();
