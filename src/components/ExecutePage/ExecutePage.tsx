@@ -565,15 +565,14 @@ function ExecutePageContent({
               <button
                 type="button"
                 onClick={() => setAutoApplyProposals((value) => !value)}
-                className={`inline-flex items-center gap-2 rounded-full border px-3 py-1.5 text-xs font-semibold transition ${
+                className={`inline-flex h-9 w-9 items-center justify-center rounded-lg border transition ${
                   autoApplyProposals
                     ? 'border-cyan-400/50 bg-cyan-500/15 text-cyan-700 dark:border-cyan-500/50 dark:text-cyan-300'
                     : 'border-slate-200 bg-white text-slate-600 hover:bg-slate-100 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-300 dark:hover:bg-slate-800'
                 }`}
-                title={autoApplyProposals ? 'Auto-apply new proposals is on' : 'Auto-apply new proposals is off'}
+                title={autoApplyProposals ? 'Auto-apply on (click to disable)' : 'Auto-apply off (click to enable)'}
               >
-                <Sparkles size={14} />
-                Auto Apply
+                <Sparkles size={16} />
               </button>
               <button
                 type="button"
