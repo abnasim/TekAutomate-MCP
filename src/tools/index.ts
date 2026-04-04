@@ -123,9 +123,17 @@ export function getToolDefinitions() {
     {
       name: 'smart_scpi_lookup',
       description:
-        'Natural language SCPI command finder for Tektronix oscilloscopes. ' +
-        'Ask in plain English what you want to do with the scope, get back exact SCPI commands ' +
-        'with syntax, arguments, valid values, and code examples.\n\n' +
+        'Natural-language SCPI command finder for Tektronix oscilloscopes. ' +
+        'Use when you do not know the command/header yet and want MCP to map plain English to likely SCPI commands. ' +
+        'This is a command finder, not generic RAG retrieval.\n\n' +
+        'Best for:\n' +
+        '- finding a likely command family from user intent\n' +
+        '- measurement, trigger, bus decode, horizontal, save/recall, and display questions\n' +
+        '- follow-up before get_command_by_header or verify_scpi_commands\n\n' +
+        'Avoid for:\n' +
+        '- exact known headers (use get_command_by_header)\n' +
+        '- cheap keyword discovery (use search_scpi)\n' +
+        '- exact bug/procedure retrieval (use retrieve_rag_chunks)\n\n' +
         'Examples of good queries:\n' +
         '- "how do I measure voltage on channel 1"\n' +
         '- "add eye diagram measurement"\n' +
@@ -156,7 +164,18 @@ export function getToolDefinitions() {
     },
     {
       name: 'search_scpi',
-      description: 'Search SCPI commands by feature or keyword (e.g. "FastFrame", "trigger edge", "measurement frequency"). Returns ultra-compact discovery results by default for token efficiency: header, type, description, and group. Use get_command_by_header for full syntax, arguments, and examples after you pick a match. Pass verbosity:"full" only when you explicitly need rich command blobs.',
+      description:
+        'Cheap keyword/header search over the SCPI command database. ' +
+        'Use for fast discovery when you want likely headers or command families from short targeted phrases such as "edge trigger", "measurement frequency", or "I2C bus".\n\n' +
+        'Best for:\n' +
+        '- cheap first-pass command discovery\n' +
+        '- short noun-heavy queries\n' +
+        '- finding likely headers before get_command_by_header\n\n' +
+        'Avoid for:\n' +
+        '- long conversational prompts\n' +
+        '- exact known headers (use get_command_by_header)\n' +
+        '- procedure or bug retrieval (use retrieve_rag_chunks)\n\n' +
+        'Returns compact discovery results by default: header, type, description, and group. Use verbosity:"full" only when you explicitly need richer command blobs.',
       parameters: {
         type: 'object',
         properties: {
@@ -261,7 +280,9 @@ export function getToolDefinitions() {
     },
     {
       name: 'verify_scpi_commands',
-      description: 'Batch-verify multiple SCPI command strings. Use AFTER generating all steps to confirm every command is valid before returning ACTIONS_JSON.',
+      description:
+        'Validate one or more fully formed SCPI command strings against the command database. ' +
+        'Use after generating candidate commands and before executing them or returning workflow actions.',
       parameters: {
         type: 'object',
         properties: {
@@ -280,7 +301,7 @@ export function getToolDefinitions() {
       name: 'browse_scpi_commands',
       description:
         'Interactive 3-level drill-down for exploring SCPI commands. ' +
-        'Use when smart_scpi_lookup returns no results or you need to browse commands iteratively.\n\n' +
+        'Use when you want to browse by command group, or when search_scpi / smart_scpi_lookup did not narrow things down enough.\n\n' +
         'Level 1 (no args): List all command groups (Vertical, Trigger, Measurement, Bus, etc.)\n' +
         'Level 2 (group): List commands in a group, optionally filtered by keyword\n' +
         'Level 3 (header): Full command details — syntax, arguments, valid values, examples\n\n' +
@@ -380,7 +401,7 @@ export function getToolDefinitions() {
       name: 'get_current_workflow',
       description:
         'Return the latest current TekAutomate workflow state mirrored from the browser. ' +
-        'Use this to inspect existing steps, selected step, validation errors, backend, and model family before editing a workflow.',
+        'Use before editing a workflow when current steps, selected step, validation errors, backend, or model family matter.',
       parameters: {
         type: 'object',
         properties: {},
@@ -392,7 +413,7 @@ export function getToolDefinitions() {
       name: 'get_instrument_info',
       description:
         'Return the latest TekAutomate instrument connection context mirrored from the browser. ' +
-        'Use this when connected instrument details, backend, model family, or live mode matter.',
+        'Use when connected instrument details, backend, model family, live mode, executor context, or VISA resource matter.',
       parameters: {
         type: 'object',
         properties: {},
@@ -404,7 +425,7 @@ export function getToolDefinitions() {
       name: 'get_run_log',
       description:
         'Return the latest TekAutomate execution log tail mirrored from the browser. ' +
-        'Use this for failed runs, timeout debugging, screenshot-transfer issues, and runtime diagnosis.',
+        'Use for failed runs, timeout debugging, screenshot-transfer issues, auth failures, and runtime diagnosis.',
       parameters: {
         type: 'object',
         properties: {},
@@ -504,15 +525,27 @@ export function getToolDefinitions() {
     },
     {
       name: 'retrieve_rag_chunks',
-      description: 'Retrieve docs from local knowledge base. corpus: "scpi"|"tmdevices"|"templates"|"pyvisa_tekhsi"|"app_logic"|"errors"|"scope_logic". Use for exact procedures, known bugs, workflow patterns, connection examples, and scope troubleshooting playbooks.',
+      description:
+        'Retrieve exact chunks from the local MCP knowledge base. ' +
+        'Use this for procedures, known bugs, app behavior, workflow examples, connection guidance, and scope troubleshooting playbooks.\n\n' +
+        'Corpora:\n' +
+        '- scpi: reference material and command-related docs\n' +
+        '- tmdevices: tm_devices usage/help\n' +
+        '- templates: workflow/template examples\n' +
+        '- pyvisa_tekhsi: transport and Python I/O guidance\n' +
+        '- app_logic: TekAutomate app behavior and implementation rules\n' +
+        '- errors: known failures, causes, and fixes\n' +
+        '- scope_logic: step-by-step scope procedures like clipping, probe compensation, decode bring-up, autoset-first\n\n' +
+        'Use short, exact, noun-heavy queries such as "OPC Query Return Type", "clipping 9.91E+37", "probe compensation", or "autoset first".',
       parameters: {
         type: 'object',
         properties: {
           corpus: {
             type: 'string',
             enum: ['scpi', 'tmdevices', 'app_logic', 'errors', 'templates', 'pyvisa_tekhsi', 'scope_logic'],
+            description: 'Which knowledge corpus to search.',
           },
-          query: { type: 'string', description: 'Search query text.' },
+          query: { type: 'string', description: 'Short targeted search phrase. Prefer exact bug names, procedure names, symptoms, or keywords.' },
           topK: { type: 'number', description: 'Max chunks to return (default 5).' },
         },
         required: ['corpus', 'query'],
@@ -521,7 +554,9 @@ export function getToolDefinitions() {
     },
     {
       name: 'search_known_failures',
-      description: 'Search known runtime failures and fixes. Use when user reports errors or unexpected behavior. Returns symptom/cause/fix triplets.',
+      description:
+        'Search the curated known-failures corpus for symptoms, root causes, and fixes. ' +
+        'Use when the user reports an error, timeout, unexpected behavior, or a known bad pattern.',
       parameters: {
         type: 'object',
         properties: {
@@ -534,7 +569,9 @@ export function getToolDefinitions() {
     },
     {
       name: 'get_template_examples',
-      description: 'Retrieve matching workflow template examples.',
+      description:
+        'Retrieve matching workflow/template examples. ' +
+        'Use when the user wants an example flow, a starting template, or prior patterns for a task such as jitter, decode, screenshot, or measurement setup.',
       parameters: {
         type: 'object',
         properties: {
@@ -920,6 +957,7 @@ const MCP_EXPOSED_TOOLS = new Set([
   'verify_scpi_commands',    // { commands: ["CH1:SCAle 1.0"] }
   'browse_scpi_commands',    // { group?: "Trigger", filter?: "edge" }
   'get_command_by_header',   // { header: "TRIGger:A:EDGE:SOUrce" }
+  'retrieve_rag_chunks',     // { corpus: "errors", query: "OPC Query Return Type" }
   'get_template_examples',   // { query: "jitter measurement" }
   // Live instrument tools
   'send_scpi',
