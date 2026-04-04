@@ -57,12 +57,9 @@ export function QRConnectScanner({ onSuccess, onCancel }: QRConnectScannerProps)
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           protocol_version: 1,
-          action: 'send_scpi',
+          action: 'run_python',
           timeout_sec: 5,
-          scope_visa: '-',
-          liveMode: true,
-          commands: [],
-          timeout_ms: 3000,
+          code: 'print("ok")',
         }),
         signal: AbortSignal.timeout(5000),
       });
