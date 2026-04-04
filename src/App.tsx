@@ -14872,18 +14872,20 @@ scpi.query('*OPC?')`;
       {showExecutorModal && (
         <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-50 p-4" onClick={() => setShowExecutorModal(false)}>
           <div className="bg-white dark:bg-gray-800 rounded-xl w-full max-w-md p-6 shadow-2xl" onClick={(e) => e.stopPropagation()}>
-            <h3 className="text-lg font-semibold text-gray-900 dark:text-gray-100 mb-2">Executor connection</h3>
-            <p className="text-sm text-gray-500 dark:text-gray-400 mb-4">
+            <h3 className="text-lg font-semibold text-gray-900 dark:text-gray-100 mb-2">Executor Connection</h3>
+            <p className="text-sm text-gray-500 dark:text-gray-400 mb-1">
               {executorEndpoint
-                ? `Connected to ${executorEndpoint.host}:${executorEndpoint.port}. Use "Connect and execute" in the export modal to run the flow on the scope.`
-                : 'Not connected. Run the scope executor on the scope PC (python server.py --port 8765), then scan the QR or enter the URL below.'}
+                ? `Connected to ${executorEndpoint.host}:${executorEndpoint.port}.`
+                : 'Not connected. Run TekAutomate Executor on the scope PC, then connect using the same network IP.'}
             </p>
-            <p className="text-xs text-gray-400 dark:text-gray-500 mb-4">
-              If you see &quot;Could not reach executor&quot;, ensure the server is running on that PC and the app can reach it (same network or port open).
-            </p>
+            {!executorEndpoint && (
+              <p className="text-xs text-gray-400 dark:text-gray-500 mb-4">
+                Ensure the executor is running and both devices are on the same network.
+              </p>
+            )}
             {executorEndpoint && (
               <p className="text-xs font-mono text-gray-600 dark:text-gray-300 mb-4 break-all">
-                tekautomate://connect?v=1&host={executorEndpoint.host}&port={executorEndpoint.port}
+                {executorEndpoint.host}:{executorEndpoint.port}
               </p>
             )}
             <div className="flex flex-col gap-2">
@@ -14894,8 +14896,7 @@ scpi.query('*OPC?')`;
                     className="w-full px-4 py-2.5 text-sm font-medium text-gray-700 dark:text-gray-200 border border-gray-300 dark:border-gray-600 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-700 flex items-center justify-center gap-2"
                     onClick={() => { setShowExecutorModal(false); setShowQRScanner(true); }}
                   >
-                    <Camera size={16} />
-                    Change (scan or enter URL)
+                    Change Connection
                   </button>
                   <button
                     type="button"
@@ -14906,14 +14907,23 @@ scpi.query('*OPC?')`;
                   </button>
                 </>
               ) : (
-                <button
-                  type="button"
-                  className="w-full px-4 py-2.5 text-sm font-medium bg-blue-600 text-white rounded-lg hover:bg-blue-700 flex items-center justify-center gap-2"
-                  onClick={() => { setShowExecutorModal(false); setShowQRScanner(true); }}
-                >
-                  <Camera size={16} />
-                  Scan QR or enter URL
-                </button>
+                <>
+                  <button
+                    type="button"
+                    className="w-full px-4 py-2.5 text-sm font-medium bg-blue-600 text-white rounded-lg hover:bg-blue-700 flex items-center justify-center gap-2"
+                    onClick={() => { setShowExecutorModal(false); setShowQRScanner(true); }}
+                  >
+                    Enter Executor IP
+                  </button>
+                  <button
+                    type="button"
+                    className="w-full px-4 py-2.5 text-sm font-medium text-gray-700 dark:text-gray-200 border border-gray-300 dark:border-gray-600 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-700 flex items-center justify-center gap-2"
+                    onClick={() => { setShowExecutorModal(false); setShowQRScanner(true); }}
+                  >
+                    <Camera size={16} />
+                    Scan QR Code
+                  </button>
+                </>
               )}
             </div>
             <button type="button" className="mt-4 w-full py-2 text-sm text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-300" onClick={() => setShowExecutorModal(false)}>Close</button>
