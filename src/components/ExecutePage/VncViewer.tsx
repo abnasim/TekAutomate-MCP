@@ -1,119 +1,69 @@
-import React, { useMemo } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 
 interface VncViewerProps {
   wsUrl: string;
   title?: string;
 }
 
-function escapeHtml(value: string): string {
-  return value
-    .replace(/&/g, '&amp;')
-    .replace(/</g, '&lt;')
-    .replace(/>/g, '&gt;')
-    .replace(/"/g, '&quot;')
-    .replace(/'/g, '&#39;');
-}
+type ViewerState = {
+  title: string;
+  message: string;
+  visible: boolean;
+};
+
+const CONNECTING_STATE: ViewerState = {
+  title: 'Connecting VNC...',
+  message: 'Starting the noVNC session.',
+  visible: true,
+};
 
 export function VncViewer({ wsUrl, title = 'Scope VNC Viewer' }: VncViewerProps) {
-  const srcDoc = useMemo(() => {
-    const safeUrl = JSON.stringify(wsUrl);
-    const safeTitle = escapeHtml(title);
-    return `<!DOCTYPE html>
-<html lang="en">
-  <head>
-    <meta charset="utf-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <title>${safeTitle}</title>
-    <style>
-      html, body {
-        margin: 0;
-        width: 100%;
-        height: 100%;
-        overflow: hidden;
-        background: #020617;
-        color: #e2e8f0;
-        font-family: Inter, system-ui, sans-serif;
-      }
-      #root {
-        position: relative;
-        width: 100%;
-        height: 100%;
-        overflow: hidden;
-        background:
-          radial-gradient(circle at top, rgba(59, 130, 246, 0.22), transparent 45%),
-          linear-gradient(180deg, #020617 0%, #0f172a 100%);
-      }
-      #screen {
-        width: 100%;
-        height: 100%;
-      }
-      #overlay {
-        position: absolute;
-        inset: 0;
-        display: flex;
-        align-items: center;
-        justify-content: center;
-        pointer-events: none;
-        background: rgba(2, 6, 23, 0.34);
-        backdrop-filter: blur(2px);
-      }
-      #status {
-        border: 1px solid rgba(148, 163, 184, 0.28);
-        background: rgba(15, 23, 42, 0.92);
-        color: #e2e8f0;
-        border-radius: 14px;
-        padding: 12px 14px;
-        font-size: 12px;
-        line-height: 1.5;
-        box-shadow: 0 16px 40px rgba(15, 23, 42, 0.35);
-        max-width: 320px;
-      }
-      #status strong {
-        display: block;
-        margin-bottom: 4px;
-        font-size: 13px;
-      }
-      .hidden {
-        display: none !important;
-      }
-    </style>
-  </head>
-  <body>
-    <div id="root">
-      <div id="screen"></div>
-      <div id="overlay">
-        <div id="status"><strong>Connecting VNC...</strong>Starting the noVNC session.</div>
-      </div>
-    </div>
-    <script type="module">
-      import RFB from '/vendor/novnc/lib/rfb.js';
+  const screenRef = useRef<HTMLDivElement | null>(null);
+  const rfbRef = useRef<any>(null);
+  const connectTimeoutRef = useRef<number | null>(null);
+  const [viewerState, setViewerState] = useState<ViewerState>(CONNECTING_STATE);
+  const loadNoVncModule = useMemo(
+    () => new Function('return import("/vendor/novnc/lib/rfb.js");') as () => Promise<{ default: any }>,
+    []
+  );
 
-      const target = document.getElementById('screen');
-      const overlay = document.getElementById('overlay');
-      const status = document.getElementById('status');
-      const wsUrl = ${safeUrl};
-      let rfb = null;
-      let connected = false;
-      let connectTimeoutId = null;
+  const overlayHiddenClass = useMemo(
+    () => (viewerState.visible ? '' : 'hidden'),
+    [viewerState.visible]
+  );
 
-      function showStatus(title, message) {
-        overlay.classList.remove('hidden');
-        status.innerHTML = '<strong>' + title + '</strong>' + message;
-      }
+  useEffect(() => {
+    const screen = screenRef.current;
+    if (!screen) return undefined;
 
-      function hideStatus() {
-        overlay.classList.add('hidden');
-      }
+    let disposed = false;
 
-      function clearConnectTimeout() {
-        if (connectTimeoutId !== null) {
-          window.clearTimeout(connectTimeoutId);
-          connectTimeoutId = null;
-        }
+    const clearConnectTimeout = () => {
+      if (connectTimeoutRef.current !== null) {
+        window.clearTimeout(connectTimeoutRef.current);
+        connectTimeoutRef.current = null;
       }
+    };
+
+    const postToParent = (payload: Record<string, unknown>) => {
+      window.parent.postMessage({ source: 'tekautomate-vnc', ...payload }, '*');
+    };
+
+    const showState = (next: ViewerState) => {
+      if (disposed) return;
+      setViewerState(next);
+    };
+
+    const start = async () => {
+      showState(CONNECTING_STATE);
 
       try {
-        rfb = new RFB(target, wsUrl, { shared: true });
+        const mod = await loadNoVncModule();
+        if (disposed) return;
+
+        const RFB = mod.default;
+        const rfb = new RFB(screen, wsUrl, { shared: true });
+        rfbRef.current = rfb;
         rfb.scaleViewport = true;
         rfb.resizeSession = false;
         rfb.clipViewport = false;
@@ -122,75 +72,106 @@ export function VncViewer({ wsUrl, title = 'Scope VNC Viewer' }: VncViewerProps)
         rfb.focusOnClick = true;
         rfb.background = 'rgb(2, 6, 23)';
 
-        connectTimeoutId = window.setTimeout(() => {
-          if (connected) return;
+        connectTimeoutRef.current = window.setTimeout(() => {
+          if (disposed) return;
           const message = 'The embedded viewer did not complete the noVNC handshake within 5 seconds.';
-          showStatus('VNC connection timed out', message);
+          showState({
+            title: 'VNC connection timed out',
+            message,
+            visible: true,
+          });
           try {
-            rfb?.disconnect();
+            rfb.disconnect();
           } catch (_) {}
-          window.parent.postMessage({ source: 'tekautomate-vnc', type: 'error', message }, '*');
+          postToParent({ type: 'error', message });
         }, 5000);
 
         rfb.addEventListener('connect', () => {
-          connected = true;
           clearConnectTimeout();
-          hideStatus();
-          window.parent.postMessage({ source: 'tekautomate-vnc', type: 'connected' }, '*');
+          if (disposed) return;
+          showState({
+            title: '',
+            message: '',
+            visible: false,
+          });
+          postToParent({ type: 'connected' });
         });
 
-        rfb.addEventListener('disconnect', (event) => {
+        rfb.addEventListener('disconnect', (event: any) => {
           clearConnectTimeout();
+          if (disposed) return;
           const clean = Boolean(event?.detail?.clean);
-          showStatus(
-            clean ? 'VNC disconnected' : 'VNC connection lost',
-            clean ? 'The session ended cleanly.' : 'The viewer lost its connection to the executor bridge.'
-          );
-          window.parent.postMessage({ source: 'tekautomate-vnc', type: 'disconnected', clean }, '*');
+          showState({
+            title: clean ? 'VNC disconnected' : 'VNC connection lost',
+            message: clean ? 'The session ended cleanly.' : 'The viewer lost its connection to the executor bridge.',
+            visible: true,
+          });
+          postToParent({ type: 'disconnected', clean });
         });
 
         rfb.addEventListener('credentialsrequired', () => {
           clearConnectTimeout();
           const password = window.prompt('Enter VNC password for this scope:', '') || '';
           if (!password) {
-            showStatus('Password required', 'The scope requested a VNC password. Reconnect when you are ready.');
+            showState({
+              title: 'Password required',
+              message: 'The scope requested a VNC password. Reconnect when you are ready.',
+              visible: true,
+            });
             return;
           }
           rfb.sendCredentials({ password });
         });
 
-        rfb.addEventListener('securityfailure', (event) => {
+        rfb.addEventListener('securityfailure', (event: any) => {
           clearConnectTimeout();
-          const reason = event?.detail?.reason || 'Security negotiation failed.';
-          showStatus('VNC security failure', String(reason));
-          window.parent.postMessage({ source: 'tekautomate-vnc', type: 'error', message: String(reason) }, '*');
+          const reason = String(event?.detail?.reason || 'Security negotiation failed.');
+          showState({
+            title: 'VNC security failure',
+            message: reason,
+            visible: true,
+          });
+          postToParent({ type: 'error', message: reason });
         });
       } catch (error) {
         clearConnectTimeout();
         const message = error instanceof Error ? error.message : String(error);
-        showStatus('Failed to start VNC', message);
-        window.parent.postMessage({ source: 'tekautomate-vnc', type: 'error', message }, '*');
+        showState({
+          title: 'Failed to start VNC',
+          message,
+          visible: true,
+        });
+        postToParent({ type: 'error', message });
       }
+    };
 
-      window.addEventListener('beforeunload', () => {
-        clearConnectTimeout();
-        try {
-          rfb?.disconnect();
-        } catch (_) {}
-      });
-    </script>
-  </body>
-</html>`;
-  }, [title, wsUrl]);
+    void start();
+
+    return () => {
+      disposed = true;
+      clearConnectTimeout();
+      try {
+        rfbRef.current?.disconnect?.();
+      } catch (_) {}
+      rfbRef.current = null;
+      if (screenRef.current) {
+        screenRef.current.innerHTML = '';
+      }
+    };
+  }, [loadNoVncModule, wsUrl]);
 
   return (
-    <div className="h-full overflow-hidden rounded-2xl border border-slate-200 bg-slate-950 shadow-sm dark:border-slate-800">
-      <iframe
-        title={title}
-        srcDoc={srcDoc}
-        className="block h-full min-h-[24rem] w-full border-0 bg-slate-950"
-        sandbox="allow-scripts allow-same-origin allow-modals"
-      />
+    <div className="relative h-full overflow-hidden rounded-2xl border border-slate-200 bg-slate-950 shadow-sm dark:border-slate-800">
+      <div ref={screenRef} aria-label={title} className="h-full min-h-[24rem] w-full" />
+      <div
+        className={`absolute inset-0 flex items-center justify-center bg-[rgba(2,6,23,0.34)] backdrop-blur-[2px] ${overlayHiddenClass}`}
+        style={{ pointerEvents: 'none' }}
+      >
+        <div className="max-w-[320px] rounded-[14px] border border-[rgba(148,163,184,0.28)] bg-[rgba(15,23,42,0.92)] px-[14px] py-3 text-[12px] leading-[1.5] text-slate-200 shadow-[0_16px_40px_rgba(15,23,42,0.35)]">
+          <strong className="mb-1 block text-[13px]">{viewerState.title}</strong>
+          {viewerState.message}
+        </div>
+      </div>
     </div>
   );
 }
