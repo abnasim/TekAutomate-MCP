@@ -18,6 +18,8 @@ import threading
 import time
 import traceback
 import warnings
+import base64
+import string
 
 _real_stdout = sys.stdout
 
@@ -58,6 +60,10 @@ _SCPI_CHUNK_SIZE_SOCKET = 8
 _SCPI_CHUNK_SIZE_VISA = 12
 _SCPI_CHUNK_PAUSE_SEC = 0.12
 _CAPTURE_RETRY_COUNT = 2
+_RAW_READ_PREFIXES = (
+    "FILESYSTEM:READFILE",
+    "FILESYSTEM:READFILE?",
+)
 
 
 def _visa_lock_for(visa: str) -> threading.Lock:
@@ -256,6 +262,44 @@ def _set_session_timeout(session, timeout_ms: int, use_socket: bool):
         session.set_timeout(timeout_ms / 1000.0)
     else:
         session.timeout = timeout_ms
+
+
+def _requires_raw_read(cmd: str) -> bool:
+    upper = cmd.strip().upper()
+    return any(upper.startswith(prefix) for prefix in _RAW_READ_PREFIXES)
+
+
+def _raw_payload_to_result(data: bytes) -> dict:
+    if not data:
+        return {
+            "response": "",
+            "isBinary": False,
+            "byteCount": 0,
+            "encoding": "utf-8",
+            "rawBase64": "",
+        }
+
+    try:
+        decoded = data.decode("utf-8")
+        printable = sum(1 for ch in decoded if ch in string.printable or ch in "\n\r\t")
+        is_text = ("\x00" not in decoded) and (printable / max(len(decoded), 1) >= 0.85)
+        if is_text:
+            return {
+                "response": decoded,
+                "isBinary": False,
+                "byteCount": len(data),
+                "encoding": "utf-8",
+            }
+    except UnicodeDecodeError:
+        pass
+
+    return {
+        "response": f"[binary payload {len(data)} bytes; see rawBase64]",
+        "isBinary": True,
+        "byteCount": len(data),
+        "encoding": "base64",
+        "rawBase64": base64.b64encode(data).decode("ascii"),
+    }
 
 
 def _open_command_session(visa: str, timeout_ms: int, use_socket: bool):
@@ -551,6 +595,7 @@ def _handle_send_scpi(job: dict) -> dict:
             ok = True
             error = None
             response = "OK"
+            raw_result = None
             command_timeout_ms = _command_timeout_ms(cmd, timeout_ms)
             _set_session_timeout(scpi, command_timeout_ms, use_socket)
 
@@ -558,7 +603,11 @@ def _handle_send_scpi(job: dict) -> dict:
                 _emit({"log": "scpi", "level": "send", "msg": f"[SCPI TX] {cmd}"})
 
             try:
-                if cmd.strip().endswith("?"):
+                if _requires_raw_read(cmd) and not use_socket:
+                    scpi.write(cmd)
+                    raw_result = _raw_payload_to_result(scpi.read_raw())
+                    response = raw_result.pop("response", "")
+                elif cmd.strip().endswith("?"):
                     response = str(scpi.query(cmd)).strip()
                 else:
                     scpi.write(cmd)
@@ -577,7 +626,11 @@ def _handle_send_scpi(job: dict) -> dict:
                                 pass
                             _reset_resource_manager()
                             scpi, close_scpi = _open_command_session(visa, command_timeout_ms, False)
-                        if cmd.strip().endswith("?"):
+                        if _requires_raw_read(cmd) and not use_socket:
+                            scpi.write(cmd)
+                            raw_result = _raw_payload_to_result(scpi.read_raw())
+                            response = raw_result.pop("response", "")
+                        elif cmd.strip().endswith("?"):
                             response = str(scpi.query(cmd)).strip()
                         else:
                             scpi.write(cmd)
@@ -601,15 +654,16 @@ def _handle_send_scpi(job: dict) -> dict:
                 else:
                     _emit({"log": "scpi", "level": "error", "msg": f"[SCPI ERR] {cmd} -> {error} ({elapsed_ms}ms)"})
 
-            responses.append(
-                {
-                    "command": cmd,
-                    "response": response,
-                    "ok": ok,
-                    "error": error,
-                    "timeMs": elapsed_ms,
-                }
-            )
+            response_item = {
+                "command": cmd,
+                "response": response,
+                "ok": ok,
+                "error": error,
+                "timeMs": elapsed_ms,
+            }
+            if ok and raw_result:
+                response_item.update(raw_result)
+            responses.append(response_item)
     finally:
         if close_scpi:
             try:
