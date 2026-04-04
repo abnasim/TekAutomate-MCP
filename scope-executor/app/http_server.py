@@ -128,14 +128,18 @@ class _Handler(BaseHTTPRequestHandler):
         self._cors_headers()
         self.send_header("Content-Type", "application/json")
         self.send_header("Content-Length", str(len(data)))
+        self.send_header("Connection", "close")
         self.end_headers()
         self.wfile.write(data)
         self.wfile.flush()
+        self.close_connection = True
 
     def do_OPTIONS(self):
         self.send_response(204)
         self._cors_headers()
+        self.send_header("Connection", "close")
         self.end_headers()
+        self.close_connection = True
 
     def do_GET(self):
         parsed = urlparse(self.path)
