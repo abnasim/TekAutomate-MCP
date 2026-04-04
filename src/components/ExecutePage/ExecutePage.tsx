@@ -513,12 +513,14 @@ function ExecutePageContent({
               <button
                 type="button"
                 onClick={onRun}
-                disabled={runStatus === 'running' || runStatus === 'connecting'}
-                className="inline-flex items-center gap-2 rounded-lg bg-gradient-to-r from-violet-600 to-cyan-600 px-3 py-2 text-sm font-semibold text-white disabled:cursor-not-allowed disabled:opacity-40"
-                title="Run on scope"
+                disabled={runStatus === 'running' || runStatus === 'connecting' || !executorEndpoint}
+                className={`inline-flex items-center gap-2 rounded-lg px-3 py-2 text-sm font-semibold text-white disabled:cursor-not-allowed disabled:opacity-40 ${
+                  executorEndpoint ? 'bg-green-600 hover:bg-green-700' : 'bg-gray-500'
+                }`}
+                title={executorEndpoint ? 'Run on scope' : 'Connect to executor first'}
               >
                 <Play size={16} />
-                {runStatus === 'running' || runStatus === 'connecting' ? 'Running...' : 'Run on Scope'}
+                {runStatus === 'running' || runStatus === 'connecting' ? 'Running...' : executorEndpoint ? 'Run on Scope' : 'Not Connected'}
               </button>
             </div>
           </div>
