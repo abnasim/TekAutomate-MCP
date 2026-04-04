@@ -24,33 +24,7 @@ const __dirname = path.dirname(__filename);
 let lastAiDebug: Record<string, unknown> | null = null;
 
 function sanitizeToolResultForExternalMcp(toolName: string, result: unknown): unknown {
-  if (toolName !== 'capture_screenshot' || !result || typeof result !== 'object') return result;
-  const record = result as Record<string, unknown>;
-  const data = record.data && typeof record.data === 'object'
-    ? (record.data as Record<string, unknown>)
-    : null;
-  const source = data ?? record;
-
-  const sanitizedData: Record<string, unknown> = {
-    ok: source.ok === false ? false : true,
-    captured: true,
-  };
-
-  if (typeof source.capturedAt === 'string') sanitizedData.capturedAt = source.capturedAt;
-  if (typeof source.scopeType === 'string') sanitizedData.scopeType = source.scopeType;
-  if (typeof source.sizeBytes === 'number') sanitizedData.sizeBytes = source.sizeBytes;
-  if (typeof source.originalSizeBytes === 'number') sanitizedData.originalSizeBytes = source.originalSizeBytes;
-  if (typeof source.analysisSizeBytes === 'number') sanitizedData.analysisSizeBytes = source.analysisSizeBytes;
-  if (typeof source.mimeType === 'string') sanitizedData.mimeType = source.mimeType;
-  if (typeof source.originalMimeType === 'string') sanitizedData.originalMimeType = source.originalMimeType;
-  if (typeof source.analysisMimeType === 'string') sanitizedData.analysisMimeType = source.analysisMimeType;
-
-  return {
-    ...(record.ok === false ? { ok: false } : { ok: true }),
-    data: sanitizedData,
-    sourceMeta: Array.isArray(record.sourceMeta) ? record.sourceMeta : [],
-    warnings: Array.isArray(record.warnings) ? record.warnings : [],
-  };
+  return result;
 }
 const REQUEST_LOG_DIR = path.join(__dirname, 'logs', 'requests');
 const MAX_LOG_FILES = 500;

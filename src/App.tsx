@@ -60,6 +60,8 @@ type AskAiParsedResult = {
   tip?: string;
 };
 
+const EXECUTE_PAGE_LIVE_TOKEN_STORAGE = 'tekautomate.execute.live_token';
+
 const parseAskAiContent = (content: string): AskAiParsedResult => {
   const text = (content || '').trim();
   const codeMatches = Array.from(text.matchAll(/`([^`]+)`/g))
@@ -1519,6 +1521,7 @@ function AppInner() {
     const fetchScanned = async () => {
       try {
         const res = await fetch(`http://${executorEndpoint.host}:${executorEndpoint.port}/scan`, {
+          headers: buildExecutorHeaders(),
           signal: AbortSignal.timeout(35000),
         });
         const json = await res.json() as { ok?: boolean; instruments?: Array<{ resource: string; identity: string; manufacturer: string; model: string; serial: string; reachable: boolean; connType: string }> };
@@ -1531,7 +1534,7 @@ function AppInner() {
     };
     fetchScanned();
     return () => { cancelled = true; };
-  }, [executorEndpoint]);
+  }, [buildExecutorHeaders, executorEndpoint]);
 
   const [showQRScanner, setShowQRScanner] = useState(false);
   const [showExecutorModal, setShowExecutorModal] = useState(false);
@@ -6388,6 +6391,26 @@ if __name__ == "__main__":
     return [`http://${host}:${port}/run`];
   }, [executorEndpoint]);
 
+  const getStoredLiveToken = useCallback((): string => {
+    try {
+      return window.localStorage.getItem(EXECUTE_PAGE_LIVE_TOKEN_STORAGE)?.trim() || '';
+    } catch {
+      return '';
+    }
+  }, []);
+
+  const buildExecutorHeaders = useCallback(
+    (baseHeaders?: Record<string, string>): Record<string, string> => {
+      const headers: Record<string, string> = { ...(baseHeaders || {}) };
+      const liveToken = getStoredLiveToken();
+      if (liveToken) {
+        headers['X-Live-Token'] = liveToken;
+      }
+      return headers;
+    },
+    [getStoredLiveToken]
+  );
+
   const postToExecutor = useCallback(async (
     body: string,
     timeoutMs: number
@@ -6403,7 +6426,7 @@ if __name__ == "__main__":
     const racers = urls.map((url, i) =>
       fetch(url, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: buildExecutorHeaders({ 'Content-Type': 'application/json' }),
         body,
         signal: controllers[i].signal,
       }).then(res => ({ res, url, idx: i }))
@@ -6423,7 +6446,7 @@ if __name__ == "__main__":
       const msg = err instanceof Error ? err.message : String(err);
       throw new Error(`Could not reach executor (${urls.join(' | ')}): ${msg}`);
     }
-  }, [buildExecutorRunUrls]);
+  }, [buildExecutorHeaders, buildExecutorRunUrls]);
 
   const captureLiveScopeScreenshot = useCallback(async (reason: 'manual' | 'auto' | 'initial' = 'manual') => {
     if (!executorEndpoint) {
@@ -6659,7 +6682,7 @@ if __name__ == "__main__":
       const disconnectUrl = `http://${executorEndpoint.host}:${executorEndpoint.port}/run`;
       await fetch(disconnectUrl, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: buildExecutorHeaders({ 'Content-Type': 'application/json' }),
         body: JSON.stringify({ protocol_version: 1, action: 'disconnect', scope_visa: getVisaResourceString(activeInstrumentConfig) }),
       });
     } catch { /* non-fatal — executor might not have a live session */ }
@@ -6797,7 +6820,7 @@ if __name__ == "__main__":
       es?.close();
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps -- generatePython is a closure over steps/config; omit to avoid unnecessary effect churn
-  }, [executorEndpoint, currentView, executionSource, buildExecutionPlanPreview, enablePrintMessages, getCurrentFlowStepsForAudit, devices, saveFailedAuditReport, generatePython, postToExecutor]);
+  }, [buildExecutorHeaders, executorEndpoint, currentView, executionSource, buildExecutionPlanPreview, enablePrintMessages, getCurrentFlowStepsForAudit, devices, saveFailedAuditReport, generatePython, postToExecutor]);
 
   const applyAiActionsAndRerun = useCallback(async (actions: AiAction[]) => {
     if (!actions.length) return { applied: 0, rerunStarted: false, changed: false };
@@ -13832,7 +13855,7 @@ scpi.query('*OPC?')`;
                             const url = `http://${executorEndpoint.host}:${executorEndpoint.port}/run`;
                             const res = await fetch(url, {
                               method: 'POST',
-                              headers: { 'Content-Type': 'application/json' },
+                              headers: buildExecutorHeaders({ 'Content-Type': 'application/json' }),
                               body: JSON.stringify({
                                 protocol_version: 1,
                                 action: 'send_scpi',
