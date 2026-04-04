@@ -549,13 +549,16 @@ class _Handler(BaseHTTPRequestHandler):
             self._emit("POST", "/vnc/start", 400, "invalid JSON")
             return
         target_host = str(data.get("target_host") or "").strip()
-        target_port = int(data.get("target_port") or 5900)
-        listen_port = int(data.get("listen_port") or 6080)
         try:
+            target_port = self._parse_int_param(data.get("target_port"), default=5900, name="target_port")
+            listen_port = self._parse_int_param(data.get("listen_port"), default=6080, name="listen_port")
             result = self.server_thread.vnc_start(target_host, target_port, listen_port) if self.server_thread else {"ok": False, "error": "Server unavailable"}
             code = 200 if result.get("ok") else 400
             self._json_response(code, result)
             self._emit("POST", "/vnc/start", code, f"target={target_host}:{target_port} ws={result.get('ws_url') or '-'}")
+        except ValueError as exc:
+            self._json_response(400, {"ok": False, "error": str(exc)})
+            self._emit("POST", "/vnc/start", 400, str(exc))
         except Exception as exc:
             self._json_response(500, {"ok": False, "error": str(exc)})
             self._emit("POST", "/vnc/start", 500, str(exc))
@@ -592,7 +595,8 @@ class HTTPServerThread(threading.Thread):
         self.get_timeout = lambda: 30
         self._live_token_manager = LiveTokenManager()
         self._vnc_proxy_manager = VncProxyManager(
-            listen_host=host,
+            listen_host="127.0.0.1",
+            bind_host="0.0.0.0",
             live_token_status_provider=self.get_live_token_status,
         )
 
@@ -663,6 +667,9 @@ class HTTPServerThread(threading.Thread):
 
     def vnc_probe(self, target_host: str, target_port: int = 5900):
         return self._vnc_proxy_manager.probe(target_host, target_port)
+
+    def vnc_test_target(self, target_host: str, target_port: int = 5900):
+        return self._vnc_proxy_manager.test_target(target_host, target_port)
 
     def vnc_start(self, target_host: str, target_port: int = 5900, listen_port: int = 6080):
         return self._vnc_proxy_manager.start(target_host, target_port, listen_port)

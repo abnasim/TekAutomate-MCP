@@ -289,16 +289,30 @@ class MainWindow:
             self.log_panel.log(message, "warning")
             return
 
-        uri = f"vnc://{host}:{port}"
-        try:
-            os.startfile(uri)  # type: ignore[attr-defined]
-            message = f"Opened local VNC client for {host}:{port}"
+        self.conn_panel.set_vnc_test_result(f"Testing VNC handshake for {host}:{port}...")
+        self.log_panel.log(f"Testing VNC handshake for {host}:{port}...", "dim")
+
+        def _job():
+            if not self._server:
+                result = {"ok": False, "error": "Server unavailable"}
+            else:
+                result = self._server.vnc_test_target(host, port)
+            self.root.after(0, lambda: self._finish_vnc_test(host, port, result))
+
+        threading.Thread(target=_job, daemon=True).start()
+
+    def _finish_vnc_test(self, host: str, port: int, result: dict):
+        if result.get("ok") and result.get("reachable"):
+            banner = str(result.get("rfbBanner") or "RFB banner received")
+            message = f"VNC handshake OK for {host}:{port} ({banner})"
             self.conn_panel.set_vnc_test_result(message)
             self.log_panel.log(message, "success")
-        except Exception as exc:
-            message = f"Failed to open local VNC client for {host}:{port}: {exc}"
-            self.conn_panel.set_vnc_test_result(message)
-            self.log_panel.log(message, "error")
+            return
+
+        error = str(result.get("error") or "VNC handshake failed.")
+        message = f"VNC handshake failed for {host}:{port}: {error}"
+        self.conn_panel.set_vnc_test_result(message)
+        self.log_panel.log(message, "error")
 
     def _quit(self):
         if self._really_quit:

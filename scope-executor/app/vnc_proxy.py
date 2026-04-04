@@ -1,19 +1,19 @@
 """
-VNC availability probing and websockify session management.
+VNC availability probing and native WebSocket bridge management.
 """
 
 from __future__ import annotations
 
-from dataclasses import dataclass
+import asyncio
+from dataclasses import dataclass, field
 from datetime import datetime, timezone
 import secrets
-import shutil
 import socket
-import subprocess
-import sys
 import threading
 import time
 from typing import Callable
+
+from websockets.asyncio.server import ServerConnection, serve
 
 
 def _utc_now() -> datetime:
@@ -24,11 +24,24 @@ def _iso(dt: datetime | None) -> str | None:
     return dt.isoformat() if dt else None
 
 
+def _read_rfb_banner(host: str, port: int, timeout: float = 2.0) -> bytes:
+    with socket.create_connection((host, port), timeout=timeout) as sock:
+        sock.settimeout(timeout)
+        data = b""
+        while not data.endswith(b"\n") and len(data) < 64:
+            chunk = sock.recv(64 - len(data))
+            if not chunk:
+                break
+            data += chunk
+        return data
+
+
 @dataclass
 class _ProbeCacheEntry:
     available: bool
     checked_at: float
     error: str | None = None
+    rfb_banner: str | None = None
 
 
 @dataclass
@@ -38,15 +51,27 @@ class _VncSession:
     target_host: str
     target_port: int
     listen_host: str
+    bind_host: str
     listen_port: int
     ws_url: str
-    process: subprocess.Popen
     created_at: datetime
     last_touched_at: datetime
+    thread: threading.Thread | None = None
+    ready_event: threading.Event = field(default_factory=threading.Event)
+    stop_event: threading.Event = field(default_factory=threading.Event)
+    loop: asyncio.AbstractEventLoop | None = None
+    stop_future: asyncio.Future | None = None
+    active_connections: int = 0
+    start_error: str | None = None
+    last_error: str | None = None
+    rfb_banner: str | None = None
+
+    def running(self) -> bool:
+        return bool(self.thread and self.thread.is_alive() and not self.stop_event.is_set() and not self.start_error)
 
     def payload(self) -> dict:
         return {
-            "running": self.process.poll() is None,
+            "running": self.running(),
             "session_id": self.session_id,
             "vnc_token": self.vnc_token,
             "target": {
@@ -55,12 +80,16 @@ class _VncSession:
             },
             "listen": {
                 "host": self.listen_host,
+                "bindHost": self.bind_host,
                 "port": self.listen_port,
             },
             "ws_url": self.ws_url,
             "createdAt": _iso(self.created_at),
             "lastTouchedAt": _iso(self.last_touched_at),
             "uptime_sec": max(0, int((_utc_now() - self.created_at).total_seconds())),
+            "activeConnections": self.active_connections,
+            "rfbBanner": self.rfb_banner,
+            "lastError": self.last_error,
         }
 
 
@@ -69,11 +98,13 @@ class VncProxyManager:
         self,
         *,
         listen_host: str,
+        bind_host: str | None = None,
         live_token_status_provider: Callable[[], dict],
         inactivity_timeout_sec: int = 300,
         probe_cache_ttl_sec: int = 60,
     ):
         self._listen_host = listen_host or "127.0.0.1"
+        self._bind_host = bind_host or "0.0.0.0"
         self._live_token_status_provider = live_token_status_provider
         self._inactivity_timeout_sec = max(60, int(inactivity_timeout_sec))
         self._probe_cache_ttl_sec = max(5, int(probe_cache_ttl_sec))
@@ -114,18 +145,29 @@ class VncProxyManager:
                     "error": entry.error,
                     "cached": True,
                     "checkedAt": entry.checked_at,
+                    "rfbBanner": entry.rfb_banner,
                 }
 
         available = False
         error: str | None = None
+        banner_text: str | None = None
         try:
-            with socket.create_connection((host, port), timeout=2.0):
+            banner = _read_rfb_banner(host, port, timeout=2.0)
+            banner_text = banner.decode("ascii", errors="replace").strip() if banner else None
+            if banner.startswith(b"RFB "):
                 available = True
+            else:
+                error = f"Unexpected VNC banner: {banner_text or '<empty>'}"
         except Exception as exc:
             error = str(exc)
 
         with self._lock:
-            self._probe_cache[key] = _ProbeCacheEntry(available=available, checked_at=now, error=error)
+            self._probe_cache[key] = _ProbeCacheEntry(
+                available=available,
+                checked_at=now,
+                error=error,
+                rfb_banner=banner_text,
+            )
 
         return {
             "ok": True,
@@ -134,6 +176,27 @@ class VncProxyManager:
             "error": error,
             "cached": False,
             "checkedAt": now,
+            "rfbBanner": banner_text,
+        }
+
+    def test_target(self, target_host: str, target_port: int = 5900) -> dict:
+        result = self.probe(target_host, target_port)
+        if not result.get("ok"):
+            return result
+        if result.get("available"):
+            return {
+                "ok": True,
+                "reachable": True,
+                "target": result.get("target"),
+                "rfbBanner": result.get("rfbBanner"),
+                "message": f"VNC server responded with {result.get('rfbBanner') or 'an RFB banner'}.",
+            }
+        return {
+            "ok": True,
+            "reachable": False,
+            "target": result.get("target"),
+            "rfbBanner": result.get("rfbBanner"),
+            "error": result.get("error") or "VNC server did not return a valid RFB banner.",
         }
 
     def start(self, target_host: str, target_port: int = 5900, listen_port: int = 6080) -> dict:
@@ -147,7 +210,7 @@ class VncProxyManager:
         with self._lock:
             self._sweep_locked()
             existing = self._sessions_by_target.get(key)
-            if existing and existing.process.poll() is None:
+            if existing and existing.running():
                 existing.last_touched_at = _utc_now()
                 return {"ok": True, **existing.payload(), "reused": True}
 
@@ -155,17 +218,7 @@ class VncProxyManager:
             if not probe_result.get("available"):
                 return {"ok": False, "error": probe_result.get("error") or "VNC not available for target.", "available": False}
 
-            command = self._build_command()
             listen_port_resolved = self._allocate_listen_port_locked(desired_listen_port)
-            proc = subprocess.Popen(
-                [*command, str(listen_port_resolved), f"{host}:{port}"],
-                stdout=subprocess.DEVNULL,
-                stderr=subprocess.DEVNULL,
-            )
-            time.sleep(0.25)
-            if proc.poll() is not None:
-                raise RuntimeError("websockify exited immediately. Check that it is installed in the executor environment.")
-
             now_dt = _utc_now()
             session = _VncSession(
                 session_id=secrets.token_urlsafe(12),
@@ -173,14 +226,27 @@ class VncProxyManager:
                 target_host=host,
                 target_port=port,
                 listen_host=self._listen_host,
+                bind_host=self._bind_host,
                 listen_port=listen_port_resolved,
                 ws_url=f"ws://{self._listen_host}:{listen_port_resolved}",
-                process=proc,
                 created_at=now_dt,
                 last_touched_at=now_dt,
+                rfb_banner=probe_result.get("rfbBanner"),
             )
+            session.thread = threading.Thread(target=self._run_bridge_thread, args=(session,), daemon=True)
             self._sessions_by_target[key] = session
             self._sessions_by_id[session.session_id] = session
+            session.thread.start()
+
+        session.ready_event.wait(timeout=3.0)
+        with self._lock:
+            if session.start_error:
+                self._remove_session_locked(session)
+                raise RuntimeError(session.start_error)
+            if not session.running():
+                self._remove_session_locked(session)
+                raise RuntimeError("VNC bridge did not start cleanly.")
+            session.last_touched_at = _utc_now()
             return {"ok": True, **session.payload(), "reused": False}
 
     def stop(self, session_id: str | None = None) -> dict:
@@ -201,11 +267,11 @@ class VncProxyManager:
             if target_host:
                 key = self._target_key(str(target_host).strip(), int(target_port or 5900))
                 session = self._sessions_by_target.get(key)
-                if not session or session.process.poll() is not None:
+                if not session or not session.running():
                     return {"ok": True, "running": False}
                 session.last_touched_at = _utc_now()
                 return {"ok": True, **session.payload()}
-            sessions = [session.payload() for session in self._sessions_by_id.values() if session.process.poll() is None]
+            sessions = [session.payload() for session in self._sessions_by_id.values() if session.running()]
             return {"ok": True, "running": bool(sessions), "sessions": sessions}
 
     def summary(self) -> dict:
@@ -218,7 +284,7 @@ class VncProxyManager:
                     latest_probe_key = key
                     latest_probe = entry
 
-            sessions = [session.payload() for session in self._sessions_by_id.values() if session.process.poll() is None]
+            sessions = [session.payload() for session in self._sessions_by_id.values() if session.running()]
             result = {
                 "ok": True,
                 "running": bool(sessions),
@@ -233,6 +299,7 @@ class VncProxyManager:
                     "error": latest_probe.error,
                     "checkedAt": latest_probe.checked_at,
                     "ageSec": max(0, int(time.time() - latest_probe.checked_at)),
+                    "rfbBanner": latest_probe.rfb_banner,
                 }
             return result
 
@@ -246,7 +313,7 @@ class VncProxyManager:
 
     def _prune_exited_locked(self):
         for session in list(self._sessions_by_id.values()):
-            if session.process.poll() is not None:
+            if session.thread and not session.thread.is_alive():
                 self._remove_session_locked(session)
 
     def _sweep_locked(self):
@@ -257,11 +324,11 @@ class VncProxyManager:
 
         now_dt = _utc_now()
         for session in list(self._sessions_by_id.values()):
-            if session.process.poll() is not None:
+            if not session.running():
                 self._remove_session_locked(session)
                 continue
             idle_sec = (now_dt - session.last_touched_at).total_seconds()
-            if idle_sec >= self._inactivity_timeout_sec:
+            if session.active_connections <= 0 and idle_sec >= self._inactivity_timeout_sec:
                 self._stop_session_locked(session)
 
     def _stop_all_locked(self):
@@ -269,16 +336,18 @@ class VncProxyManager:
             self._stop_session_locked(session)
 
     def _stop_session_locked(self, session: _VncSession):
-        try:
-            if session.process.poll() is None:
-                session.process.terminate()
-                session.process.wait(timeout=2.0)
-        except Exception:
+        session.stop_event.set()
+        loop = session.loop
+        stop_future = session.stop_future
+        if loop and stop_future and not stop_future.done():
             try:
-                session.process.kill()
+                loop.call_soon_threadsafe(stop_future.set_result, None)
             except Exception:
                 pass
+        thread = session.thread
         self._remove_session_locked(session)
+        if thread and thread.is_alive():
+            thread.join(timeout=2.0)
 
     def _remove_session_locked(self, session: _VncSession):
         self._sessions_by_id.pop(session.session_id, None)
@@ -286,24 +355,117 @@ class VncProxyManager:
 
     def _allocate_listen_port_locked(self, desired_port: int) -> int:
         port = max(1024, int(desired_port))
-        active_ports = {session.listen_port for session in self._sessions_by_id.values() if session.process.poll() is None}
+        active_ports = {session.listen_port for session in self._sessions_by_id.values() if session.running()}
         while port in active_ports or not self._port_available(port):
             port += 1
         return port
 
     def _port_available(self, port: int) -> bool:
         try:
-            sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-            sock.bind(("0.0.0.0", port))
-            sock.close()
+            with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as sock:
+                sock.bind((self._bind_host, port))
             return True
         except Exception:
             return False
 
-    def _build_command(self) -> list[str]:
-        if shutil.which("websockify"):
-            return ["websockify"]
-        return [sys.executable, "-m", "websockify"]
+    def _run_bridge_thread(self, session: _VncSession):
+        loop = asyncio.new_event_loop()
+        session.loop = loop
+        asyncio.set_event_loop(loop)
+        stop_future = loop.create_future()
+        session.stop_future = stop_future
+
+        async def _runner():
+            try:
+                async with serve(
+                    lambda websocket: self._handle_client(session, websocket),
+                    session.bind_host,
+                    session.listen_port,
+                    compression=None,
+                    max_size=None,
+                    ping_interval=20,
+                    ping_timeout=20,
+                ):
+                    session.ready_event.set()
+                    await stop_future
+            except Exception as exc:
+                session.start_error = str(exc)
+                session.last_error = str(exc)
+                session.ready_event.set()
+
+        try:
+            loop.run_until_complete(_runner())
+        finally:
+            pending = asyncio.all_tasks(loop)
+            for task in pending:
+                task.cancel()
+            if pending:
+                loop.run_until_complete(asyncio.gather(*pending, return_exceptions=True))
+            loop.close()
+
+    async def _handle_client(self, session: _VncSession, websocket: ServerConnection):
+        self._touch_session(session, connected_delta=1)
+        reader = None
+        writer = None
+        try:
+            reader, writer = await asyncio.open_connection(session.target_host, session.target_port)
+            sock = writer.get_extra_info("socket")
+            if sock is not None:
+                sock.setsockopt(socket.IPPROTO_TCP, socket.TCP_NODELAY, 1)
+
+            async def _ws_to_tcp():
+                while True:
+                    message = await websocket.recv(decode=False)
+                    if message is None:
+                        break
+                    if isinstance(message, str):
+                        message = message.encode("utf-8")
+                    writer.write(message)
+                    await writer.drain()
+                    self._touch_session(session)
+
+            async def _tcp_to_ws():
+                while True:
+                    data = await reader.read(65536)
+                    if not data:
+                        break
+                    await websocket.send(data)
+                    self._touch_session(session)
+
+            tasks = [
+                asyncio.create_task(_ws_to_tcp()),
+                asyncio.create_task(_tcp_to_ws()),
+            ]
+            done, pending = await asyncio.wait(tasks, return_when=asyncio.FIRST_COMPLETED)
+            for task in pending:
+                task.cancel()
+            await asyncio.gather(*pending, return_exceptions=True)
+            for task in done:
+                exc = task.exception()
+                if exc:
+                    raise exc
+        except Exception as exc:
+            session.last_error = str(exc)
+            try:
+                await websocket.close()
+            except Exception:
+                pass
+        finally:
+            if writer is not None:
+                writer.close()
+                try:
+                    await writer.wait_closed()
+                except Exception:
+                    pass
+            self._touch_session(session, connected_delta=-1)
+
+    def _touch_session(self, session: _VncSession, *, connected_delta: int = 0):
+        with self._lock:
+            if session.session_id not in self._sessions_by_id:
+                return
+            session.last_touched_at = _utc_now()
+            if connected_delta:
+                session.active_connections = max(0, session.active_connections + connected_delta)
 
     def _target_key(self, host: str, port: int) -> str:
         return f"{host}:{int(port)}"
