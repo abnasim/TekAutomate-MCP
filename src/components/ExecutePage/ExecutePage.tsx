@@ -239,7 +239,11 @@ function ExecutePageContent({
   void onBack;
 
   useEffect(() => {
-    setCenterTab((current) => (current === 'proposals' && workflowProposal ? current : executionSource));
+    setCenterTab((current) => {
+      // Keep current tab if it's still valid (user selected it)
+      if (current === 'live' || current === 'blockly' || current === 'steps' || current === 'proposals') return current;
+      return executionSource;
+    });
   }, [executionSource, workflowProposal]);
 
   useEffect(() => {
