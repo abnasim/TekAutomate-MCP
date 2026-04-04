@@ -924,6 +924,7 @@ const MCP_SLIM_TOOLS = new Set([
   'capture_screenshot',
   'discover_scpi',
   'get_visa_resources',
+  'check_scope_logic',
 ]);
 
 export async function fetchLiveTools(): Promise<LiveToolDef[]> {

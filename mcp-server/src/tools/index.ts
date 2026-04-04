@@ -16,6 +16,7 @@ import { probeCommand } from './probeCommand';
 import { captureScreenshot } from './captureScreenshot';
 import { sendScpi } from './sendScpi';
 import { retrieveRagChunks } from './retrieveRagChunks';
+import { checkScopeLogic } from './checkScopeLogic';
 import { searchKnownFailures } from './searchKnownFailures';
 import { searchScpi } from './searchScpi';
 import { searchTmDevices } from './searchTmDevices';
@@ -95,6 +96,7 @@ export const TOOL_HANDLERS = {
   get_instrument_info: getInstrumentInfo,
   get_run_log: getRunLog,
   retrieve_rag_chunks: retrieveRagChunks,
+  check_scope_logic: checkScopeLogic,
   search_known_failures: searchKnownFailures,
   get_template_examples: getTemplateExamples,
   get_policy: getPolicy,
@@ -516,6 +518,27 @@ export function getToolDefinitions() {
           topK: { type: 'number', description: 'Max chunks to return (default 5).' },
         },
         required: ['corpus', 'query'],
+        additionalProperties: false,
+      },
+    },
+    {
+      name: 'check_scope_logic',
+      description:
+        'Get pre-checked procedures for scope operations before acting. ' +
+        'Call this BEFORE starting multi-step scope work: decode setup, clipping fix, ' +
+        'signal integrity triage, trigger stabilization, probe compensation, etc. ' +
+        'Returns step-by-step procedures from verified scope_logic playbooks. ' +
+        'When a procedure is returned, follow its steps exactly.',
+      parameters: {
+        type: 'object',
+        properties: {
+          query: {
+            type: 'string',
+            description: 'What you need to do. Examples: "fix clipping", "setup i2c decode", "stabilize trigger", "signal ringing", "probe compensation".',
+          },
+          topK: { type: 'number', description: 'Max procedures to return (default 2).' },
+        },
+        required: ['query'],
         additionalProperties: false,
       },
     },
