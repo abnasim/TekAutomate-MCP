@@ -86,7 +86,7 @@ export function VncViewer({ wsUrl, title = 'Scope VNC Viewer' }: VncViewerProps)
       </div>
     </div>
     <script type="module">
-      import RFB from 'https://cdn.jsdelivr.net/npm/@novnc/novnc@1.5.0/core/rfb.js';
+      import RFB from '/vendor/novnc/lib/rfb.js';
 
       const target = document.getElementById('screen');
       const overlay = document.getElementById('overlay');
