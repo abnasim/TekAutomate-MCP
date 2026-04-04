@@ -80,6 +80,7 @@ export function LiveModePanel({
   const hasLogs = logLines.length > 0;
   const canShowVncTab = Boolean(vncActive || vncAvailable);
   const selectedDevice = deviceOptions.find((device) => device.id === selectedDeviceId) || null;
+  const isVncViewActive = viewMode === 'vnc' && vncActive && vncSessionInfo;
 
   useEffect(() => {
     if (!vncActive || !vncSessionInfo) {
@@ -115,6 +116,33 @@ export function LiveModePanel({
             </select>
           ) : null}
           <div className="flex items-center gap-1">
+            {canShowVncTab ? (
+              <div className="inline-flex rounded-lg border border-slate-300 bg-white p-1 shadow-sm dark:border-slate-700 dark:bg-slate-900">
+                <button
+                  type="button"
+                  onClick={() => setViewMode('screenshot')}
+                  className={`rounded-md px-2.5 py-1 text-[11px] font-medium transition-colors ${
+                    viewMode === 'screenshot'
+                      ? 'bg-sky-600 text-white shadow-sm'
+                      : 'text-slate-600 hover:bg-slate-100 dark:text-slate-300 dark:hover:bg-slate-800'
+                  }`}
+                >
+                  Screenshot
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setViewMode('vnc')}
+                  disabled={!vncActive || !vncSessionInfo}
+                  className={`rounded-md px-2.5 py-1 text-[11px] font-medium transition-colors disabled:cursor-not-allowed disabled:opacity-50 ${
+                    viewMode === 'vnc'
+                      ? 'bg-violet-600 text-white shadow-sm'
+                      : 'text-slate-600 hover:bg-slate-100 dark:text-slate-300 dark:hover:bg-slate-800'
+                  }`}
+                >
+                  VNC
+                </button>
+              </div>
+            ) : null}
             <button
               type="button"
               onClick={onToggleAutoRefresh}
@@ -196,34 +224,7 @@ export function LiveModePanel({
       </div>
 
       {/* Main content: screenshot + logs */}
-      <div className="flex-1 min-h-0 overflow-auto p-4 space-y-3">
-        {canShowVncTab ? (
-          <div className="inline-flex rounded-xl border border-slate-200 bg-white/80 p-1 shadow-sm dark:border-slate-800 dark:bg-slate-900/50">
-            <button
-              type="button"
-              onClick={() => setViewMode('screenshot')}
-              className={`rounded-lg px-3 py-1.5 text-xs font-medium transition-colors ${
-                viewMode === 'screenshot'
-                  ? 'bg-sky-600 text-white shadow-sm'
-                  : 'text-slate-600 hover:bg-slate-100 dark:text-slate-300 dark:hover:bg-slate-800'
-              }`}
-            >
-              Screenshot
-            </button>
-            <button
-              type="button"
-              onClick={() => setViewMode('vnc')}
-              disabled={!vncActive || !vncSessionInfo}
-              className={`rounded-lg px-3 py-1.5 text-xs font-medium transition-colors disabled:cursor-not-allowed disabled:opacity-50 ${
-                viewMode === 'vnc'
-                  ? 'bg-violet-600 text-white shadow-sm'
-                  : 'text-slate-600 hover:bg-slate-100 dark:text-slate-300 dark:hover:bg-slate-800'
-              }`}
-            >
-              VNC
-            </button>
-          </div>
-        ) : null}
+      <div className={`flex-1 min-h-0 p-4 space-y-3 ${isVncViewActive ? 'overflow-hidden' : 'overflow-auto'}`}>
 
         {error && (
           <div className="rounded-xl border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-700 dark:border-rose-900/60 dark:bg-rose-950/40 dark:text-rose-300">
@@ -243,7 +244,7 @@ export function LiveModePanel({
           </div>
         )}
 
-        {showVncReadyCard && vncActive && vncSessionInfo && (
+        {showVncReadyCard && vncActive && vncSessionInfo && !isVncViewActive && (
           <div className="rounded-2xl border border-violet-200 bg-violet-50/90 px-4 py-3 text-sm text-violet-900 shadow-sm dark:border-violet-900/60 dark:bg-violet-950/30 dark:text-violet-100">
             <div className="flex items-center gap-2 font-semibold">
               <MonitorSmartphone size={14} />
@@ -271,7 +272,7 @@ export function LiveModePanel({
           </div>
         )}
 
-        {viewMode === 'vnc' && vncActive && vncSessionInfo ? (
+        {isVncViewActive ? (
           <VncViewer wsUrl={vncSessionInfo.wsUrl} />
         ) : capture ? (
           <div className="relative">
@@ -318,7 +319,7 @@ export function LiveModePanel({
         )}
 
         {/* Logs section - collapsible, below screenshot */}
-        {hasLogs && (
+        {hasLogs && !isVncViewActive && (
           <div className="rounded-xl border border-slate-200 dark:border-slate-800 overflow-hidden">
             <button
               type="button"

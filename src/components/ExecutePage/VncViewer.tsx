@@ -184,11 +184,11 @@ export function VncViewer({ wsUrl, title = 'Scope VNC Viewer' }: VncViewerProps)
   }, [title, wsUrl]);
 
   return (
-    <div className="overflow-hidden rounded-2xl border border-slate-200 bg-slate-950 shadow-sm dark:border-slate-800">
+    <div className="h-full overflow-hidden rounded-2xl border border-slate-200 bg-slate-950 shadow-sm dark:border-slate-800">
       <iframe
         title={title}
         srcDoc={srcDoc}
-        className="block h-[calc(100vh-14rem)] min-h-[24rem] w-full border-0 bg-slate-950"
+        className="block h-full min-h-[24rem] w-full border-0 bg-slate-950"
         sandbox="allow-scripts allow-same-origin allow-modals"
       />
     </div>
