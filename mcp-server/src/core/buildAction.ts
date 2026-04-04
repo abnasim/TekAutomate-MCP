@@ -1651,10 +1651,11 @@ export async function executeBuild(request: BuildRequest): Promise<MicroToolResu
     const rag = await getRagIndexes();
     if (rag) {
       const queryWords = new Set(request.query.toLowerCase().split(/\s+/).filter(w => w.length > 2));
-      // Search SCPI corpus + app_logic for relevant context
+      // Search SCPI + procedural corpora for relevant context
       const scpiChunks = rag.search('scpi', request.query, 5) as Array<{ title: string; body: string; source?: string }>;
-      const appChunks = rag.search('app_logic', request.query, 3) as Array<{ title: string; body: string; source?: string }>;
-      const allChunks = [...scpiChunks, ...appChunks];
+      const scopeChunks = rag.search('scope_logic', request.query, 3) as Array<{ title: string; body: string; source?: string }>;
+      const appChunks = rag.search('app_logic', request.query, 2) as Array<{ title: string; body: string; source?: string }>;
+      const allChunks = [...scpiChunks, ...scopeChunks, ...appChunks];
 
       // Filter: keep chunks whose title overlaps with query words
       ragChunks = allChunks

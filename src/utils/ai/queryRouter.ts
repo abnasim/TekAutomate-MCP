@@ -31,6 +31,11 @@ const ROUTER_SIGNALS: Array<{ corpus: RagCorpus; pattern: RegExp; reason: string
     pattern: /blockly|block|xml|mutation|toolbox|workspace|backend|pyvisa|vxi11|tekhsi|hybrid|connection/i,
     reason: 'app/backend behavior',
   },
+  {
+    corpus: 'scope_logic',
+    pattern: /clipping|clip|9\.91e\+37|overshoot|ringing|signal integrity|probe comp|probe compensation|setup scope|autoset|auto setup|optimize display/i,
+    reason: 'scope procedure intent',
+  },
 ];
 
 const BUILD_SIGNALS = /build|create|generate|compose|setup|configure|capture|measure|workflow|flow|steps|blockly|json|xml/i;

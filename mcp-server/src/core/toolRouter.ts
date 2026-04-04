@@ -308,7 +308,11 @@ async function handleSearch(req: RouterRequest, startedAt: number): Promise<Rout
       const ragStart = Date.now();
       const { retrieveRagChunks } = await import('../tools/retrieveRagChunks');
       const ragResults: Array<{ corpus: string; title: string; body: string }> = [];
-      for (const corpus of ['errors', 'app_logic', 'scpi'] as const) {
+      const wantsScopeProcedure = /\b(clipping|clip|9\.91e\+37|overshoot|ringing|signal integrity|probe comp|probe compensation|setup scope|auto ?setup|autoset|optimize display)\b/i.test(req.query);
+      const ragCorpora = wantsScopeProcedure
+        ? (['scope_logic', 'errors', 'app_logic', 'scpi'] as const)
+        : (['errors', 'app_logic', 'scpi'] as const);
+      for (const corpus of ragCorpora) {
         const res = await retrieveRagChunks({ corpus, query: req.query, topK: 1 });
         if (res.ok && Array.isArray(res.data)) {
           for (const chunk of res.data) {

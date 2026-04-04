@@ -123,6 +123,33 @@ Add `.vscode/mcp.json`:
 
 Visit `https://tekautomate-mcp-production.up.railway.app` for the full tools & API reference page.
 
+### RAG content and corpus updates
+
+The MCP server now owns its RAG source content under:
+
+- `mcp-server/rag/corpus`
+
+Generated shards are written to:
+
+- `public/rag`
+
+This includes a `scope_logic` corpus for procedural scope knowledge such as:
+
+- clipping recovery
+- autoset-first setup
+- trigger stabilization
+- decode bring-up
+- probe compensation
+
+Typical workflow:
+
+1. Add or edit markdown/JSON under `mcp-server/rag/corpus/...`
+2. Run `npm --prefix mcp-server run build:rag`
+3. Commit both the source corpus files and regenerated `public/rag/*.json`
+4. Push
+
+For the standalone hosted MCP repo, the same pattern applies: build locally, then push the generated shards so hosted deployments do not have to guess or rebuild corpus content at runtime.
+
 ---
 
 ## Examples

@@ -1,6 +1,6 @@
 import type { AiAction } from '../aiActions';
 
-export type RagCorpus = 'scpi' | 'tmdevices' | 'app_logic' | 'templates' | 'errors' | 'pyvisa_tekhsi';
+export type RagCorpus = 'scpi' | 'tmdevices' | 'app_logic' | 'scope_logic' | 'templates' | 'errors' | 'pyvisa_tekhsi';
 
 export interface RagChunk {
   id: string;

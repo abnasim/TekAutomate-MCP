@@ -18,14 +18,10 @@ export async function retrieveRagChunks(
   const chunks = rag.search(input.corpus, q, input.topK || 5);
   return {
     ok: true,
-    data: chunks.map((c) => ({
-      id: c.id,
-      corpus: c.corpus,
-      title: c.title,
-      body: c.body,
-      source: c.source,
-      pathHint: c.pathHint,
-    })),
+    data: chunks.map((c) => {
+      const { text, ...rest } = c;
+      return rest;
+    }),
     sourceMeta: chunks.map((c) => ({
       file: c.source || `rag:${c.corpus}`,
       commandId: c.id,

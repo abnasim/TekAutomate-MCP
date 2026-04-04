@@ -77,7 +77,7 @@
     "logs:failures": "node mcp-server/scripts/logsFailures.js",
     "test:ci": "npm test && npm run test:scpi && npm run test:e2e:fast",
     "build:tmdevices-corpus": "node scripts/buildTmDevicesCorpus.js",
-    "build:rag": "node scripts/buildRagIndex.js",
+    "build:rag": "npm --prefix mcp-server run build:rag",
     "electron": "electron .",
     "electron-dev": "concurrently \"npm start\" \"wait-on http://localhost:3001 && electron .\"",
     "electron-build": "npm run build && electron-builder",

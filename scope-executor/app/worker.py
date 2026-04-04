@@ -409,6 +409,7 @@ def _handle_capture_screenshot(job: dict) -> dict:
                             scpi.read_termination = None
 
                             if scope_type == "legacy":
+                                # DPO 5k/7k series — HARDCOPY method
                                 scpi.write('HARDCOPY:PORT FILE')
                                 scpi.write('HARDCOPY:FILENAME "C:/Temp/screenshot.png"')
                                 scpi.write('HARDCOPY START')
@@ -417,7 +418,26 @@ def _handle_capture_screenshot(job: dict) -> dict:
                                 data = scpi.read_raw()
                                 scpi.write('FILESYSTEM:DELETE "C:/Temp/screenshot.png"')
                                 scpi.write('*WAI')
+                            elif scope_type == "export":
+                                # MSO/DPO 70000 series — EXPort method
+                                import time as _time
+                                remote_path = 'C:/TekScope/screenshot.png'
+                                scpi.write(f'EXPort:FILEName "{remote_path}"')
+                                scpi.write('EXPort:FORMat PNG')
+                                scpi.write('EXPort:VIEW FULLSCREEN')
+                                scpi.write('EXPort:PALEtte COLOR')
+                                scpi.write('EXPort START')
+                                if str(scpi.query('*OPC?')).strip() != '1':
+                                    raise RuntimeError("EXPort START did not complete")
+                                _time.sleep(1.0)  # 70000 series needs brief settle time
+                                old_timeout = scpi.timeout
+                                scpi.timeout = 30000
+                                scpi.write(f'FILESYSTEM:READFILE "{remote_path}"')
+                                data = scpi.read_raw()
+                                scpi.timeout = old_timeout
+                                scpi.write(f'FILESYSTEM:DELETE "{remote_path}"')
                             else:
+                                # MSO 2/4/5/6 series — SAVE:IMAGE method (modern)
                                 temp_path = 'C:/Temp_Screen.png'
                                 scpi.write(f'SAVE:IMAGE "{temp_path}"')
                                 if str(scpi.query('*OPC?')).strip() != '1':
