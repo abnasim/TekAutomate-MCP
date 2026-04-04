@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { Camera, ChevronDown, ChevronRight, Image as ImageIcon, KeyRound, Loader2, RefreshCw, Terminal } from 'lucide-react';
 
 export interface LiveModeCapture {
@@ -51,14 +51,37 @@ export function LiveModePanel({
   onToggleLiveTokenEditor,
 }: LiveModePanelProps) {
   const [showLogs, setShowLogs] = useState(false);
+  const [freshCapture, setFreshCapture] = useState(false);
   const logLines = (runLog || '').split(/\r?\n/).filter(Boolean);
   const hasLogs = logLines.length > 0;
+
+  // Flash green LED when new screenshot arrives
+  useEffect(() => {
+    if (capture?.capturedAt) {
+      setFreshCapture(true);
+      const timer = setTimeout(() => setFreshCapture(false), 2000);
+      return () => clearTimeout(timer);
+    }
+  }, [capture?.capturedAt]);
 
   return (
     <div className="h-full flex flex-col bg-slate-100 dark:bg-slate-950">
       {/* Header */}
       <div className="flex items-center justify-between gap-3 border-b border-slate-200 px-4 py-2.5 dark:border-slate-800/50">
-        <div className="text-sm font-semibold text-slate-900 dark:text-white">Live Mode</div>
+        <div className="flex items-center gap-2">
+          <span className="text-sm font-semibold text-slate-900 dark:text-white">Live Mode</span>
+          {onToggleLiveTokenEditor ? (
+            <button
+              type="button"
+              onClick={onToggleLiveTokenEditor}
+              className="inline-flex items-center justify-center rounded-lg border border-slate-300 bg-white p-1.5 text-slate-500 transition-colors hover:bg-slate-50 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-400 dark:hover:bg-slate-800"
+              title="Live token settings"
+              aria-label="Live token settings"
+            >
+              <KeyRound size={11} />
+            </button>
+          ) : null}
+        </div>
         <div className="flex items-center gap-2">
           <div className="flex items-center gap-1">
             <button
@@ -81,18 +104,11 @@ export function LiveModePanel({
               <option value={5}>5s</option>
               <option value={10}>10s</option>
             </select>
-            {onToggleLiveTokenEditor ? (
-              <button
-                type="button"
-                onClick={onToggleLiveTokenEditor}
-                className="inline-flex items-center justify-center rounded-lg border border-slate-300 bg-white p-1.5 text-slate-700 transition-colors hover:bg-slate-50 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-200 dark:hover:bg-slate-800"
-                title="Show live token"
-                aria-label="Show live token"
-              >
-                <KeyRound size={12} />
-              </button>
-            ) : null}
           </div>
+          {/* Green LED indicator for fresh screenshot */}
+          {freshCapture && (
+            <span className="h-2 w-2 rounded-full bg-emerald-500 animate-pulse" title="New screenshot received" />
+          )}
           <button
             type="button"
             onClick={onRefresh}
