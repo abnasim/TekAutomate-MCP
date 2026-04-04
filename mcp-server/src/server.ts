@@ -207,10 +207,17 @@ async function readJsonBody(req: http.IncomingMessage): Promise<Record<string, u
   return JSON.parse(raw || '{}') as Record<string, unknown>;
 }
 
-function extractBearerToken(req: http.IncomingMessage): string {
+function extractRequestToken(req: http.IncomingMessage): string {
   const raw = String(req.headers.authorization || '').trim();
-  if (!raw.toLowerCase().startsWith('bearer ')) return '';
-  return raw.slice(7).trim();
+  if (raw.toLowerCase().startsWith('bearer ')) {
+    return raw.slice(7).trim();
+  }
+  try {
+    const requestUrl = new URL(req.url || '/', `http://${req.headers.host || 'localhost'}`);
+    return String(requestUrl.searchParams.get('token') || '').trim();
+  } catch {
+    return '';
+  }
 }
 
 function sendJson(res: http.ServerResponse, status: number, payload: unknown) {
@@ -836,7 +843,7 @@ function filterTools(q) {
           sendJson(res, 400, { ok: false, error: 'Missing instrumentEndpoint (executorUrl, visaResource)' });
           return;
         }
-        const forwardedToken = String(ep.liveToken || extractBearerToken(req) || '').trim();
+        const forwardedToken = String(ep.liveToken || extractRequestToken(req) || '').trim();
         const execRes = await fetch(`${ep.executorUrl.replace(/\/$/, '')}/run`, {
           method: 'POST',
           headers: {
@@ -880,7 +887,7 @@ function filterTools(q) {
           sendJson(res, 400, { ok: false, error: 'Missing tool name' });
           return;
         }
-        const forwardedToken = extractBearerToken(req);
+        const forwardedToken = extractRequestToken(req);
         // Inject instrument endpoint for live tools
         let args = body.args || {};
         const liveTools = ['get_instrument_state', 'probe_command', 'send_scpi', 'capture_screenshot', 'get_visa_resources', 'get_environment', 'discover_scpi'];
