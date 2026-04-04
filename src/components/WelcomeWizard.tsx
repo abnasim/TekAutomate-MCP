@@ -72,20 +72,20 @@ export const WelcomeWizard: React.FC<WelcomeWizardProps> = ({ isOpen, onClose, o
 
   return (
     <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-50 overflow-y-auto p-4" onClick={onClose}>
-      <div className="bg-white rounded-xl w-full max-w-4xl p-8 shadow-2xl my-auto" onClick={(e) => e.stopPropagation()}>
+      <div className="bg-white dark:bg-gray-800 dark:text-gray-100 rounded-xl w-full max-w-4xl p-8 shadow-2xl my-auto" onClick={(e) => e.stopPropagation()}>
         <div className="flex items-center justify-between mb-6">
           <div className="flex items-center gap-3">
             <div className="w-10 h-10 bg-blue-600 rounded-lg flex items-center justify-center">
               <Rocket className="h-6 w-6 text-white" />
             </div>
             <div>
-              <h2 className="text-2xl font-bold text-gray-900">Quick Setup Wizard</h2>
-              <p className="text-sm text-gray-500">Get started in 3 simple steps</p>
+              <h2 className="text-2xl font-bold text-gray-900 dark:text-gray-100">Quick Setup Wizard</h2>
+              <p className="text-sm text-gray-500 dark:text-gray-400 dark:text-gray-500">Get started in 3 simple steps</p>
             </div>
           </div>
           <button 
             onClick={onClose} 
-            className="text-gray-400 hover:text-gray-600 transition-colors p-2 hover:bg-gray-100 rounded-lg"
+            className="text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 transition-colors p-2 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-lg"
           >
             <X size={24} />
           </button>
@@ -114,7 +114,7 @@ export const WelcomeWizard: React.FC<WelcomeWizardProps> = ({ isOpen, onClose, o
         {step === 1 && (
           <div className="space-y-6">
             <div>
-              <h3 className="text-xl font-semibold mb-2 text-gray-900">Which instrument are we connecting to?</h3>
+              <h3 className="text-xl font-semibold mb-2 text-gray-900 dark:text-gray-100">Which instrument are we connecting to?</h3>
               <p className="text-sm text-gray-600 mb-6">Enter the IP address or hostname of your instrument</p>
               
               {/* Primary Input: IP Address / Hostname */}
@@ -127,7 +127,7 @@ export const WelcomeWizard: React.FC<WelcomeWizardProps> = ({ isOpen, onClose, o
                   value={wizardData.host}
                   onChange={(e) => updateWizardData({ host: e.target.value })}
                   placeholder="e.g., 192.168.1.55 or C-MSO64-12345"
-                  className="w-full px-4 py-4 text-lg border-2 border-gray-300 rounded-lg focus:border-blue-600 focus:ring-2 focus:ring-blue-200 outline-none transition-all"
+                  className="w-full px-4 py-4 text-lg border-2 border-gray-300 dark:border-gray-600 rounded-lg focus:border-blue-600 focus:ring-2 focus:ring-blue-200 outline-none transition-all"
                   autoFocus
                 />
                 <p className="text-xs text-gray-500 mt-2">This is the most important piece of information</p>
@@ -152,14 +152,14 @@ export const WelcomeWizard: React.FC<WelcomeWizardProps> = ({ isOpen, onClose, o
                       className={`p-4 text-left border-2 rounded-lg transition-all flex items-start gap-3 ${
                         wizardData.deviceFamily === option.value
                           ? 'border-blue-600 bg-blue-50 shadow-md'
-                          : 'border-gray-200 hover:border-gray-300 hover:bg-gray-50'
+                          : 'border-gray-200 dark:border-gray-600 hover:border-gray-300 dark:hover:border-gray-500 dark:border-gray-600 hover:bg-gray-50 dark:hover:bg-gray-700'
                       }`}
                     >
                       <div className={`mt-1 ${wizardData.deviceFamily === option.value ? 'text-blue-600' : 'text-gray-400'}`}>
                         <option.icon size={20} />
                       </div>
                       <div className="flex-1">
-                        <div className="font-semibold text-gray-900">{option.label}</div>
+                        <div className="font-semibold text-gray-900 dark:text-gray-100">{option.label}</div>
                         <div className="text-xs text-gray-600 mt-1">{option.desc}</div>
                       </div>
                     </button>
@@ -185,7 +185,7 @@ export const WelcomeWizard: React.FC<WelcomeWizardProps> = ({ isOpen, onClose, o
         {step === 2 && (
           <div className="space-y-6">
             <div>
-              <h3 className="text-xl font-semibold mb-2 text-gray-900">How do you want to communicate?</h3>
+              <h3 className="text-xl font-semibold mb-2 text-gray-900 dark:text-gray-100">How do you want to communicate?</h3>
               <p className="text-sm text-gray-600 mb-6">Choose the Python backend that best fits your needs</p>
               
               {/* Main Options: PyVISA and tm_devices side-by-side */}
@@ -196,7 +196,7 @@ export const WelcomeWizard: React.FC<WelcomeWizardProps> = ({ isOpen, onClose, o
                   className={`p-6 border-2 rounded-xl transition-all text-left ${
                     wizardData.backend === 'pyvisa'
                       ? 'border-blue-600 bg-blue-50 shadow-lg'
-                      : 'border-gray-200 hover:border-gray-300 hover:shadow-md'
+                      : 'border-gray-200 dark:border-gray-600 hover:border-gray-300 dark:hover:border-gray-500 dark:border-gray-600 hover:shadow-md'
                   }`}
                 >
                   <div className="flex items-start justify-between mb-3">
@@ -212,7 +212,7 @@ export const WelcomeWizard: React.FC<WelcomeWizardProps> = ({ isOpen, onClose, o
                   <h4 className="text-lg font-bold text-gray-900 mb-2">PyVISA</h4>
                   <p className="text-sm text-gray-600 mb-3">Handles SCPI commands via VISA. Uses VXI-11 if connection is made without socket port. If socket port is used, connections are made to scope using that port to allow barebone SCPI read/write/query.</p>
                   <p className="text-xs text-gray-500 font-medium mt-3">Best for:</p>
-                  <p className="text-xs text-gray-600">Older instruments, simple SCPI commands, maximum compatibility</p>
+                  <p className="text-xs text-gray-600 dark:text-gray-300">Older instruments, simple SCPI commands, maximum compatibility</p>
                   <button
                     onClick={(e) => {
                       e.stopPropagation();
@@ -230,7 +230,7 @@ export const WelcomeWizard: React.FC<WelcomeWizardProps> = ({ isOpen, onClose, o
                   className={`p-6 border-2 rounded-xl transition-all text-left ${
                     wizardData.backend === 'tm_devices'
                       ? 'border-blue-600 bg-blue-50 shadow-lg'
-                      : 'border-gray-200 hover:border-gray-300 hover:shadow-md'
+                      : 'border-gray-200 dark:border-gray-600 hover:border-gray-300 dark:hover:border-gray-500 dark:border-gray-600 hover:shadow-md'
                   }`}
                 >
                   <div className="flex items-start justify-between mb-3">
@@ -246,7 +246,7 @@ export const WelcomeWizard: React.FC<WelcomeWizardProps> = ({ isOpen, onClose, o
                   <h4 className="text-lg font-bold text-gray-900 mb-2">tm_devices</h4>
                   <p className="text-sm text-gray-600 mb-3">Functions wrapped up nicely with object-oriented Python. Also allows raw SCPI commands when needed. Provides auto-completion and helper functions.</p>
                   <p className="text-xs text-gray-500 font-medium mt-3">Best for:</p>
-                  <p className="text-xs text-gray-600">Modern Tektronix instruments, clean code, developer productivity</p>
+                  <p className="text-xs text-gray-600 dark:text-gray-300">Modern Tektronix instruments, clean code, developer productivity</p>
                   <button
                     onClick={(e) => {
                       e.stopPropagation();
@@ -261,17 +261,17 @@ export const WelcomeWizard: React.FC<WelcomeWizardProps> = ({ isOpen, onClose, o
 
               {/* Special Case: TekHSI (only for oscilloscopes) */}
               {isTekHSIEnabled && (
-                <div className="border-t border-gray-200 pt-6">
+                <div className="border-t border-gray-200 dark:border-gray-600 pt-6">
                   <div className="mb-3">
                     <h4 className="text-sm font-semibold text-gray-700 mb-1">Special Use Case:</h4>
-                    <p className="text-xs text-gray-500">For high-speed waveform acquisition only</p>
+                    <p className="text-xs text-gray-500 dark:text-gray-400 dark:text-gray-500">For high-speed waveform acquisition only</p>
                   </div>
                   <button
                     onClick={() => updateWizardData({ backend: 'tekhsi' })}
                     className={`w-full p-6 border-2 rounded-xl transition-all text-left ${
                       wizardData.backend === 'tekhsi'
                         ? 'border-purple-600 bg-purple-50 shadow-lg'
-                        : 'border-gray-200 hover:border-gray-300 hover:shadow-md'
+                        : 'border-gray-200 dark:border-gray-600 hover:border-gray-300 dark:hover:border-gray-500 dark:border-gray-600 hover:shadow-md'
                     }`}
                   >
                     <div className="flex items-start gap-4">
@@ -282,7 +282,7 @@ export const WelcomeWizard: React.FC<WelcomeWizardProps> = ({ isOpen, onClose, o
                       </div>
                       <div className="flex-1">
                         <div className="flex items-center justify-between mb-2">
-                          <h4 className="text-lg font-bold text-gray-900">TekHSI</h4>
+                          <h4 className="text-lg font-bold text-gray-900 dark:text-gray-100">TekHSI</h4>
                           <span className={`px-2 py-1 text-xs font-semibold rounded ${
                             wizardData.backend === 'tekhsi' ? 'bg-purple-100 text-purple-700' : 'bg-gray-100 text-gray-600'
                           }`}>
@@ -291,7 +291,7 @@ export const WelcomeWizard: React.FC<WelcomeWizardProps> = ({ isOpen, onClose, o
                         </div>
                         <p className="text-sm text-gray-600 mb-2">For fast, huge waveform pulls in realtime with SFP+ port. Uses gRPC for high-speed data transfer.</p>
                         <p className="text-xs text-gray-500 font-medium">When to use:</p>
-                        <p className="text-xs text-gray-600">Only when you need maximum waveform transfer speed on oscilloscopes with SFP+ connectivity</p>
+                        <p className="text-xs text-gray-600 dark:text-gray-300">Only when you need maximum waveform transfer speed on oscilloscopes with SFP+ connectivity</p>
                         <button
                           onClick={(e) => {
                             e.stopPropagation();
@@ -315,7 +315,7 @@ export const WelcomeWizard: React.FC<WelcomeWizardProps> = ({ isOpen, onClose, o
         {step === 3 && (
           <div className="space-y-6">
             <div>
-              <h3 className="text-xl font-semibold mb-2 text-gray-900">What is your immediate goal?</h3>
+              <h3 className="text-xl font-semibold mb-2 text-gray-900 dark:text-gray-100">What is your immediate goal?</h3>
               <p className="text-sm text-gray-600 mb-6">We'll pre-fill your workflow with the right steps</p>
               
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
@@ -325,7 +325,7 @@ export const WelcomeWizard: React.FC<WelcomeWizardProps> = ({ isOpen, onClose, o
                   className={`p-6 border-2 rounded-xl transition-all text-left ${
                     wizardData.intent === 'connection_check'
                       ? 'border-blue-600 bg-blue-50 shadow-lg'
-                      : 'border-gray-200 hover:border-gray-300 hover:shadow-md'
+                      : 'border-gray-200 dark:border-gray-600 hover:border-gray-300 dark:hover:border-gray-500 dark:border-gray-600 hover:shadow-md'
                   }`}
                 >
                   <div className="flex items-center gap-3 mb-3">
@@ -336,10 +336,10 @@ export const WelcomeWizard: React.FC<WelcomeWizardProps> = ({ isOpen, onClose, o
                         wizardData.intent === 'connection_check' ? 'text-green-600' : 'text-gray-400'
                       }`} />
                     </div>
-                    <h4 className="text-lg font-bold text-gray-900">Connection Check</h4>
+                    <h4 className="text-lg font-bold text-gray-900 dark:text-gray-100">Connection Check</h4>
                   </div>
                   <p className="text-sm text-gray-600 mb-2">I just want to see if this thing works.</p>
-                  <p className="text-xs text-gray-500">Steps: Connect → Query: *IDN?</p>
+                  <p className="text-xs text-gray-500 dark:text-gray-400 dark:text-gray-500">Steps: Connect → Query: *IDN?</p>
                 </button>
 
                 {/* Option B: Screen Capture */}
@@ -348,16 +348,16 @@ export const WelcomeWizard: React.FC<WelcomeWizardProps> = ({ isOpen, onClose, o
                   disabled={isScreenCaptureDisabled}
                   className={`p-6 border-2 rounded-xl transition-all text-left relative ${
                     isScreenCaptureDisabled
-                      ? 'border-gray-200 bg-gray-50 opacity-60 cursor-not-allowed'
+                      ? 'border-gray-200 dark:border-gray-600 bg-gray-50 opacity-60 cursor-not-allowed'
                       : wizardData.intent === 'screen_capture'
                       ? 'border-blue-600 bg-blue-50 shadow-lg'
-                      : 'border-gray-200 hover:border-gray-300 hover:shadow-md'
+                      : 'border-gray-200 dark:border-gray-600 hover:border-gray-300 dark:hover:border-gray-500 dark:border-gray-600 hover:shadow-md'
                   }`}
                   title={isScreenCaptureDisabled ? 'Screen capture not available for this device type' : ''}
                 >
                   {isScreenCaptureDisabled && (
                     <div className="absolute top-2 right-2">
-                      <span className="px-2 py-1 text-xs font-semibold rounded bg-gray-200 text-gray-600">
+                      <span className="px-2 py-1 text-xs font-semibold rounded bg-gray-200 text-gray-600 dark:text-gray-300">
                         Not Available
                       </span>
                     </div>
@@ -374,10 +374,10 @@ export const WelcomeWizard: React.FC<WelcomeWizardProps> = ({ isOpen, onClose, o
                           : wizardData.intent === 'screen_capture' ? 'text-purple-600' : 'text-gray-400'
                       }`} />
                     </div>
-                    <h4 className="text-lg font-bold text-gray-900">Screen Capture</h4>
+                    <h4 className="text-lg font-bold text-gray-900 dark:text-gray-100">Screen Capture</h4>
                   </div>
                   <p className="text-sm text-gray-600 mb-2">I need a picture for my report.</p>
-                  <p className="text-xs text-gray-500">
+                  <p className="text-xs text-gray-500 dark:text-gray-400 dark:text-gray-500">
                     {isScreenCaptureDisabled 
                       ? 'Not supported on this hardware'
                       : 'Steps: Connect → Write: SAVe:IMAGe → Save Waveform'}
@@ -390,7 +390,7 @@ export const WelcomeWizard: React.FC<WelcomeWizardProps> = ({ isOpen, onClose, o
                   className={`p-6 border-2 rounded-xl transition-all text-left ${
                     wizardData.intent === 'acquire_data'
                       ? 'border-blue-600 bg-blue-50 shadow-lg'
-                      : 'border-gray-200 hover:border-gray-300 hover:shadow-md'
+                      : 'border-gray-200 dark:border-gray-600 hover:border-gray-300 dark:hover:border-gray-500 dark:border-gray-600 hover:shadow-md'
                   }`}
                 >
                   <div className="flex items-center gap-3 mb-3">
@@ -401,10 +401,10 @@ export const WelcomeWizard: React.FC<WelcomeWizardProps> = ({ isOpen, onClose, o
                         wizardData.intent === 'acquire_data' ? 'text-orange-600' : 'text-gray-400'
                       }`} />
                     </div>
-                    <h4 className="text-lg font-bold text-gray-900">Acquire Data</h4>
+                    <h4 className="text-lg font-bold text-gray-900 dark:text-gray-100">Acquire Data</h4>
                   </div>
                   <p className="text-sm text-gray-600 mb-2">I need raw numbers/CSV.</p>
-                  <p className="text-xs text-gray-500">Steps: Connect → Write: DATa:SOUrce → Save Waveform</p>
+                  <p className="text-xs text-gray-500 dark:text-gray-400 dark:text-gray-500">Steps: Connect → Write: DATa:SOUrce → Save Waveform</p>
                 </button>
 
                 {/* Option D: Empty Project */}
@@ -413,7 +413,7 @@ export const WelcomeWizard: React.FC<WelcomeWizardProps> = ({ isOpen, onClose, o
                   className={`p-6 border-2 rounded-xl transition-all text-left ${
                     wizardData.intent === 'empty'
                       ? 'border-blue-600 bg-blue-50 shadow-lg'
-                      : 'border-gray-200 hover:border-gray-300 hover:shadow-md'
+                      : 'border-gray-200 dark:border-gray-600 hover:border-gray-300 dark:hover:border-gray-500 dark:border-gray-600 hover:shadow-md'
                   }`}
                 >
                   <div className="flex items-center gap-3 mb-3">
@@ -424,10 +424,10 @@ export const WelcomeWizard: React.FC<WelcomeWizardProps> = ({ isOpen, onClose, o
                         wizardData.intent === 'empty' ? 'text-gray-600' : 'text-gray-400'
                       }`} />
                     </div>
-                    <h4 className="text-lg font-bold text-gray-900">Empty Project</h4>
+                    <h4 className="text-lg font-bold text-gray-900 dark:text-gray-100">Empty Project</h4>
                   </div>
                   <p className="text-sm text-gray-600 mb-2">I know what I'm doing, leave me alone.</p>
-                  <p className="text-xs text-gray-500">Start with a blank workflow</p>
+                  <p className="text-xs text-gray-500 dark:text-gray-400 dark:text-gray-500">Start with a blank workflow</p>
                 </button>
               </div>
             </div>
@@ -438,7 +438,7 @@ export const WelcomeWizard: React.FC<WelcomeWizardProps> = ({ isOpen, onClose, o
         <div className="flex justify-between items-center mt-8 pt-6 border-t border-gray-200">
           <button
             onClick={handleSkip}
-            className="px-4 py-2 text-sm text-gray-600 hover:text-gray-800 transition-colors"
+            className="px-4 py-2 text-sm text-gray-600 hover:text-gray-800 dark:hover:text-gray-200 transition-colors"
           >
             Skip Wizard
           </button>
@@ -446,7 +446,7 @@ export const WelcomeWizard: React.FC<WelcomeWizardProps> = ({ isOpen, onClose, o
             {step > 1 && (
               <button
                 onClick={() => setStep(step - 1)}
-                className="px-6 py-2 text-sm border-2 border-gray-300 rounded-lg hover:bg-gray-50 transition-colors font-medium"
+                className="px-6 py-2 text-sm border-2 border-gray-300 dark:border-gray-600 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors font-medium"
               >
                 Back
               </button>

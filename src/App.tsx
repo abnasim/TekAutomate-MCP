@@ -499,7 +499,7 @@ const STEP_PALETTE = [
   { type: 'tm_device_command' as StepType, label: 'tm_devices Command', icon: Zap, color: 'bg-purple-100 dark:bg-purple-900/50 text-purple-700 dark:text-purple-200' },
   { type: 'recall' as StepType, label: 'Recall', icon: FolderInput, color: 'bg-orange-100 dark:bg-orange-900/50 text-orange-700 dark:text-orange-200' },
   { type: 'sleep' as StepType, label: 'Sleep', icon: Timer, color: 'bg-yellow-100 dark:bg-yellow-900/50 text-yellow-700 dark:text-yellow-200' },
-  { type: 'python' as StepType, label: 'Python', icon: Code2, color: 'bg-slate-100 dark:bg-slate-800/60 text-slate-700 dark:text-slate-200' },
+  { type: 'python' as StepType, label: 'Python', icon: Code2, color: 'bg-slate-100 dark:bg-slate-600 text-slate-700 dark:text-slate-100' },
   { type: 'comment' as StepType, label: 'Comment', icon: MessageSquare, color: 'bg-cyan-100 dark:bg-cyan-900/50 text-cyan-700 dark:text-cyan-200' },
   { type: 'save_waveform' as StepType, label: 'Save Waveform', icon: HardDriveDownload, color: 'bg-indigo-100 dark:bg-indigo-900/50 text-indigo-700 dark:text-indigo-200' },
   { type: 'save_screenshot' as StepType, label: 'Save Screenshot', icon: Camera, color: 'bg-pink-100 dark:bg-pink-900/50 text-pink-700 dark:text-pink-200' },
