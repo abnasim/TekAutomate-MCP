@@ -112,9 +112,9 @@ class InstrumentPanel(ttk.Frame):
         pip.create_oval(0, 0, 8, 8, fill=pip_color, outline="")
         pip.pack(side=tk.RIGHT)
 
-        # Identity row + actions
+        # Identity row
         info_row = ttk.Frame(card)
-        info_row.pack(fill=tk.X, padx=8, pady=(0, 6))
+        info_row.pack(fill=tk.X, padx=8, pady=(0, 2))
 
         if info.model:
             id_text = f"{info.manufacturer} {info.model}"
@@ -127,12 +127,16 @@ class InstrumentPanel(ttk.Frame):
 
         ttk.Label(info_row, text=id_text).pack(side=tk.LEFT, fill=tk.X, expand=True)
 
+        # Action buttons row — separate row so they never get clipped
+        btn_row = ttk.Frame(card)
+        btn_row.pack(fill=tk.X, padx=8, pady=(0, 6))
+
         clear_btn = ttk.Button(
-            info_row,
+            btn_row,
             text="Clear Buffer",
             command=lambda resource=info.resource, label=info.display_name: self.clear_requested.emit(resource, label),
         )
-        clear_btn.pack(side=tk.RIGHT, padx=(8, 0))
+        clear_btn.pack(side=tk.RIGHT)
         self._clear_buttons[info.resource] = clear_btn
 
         self._count.configure(text=f"({len(self._instruments)})")
