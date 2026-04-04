@@ -312,23 +312,16 @@ function ExecutePageContent({
     setShowLiveTokenEditor(true);
   }, [runLog]);
 
-  const liveTokenStatusLabel =
-    liveTokenState === 'active'
-      ? 'Live token active'
-      : liveTokenState === 'saved'
-        ? 'Live token saved'
-        : liveTokenState === 'error'
-          ? 'Live token needs attention'
-          : 'No live token';
-
-  const liveTokenStatusClass =
-    liveTokenState === 'active'
-      ? 'bg-emerald-500/15 text-emerald-700 dark:text-emerald-300'
-      : liveTokenState === 'saved'
-        ? 'bg-sky-500/15 text-sky-700 dark:text-sky-300'
-        : liveTokenState === 'error'
-          ? 'bg-rose-500/15 text-rose-700 dark:text-rose-300'
-          : 'bg-slate-500/15 text-slate-700 dark:text-slate-300';
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    const handler = () => {
+      setShowLiveTokenEditor((prev) => (liveToken.trim() ? !prev : true));
+    };
+    window.addEventListener('tekautomate:toggle-live-token-editor', handler as EventListener);
+    return () => {
+      window.removeEventListener('tekautomate:toggle-live-token-editor', handler as EventListener);
+    };
+  }, [liveToken]);
 
   const appendStepLog = useCallback((line: string) => {
     setStepLog(prev => prev + line + '\n');
@@ -725,63 +718,36 @@ function ExecutePageContent({
               </button>
             </div>
           </div>
-          {securedInstrumentEndpoint?.executorUrl ? (
+          {securedInstrumentEndpoint?.executorUrl && showLiveTokenEditor ? (
             <div className="flex items-center gap-3 border-b border-slate-200 bg-white/70 px-3 py-2 text-xs text-slate-600 dark:border-slate-800/50 dark:bg-slate-900/40 dark:text-slate-300">
               <span className="font-semibold text-slate-700 dark:text-slate-200">Live Token</span>
-              {showLiveTokenEditor ? (
-                <>
-                  <input
-                    type="password"
-                    value={liveToken}
-                    onChange={(event) => setLiveToken(event.target.value)}
-                    onBlur={() => {
-                      if (liveToken.trim()) {
-                        setShowLiveTokenEditor(false);
-                      }
-                    }}
-                    onKeyDown={(event) => {
-                      if (event.key === 'Enter' && liveToken.trim()) {
-                        setShowLiveTokenEditor(false);
-                      }
-                    }}
-                    placeholder="Paste token from executor"
-                    className="min-w-0 flex-1 rounded-md border border-slate-300 bg-white px-3 py-1.5 text-sm text-slate-900 outline-none focus:border-cyan-500 dark:border-slate-700 dark:bg-slate-950 dark:text-white"
-                  />
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setLiveToken('');
-                      setShowLiveTokenEditor(true);
-                    }}
-                    className="rounded-md border border-slate-300 px-2 py-1 text-xs font-medium text-slate-600 hover:bg-slate-100 dark:border-slate-700 dark:text-slate-300 dark:hover:bg-slate-800"
-                  >
-                    Clear
-                  </button>
-                </>
-              ) : (
-                <>
-                  <span className={`rounded-full px-3 py-1 text-xs font-semibold ${liveTokenStatusClass}`}>
-                    {liveTokenStatusLabel}
-                  </span>
-                  <button
-                    type="button"
-                    onClick={() => setShowLiveTokenEditor(true)}
-                    className="rounded-md border border-slate-300 px-2 py-1 text-xs font-medium text-slate-600 hover:bg-slate-100 dark:border-slate-700 dark:text-slate-300 dark:hover:bg-slate-800"
-                  >
-                    Change
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setLiveToken('');
-                      setShowLiveTokenEditor(true);
-                    }}
-                    className="rounded-md border border-slate-300 px-2 py-1 text-xs font-medium text-slate-600 hover:bg-slate-100 dark:border-slate-700 dark:text-slate-300 dark:hover:bg-slate-800"
-                  >
-                    Clear
-                  </button>
-                </>
-              )}
+              <input
+                type="password"
+                value={liveToken}
+                onChange={(event) => setLiveToken(event.target.value)}
+                onBlur={() => {
+                  if (liveToken.trim()) {
+                    setShowLiveTokenEditor(false);
+                  }
+                }}
+                onKeyDown={(event) => {
+                  if (event.key === 'Enter' && liveToken.trim()) {
+                    setShowLiveTokenEditor(false);
+                  }
+                }}
+                placeholder="Paste token from executor"
+                className="min-w-0 flex-1 rounded-md border border-slate-300 bg-white px-3 py-1.5 text-sm text-slate-900 outline-none focus:border-cyan-500 dark:border-slate-700 dark:bg-slate-950 dark:text-white"
+              />
+              <button
+                type="button"
+                onClick={() => {
+                  setLiveToken('');
+                  setShowLiveTokenEditor(true);
+                }}
+                className="rounded-md border border-slate-300 px-2 py-1 text-xs font-medium text-slate-600 hover:bg-slate-100 dark:border-slate-700 dark:text-slate-300 dark:hover:bg-slate-800"
+              >
+                Clear
+              </button>
             </div>
           ) : null}
           <div className="flex-1 min-h-0 overflow-hidden">

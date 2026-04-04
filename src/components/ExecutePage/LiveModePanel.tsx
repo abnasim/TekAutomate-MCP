@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Camera, ChevronDown, ChevronRight, Image as ImageIcon, Loader2, RefreshCw, Terminal } from 'lucide-react';
+import { Camera, ChevronDown, ChevronRight, Image as ImageIcon, KeyRound, Loader2, RefreshCw, Terminal } from 'lucide-react';
 
 export interface LiveModeCapture {
   dataUrl: string;
@@ -18,6 +18,7 @@ interface LiveModePanelProps {
   onRefresh: () => void;
   onToggleAutoRefresh: () => void;
   onChangeRefreshInterval: (seconds: number) => void;
+  onToggleLiveTokenEditor?: () => void;
 }
 
 function formatBytes(size: number): string {
@@ -47,6 +48,7 @@ export function LiveModePanel({
   onRefresh,
   onToggleAutoRefresh,
   onChangeRefreshInterval,
+  onToggleLiveTokenEditor,
 }: LiveModePanelProps) {
   const [showLogs, setShowLogs] = useState(false);
   const logLines = (runLog || '').split(/\r?\n/).filter(Boolean);
@@ -79,6 +81,17 @@ export function LiveModePanel({
               <option value={5}>5s</option>
               <option value={10}>10s</option>
             </select>
+            {onToggleLiveTokenEditor ? (
+              <button
+                type="button"
+                onClick={onToggleLiveTokenEditor}
+                className="inline-flex items-center justify-center rounded-lg border border-slate-300 bg-white p-1.5 text-slate-700 transition-colors hover:bg-slate-50 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-200 dark:hover:bg-slate-800"
+                title="Show live token"
+                aria-label="Show live token"
+              >
+                <KeyRound size={12} />
+              </button>
+            ) : null}
           </div>
           <button
             type="button"
