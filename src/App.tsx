@@ -15191,6 +15191,7 @@ scpi.query('*OPC?')`;
             modelFamily: modelFamily,
             deviceType: deviceType,
             deviceDriver: deviceDriver,
+            scopeGeneration: /dpo|mdo|tds/i.test(modelFamily) ? 'legacy' : 'modern',
             alias: `${deviceType.toLowerCase()}1`,
             visaBackend: 'system',
             enabled: true,
