@@ -120,6 +120,36 @@
     "source": "rag/corpus/scope_logic/anti-clipping.md"
   },
   {
+    "id": "decode_bringup_md_4_p1",
+    "corpus": "errors",
+    "title": "Notes",
+    "body": "- Decode setup should follow waveform bring-up, not replace it.\n- Bus decode failures are often threshold or source issues, not missing bus commands.\n- Save screenshots or bus tables only after decode is readable.",
+    "tags": [
+      "decode_bringup_md"
+    ],
+    "source": "rag/corpus/scope_logic/decode-bringup.md"
+  },
+  {
+    "id": "invalid_measurement_results_md_3_p1",
+    "corpus": "errors",
+    "title": "Procedure",
+    "body": "1. Treat the value as invalid and do not use it in decisions or pass/fail logic.\n2. Check whether the waveform is clipped, off-screen, or under-ranged.\n3. Fix vertical scale and vertical position before touching the measurement definition.\n4. Verify the measurement source and reference levels after the waveform is visible and stable.\n5. Re-run the measurement only after the signal is no longer clipped or obviously malformed.",
+    "tags": [
+      "invalid_measurement_results_md"
+    ],
+    "source": "rag/corpus/scope_logic/invalid-measurement-results.md"
+  },
+  {
+    "id": "procedure_template_md_2_p1",
+    "corpus": "errors",
+    "title": "Trigger Signals",
+    "body": "- Phrase or symptom the AI should match\n- Common query wording from users\n- Specific sentinels, errors, or readback values",
+    "tags": [
+      "procedure_template_md"
+    ],
+    "source": "rag/corpus/scope_logic/procedure-template.md"
+  },
+  {
     "id": "scpi_hard_knowledge_md_38_p1",
     "corpus": "errors",
     "title": "Miscellaneous",
@@ -1529,6 +1559,52 @@
       "CUSTOM_GPT_INSTRUCTIONS.txt"
     ],
     "related_commands": [],
+    "corpus": "errors",
+    "source": "rag/corpus/error_patterns/error_patterns_index.json"
+  },
+  {
+    "id": "error_code_table",
+    "type": "reference_table",
+    "severity": "medium",
+    "tags": [
+      "status",
+      "events",
+      "sesr",
+      "deser",
+      "esr",
+      "opc",
+      "busy",
+      "wai",
+      "query_event",
+      "message_codes",
+      "command_error",
+      "execution_error",
+      "device_error",
+      "warnings",
+      "reference_table"
+    ],
+    "title": "Status and Event Message Code Table — SESR, Command Errors, Execution Errors, Device Errors, and Warnings",
+    "symptom": "Need to interpret instrument message codes, SESR bits, query-event messages, OPC synchronization behavior, or measurement clipping/error warnings returned by *ESR?, EVMsg?, ALLEv?, or related status/event reads.",
+    "root_cause": "The scope reports programming-interface messages in multiple categories with different code ranges and SESR associations: no-event messages, command errors, execution errors, device errors, system events, execution warnings, and internal warnings. Without a consolidated lookup, automation may mis-handle timeouts, query events, clipping warnings, or OPC synchronization conditions.",
+    "fix": "Use this table as the canonical lookup for message codes and synchronization semantics. When a timeout or wait condition occurs, check SESR via *ESR? and read the event queue (EVMsg? or ALLEv?) to map returned codes to the proper category and next action.",
+    "body": "Key synchronization rules: *OPC sets SESR bit 0 when all pending OPC-generating operations complete; *OPC? returns 1 only when those operations complete or a device clear is received; *WAI blocks later instrument-side command execution until pending OPC-generating work completes; BUSY? returns 1 while operations are pending and 0 when complete. Important timeout guidance: some OPC-generating operations may take a long time or never complete, such as single-sequence acquisition when no trigger occurs, so controller timeouts must be set appropriately and timeout recovery should query *ESR? plus the event queue.\n\nNo Event messages: code 0 = 'No events to report; queue empty', code 1 = 'No events to report; new events pending *ESR?'.\n\nCommand Error messages (CME bit 5): 100 Command error, 101 Invalid character, 102 Syntax error, 103 Invalid separator, 104 Data type error, 105 GET not allowed, 108 Parameter not allowed, 109 Missing parameter, 110 Command header error, 112 Program mnemonic too long, 113 Undefined header, 120 Numeric data error, 121 Invalid character in numeric, 123 Exponent too large, 124 Too many digits, 130 Suffix error, 131 Invalid suffix, 134 Suffix too long, 140 Character data error, 141 Invalid character data, 144 Character data too long, 150 String data error, 151 Invalid string data, 152 String data too long, 160 Block data error, 161 Invalid block data, 170 Command expression error, 171 Invalid expression.\n\nExecution Error messages (EXE bit 4): 200 Execution error, 221 Settings conflict, 222 Data out of range, 224 Illegal parameter value, 241 Hardware missing, 250 Mass storage error, 251 Missing mass storage, 252 Missing media, 253 Corrupt media, 254 Media full, 255 Directory full, 256 File name not found, 257 File name error, 258 Media protected, 259 File name too long, 280 Program error, 282 Insufficient network printer information, 283 Network printer not responding, 284 Network printer server not responding, 286 Program runtime error, 2200–2235 measurement/math errors including zero period, low amplitude, invalid gate, measurement overflow, no crossing, constant waveform, no valid edge, waveform mismatch, WAIT calculating, no waveform to measure, null waveform, positive/negative clipping, clipping positive, clipping negative, high ref < low ref, no statistics available, requested waveform temporarily unavailable, invalid math description; 2240 Invalid password; 2241 Waveform requested is invalid; 2244 Source waveform is not active; 2245 Saveref error, selected channel is turned off; 2250/2253/2254 reference waveform file errors; 2259 File too big; 2270–2278 alias errors; 2285 TekSecure Pass; 2286 TekSecure Fail; 2500 Setup error, file does not look like a setup file; 2501 Setup warning, could not recall all values from external setup; 2620 Mask error, too few points received; 2760 Mark limit reached; 2761 No mark present; 2762 Search copy failed.\n\nDevice Error messages (DDE bit 3): 310 System error, 311 Memory error, 312 P",
+    "code_before": "Timeout or wait logic without checking *ESR? and the event queue; message codes treated as opaque strings.",
+    "code_after": "On timeout or status anomaly: query *ESR?, then EVMsg? or ALLEv?, map returned codes through this table, and choose follow-up based on category (CME, EXE, DDE, query event, or warning).",
+    "affected_files": [
+      "rag/corpus/error_patterns/error_patterns_index.json"
+    ],
+    "related_commands": [
+      "*ESR?",
+      "*OPC",
+      "*OPC?",
+      "*WAI",
+      "BUSY?",
+      "EVMsg?",
+      "ALLEv?",
+      "*SRE",
+      "*ESE",
+      "DESE"
+    ],
     "corpus": "errors",
     "source": "rag/corpus/error_patterns/error_patterns_index.json"
   }
