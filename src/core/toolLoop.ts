@@ -733,12 +733,14 @@ async function runSearchKnowledge(req: McpChatRequest) {
     const wantsErrors = /\b(error|bug|fix|issue|fail|timeout|crash|debug)\b/i.test(qLower);
     const wantsArch = /\b(architect|workflow|blockly|steps|flow|schema|template|pattern)\b/i.test(qLower);
     const wantsPyvisa = /\b(pyvisa|tekhsi|connect|visa|socket|grpc)\b/i.test(qLower);
-    const corpora: Array<'scpi' | 'errors' | 'app_logic' | 'templates' | 'pyvisa_tekhsi'> = ['scpi'];
+    const wantsScopeLogic = /\b(clipping|clip|9\.91e\+37|overshoot|ringing|signal\s+integrity|probe\s+comp|probe\s+compensation|setup\s+scope|auto\s+setup|autoset|optimize\s+display)\b/i.test(qLower);
+    const corpora: Array<'scpi' | 'errors' | 'app_logic' | 'templates' | 'pyvisa_tekhsi' | 'scope_logic'> = ['scpi'];
     if (wantsErrors) corpora.push('errors');
+    if (wantsScopeLogic) corpora.push('scope_logic');
     if (wantsArch) corpora.push('app_logic', 'templates');
     if (wantsPyvisa) corpora.push('pyvisa_tekhsi');
-    // If nothing specific, add app_logic as secondary
-    if (corpora.length === 1) corpora.push('app_logic');
+    // If nothing specific, add scope/app context as secondary
+    if (corpora.length === 1) corpora.push('scope_logic', 'app_logic');
 
     const allResults: Array<{corpus: string; title: string; body: string; source?: string}> = [];
 
@@ -5175,6 +5177,7 @@ function buildOpenAiUserContent(req: McpChatRequest, userPrompt: string): Array<
       type: 'image_url',
       image_url: {
         url: image.dataUrl,
+        detail: 'auto',
       },
     })),
   ];
@@ -5193,6 +5196,7 @@ function buildOpenAiResponsesContent(req: McpChatRequest, userPrompt: string): A
     ...images.map((image) => ({
       type: 'input_image',
       image_url: image.dataUrl,
+      detail: 'auto',
     })),
   ];
 }

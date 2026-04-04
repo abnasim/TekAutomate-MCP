@@ -110,6 +110,16 @@
     "source": "rag/corpus/app_logic/TEKEXPRESS_INTEGRATION.md"
   },
   {
+    "id": "anti_clipping_md_3_p1",
+    "corpus": "errors",
+    "title": "Procedure",
+    "body": "1. Identify the affected analog channel.\n2. Increase the vertical scale on that channel until the waveform no longer hits the display rails.\n3. Re-center the waveform with channel offset or position if needed.\n4. Check channel termination, attenuation, and probe settings to confirm they match the actual setup.\n5. If bandwidth limiting is enabled and the signal is still clipping, keep the larger scale anyway; bandwidth limiting is not a clipping fix.\n6. Re-run the clipping query or the failing measurement.\n7. Only trust amplitude, overshoot, rise/fall, or statistics results after clipping clears.",
+    "tags": [
+      "anti_clipping_md"
+    ],
+    "source": "rag/corpus/scope_logic/anti-clipping.md"
+  },
+  {
     "id": "scpi_hard_knowledge_md_38_p1",
     "corpus": "errors",
     "title": "Miscellaneous",
@@ -231,9 +241,8 @@
   },
   {
     "id": "err_unicode_decode_opc_after_readfile",
-    "corpus": "errors",
-    "title": "UnicodeDecodeError on Screenshot — *OPC? after FILESYSTEM:READFILE reads leftover PNG binary",
-    "body": "The PNG file data (binary bytes like 0xe5) was being interpreted as ASCII text. The sequence was: 1) scope.write('FILESYSTEM:READFILE \"...\"') 2) scope.read_raw() reads PNG data 3) scope.write('FILESYSTEM:DELETE \"...\"') 4) scope.query('*OPC?') tries to read '1' but gets leftover PNG data. The fix removes all query('*OPC?') calls after HARDCOPY START and FILESYSTEM:DELETE, replacing them with time.sleep(1.0). This avoids reading from the buffer entirely. Both legacy (HARDCOPY) and modern (SAVE:IMAGE) screenshot templates were updated.\nUnicodeDecodeError: 'ascii' codec can't decode byte 0xe5 in position 2. Occurs after screenshot capture when query('*OPC?') is called following FILESYSTEM:READFILE.\nAfter FILESYSTEM:READFILE + read_raw(), leftover PNG binary data remains in the communication buffer. The subsequent scope.query('*OPC?') tries to read the expected '1' text response but instead reads leftover binary bytes, causing ASCII decode failure.\nReplace all query('*OPC?') calls after file operations with time.sleep(1.0). Do not read from the buffer after binary transfers.\nscope.write('HARDCOPY START')\nscope.query('*OPC?')  # ❌ Tries to read response\ntime.sleep(0.5)\n# ... file transfer ...\nscope.write('FILESYSTEM:DELETE \"...\"')\nscope.query('*OPC?')  # ❌ Reads leftover binary data = UnicodeDecodeError!\nscope.write('HARDCOPY START')\ntime.sleep(1.0)  # ✅ Just wait, don't read\n# ... file transfer ...\nscope.write('FILESYSTEM:DELETE \"...\"')\n# ✅ No query after delete, no error",
+    "type": "bug_fix",
+    "severity": "critical",
     "tags": [
       "screenshot",
       "opc",
@@ -243,13 +252,31 @@
       "filesystem_readfile",
       "bug_fix"
     ],
+    "title": "UnicodeDecodeError on Screenshot — *OPC? after FILESYSTEM:READFILE reads leftover PNG binary",
+    "symptom": "UnicodeDecodeError: 'ascii' codec can't decode byte 0xe5 in position 2. Occurs after screenshot capture when query('*OPC?') is called following FILESYSTEM:READFILE.",
+    "root_cause": "After FILESYSTEM:READFILE + read_raw(), leftover PNG binary data remains in the communication buffer. The subsequent scope.query('*OPC?') tries to read the expected '1' text response but instead reads leftover binary bytes, causing ASCII decode failure.",
+    "fix": "Replace all query('*OPC?') calls after file operations with time.sleep(1.0). Do not read from the buffer after binary transfers.",
+    "body": "The PNG file data (binary bytes like 0xe5) was being interpreted as ASCII text. The sequence was: 1) scope.write('FILESYSTEM:READFILE \"...\"') 2) scope.read_raw() reads PNG data 3) scope.write('FILESYSTEM:DELETE \"...\"') 4) scope.query('*OPC?') tries to read '1' but gets leftover PNG data. The fix removes all query('*OPC?') calls after HARDCOPY START and FILESYSTEM:DELETE, replacing them with time.sleep(1.0). This avoids reading from the buffer entirely. Both legacy (HARDCOPY) and modern (SAVE:IMAGE) screenshot templates were updated.\nUnicodeDecodeError: 'ascii' codec can't decode byte 0xe5 in position 2. Occurs after screenshot capture when query('*OPC?') is called following FILESYSTEM:READFILE.\nAfter FILESYSTEM:READFILE + read_raw(), leftover PNG binary data remains in the communication buffer. The subsequent scope.query('*OPC?') tries to read the expected '1' text response but instead reads leftover binary bytes, causing ASCII decode failure.\nReplace all query('*OPC?') calls after file operations with time.sleep(1.0). Do not read from the buffer after binary transfers.\nscope.write('HARDCOPY START')\nscope.query('*OPC?')  # ❌ Tries to read response\ntime.sleep(0.5)\n# ... file transfer ...\nscope.write('FILESYSTEM:DELETE \"...\"')\nscope.query('*OPC?')  # ❌ Reads leftover binary data = UnicodeDecodeError!\nscope.write('HARDCOPY START')\ntime.sleep(1.0)  # ✅ Just wait, don't read\n# ... file transfer ...\nscope.write('FILESYSTEM:DELETE \"...\"')\n# ✅ No query after delete, no error",
+    "code_before": "scope.write('HARDCOPY START')\nscope.query('*OPC?')  # ❌ Tries to read response\ntime.sleep(0.5)\n# ... file transfer ...\nscope.write('FILESYSTEM:DELETE \"...\"')\nscope.query('*OPC?')  # ❌ Reads leftover binary data = UnicodeDecodeError!",
+    "code_after": "scope.write('HARDCOPY START')\ntime.sleep(1.0)  # ✅ Just wait, don't read\n# ... file transfer ...\nscope.write('FILESYSTEM:DELETE \"...\"')\n# ✅ No query after delete, no error",
+    "affected_files": [
+      "src/components/BlocklyBuilder/generators/pythonGenerators.ts",
+      "public/templates/basic.json"
+    ],
+    "related_commands": [
+      "*OPC?",
+      "FILESYSTEM:READFILE",
+      "FILESYSTEM:DELETE",
+      "HARDCOPY START",
+      "SAVE:IMAGE"
+    ],
+    "corpus": "errors",
     "source": "rag/corpus/error_patterns/error_patterns_index.json"
   },
   {
     "id": "err_variable_name_corruption_blockly_id",
-    "corpus": "errors",
-    "title": "Variable Name Corruption — Blockly getFieldValue('VAR') returns ID not name",
-    "body": "Fixed in 3 locations in blockToStep.ts: 1) controls_for block (~line 183), 2) variables_set block (~line 235), 3) convertExpressionToPython helper for variables_get (~line 277). The pattern is: const varId = block.getFieldValue('VAR'); const varModel = block.workspace.getVariableById(varId); const varName = varModel ? varModel.getName() : 'i';\nExported Python code contains corrupted variable names like 'N%hHHhp:Bg=T0!BWtnrB = 0' and 'o(s_~?vBNu5x*!/I9Y1! = (1 + (N%hHHhp:Bg=T0!BWtnrB * 0.5))' instead of 'i' and 'voltage'.\nBlockly stores variables with a unique ID (e.g., 'N%hHHhp:Bg=T0!BWtnrB') and a display name (e.g., 'i'). block.getFieldValue('VAR') returns the ID, not the name. The converter was using the ID directly as the Python variable name.\nUse Blockly's IVariableModel API: get the variable ID from getFieldValue('VAR'), then resolve the actual name via block.workspace.getVariableById(varId).getName().\n// WRONG ❌\nconst varName = block.getFieldValue('VAR');\n// Returns: 'N%hHHhp:Bg=T0!BWtnrB'\n// CORRECT ✅\nconst varId = block.getFieldValue('VAR');\nconst varModel = block.workspace.getVariableById(varId);\nconst varName = varModel ? varModel.getName() : 'i';\n// Returns: 'i'",
+    "type": "bug_fix",
+    "severity": "critical",
     "tags": [
       "blockly",
       "variable",
@@ -258,13 +285,24 @@
       "steps_ui",
       "bug_fix"
     ],
+    "title": "Variable Name Corruption — Blockly getFieldValue('VAR') returns ID not name",
+    "symptom": "Exported Python code contains corrupted variable names like 'N%hHHhp:Bg=T0!BWtnrB = 0' and 'o(s_~?vBNu5x*!/I9Y1! = (1 + (N%hHHhp:Bg=T0!BWtnrB * 0.5))' instead of 'i' and 'voltage'.",
+    "root_cause": "Blockly stores variables with a unique ID (e.g., 'N%hHHhp:Bg=T0!BWtnrB') and a display name (e.g., 'i'). block.getFieldValue('VAR') returns the ID, not the name. The converter was using the ID directly as the Python variable name.",
+    "fix": "Use Blockly's IVariableModel API: get the variable ID from getFieldValue('VAR'), then resolve the actual name via block.workspace.getVariableById(varId).getName().",
+    "body": "Fixed in 3 locations in blockToStep.ts: 1) controls_for block (~line 183), 2) variables_set block (~line 235), 3) convertExpressionToPython helper for variables_get (~line 277). The pattern is: const varId = block.getFieldValue('VAR'); const varModel = block.workspace.getVariableById(varId); const varName = varModel ? varModel.getName() : 'i';\nExported Python code contains corrupted variable names like 'N%hHHhp:Bg=T0!BWtnrB = 0' and 'o(s_~?vBNu5x*!/I9Y1! = (1 + (N%hHHhp:Bg=T0!BWtnrB * 0.5))' instead of 'i' and 'voltage'.\nBlockly stores variables with a unique ID (e.g., 'N%hHHhp:Bg=T0!BWtnrB') and a display name (e.g., 'i'). block.getFieldValue('VAR') returns the ID, not the name. The converter was using the ID directly as the Python variable name.\nUse Blockly's IVariableModel API: get the variable ID from getFieldValue('VAR'), then resolve the actual name via block.workspace.getVariableById(varId).getName().\n// WRONG ❌\nconst varName = block.getFieldValue('VAR');\n// Returns: 'N%hHHhp:Bg=T0!BWtnrB'\n// CORRECT ✅\nconst varId = block.getFieldValue('VAR');\nconst varModel = block.workspace.getVariableById(varId);\nconst varName = varModel ? varModel.getName() : 'i';\n// Returns: 'i'",
+    "code_before": "// WRONG ❌\nconst varName = block.getFieldValue('VAR');\n// Returns: 'N%hHHhp:Bg=T0!BWtnrB'",
+    "code_after": "// CORRECT ✅\nconst varId = block.getFieldValue('VAR');\nconst varModel = block.workspace.getVariableById(varId);\nconst varName = varModel ? varModel.getName() : 'i';\n// Returns: 'i'",
+    "affected_files": [
+      "src/components/BlocklyBuilder/converters/blockToStep.ts"
+    ],
+    "related_commands": [],
+    "corpus": "errors",
     "source": "rag/corpus/error_patterns/error_patterns_index.json"
   },
   {
     "id": "err_literal_newline_in_python_code",
-    "corpus": "errors",
-    "title": "Literal \\n in python_code Blocks — Fix Applied Then Reversed",
-    "body": "This was a two-phase bug. First, literal \\n in python_code caused SyntaxError. A replacement was added: pythonCode = pythonCode.replace(/\\\\n/g, '\\n'). But this broke string literals containing \\n escape sequences (e.g., f.write(\"data\\n\") became f.write(\"data\" followed by a raw newline, breaking the string). The final resolution was to remove the replacement entirely. The \\n sequences in Python string literals must remain as escape sequences in the output.\nPhase 1: SyntaxError in generated Python because \\n is literal text not a newline. Phase 2 (after fix): String literals like f.write(\"data\\n\") broken because the fix converted ALL \\n including those inside strings.\nPhase 1: python_code block content like 'smu.source.function = \"VOLT\"\\nsmu.output.enabled = True' had literal backslash-n characters instead of actual newlines, producing a SyntaxError. Phase 2: The fix (pythonCode.replace(/\\\\n/g, '\\n')) broke legitimate escape sequences inside string literals like f.write(\"Frame,Frequency_Hz,Vpp_V\\n\").\nFinal fix: Remove the \\n replacement entirely. The python_code block content should already contain actual newlines from the Blockly editor. The literal \\n issue was caused upstream, not in the generator.\n// Phase 1 fix (CAUSED REGRESSION):\npythonCode = pythonCode.replace(/\\\\n/g, '\\n');\n// Final fix: removed the replacement entirely\n// pythonCode is used as-is from the Blockly field",
+    "type": "bug_fix",
+    "severity": "critical",
     "tags": [
       "generator",
       "newline",
@@ -273,13 +311,24 @@
       "regression",
       "bug_fix"
     ],
+    "title": "Literal \\n in python_code Blocks — Fix Applied Then Reversed",
+    "symptom": "Phase 1: SyntaxError in generated Python because \\n is literal text not a newline. Phase 2 (after fix): String literals like f.write(\"data\\n\") broken because the fix converted ALL \\n including those inside strings.",
+    "root_cause": "Phase 1: python_code block content like 'smu.source.function = \"VOLT\"\\nsmu.output.enabled = True' had literal backslash-n characters instead of actual newlines, producing a SyntaxError. Phase 2: The fix (pythonCode.replace(/\\\\n/g, '\\n')) broke legitimate escape sequences inside string literals like f.write(\"Frame,Frequency_Hz,Vpp_V\\n\").",
+    "fix": "Final fix: Remove the \\n replacement entirely. The python_code block content should already contain actual newlines from the Blockly editor. The literal \\n issue was caused upstream, not in the generator.",
+    "body": "This was a two-phase bug. First, literal \\n in python_code caused SyntaxError. A replacement was added: pythonCode = pythonCode.replace(/\\\\n/g, '\\n'). But this broke string literals containing \\n escape sequences (e.g., f.write(\"data\\n\") became f.write(\"data\" followed by a raw newline, breaking the string). The final resolution was to remove the replacement entirely. The \\n sequences in Python string literals must remain as escape sequences in the output.\nPhase 1: SyntaxError in generated Python because \\n is literal text not a newline. Phase 2 (after fix): String literals like f.write(\"data\\n\") broken because the fix converted ALL \\n including those inside strings.\nPhase 1: python_code block content like 'smu.source.function = \"VOLT\"\\nsmu.output.enabled = True' had literal backslash-n characters instead of actual newlines, producing a SyntaxError. Phase 2: The fix (pythonCode.replace(/\\\\n/g, '\\n')) broke legitimate escape sequences inside string literals like f.write(\"Frame,Frequency_Hz,Vpp_V\\n\").\nFinal fix: Remove the \\n replacement entirely. The python_code block content should already contain actual newlines from the Blockly editor. The literal \\n issue was caused upstream, not in the generator.\n// Phase 1 fix (CAUSED REGRESSION):\npythonCode = pythonCode.replace(/\\\\n/g, '\\n');\n// Final fix: removed the replacement entirely\n// pythonCode is used as-is from the Blockly field",
+    "code_before": "// Phase 1 fix (CAUSED REGRESSION):\npythonCode = pythonCode.replace(/\\\\n/g, '\\n');",
+    "code_after": "// Final fix: removed the replacement entirely\n// pythonCode is used as-is from the Blockly field",
+    "affected_files": [
+      "src/components/BlocklyBuilder/generators/pythonGenerators.ts"
+    ],
+    "related_commands": [],
+    "corpus": "errors",
     "source": "rag/corpus/error_patterns/error_patterns_index.json"
   },
   {
     "id": "err_float_loop_range",
-    "corpus": "errors",
-    "title": "Float Loop Generation — range() Doesn't Accept Floats",
-    "body": "The generator now checks if any loop parameter contains a decimal point. If so, it generates: variable = start; while variable <= stop: ... variable += step. This handles voltage sweeps like 0.5V to 2.5V in 0.5V steps correctly. The Steps UI already generates while loops for sweeps, so this brings Blockly generation in line with Steps UI behavior.\nGenerated Python code contains 'for v in range(0.5, 2.5, 0.5)' which raises TypeError: 'float' object cannot be interpreted as an integer.\nPython's built-in range() only accepts integer arguments. When Blockly controls_for blocks use float start/stop/step values (common in voltage sweeps), the generator produced invalid range() calls.\nDetect float values in loop parameters. When any of start/stop/step are floats, generate a while loop instead of a for/range loop.\n# BROKEN - range() rejects floats\nfor v in range(0.5, 2.5, 0.5):\n    psu.write(f'VOLT {v}')\n# FIXED - while loop for float ranges\nv = 0.5\nwhile v <= 2.5:\n    psu.write(f'VOLT {v}')\n    v += 0.5",
+    "type": "bug_fix",
+    "severity": "critical",
     "tags": [
       "generator",
       "python",
@@ -288,13 +337,24 @@
       "range",
       "bug_fix"
     ],
+    "title": "Float Loop Generation — range() Doesn't Accept Floats",
+    "symptom": "Generated Python code contains 'for v in range(0.5, 2.5, 0.5)' which raises TypeError: 'float' object cannot be interpreted as an integer.",
+    "root_cause": "Python's built-in range() only accepts integer arguments. When Blockly controls_for blocks use float start/stop/step values (common in voltage sweeps), the generator produced invalid range() calls.",
+    "fix": "Detect float values in loop parameters. When any of start/stop/step are floats, generate a while loop instead of a for/range loop.",
+    "body": "The generator now checks if any loop parameter contains a decimal point. If so, it generates: variable = start; while variable <= stop: ... variable += step. This handles voltage sweeps like 0.5V to 2.5V in 0.5V steps correctly. The Steps UI already generates while loops for sweeps, so this brings Blockly generation in line with Steps UI behavior.\nGenerated Python code contains 'for v in range(0.5, 2.5, 0.5)' which raises TypeError: 'float' object cannot be interpreted as an integer.\nPython's built-in range() only accepts integer arguments. When Blockly controls_for blocks use float start/stop/step values (common in voltage sweeps), the generator produced invalid range() calls.\nDetect float values in loop parameters. When any of start/stop/step are floats, generate a while loop instead of a for/range loop.\n# BROKEN - range() rejects floats\nfor v in range(0.5, 2.5, 0.5):\n    psu.write(f'VOLT {v}')\n# FIXED - while loop for float ranges\nv = 0.5\nwhile v <= 2.5:\n    psu.write(f'VOLT {v}')\n    v += 0.5",
+    "code_before": "# BROKEN - range() rejects floats\nfor v in range(0.5, 2.5, 0.5):\n    psu.write(f'VOLT {v}')",
+    "code_after": "# FIXED - while loop for float ranges\nv = 0.5\nwhile v <= 2.5:\n    psu.write(f'VOLT {v}')\n    v += 0.5",
+    "affected_files": [
+      "src/components/BlocklyBuilder/generators/pythonGenerators.ts"
+    ],
+    "related_commands": [],
+    "corpus": "errors",
     "source": "rag/corpus/error_patterns/error_patterns_index.json"
   },
   {
     "id": "err_device_context_loop_confusion",
-    "corpus": "errors",
-    "title": "Device Context Confusion — Blocks Inside Loops Can't Trace via getPreviousBlock()",
-    "body": "Each scpi_write, scpi_query, and similar block has a DEVICE_CONTEXT field (e.g., '(scope)' or '(smu)'). Previously this was treated as a hint while the generator tried to walk the block chain. Now it is authoritative. This means blocks inside loops, conditionals, or any nested structure always know their target device regardless of block chain topology.\nSCPI commands inside loops are sent to the wrong device. For example, scope commands inside a loop are generated with SMU context, or all commands default to the last-connected device.\nThe generator traced device context by walking the block chain via getPreviousBlock(). Inside loops, this chain breaks — the generator can't walk past the loop boundary to find the enclosing device context. It falls through to a wrong currentDeviceContext default.\nMake the DEVICE_CONTEXT field on each block the absolute priority for determining which device a command targets. Only fall back to chain-walking if DEVICE_CONTEXT is not set.\n// Walked block chain - breaks inside loops\nlet ctx = block.getPreviousBlock();\nwhile (ctx && ctx.type !== 'set_device_context') {\n  ctx = ctx.getPreviousBlock();\n}\n// Falls through to wrong default\n// DEVICE_CONTEXT field is authoritative\nconst deviceCtx = block.getFieldValue('DEVICE_CONTEXT');\nif (deviceCtx) {\n  device = resolveDevice(deviceCtx);\n} else {\n  // Fallback to chain walking only if field not set\n}",
+    "type": "bug_fix",
+    "severity": "critical",
     "tags": [
       "generator",
       "device_context",
@@ -303,13 +363,24 @@
       "multi_device",
       "bug_fix"
     ],
+    "title": "Device Context Confusion — Blocks Inside Loops Can't Trace via getPreviousBlock()",
+    "symptom": "SCPI commands inside loops are sent to the wrong device. For example, scope commands inside a loop are generated with SMU context, or all commands default to the last-connected device.",
+    "root_cause": "The generator traced device context by walking the block chain via getPreviousBlock(). Inside loops, this chain breaks — the generator can't walk past the loop boundary to find the enclosing device context. It falls through to a wrong currentDeviceContext default.",
+    "fix": "Make the DEVICE_CONTEXT field on each block the absolute priority for determining which device a command targets. Only fall back to chain-walking if DEVICE_CONTEXT is not set.",
+    "body": "Each scpi_write, scpi_query, and similar block has a DEVICE_CONTEXT field (e.g., '(scope)' or '(smu)'). Previously this was treated as a hint while the generator tried to walk the block chain. Now it is authoritative. This means blocks inside loops, conditionals, or any nested structure always know their target device regardless of block chain topology.\nSCPI commands inside loops are sent to the wrong device. For example, scope commands inside a loop are generated with SMU context, or all commands default to the last-connected device.\nThe generator traced device context by walking the block chain via getPreviousBlock(). Inside loops, this chain breaks — the generator can't walk past the loop boundary to find the enclosing device context. It falls through to a wrong currentDeviceContext default.\nMake the DEVICE_CONTEXT field on each block the absolute priority for determining which device a command targets. Only fall back to chain-walking if DEVICE_CONTEXT is not set.\n// Walked block chain - breaks inside loops\nlet ctx = block.getPreviousBlock();\nwhile (ctx && ctx.type !== 'set_device_context') {\n  ctx = ctx.getPreviousBlock();\n}\n// Falls through to wrong default\n// DEVICE_CONTEXT field is authoritative\nconst deviceCtx = block.getFieldValue('DEVICE_CONTEXT');\nif (deviceCtx) {\n  device = resolveDevice(deviceCtx);\n} else {\n  // Fallback to chain walking only if field not set\n}",
+    "code_before": "// Walked block chain - breaks inside loops\nlet ctx = block.getPreviousBlock();\nwhile (ctx && ctx.type !== 'set_device_context') {\n  ctx = ctx.getPreviousBlock();\n}\n// Falls through to wrong default",
+    "code_after": "// DEVICE_CONTEXT field is authoritative\nconst deviceCtx = block.getFieldValue('DEVICE_CONTEXT');\nif (deviceCtx) {\n  device = resolveDevice(deviceCtx);\n} else {\n  // Fallback to chain walking only if field not set\n}",
+    "affected_files": [
+      "src/components/BlocklyBuilder/generators/pythonGenerators.ts"
+    ],
+    "related_commands": [],
+    "corpus": "errors",
     "source": "rag/corpus/error_patterns/error_patterns_index.json"
   },
   {
     "id": "err_sweep_params_mismatch",
-    "corpus": "errors",
-    "title": "Sweep Parameters Mismatch — Blockly Converter Uses Wrong Param Names for Steps UI",
-    "body": "For controls_repeat_ext/controls_repeat blocks: changed from {iterations, sweepType:'repeat'} to {variableName:'i', start:0, stop:iterations-1, step:1, saveResults:false}. For controls_for blocks: changed from {iterations, sweepType:'for', variable:varName} to {variableName:varName, start:fromValue, stop:toValue, step:byValue, saveResults:false}. The Steps UI generates sweep loops from App.tsx lines 4466-4501 using these exact param names.\nExported Steps from Blockly have undefined variables and incorrect loop structure. Generated Python shows 'while value <= 4:' instead of proper for loop, and variables like psu, voltage, current_device, i are undefined.\nThe Blockly-to-Steps converter (blockToStep.ts) was using iterations/sweepType params, but the Steps UI expects variableName/start/stop/step/saveResults. The param key names didn't match what App.tsx generatePython() reads.\nMap Blockly loop block parameters to the correct Steps UI param names: variableName (not variable), start, stop, step, saveResults.\n// OLD (WRONG)\nparams: {\n  iterations,\n  sweepType: 'for',\n  variable: varName,\n  start: fromValue,\n  stop: toValue,\n  step: byValue\n}\n// NEW (CORRECT)\nparams: {\n  variableName: varName,\n  start: fromValue,\n  stop: toValue,\n  step: byValue,\n  saveResults: false\n}",
+    "type": "bug_fix",
+    "severity": "critical",
     "tags": [
       "blockly",
       "steps_ui",
@@ -318,13 +389,24 @@
       "parameters",
       "bug_fix"
     ],
+    "title": "Sweep Parameters Mismatch — Blockly Converter Uses Wrong Param Names for Steps UI",
+    "symptom": "Exported Steps from Blockly have undefined variables and incorrect loop structure. Generated Python shows 'while value <= 4:' instead of proper for loop, and variables like psu, voltage, current_device, i are undefined.",
+    "root_cause": "The Blockly-to-Steps converter (blockToStep.ts) was using iterations/sweepType params, but the Steps UI expects variableName/start/stop/step/saveResults. The param key names didn't match what App.tsx generatePython() reads.",
+    "fix": "Map Blockly loop block parameters to the correct Steps UI param names: variableName (not variable), start, stop, step, saveResults.",
+    "body": "For controls_repeat_ext/controls_repeat blocks: changed from {iterations, sweepType:'repeat'} to {variableName:'i', start:0, stop:iterations-1, step:1, saveResults:false}. For controls_for blocks: changed from {iterations, sweepType:'for', variable:varName} to {variableName:varName, start:fromValue, stop:toValue, step:byValue, saveResults:false}. The Steps UI generates sweep loops from App.tsx lines 4466-4501 using these exact param names.\nExported Steps from Blockly have undefined variables and incorrect loop structure. Generated Python shows 'while value <= 4:' instead of proper for loop, and variables like psu, voltage, current_device, i are undefined.\nThe Blockly-to-Steps converter (blockToStep.ts) was using iterations/sweepType params, but the Steps UI expects variableName/start/stop/step/saveResults. The param key names didn't match what App.tsx generatePython() reads.\nMap Blockly loop block parameters to the correct Steps UI param names: variableName (not variable), start, stop, step, saveResults.\n// OLD (WRONG)\nparams: {\n  iterations,\n  sweepType: 'for',\n  variable: varName,\n  start: fromValue,\n  stop: toValue,\n  step: byValue\n}\n// NEW (CORRECT)\nparams: {\n  variableName: varName,\n  start: fromValue,\n  stop: toValue,\n  step: byValue,\n  saveResults: false\n}",
+    "code_before": "// OLD (WRONG)\nparams: {\n  iterations,\n  sweepType: 'for',\n  variable: varName,\n  start: fromValue,\n  stop: toValue,\n  step: byValue\n}",
+    "code_after": "// NEW (CORRECT)\nparams: {\n  variableName: varName,\n  start: fromValue,\n  stop: toValue,\n  step: byValue,\n  saveResults: false\n}",
+    "affected_files": [
+      "src/components/BlocklyBuilder/converters/blockToStep.ts"
+    ],
+    "related_commands": [],
+    "corpus": "errors",
     "source": "rag/corpus/error_patterns/error_patterns_index.json"
   },
   {
     "id": "err_set_and_query_roundtrip_degradation",
-    "corpus": "errors",
-    "title": "set_and_query Roundtrip Degradation — 4975 Commands at Risk",
-    "body": "Impact by family: MSO_DPO_5k_7k_70K: 1229 at-risk, mso_2_4_5_6_7: 2491, rsa: 1238, afg: 2, tekexpress: 15. Total: 4975 commands that could lose their query semantics on roundtrip. The canary test validates that set_and_query survives a complete Steps→Blockly→Steps cycle. Remaining follow-up: add per-family spot checks for full catalog regression coverage.\nAfter Steps→Blockly→Steps roundtrip, set_and_query commands degrade to write-only. The query half is permanently lost. Affects 4975 commands across all device families.\nIn stepToBlock.ts, set_and_query is converted to scpi_write (a Blockly block), dropping the query half. During Blockly→Steps export (blockToStep.ts), the block conversion returns 'write' type, not 'set_and_query', because the metadata was lost.\n1) Preserve set_and_query metadata on imported scpi_write Blockly blocks. 2) Restore set_and_query type and params during Blockly→Steps export. 3) Generate write+query from Blockly when preserved metadata is present. 4) Added canary test (e2e/set-and-query-canary.spec.ts) gating this behavior.\n// stepToBlock: set_and_query becomes scpi_write, losing query\n// blockToStep: scpi_write exports as 'write' type\n// stepToBlock: set_and_query metadata preserved on scpi_write block\n// blockToStep: detects preserved metadata, restores set_and_query type\n// Generator: emits both write() and query() when metadata present",
+    "type": "bug_fix",
+    "severity": "critical",
     "tags": [
       "set_and_query",
       "roundtrip",
@@ -334,13 +416,30 @@
       "regression",
       "bug_fix"
     ],
+    "title": "set_and_query Roundtrip Degradation — 4975 Commands at Risk",
+    "symptom": "After Steps→Blockly→Steps roundtrip, set_and_query commands degrade to write-only. The query half is permanently lost. Affects 4975 commands across all device families.",
+    "root_cause": "In stepToBlock.ts, set_and_query is converted to scpi_write (a Blockly block), dropping the query half. During Blockly→Steps export (blockToStep.ts), the block conversion returns 'write' type, not 'set_and_query', because the metadata was lost.",
+    "fix": "1) Preserve set_and_query metadata on imported scpi_write Blockly blocks. 2) Restore set_and_query type and params during Blockly→Steps export. 3) Generate write+query from Blockly when preserved metadata is present. 4) Added canary test (e2e/set-and-query-canary.spec.ts) gating this behavior.",
+    "body": "Impact by family: MSO_DPO_5k_7k_70K: 1229 at-risk, mso_2_4_5_6_7: 2491, rsa: 1238, afg: 2, tekexpress: 15. Total: 4975 commands that could lose their query semantics on roundtrip. The canary test validates that set_and_query survives a complete Steps→Blockly→Steps cycle. Remaining follow-up: add per-family spot checks for full catalog regression coverage.\nAfter Steps→Blockly→Steps roundtrip, set_and_query commands degrade to write-only. The query half is permanently lost. Affects 4975 commands across all device families.\nIn stepToBlock.ts, set_and_query is converted to scpi_write (a Blockly block), dropping the query half. During Blockly→Steps export (blockToStep.ts), the block conversion returns 'write' type, not 'set_and_query', because the metadata was lost.\n1) Preserve set_and_query metadata on imported scpi_write Blockly blocks. 2) Restore set_and_query type and params during Blockly→Steps export. 3) Generate write+query from Blockly when preserved metadata is present. 4) Added canary test (e2e/set-and-query-canary.spec.ts) gating this behavior.\n// stepToBlock: set_and_query becomes scpi_write, losing query\n// blockToStep: scpi_write exports as 'write' type\n// stepToBlock: set_and_query metadata preserved on scpi_write block\n// blockToStep: detects preserved metadata, restores set_and_query type\n// Generator: emits both write() and query() when metadata present",
+    "code_before": "// stepToBlock: set_and_query becomes scpi_write, losing query\n// blockToStep: scpi_write exports as 'write' type",
+    "code_after": "// stepToBlock: set_and_query metadata preserved on scpi_write block\n// blockToStep: detects preserved metadata, restores set_and_query type\n// Generator: emits both write() and query() when metadata present",
+    "affected_files": [
+      "src/components/BlocklyBuilder/converters/stepToBlock.ts",
+      "src/components/BlocklyBuilder/converters/blockToStep.ts",
+      "e2e/set-and-query-canary.spec.ts"
+    ],
+    "related_commands": [
+      "CH1:SCAle",
+      "ACQuire:MODe",
+      "CH1:COUPling"
+    ],
+    "corpus": "errors",
     "source": "rag/corpus/error_patterns/error_patterns_index.json"
   },
   {
     "id": "err_hardcopy_format_template_literal",
-    "corpus": "errors",
-    "title": "HARDCOPY:FORMAT Template Bug — Literal ${format} in Output Instead of PNG",
-    "body": "This affected the legacy screenshot template (MSO/DPO 5k/7k/70k series). The generated Python would send the literal command 'HARDCOPY:FORMAT ${format}' to the scope, which the scope would reject silently or misinterpret. The fix ensures the format variable (typically 'PNG') is properly interpolated into the generated code.\nGenerated Python code contains scope.write('HARDCOPY:FORMAT ${format}') which sends the literal string '${format}' to the scope instead of 'PNG'.\nThe generator used a JavaScript template literal backtick syntax inside a single-quoted string, so TypeScript didn't interpolate the variable. The ${format} was passed through literally to the Python output.\nChanged to use proper TypeScript template literal with backticks and .toUpperCase(): code += `${device}.write('HARDCOPY:FORMAT ${format.toUpperCase()}')`\ncode += `${device}.write('HARDCOPY:FORMAT ${format}')\\n`;\ncode += `${device}.write('HARDCOPY:FORMAT ${format.toUpperCase()}')\\n`;",
+    "type": "bug_fix",
+    "severity": "critical",
     "tags": [
       "screenshot",
       "template",
@@ -349,13 +448,28 @@
       "generator",
       "bug_fix"
     ],
+    "title": "HARDCOPY:FORMAT Template Bug — Literal ${format} in Output Instead of PNG",
+    "symptom": "Generated Python code contains scope.write('HARDCOPY:FORMAT ${format}') which sends the literal string '${format}' to the scope instead of 'PNG'.",
+    "root_cause": "The generator used a JavaScript template literal backtick syntax inside a single-quoted string, so TypeScript didn't interpolate the variable. The ${format} was passed through literally to the Python output.",
+    "fix": "Changed to use proper TypeScript template literal with backticks and .toUpperCase(): code += `${device}.write('HARDCOPY:FORMAT ${format.toUpperCase()}')`",
+    "body": "This affected the legacy screenshot template (MSO/DPO 5k/7k/70k series). The generated Python would send the literal command 'HARDCOPY:FORMAT ${format}' to the scope, which the scope would reject silently or misinterpret. The fix ensures the format variable (typically 'PNG') is properly interpolated into the generated code.\nGenerated Python code contains scope.write('HARDCOPY:FORMAT ${format}') which sends the literal string '${format}' to the scope instead of 'PNG'.\nThe generator used a JavaScript template literal backtick syntax inside a single-quoted string, so TypeScript didn't interpolate the variable. The ${format} was passed through literally to the Python output.\nChanged to use proper TypeScript template literal with backticks and .toUpperCase(): code += `${device}.write('HARDCOPY:FORMAT ${format.toUpperCase()}')`\ncode += `${device}.write('HARDCOPY:FORMAT ${format}')\\n`;\ncode += `${device}.write('HARDCOPY:FORMAT ${format.toUpperCase()}')\\n`;",
+    "code_before": "code += `${device}.write('HARDCOPY:FORMAT ${format}')\\n`;",
+    "code_after": "code += `${device}.write('HARDCOPY:FORMAT ${format.toUpperCase()}')\\n`;",
+    "affected_files": [
+      "src/components/BlocklyBuilder/generators/pythonGenerators.ts"
+    ],
+    "related_commands": [
+      "HARDCOPY:FORMAT",
+      "HARDCOPY START",
+      "HARDCOPY:PORT"
+    ],
+    "corpus": "errors",
     "source": "rag/corpus/error_patterns/error_patterns_index.json"
   },
   {
     "id": "err_opc_query_return_type",
-    "corpus": "errors",
-    "title": "OPC Query Return Type — int() Fails on String with Newline",
-    "body": "Changed all OPC query patterns from int() conversion to string comparison with strip(). This handles both '1' and '1\\n' responses correctly across all backends.\nint(scope.commands.opc.query()) fails with ValueError if OPC response is '1\\n' (string with trailing newline).\nOPC query returns a string, not an integer. The response may include trailing whitespace or newline. Calling int() directly on '1\\n' works in some Python versions but fails in others or with certain VISA backends.\nUse .strip() and string comparison instead of int() conversion.\nif int(scope.commands.opc.query()) == 1:\n    pass  # Acquisition complete\nif scope.commands.opc.query().strip() == \"1\":\n    pass  # Acquisition complete",
+    "type": "bug_fix",
+    "severity": "high",
     "tags": [
       "opc",
       "type_coercion",
@@ -363,13 +477,26 @@
       "generator",
       "bug_fix"
     ],
+    "title": "OPC Query Return Type — int() Fails on String with Newline",
+    "symptom": "int(scope.commands.opc.query()) fails with ValueError if OPC response is '1\\n' (string with trailing newline).",
+    "root_cause": "OPC query returns a string, not an integer. The response may include trailing whitespace or newline. Calling int() directly on '1\\n' works in some Python versions but fails in others or with certain VISA backends.",
+    "fix": "Use .strip() and string comparison instead of int() conversion.",
+    "body": "Changed all OPC query patterns from int() conversion to string comparison with strip(). This handles both '1' and '1\\n' responses correctly across all backends.\nint(scope.commands.opc.query()) fails with ValueError if OPC response is '1\\n' (string with trailing newline).\nOPC query returns a string, not an integer. The response may include trailing whitespace or newline. Calling int() directly on '1\\n' works in some Python versions but fails in others or with certain VISA backends.\nUse .strip() and string comparison instead of int() conversion.\nif int(scope.commands.opc.query()) == 1:\n    pass  # Acquisition complete\nif scope.commands.opc.query().strip() == \"1\":\n    pass  # Acquisition complete",
+    "code_before": "if int(scope.commands.opc.query()) == 1:\n    pass  # Acquisition complete",
+    "code_after": "if scope.commands.opc.query().strip() == \"1\":\n    pass  # Acquisition complete",
+    "affected_files": [
+      "src/components/BlocklyBuilder/generators/pythonGenerators.ts"
+    ],
+    "related_commands": [
+      "*OPC?"
+    ],
+    "corpus": "errors",
     "source": "rag/corpus/error_patterns/error_patterns_index.json"
   },
   {
     "id": "err_variables_initialized_to_none",
-    "corpus": "errors",
-    "title": "Variables Initialized to None — Blockly Default Generator Creates Unnecessary Assignments",
-    "body": "The fix overrides Blockly's built-in variable initialization behavior. Instead of emitting 'variable = None' for every declared variable, the generator now skips initialization entirely. Variables get their values when they are first assigned through variables_set blocks or as loop indices. This produces cleaner code and makes it easier to spot actual variable usage patterns.\nGenerated Python starts with 'vpp = None', 'frame = None', 'hits = None' — unnecessary initialization that clutters code and can mask real assignment bugs.\nBlockly's default Python generator automatically initializes all variables declared in the <variables> section of the XML to None. This happens before any user code is generated.\nOverride the variables_get generator to prevent None initialization. Variables are now only assigned when explicitly set via variables_set blocks.\n# Blockly default output:\nvpp = None\nframe = None\nhits = None\n\n# ... actual code starts here\n# No pre-initialization\n# Variables assigned where first used:\nvpp = float(scope.query(':MEASUREMENT:IMMED:VALUE?').strip())",
+    "type": "bug_fix",
+    "severity": "high",
     "tags": [
       "generator",
       "blockly",
@@ -378,13 +505,24 @@
       "initialization",
       "bug_fix"
     ],
+    "title": "Variables Initialized to None — Blockly Default Generator Creates Unnecessary Assignments",
+    "symptom": "Generated Python starts with 'vpp = None', 'frame = None', 'hits = None' — unnecessary initialization that clutters code and can mask real assignment bugs.",
+    "root_cause": "Blockly's default Python generator automatically initializes all variables declared in the <variables> section of the XML to None. This happens before any user code is generated.",
+    "fix": "Override the variables_get generator to prevent None initialization. Variables are now only assigned when explicitly set via variables_set blocks.",
+    "body": "The fix overrides Blockly's built-in variable initialization behavior. Instead of emitting 'variable = None' for every declared variable, the generator now skips initialization entirely. Variables get their values when they are first assigned through variables_set blocks or as loop indices. This produces cleaner code and makes it easier to spot actual variable usage patterns.\nGenerated Python starts with 'vpp = None', 'frame = None', 'hits = None' — unnecessary initialization that clutters code and can mask real assignment bugs.\nBlockly's default Python generator automatically initializes all variables declared in the <variables> section of the XML to None. This happens before any user code is generated.\nOverride the variables_get generator to prevent None initialization. Variables are now only assigned when explicitly set via variables_set blocks.\n# Blockly default output:\nvpp = None\nframe = None\nhits = None\n\n# ... actual code starts here\n# No pre-initialization\n# Variables assigned where first used:\nvpp = float(scope.query(':MEASUREMENT:IMMED:VALUE?').strip())",
+    "code_before": "# Blockly default output:\nvpp = None\nframe = None\nhits = None\n\n# ... actual code starts here",
+    "code_after": "# No pre-initialization\n# Variables assigned where first used:\nvpp = float(scope.query(':MEASUREMENT:IMMED:VALUE?').strip())",
+    "affected_files": [
+      "src/components/BlocklyBuilder/generators/pythonGenerators.ts"
+    ],
+    "related_commands": [],
+    "corpus": "errors",
     "source": "rag/corpus/error_patterns/error_patterns_index.json"
   },
   {
     "id": "err_missing_cleanup_section",
-    "corpus": "errors",
-    "title": "Missing Cleanup Section — Devices Not Properly Closed",
-    "body": "The cleanup section now generates: 1) close() call for each connected device with an if-in-locals() guard, 2) DeviceManager.close() for tm_devices workflows, 3) ResourceManager.close() for PyVISA workflows. The guard pattern (if 'scope' in locals()) ensures cleanup doesn't fail if the script errored before device connection.\nGenerated Python scripts don't close device connections. Resources leak, VISA sessions may become exhausted, instruments may remain locked.\nThe generator did not always emit a cleanup section at the end of the script. When devices were connected but no explicit disconnect block was present, the script would end without closing connections.\nAlways generate a cleanup section when any device connections are present in the workflow.\n# Script ends without cleanup\nscope.write('SAVE:WAVEFORM ...')\n# EOF - resources leak!\n# Cleanup - close all devices\nif 'scope' in locals():\n    scope.close()\n    print('Disconnected scope')\n\nif 'device_manager' in locals():\n    device_manager.close()\n    print('DeviceManager closed')",
+    "type": "bug_fix",
+    "severity": "high",
     "tags": [
       "generator",
       "cleanup",
@@ -392,13 +530,24 @@
       "resource_leak",
       "bug_fix"
     ],
+    "title": "Missing Cleanup Section — Devices Not Properly Closed",
+    "symptom": "Generated Python scripts don't close device connections. Resources leak, VISA sessions may become exhausted, instruments may remain locked.",
+    "root_cause": "The generator did not always emit a cleanup section at the end of the script. When devices were connected but no explicit disconnect block was present, the script would end without closing connections.",
+    "fix": "Always generate a cleanup section when any device connections are present in the workflow.",
+    "body": "The cleanup section now generates: 1) close() call for each connected device with an if-in-locals() guard, 2) DeviceManager.close() for tm_devices workflows, 3) ResourceManager.close() for PyVISA workflows. The guard pattern (if 'scope' in locals()) ensures cleanup doesn't fail if the script errored before device connection.\nGenerated Python scripts don't close device connections. Resources leak, VISA sessions may become exhausted, instruments may remain locked.\nThe generator did not always emit a cleanup section at the end of the script. When devices were connected but no explicit disconnect block was present, the script would end without closing connections.\nAlways generate a cleanup section when any device connections are present in the workflow.\n# Script ends without cleanup\nscope.write('SAVE:WAVEFORM ...')\n# EOF - resources leak!\n# Cleanup - close all devices\nif 'scope' in locals():\n    scope.close()\n    print('Disconnected scope')\n\nif 'device_manager' in locals():\n    device_manager.close()\n    print('DeviceManager closed')",
+    "code_before": "# Script ends without cleanup\nscope.write('SAVE:WAVEFORM ...')\n# EOF - resources leak!",
+    "code_after": "# Cleanup - close all devices\nif 'scope' in locals():\n    scope.close()\n    print('Disconnected scope')\n\nif 'device_manager' in locals():\n    device_manager.close()\n    print('DeviceManager closed')",
+    "affected_files": [
+      "src/components/BlocklyBuilder/generators/pythonGenerators.ts"
+    ],
+    "related_commands": [],
+    "corpus": "errors",
     "source": "rag/corpus/error_patterns/error_patterns_index.json"
   },
   {
     "id": "err_backend_selection_not_preserved",
-    "corpus": "errors",
-    "title": "Backend Selection Not Preserved on XML Import — Dropdown Shows PyVISA While Internal State Is tm_devices",
-    "body": "The fix uses setTimeout(() => { this.setFieldValue(this.currentBackend_, 'BACKEND'); }, 10) to update the field after Blockly's rendering cycle. A try-catch wraps the update since the field may not exist in all block states. This also triggers the color update (tm_devices blocks are purple/270, PyVISA blocks are green/120).\nAfter importing XML with tm_devices backend, the connection block dropdown displays 'pyvisa' even though the internal mutation state correctly stores 'tm_devices'. Generated code uses wrong backend.\nThe domToMutation function correctly restored currentBackend_ from the mutation element, but it didn't update the dropdown BACKEND field in the UI. The field remained at its default value ('pyvisa').\nAdded setTimeout field update in both domToMutation and loadExtraState to update the dropdown after Blockly finishes rendering.\ndomToMutation(xmlElement) {\n  this.currentBackend_ = xmlElement.getAttribute('current_backend') || 'pyvisa';\n  // Field not updated! Shows 'pyvisa' in UI\n}\ndomToMutation(xmlElement) {\n  this.currentBackend_ = xmlElement.getAttribute('current_backend') || 'pyvisa';\n  setTimeout(() => {\n    try {\n      if (this.getField('BACKEND')) {\n        this.setFieldValue(this.currentBackend_, 'BACKEND');\n      }\n    } catch (e) {\n      console.warn('Could not restore backend field value:', e);\n    }\n  }, 10);\n}",
+    "type": "bug_fix",
+    "severity": "high",
     "tags": [
       "blockly",
       "xml_import",
@@ -408,13 +557,24 @@
       "tm_devices",
       "bug_fix"
     ],
+    "title": "Backend Selection Not Preserved on XML Import — Dropdown Shows PyVISA While Internal State Is tm_devices",
+    "symptom": "After importing XML with tm_devices backend, the connection block dropdown displays 'pyvisa' even though the internal mutation state correctly stores 'tm_devices'. Generated code uses wrong backend.",
+    "root_cause": "The domToMutation function correctly restored currentBackend_ from the mutation element, but it didn't update the dropdown BACKEND field in the UI. The field remained at its default value ('pyvisa').",
+    "fix": "Added setTimeout field update in both domToMutation and loadExtraState to update the dropdown after Blockly finishes rendering.",
+    "body": "The fix uses setTimeout(() => { this.setFieldValue(this.currentBackend_, 'BACKEND'); }, 10) to update the field after Blockly's rendering cycle. A try-catch wraps the update since the field may not exist in all block states. This also triggers the color update (tm_devices blocks are purple/270, PyVISA blocks are green/120).\nAfter importing XML with tm_devices backend, the connection block dropdown displays 'pyvisa' even though the internal mutation state correctly stores 'tm_devices'. Generated code uses wrong backend.\nThe domToMutation function correctly restored currentBackend_ from the mutation element, but it didn't update the dropdown BACKEND field in the UI. The field remained at its default value ('pyvisa').\nAdded setTimeout field update in both domToMutation and loadExtraState to update the dropdown after Blockly finishes rendering.\ndomToMutation(xmlElement) {\n  this.currentBackend_ = xmlElement.getAttribute('current_backend') || 'pyvisa';\n  // Field not updated! Shows 'pyvisa' in UI\n}\ndomToMutation(xmlElement) {\n  this.currentBackend_ = xmlElement.getAttribute('current_backend') || 'pyvisa';\n  setTimeout(() => {\n    try {\n      if (this.getField('BACKEND')) {\n        this.setFieldValue(this.currentBackend_, 'BACKEND');\n      }\n    } catch (e) {\n      console.warn('Could not restore backend field value:', e);\n    }\n  }, 10);\n}",
+    "code_before": "domToMutation(xmlElement) {\n  this.currentBackend_ = xmlElement.getAttribute('current_backend') || 'pyvisa';\n  // Field not updated! Shows 'pyvisa' in UI\n}",
+    "code_after": "domToMutation(xmlElement) {\n  this.currentBackend_ = xmlElement.getAttribute('current_backend') || 'pyvisa';\n  setTimeout(() => {\n    try {\n      if (this.getField('BACKEND')) {\n        this.setFieldValue(this.currentBackend_, 'BACKEND');\n      }\n    } catch (e) {\n      console.warn('Could not restore backend field value:', e);\n    }\n  }, 10);\n}",
+    "affected_files": [
+      "src/components/BlocklyBuilder/blocks/connectionBlocks.ts"
+    ],
+    "related_commands": [],
+    "corpus": "errors",
     "source": "rag/corpus/error_patterns/error_patterns_index.json"
   },
   {
     "id": "err_gpt_device_context_confusion",
-    "corpus": "errors",
-    "title": "GPT Device Context Errors — Scope Commands Sent to SMU Context Repeatedly",
-    "body": "This is a persistent GPT behavior that required 4+ iterations to fix per user interaction. The instructions now include: RULE: Command prefix determines context — CH1:|ACQuire:|MEASU:|DATa: → (scope), :SOURce:|:OUTPut:|:MEASure: → (smu)/(psu). A post-processing validator in TekAutomate was recommended that flags incorrect device contexts before import. Long-term: consider fine-tuning or a specialized two-pass prompt (first generate DEVICE_CONTEXT_MAP, then validate each block).\nGPT-generated XML has scope commands (CH1:SCALE, ACQuire:STATE ON) with DEVICE_CONTEXT=(smu). Workflow completely fails — SMU receives invalid commands, scope is never configured.\nThe Custom GPT does not reliably track which SCPI commands belong to which instrument type. It defaults to the most recently mentioned device for ALL commands, mixing contexts across instrument boundaries.\nEnhanced GPT system instructions (v6, 7995 chars) with: 1) Explicit wrong/correct visual examples, 2) Command prefix→device mapping rules (CH1:|ACQuire: → scope, :SOURce:|:OUTPut: → smu/psu), 3) Mandatory validation checklist before generating XML.\n<!-- ❌ WRONG - Scope command sent to SMU -->\n<block type=\"scpi_write\">\n  <field name=\"DEVICE_CONTEXT\">(smu)</field>\n  <field name=\"COMMAND\">CH1:SCAle 1.0</field>\n</block>\n<!-- ✅ CORRECT - Context matches command -->\n<block type=\"scpi_write\">\n  <field name=\"DEVICE_CONTEXT\">(scope)</field>\n  <field name=\"COMMAND\">CH1:SCAle 1.0</field>\n</block>",
+    "type": "generation_error",
+    "severity": "critical",
     "tags": [
       "gpt",
       "device_context",
@@ -423,13 +583,28 @@
       "ai",
       "generation_error"
     ],
+    "title": "GPT Device Context Errors — Scope Commands Sent to SMU Context Repeatedly",
+    "symptom": "GPT-generated XML has scope commands (CH1:SCALE, ACQuire:STATE ON) with DEVICE_CONTEXT=(smu). Workflow completely fails — SMU receives invalid commands, scope is never configured.",
+    "root_cause": "The Custom GPT does not reliably track which SCPI commands belong to which instrument type. It defaults to the most recently mentioned device for ALL commands, mixing contexts across instrument boundaries.",
+    "fix": "Enhanced GPT system instructions (v6, 7995 chars) with: 1) Explicit wrong/correct visual examples, 2) Command prefix→device mapping rules (CH1:|ACQuire: → scope, :SOURce:|:OUTPut: → smu/psu), 3) Mandatory validation checklist before generating XML.",
+    "body": "This is a persistent GPT behavior that required 4+ iterations to fix per user interaction. The instructions now include: RULE: Command prefix determines context — CH1:|ACQuire:|MEASU:|DATa: → (scope), :SOURce:|:OUTPut:|:MEASure: → (smu)/(psu). A post-processing validator in TekAutomate was recommended that flags incorrect device contexts before import. Long-term: consider fine-tuning or a specialized two-pass prompt (first generate DEVICE_CONTEXT_MAP, then validate each block).\nGPT-generated XML has scope commands (CH1:SCALE, ACQuire:STATE ON) with DEVICE_CONTEXT=(smu). Workflow completely fails — SMU receives invalid commands, scope is never configured.\nThe Custom GPT does not reliably track which SCPI commands belong to which instrument type. It defaults to the most recently mentioned device for ALL commands, mixing contexts across instrument boundaries.\nEnhanced GPT system instructions (v6, 7995 chars) with: 1) Explicit wrong/correct visual examples, 2) Command prefix→device mapping rules (CH1:|ACQuire: → scope, :SOURce:|:OUTPut: → smu/psu), 3) Mandatory validation checklist before generating XML.\n<!-- ❌ WRONG - Scope command sent to SMU -->\n<block type=\"scpi_write\">\n  <field name=\"DEVICE_CONTEXT\">(smu)</field>\n  <field name=\"COMMAND\">CH1:SCAle 1.0</field>\n</block>\n<!-- ✅ CORRECT - Context matches command -->\n<block type=\"scpi_write\">\n  <field name=\"DEVICE_CONTEXT\">(scope)</field>\n  <field name=\"COMMAND\">CH1:SCAle 1.0</field>\n</block>",
+    "code_before": "<!-- ❌ WRONG - Scope command sent to SMU -->\n<block type=\"scpi_write\">\n  <field name=\"DEVICE_CONTEXT\">(smu)</field>\n  <field name=\"COMMAND\">CH1:SCAle 1.0</field>\n</block>",
+    "code_after": "<!-- ✅ CORRECT - Context matches command -->\n<block type=\"scpi_write\">\n  <field name=\"DEVICE_CONTEXT\">(scope)</field>\n  <field name=\"COMMAND\">CH1:SCAle 1.0</field>\n</block>",
+    "affected_files": [
+      "CUSTOM_GPT_INSTRUCTIONS.txt"
+    ],
+    "related_commands": [
+      "CH1:SCAle",
+      "ACQuire:STATE",
+      ":SOURce:VOLTage:LEVel"
+    ],
+    "corpus": "errors",
     "source": "rag/corpus/error_patterns/error_patterns_index.json"
   },
   {
     "id": "err_ip_conflict_detection_no_ui_warning",
-    "corpus": "errors",
-    "title": "IP Conflict Detection — Generator Throws Error But No UI-Level Warning",
-    "body": "The generator correctly detects when multiple connect_scope blocks use the same IP/resource string and throws a descriptive error. However, users discover this only when they click 'Generate Python', not while building the workflow. Recommendation: add real-time validation in BlocklyBuilder UI to highlight devices with duplicate IPs as they are configured.\nWhen two devices share the same IP address, the generator throws 'RESOURCE COLLISION DETECTED' with fix instructions, but the user sees no visual warning in the Blockly or Steps UI before attempting generation.\nIP collision detection exists only at the generator level (pythonGenerators.ts lines 257-276). There is no pre-generation validation in the Blockly or Steps UI to catch this earlier.\nStatus: generator-level detection is implemented. UI-level validation (highlighting/flagging duplicate IPs before generation) is recommended but not yet implemented.",
+    "type": "validation_rule",
+    "severity": "high",
     "tags": [
       "generator",
       "ip_conflict",
@@ -438,13 +613,24 @@
       "multi_device",
       "validation_rule"
     ],
+    "title": "IP Conflict Detection — Generator Throws Error But No UI-Level Warning",
+    "symptom": "When two devices share the same IP address, the generator throws 'RESOURCE COLLISION DETECTED' with fix instructions, but the user sees no visual warning in the Blockly or Steps UI before attempting generation.",
+    "root_cause": "IP collision detection exists only at the generator level (pythonGenerators.ts lines 257-276). There is no pre-generation validation in the Blockly or Steps UI to catch this earlier.",
+    "fix": "Status: generator-level detection is implemented. UI-level validation (highlighting/flagging duplicate IPs before generation) is recommended but not yet implemented.",
+    "body": "The generator correctly detects when multiple connect_scope blocks use the same IP/resource string and throws a descriptive error. However, users discover this only when they click 'Generate Python', not while building the workflow. Recommendation: add real-time validation in BlocklyBuilder UI to highlight devices with duplicate IPs as they are configured.\nWhen two devices share the same IP address, the generator throws 'RESOURCE COLLISION DETECTED' with fix instructions, but the user sees no visual warning in the Blockly or Steps UI before attempting generation.\nIP collision detection exists only at the generator level (pythonGenerators.ts lines 257-276). There is no pre-generation validation in the Blockly or Steps UI to catch this earlier.\nStatus: generator-level detection is implemented. UI-level validation (highlighting/flagging duplicate IPs before generation) is recommended but not yet implemented.",
+    "code_before": "",
+    "code_after": "",
+    "affected_files": [
+      "src/components/BlocklyBuilder/generators/pythonGenerators.ts"
+    ],
+    "related_commands": [],
+    "corpus": "errors",
     "source": "rag/corpus/error_patterns/error_patterns_index.json"
   },
   {
     "id": "err_socket_daemon_state_machine",
-    "corpus": "errors",
-    "title": "Socket Daemon State Machine — Why Binary Transfer Over Port 4000 Works",
-    "body": "Four requirements for successful binary transfer: 1) EXACT COMMAND ORDERING — queries like SAVE:IMAGe:FILEFormat?, SAVE:IMAGe:COMPosition?, etc. prime internal UI subsystems; without them the SAVE:IMAGe pipeline is half-initialized. 2) HARD RESET between every step — *CLS before each query forces status clear, event queue clear, UI handler reset. 3) ONE-SHOT BINARY WINDOW — after sending FILESystem:READFile, do NOT query anything, do NOT call *OPC?, do NOT send *CLS; let the socket stay in raw streaming mode until timeout. 4) HEADER RESYNCHRONIZATION — the socket may prepend stray ASCII/newlines; realign on PNG magic bytes (\\x89PNG\\r\\n\\x1a\\n) and discard garbage. PyVISA fails because: it treats timeout as error not EOF, expects block headers or termination that READFILE doesn't provide, and cannot safely guess stream-based completion semantics.\nFILESYSTEM:READFILE fails over PyVISA (timeout or UnicodeDecodeError) but succeeds over raw TCP sockets with exact sequencing. Common belief: 'READFILE does not work on raw sockets' is operationally true for naive scripts but false for primed pipelines.\nFILESYSTEM:READFILE is intentionally non-IEEE-488.2-compliant. It is a command (not a query) that produces unframed binary output with no length header, no termination character, and termination only by EOI. VISA cannot determine when the read is complete, so it times out and raises VI_ERROR_TMO. Raw sockets can treat timeout as EOF.\nUse raw TCP socket with exact pipeline priming sequence. Document as: 'Raw-socket screenshot capture requires exact pipeline priming. Do not reorder or remove queries.'\n# PyVISA approach — FAILS\nscope.write('FILESYSTEM:READFILE \"C:/Temp/screenshot.png\"')\ndata = scope.read_raw()  # ❌ Times out, raises VI_ERROR_TMO\n# Raw socket approach — WORKS\nsock.sendall(b'FILESystem:READFile \"C:/Temp/screenshot.png\"\\n')\nsock.settimeout(5)\ndata = bytearray()\nwhile True:\n    try:\n        chunk = sock.recv(65536)\n        if chunk: data.extend(chunk)\n        else: break\n    except socket.timeout:\n        if len(data) > 0: break  # Timeout = EOF\n# Realign on PNG header\npng_magic = b'\\x89PNG\\r\\n\\x1a\\n'\nif data[:8] != png_magic and png_magic in data:\n    data = data[data.find(png_magic):]",
+    "type": "runtime_error",
+    "severity": "critical",
     "tags": [
       "socket",
       "binary_transfer",
@@ -455,13 +641,32 @@
       "state_machine",
       "runtime_error"
     ],
+    "title": "Socket Daemon State Machine — Why Binary Transfer Over Port 4000 Works",
+    "symptom": "FILESYSTEM:READFILE fails over PyVISA (timeout or UnicodeDecodeError) but succeeds over raw TCP sockets with exact sequencing. Common belief: 'READFILE does not work on raw sockets' is operationally true for naive scripts but false for primed pipelines.",
+    "root_cause": "FILESYSTEM:READFILE is intentionally non-IEEE-488.2-compliant. It is a command (not a query) that produces unframed binary output with no length header, no termination character, and termination only by EOI. VISA cannot determine when the read is complete, so it times out and raises VI_ERROR_TMO. Raw sockets can treat timeout as EOF.",
+    "fix": "Use raw TCP socket with exact pipeline priming sequence. Document as: 'Raw-socket screenshot capture requires exact pipeline priming. Do not reorder or remove queries.'",
+    "body": "Four requirements for successful binary transfer: 1) EXACT COMMAND ORDERING — queries like SAVE:IMAGe:FILEFormat?, SAVE:IMAGe:COMPosition?, etc. prime internal UI subsystems; without them the SAVE:IMAGe pipeline is half-initialized. 2) HARD RESET between every step — *CLS before each query forces status clear, event queue clear, UI handler reset. 3) ONE-SHOT BINARY WINDOW — after sending FILESystem:READFile, do NOT query anything, do NOT call *OPC?, do NOT send *CLS; let the socket stay in raw streaming mode until timeout. 4) HEADER RESYNCHRONIZATION — the socket may prepend stray ASCII/newlines; realign on PNG magic bytes (\\x89PNG\\r\\n\\x1a\\n) and discard garbage. PyVISA fails because: it treats timeout as error not EOF, expects block headers or termination that READFILE doesn't provide, and cannot safely guess stream-based completion semantics.\nFILESYSTEM:READFILE fails over PyVISA (timeout or UnicodeDecodeError) but succeeds over raw TCP sockets with exact sequencing. Common belief: 'READFILE does not work on raw sockets' is operationally true for naive scripts but false for primed pipelines.\nFILESYSTEM:READFILE is intentionally non-IEEE-488.2-compliant. It is a command (not a query) that produces unframed binary output with no length header, no termination character, and termination only by EOI. VISA cannot determine when the read is complete, so it times out and raises VI_ERROR_TMO. Raw sockets can treat timeout as EOF.\nUse raw TCP socket with exact pipeline priming sequence. Document as: 'Raw-socket screenshot capture requires exact pipeline priming. Do not reorder or remove queries.'\n# PyVISA approach — FAILS\nscope.write('FILESYSTEM:READFILE \"C:/Temp/screenshot.png\"')\ndata = scope.read_raw()  # ❌ Times out, raises VI_ERROR_TMO\n# Raw socket approach — WORKS\nsock.sendall(b'FILESystem:READFile \"C:/Temp/screenshot.png\"\\n')\nsock.settimeout(5)\ndata = bytearray()\nwhile True:\n    try:\n        chunk = sock.recv(65536)\n        if chunk: data.extend(chunk)\n        else: break\n    except socket.timeout:\n        if len(data) > 0: break  # Timeout = EOF\n# Realign on PNG header\npng_magic = b'\\x89PNG\\r\\n\\x1a\\n'\nif data[:8] != png_magic and png_magic in data:\n    data = data[data.find(png_magic):]",
+    "code_before": "# PyVISA approach — FAILS\nscope.write('FILESYSTEM:READFILE \"C:/Temp/screenshot.png\"')\ndata = scope.read_raw()  # ❌ Times out, raises VI_ERROR_TMO",
+    "code_after": "# Raw socket approach — WORKS\nsock.sendall(b'FILESystem:READFile \"C:/Temp/screenshot.png\"\\n')\nsock.settimeout(5)\ndata = bytearray()\nwhile True:\n    try:\n        chunk = sock.recv(65536)\n        if chunk: data.extend(chunk)\n        else: break\n    except socket.timeout:\n        if len(data) > 0: break  # Timeout = EOF\n# Realign on PNG header\npng_magic = b'\\x89PNG\\r\\n\\x1a\\n'\nif data[:8] != png_magic and png_magic in data:\n    data = data[data.find(png_magic):]",
+    "affected_files": [
+      "helper/capture_screenshot.py"
+    ],
+    "related_commands": [
+      "FILESYSTEM:READFILE",
+      "SAVE:IMAGe",
+      "*CLS",
+      "*OPC?",
+      "SAVE:IMAGe:FILEFormat?",
+      "SAVE:IMAGe:COMPosition?",
+      "FILESystem:CWD?"
+    ],
+    "corpus": "errors",
     "source": "rag/corpus/error_patterns/error_patterns_index.json"
   },
   {
     "id": "err_screenshot_template_wrong_structure",
-    "corpus": "errors",
-    "title": "Screenshot Template Wrong Structure — Multi-Step Sequences Broken in Steps UI",
-    "body": "Modern MSO5/6 template went from 9 steps to 3 steps. Legacy 5k/7k/70k template went from 13 steps to 3 steps. The python blocks include: os.makedirs for output directory, try/except for FILESYSTEM:MKDIR, proper timeout adjustment (30000ms) before READFILE, pathlib.Path.write_bytes for saving, and proper cleanup. Python blocks work better because they provide complete control over execution order, error handling, and timeouts in a single atomic operation.\nLegacy and modern screenshot templates used multiple individual SCPI steps (9-13 steps each) that the Steps UI generator couldn't properly sequence. Missing timeout handling, missing error handling for directory creation.\nTemplates broke screenshot capture into individual save_waveform/scpi_write steps. The Steps UI doesn't handle complex multi-step sequences with timeout changes and error handling well. Using save_waveform type for FILESYSTEM:READFILE was a workaround that caused issues.\nReplaced multi-step sequences with single python blocks containing complete, tested screenshot code. Both templates reduced to 3 steps: connect + python block + disconnect.\n// OLD: 13 individual steps\n{\"type\": \"scpi_write\", \"params\": {\"command\": \"HARDCOPY:PORT FILE\"}},\n{\"type\": \"scpi_write\", \"params\": {\"command\": \"HARDCOPY:FORMAT PNG\"}},\n// ... 11 more steps\n// NEW: Single python block with complete code\n{\"type\": \"python\", \"label\": \"Capture Screenshot\", \"params\": {\"code\": \"...\"}}\n// Contains all logic including timeout, error handling, file transfer",
+    "type": "bug_fix",
+    "severity": "high",
     "tags": [
       "screenshot",
       "template",
@@ -469,13 +674,31 @@
       "pyvisa",
       "bug_fix"
     ],
+    "title": "Screenshot Template Wrong Structure — Multi-Step Sequences Broken in Steps UI",
+    "symptom": "Legacy and modern screenshot templates used multiple individual SCPI steps (9-13 steps each) that the Steps UI generator couldn't properly sequence. Missing timeout handling, missing error handling for directory creation.",
+    "root_cause": "Templates broke screenshot capture into individual save_waveform/scpi_write steps. The Steps UI doesn't handle complex multi-step sequences with timeout changes and error handling well. Using save_waveform type for FILESYSTEM:READFILE was a workaround that caused issues.",
+    "fix": "Replaced multi-step sequences with single python blocks containing complete, tested screenshot code. Both templates reduced to 3 steps: connect + python block + disconnect.",
+    "body": "Modern MSO5/6 template went from 9 steps to 3 steps. Legacy 5k/7k/70k template went from 13 steps to 3 steps. The python blocks include: os.makedirs for output directory, try/except for FILESYSTEM:MKDIR, proper timeout adjustment (30000ms) before READFILE, pathlib.Path.write_bytes for saving, and proper cleanup. Python blocks work better because they provide complete control over execution order, error handling, and timeouts in a single atomic operation.\nLegacy and modern screenshot templates used multiple individual SCPI steps (9-13 steps each) that the Steps UI generator couldn't properly sequence. Missing timeout handling, missing error handling for directory creation.\nTemplates broke screenshot capture into individual save_waveform/scpi_write steps. The Steps UI doesn't handle complex multi-step sequences with timeout changes and error handling well. Using save_waveform type for FILESYSTEM:READFILE was a workaround that caused issues.\nReplaced multi-step sequences with single python blocks containing complete, tested screenshot code. Both templates reduced to 3 steps: connect + python block + disconnect.\n// OLD: 13 individual steps\n{\"type\": \"scpi_write\", \"params\": {\"command\": \"HARDCOPY:PORT FILE\"}},\n{\"type\": \"scpi_write\", \"params\": {\"command\": \"HARDCOPY:FORMAT PNG\"}},\n// ... 11 more steps\n// NEW: Single python block with complete code\n{\"type\": \"python\", \"label\": \"Capture Screenshot\", \"params\": {\"code\": \"...\"}}\n// Contains all logic including timeout, error handling, file transfer",
+    "code_before": "// OLD: 13 individual steps\n{\"type\": \"scpi_write\", \"params\": {\"command\": \"HARDCOPY:PORT FILE\"}},\n{\"type\": \"scpi_write\", \"params\": {\"command\": \"HARDCOPY:FORMAT PNG\"}},\n// ... 11 more steps",
+    "code_after": "// NEW: Single python block with complete code\n{\"type\": \"python\", \"label\": \"Capture Screenshot\", \"params\": {\"code\": \"...\"}}\n// Contains all logic including timeout, error handling, file transfer",
+    "affected_files": [
+      "public/templates/basic.json"
+    ],
+    "related_commands": [
+      "HARDCOPY:PORT",
+      "HARDCOPY:FORMAT",
+      "HARDCOPY START",
+      "SAVE:IMAGE",
+      "FILESYSTEM:READFILE",
+      "FILESYSTEM:DELETE"
+    ],
+    "corpus": "errors",
     "source": "rag/corpus/error_patterns/error_patterns_index.json"
   },
   {
     "id": "err_setup_bat_stops_after_nodejs",
-    "corpus": "errors",
-    "title": "Setup.bat Stops After Node.js Detection — errorlevel vs %ERRORLEVEL%",
-    "body": "The fixed script: 1) Uses 'errorlevel' checks instead of '%ERRORLEVEL%' variable for reliable error detection, 2) Redirects stderr (2>nul) to prevent error messages from stopping the script, 3) Explicitly jumps to the next section with goto statements, 4) Captures npm exit codes in a separate variable. Manual workaround: run 'npm install' or 'npm install --legacy-peer-deps' directly.\nSETUP.bat prints 'Node.js found!' with version info, then stops silently. Never proceeds to step 3 (npm install).\nThe batch script used %ERRORLEVEL% variable checks which behave differently from 'if errorlevel' syntax. Version commands (node --version, npm --version) may set error levels that halt script flow. Additionally, stderr output from these commands could interfere with flow control.\nUpdated script to use 'if errorlevel' checks instead of '%ERRORLEVEL%' variable, redirect stderr, and add explicit 'goto :install_deps' jumps between sections.\nnode --version\nif %ERRORLEVEL% NEQ 0 (\n  echo Node.js not found\n)\nnode --version 2>nul\nif errorlevel 1 (\n  echo Node.js not found\n  goto :end\n)\ngoto :install_deps",
+    "type": "troubleshooting",
+    "severity": "medium",
     "tags": [
       "setup",
       "windows",
@@ -484,13 +707,24 @@
       "installation",
       "troubleshooting"
     ],
+    "title": "Setup.bat Stops After Node.js Detection — errorlevel vs %ERRORLEVEL%",
+    "symptom": "SETUP.bat prints 'Node.js found!' with version info, then stops silently. Never proceeds to step 3 (npm install).",
+    "root_cause": "The batch script used %ERRORLEVEL% variable checks which behave differently from 'if errorlevel' syntax. Version commands (node --version, npm --version) may set error levels that halt script flow. Additionally, stderr output from these commands could interfere with flow control.",
+    "fix": "Updated script to use 'if errorlevel' checks instead of '%ERRORLEVEL%' variable, redirect stderr, and add explicit 'goto :install_deps' jumps between sections.",
+    "body": "The fixed script: 1) Uses 'errorlevel' checks instead of '%ERRORLEVEL%' variable for reliable error detection, 2) Redirects stderr (2>nul) to prevent error messages from stopping the script, 3) Explicitly jumps to the next section with goto statements, 4) Captures npm exit codes in a separate variable. Manual workaround: run 'npm install' or 'npm install --legacy-peer-deps' directly.\nSETUP.bat prints 'Node.js found!' with version info, then stops silently. Never proceeds to step 3 (npm install).\nThe batch script used %ERRORLEVEL% variable checks which behave differently from 'if errorlevel' syntax. Version commands (node --version, npm --version) may set error levels that halt script flow. Additionally, stderr output from these commands could interfere with flow control.\nUpdated script to use 'if errorlevel' checks instead of '%ERRORLEVEL%' variable, redirect stderr, and add explicit 'goto :install_deps' jumps between sections.\nnode --version\nif %ERRORLEVEL% NEQ 0 (\n  echo Node.js not found\n)\nnode --version 2>nul\nif errorlevel 1 (\n  echo Node.js not found\n  goto :end\n)\ngoto :install_deps",
+    "code_before": "node --version\nif %ERRORLEVEL% NEQ 0 (\n  echo Node.js not found\n)",
+    "code_after": "node --version 2>nul\nif errorlevel 1 (\n  echo Node.js not found\n  goto :end\n)\ngoto :install_deps",
+    "affected_files": [
+      "setup.bat"
+    ],
+    "related_commands": [],
+    "corpus": "errors",
     "source": "rag/corpus/error_patterns/error_patterns_index.json"
   },
   {
     "id": "err_zip_missing_commands_templates",
-    "corpus": "errors",
-    "title": "ZIP Missing Commands/Templates — Nested File Inclusion Bug",
-    "body": "Verification: run scripts\\VERIFY_ZIP.bat after creating distribution. Expected output: 'public/commands/: 17 files', 'public/templates/: 6 files'. If extraction fails, use Windows built-in extraction (right-click → Extract All) or 7-Zip with 'Preserve folder structure' enabled.\nAfter extracting distribution ZIP, public/commands/ or public/templates/ folders are empty. App has no SCPI commands available.\nThe distribution script (CREATE_DISTRIBUTION.bat) did not properly include nested files from public/commands/ and public/templates/ directories in the ZIP archive.\nUpdated CREATE_DISTRIBUTION.bat to properly include nested files. Added VERIFY_ZIP.bat script to confirm: 17 command files and 6 template files present. Added helper file count display.",
+    "type": "troubleshooting",
+    "severity": "medium",
     "tags": [
       "distribution",
       "zip",
@@ -499,13 +733,25 @@
       "packaging",
       "troubleshooting"
     ],
+    "title": "ZIP Missing Commands/Templates — Nested File Inclusion Bug",
+    "symptom": "After extracting distribution ZIP, public/commands/ or public/templates/ folders are empty. App has no SCPI commands available.",
+    "root_cause": "The distribution script (CREATE_DISTRIBUTION.bat) did not properly include nested files from public/commands/ and public/templates/ directories in the ZIP archive.",
+    "fix": "Updated CREATE_DISTRIBUTION.bat to properly include nested files. Added VERIFY_ZIP.bat script to confirm: 17 command files and 6 template files present. Added helper file count display.",
+    "body": "Verification: run scripts\\VERIFY_ZIP.bat after creating distribution. Expected output: 'public/commands/: 17 files', 'public/templates/: 6 files'. If extraction fails, use Windows built-in extraction (right-click → Extract All) or 7-Zip with 'Preserve folder structure' enabled.\nAfter extracting distribution ZIP, public/commands/ or public/templates/ folders are empty. App has no SCPI commands available.\nThe distribution script (CREATE_DISTRIBUTION.bat) did not properly include nested files from public/commands/ and public/templates/ directories in the ZIP archive.\nUpdated CREATE_DISTRIBUTION.bat to properly include nested files. Added VERIFY_ZIP.bat script to confirm: 17 command files and 6 template files present. Added helper file count display.",
+    "code_before": "",
+    "code_after": "",
+    "affected_files": [
+      "scripts/CREATE_DISTRIBUTION.bat",
+      "scripts/VERIFY_ZIP.bat"
+    ],
+    "related_commands": [],
+    "corpus": "errors",
     "source": "rag/corpus/error_patterns/error_patterns_index.json"
   },
   {
     "id": "err_electron_loading_error",
-    "corpus": "errors",
-    "title": "Electron Loading Error — Missing electron-is-dev, Protocol Intercept, webSecurity",
-    "body": "Electron requires special handling for local resources. The fetch() API expects http/https protocols; file:// protocol requires a custom protocol intercept registered via protocol.registerFileProtocol() or protocol.handle(). webSecurity: false is needed for development but should be true in production with proper CSP headers.\nElectron app fails to load with blank screen or fetch() errors. Resources fail to load from local filesystem.\nThree issues: 1) Missing electron-is-dev dependency, 2) fetch() API doesn't work with file:// protocol in Electron without custom protocol intercept, 3) webSecurity settings block local resource loading.\nInstall electron-is-dev, register custom protocol handler for local file serving, configure webSecurity appropriately for development vs production.",
+    "type": "troubleshooting",
+    "severity": "medium",
     "tags": [
       "electron",
       "loading",
@@ -514,13 +760,22 @@
       "security",
       "troubleshooting"
     ],
+    "title": "Electron Loading Error — Missing electron-is-dev, Protocol Intercept, webSecurity",
+    "symptom": "Electron app fails to load with blank screen or fetch() errors. Resources fail to load from local filesystem.",
+    "root_cause": "Three issues: 1) Missing electron-is-dev dependency, 2) fetch() API doesn't work with file:// protocol in Electron without custom protocol intercept, 3) webSecurity settings block local resource loading.",
+    "fix": "Install electron-is-dev, register custom protocol handler for local file serving, configure webSecurity appropriately for development vs production.",
+    "body": "Electron requires special handling for local resources. The fetch() API expects http/https protocols; file:// protocol requires a custom protocol intercept registered via protocol.registerFileProtocol() or protocol.handle(). webSecurity: false is needed for development but should be true in production with proper CSP headers.\nElectron app fails to load with blank screen or fetch() errors. Resources fail to load from local filesystem.\nThree issues: 1) Missing electron-is-dev dependency, 2) fetch() API doesn't work with file:// protocol in Electron without custom protocol intercept, 3) webSecurity settings block local resource loading.\nInstall electron-is-dev, register custom protocol handler for local file serving, configure webSecurity appropriately for development vs production.",
+    "code_before": "",
+    "code_after": "",
+    "affected_files": [],
+    "related_commands": [],
+    "corpus": "errors",
     "source": "rag/corpus/error_patterns/error_patterns_index.json"
   },
   {
     "id": "err_windows_defender_blocking",
-    "corpus": "errors",
-    "title": "Windows Defender Blocking — Unsigned Portable Exe",
-    "body": "The recommended distribution method is the win-unpacked folder rather than a single portable .exe. Users extract the folder and run the executable inside. This avoids both SmartScreen warnings and antivirus false positives. Long-term fix: obtain a code signing certificate for Tektronix-distributed builds.\nWindows Defender or SmartScreen blocks TekAutomate.exe from running. User sees 'Windows protected your PC' dialog.\nThe portable .exe is unsigned (no code signing certificate). Windows Defender flags unsigned executables, especially ones downloaded from the internet.\nDistribute the win-unpacked folder instead of a single .exe. Unpacked folder contents are less likely to trigger antivirus heuristics.",
+    "type": "troubleshooting",
+    "severity": "medium",
     "tags": [
       "windows",
       "defender",
@@ -529,13 +784,22 @@
       "distribution",
       "troubleshooting"
     ],
+    "title": "Windows Defender Blocking — Unsigned Portable Exe",
+    "symptom": "Windows Defender or SmartScreen blocks TekAutomate.exe from running. User sees 'Windows protected your PC' dialog.",
+    "root_cause": "The portable .exe is unsigned (no code signing certificate). Windows Defender flags unsigned executables, especially ones downloaded from the internet.",
+    "fix": "Distribute the win-unpacked folder instead of a single .exe. Unpacked folder contents are less likely to trigger antivirus heuristics.",
+    "body": "The recommended distribution method is the win-unpacked folder rather than a single portable .exe. Users extract the folder and run the executable inside. This avoids both SmartScreen warnings and antivirus false positives. Long-term fix: obtain a code signing certificate for Tektronix-distributed builds.\nWindows Defender or SmartScreen blocks TekAutomate.exe from running. User sees 'Windows protected your PC' dialog.\nThe portable .exe is unsigned (no code signing certificate). Windows Defender flags unsigned executables, especially ones downloaded from the internet.\nDistribute the win-unpacked folder instead of a single .exe. Unpacked folder contents are less likely to trigger antivirus heuristics.",
+    "code_before": "",
+    "code_after": "",
+    "affected_files": [],
+    "related_commands": [],
+    "corpus": "errors",
     "source": "rag/corpus/error_patterns/error_patterns_index.json"
   },
   {
     "id": "err_undefined_variables_steps_export",
-    "corpus": "errors",
-    "title": "Undefined Variables in Generated Code — Steps UI Multi-Device Export",
-    "body": "The Blockly Python output was correct (proper for loop, variable calculations, device-specific references). The Steps UI output was broken (undefined psu, voltage, current_device, i). Root cause was the converter not properly translating Blockly's per-block device binding to Steps UI's global model. Fix ensures: 1) Connect blocks create proper device entries, 2) Variable calculations become python steps, 3) Device-specific commands map to the correct device name.\nGenerated Python from Steps UI (after Blockly export) has undefined variables: psu, voltage, current_device, i. Code references devices and variables that were never declared.\nWhen Blockly exports to Steps UI, device connections may not map correctly. Blockly tracks device context per block, but Steps UI uses a global device connection model. Variable calculations from Blockly (e.g., voltage = 1 + i * 0.5) become python steps that may lose their variable scope.\nFixed blockToStep.ts converter to properly map device connections, variable declarations, and calculations. Connect steps now carry device configuration. Variable calculations exported as python step type.\n# Steps UI generated (BROKEN):\nwhile value <= 4:\n    psu.write('VOLT 1.0')  # psu undefined!\n    current_device.write('ACQUIRE:STATE ON')  # generic!\n# After fix:\nfor i in range(5):\n    voltage = 1 + i * 0.5\n    psu.write(f'VOLT {voltage}')  # correct device + variable\n    scope.write('ACQUIRE:STATE ON')  # device-specific",
+    "type": "generation_error",
+    "severity": "critical",
     "tags": [
       "generator",
       "steps_ui",
@@ -544,13 +808,24 @@
       "blockly_export",
       "generation_error"
     ],
+    "title": "Undefined Variables in Generated Code — Steps UI Multi-Device Export",
+    "symptom": "Generated Python from Steps UI (after Blockly export) has undefined variables: psu, voltage, current_device, i. Code references devices and variables that were never declared.",
+    "root_cause": "When Blockly exports to Steps UI, device connections may not map correctly. Blockly tracks device context per block, but Steps UI uses a global device connection model. Variable calculations from Blockly (e.g., voltage = 1 + i * 0.5) become python steps that may lose their variable scope.",
+    "fix": "Fixed blockToStep.ts converter to properly map device connections, variable declarations, and calculations. Connect steps now carry device configuration. Variable calculations exported as python step type.",
+    "body": "The Blockly Python output was correct (proper for loop, variable calculations, device-specific references). The Steps UI output was broken (undefined psu, voltage, current_device, i). Root cause was the converter not properly translating Blockly's per-block device binding to Steps UI's global model. Fix ensures: 1) Connect blocks create proper device entries, 2) Variable calculations become python steps, 3) Device-specific commands map to the correct device name.\nGenerated Python from Steps UI (after Blockly export) has undefined variables: psu, voltage, current_device, i. Code references devices and variables that were never declared.\nWhen Blockly exports to Steps UI, device connections may not map correctly. Blockly tracks device context per block, but Steps UI uses a global device connection model. Variable calculations from Blockly (e.g., voltage = 1 + i * 0.5) become python steps that may lose their variable scope.\nFixed blockToStep.ts converter to properly map device connections, variable declarations, and calculations. Connect steps now carry device configuration. Variable calculations exported as python step type.\n# Steps UI generated (BROKEN):\nwhile value <= 4:\n    psu.write('VOLT 1.0')  # psu undefined!\n    current_device.write('ACQUIRE:STATE ON')  # generic!\n# After fix:\nfor i in range(5):\n    voltage = 1 + i * 0.5\n    psu.write(f'VOLT {voltage}')  # correct device + variable\n    scope.write('ACQUIRE:STATE ON')  # device-specific",
+    "code_before": "# Steps UI generated (BROKEN):\nwhile value <= 4:\n    psu.write('VOLT 1.0')  # psu undefined!\n    current_device.write('ACQUIRE:STATE ON')  # generic!",
+    "code_after": "# After fix:\nfor i in range(5):\n    voltage = 1 + i * 0.5\n    psu.write(f'VOLT {voltage}')  # correct device + variable\n    scope.write('ACQUIRE:STATE ON')  # device-specific",
+    "affected_files": [
+      "src/components/BlocklyBuilder/converters/blockToStep.ts"
+    ],
+    "related_commands": [],
+    "corpus": "errors",
     "source": "rag/corpus/error_patterns/error_patterns_index.json"
   },
   {
     "id": "err_wrong_loop_structure_sweep",
-    "corpus": "errors",
-    "title": "Wrong Loop Structure — while value <= 4 Instead of Proper for Loop",
-    "body": "Steps UI sweep generation (App.tsx lines 4466-4501) always produces while loops: 'variableName = start; while variableName <= stop: ... variableName += step'. This is correct behavior, but requires the variableName parameter to be set. Without it, the generator uses a generic 'value' variable. The fix in blockToStep.ts ensures variableName is always populated from the Blockly loop's VAR field.\nSteps UI generates 'while value <= 4:' with unnamed variable 'value' instead of 'for i in range(5):' from the original Blockly loop.\nThe sweep conversion from Blockly controls_for to Steps UI sweep step lost the variable name and loop structure. Steps UI always generates while loops for sweeps, but the variable name ('i') wasn't carried through.\nEnsure variableName parameter is correctly mapped in the blockToStep converter so Steps UI while loops use the correct variable name from the Blockly source.\n# WRONG - generic variable name\nvalue = 0\nwhile value <= 4:\n    psu.write('VOLT 1.0')  # no variable reference!\n    value += 1\n# CORRECT - proper variable name carried through\ni = 0\nwhile i <= 4:\n    voltage = (1 + (i * 0.5))\n    psu.write(f'VOLT {voltage}')\n    i += 1",
+    "type": "generation_error",
+    "severity": "high",
     "tags": [
       "generator",
       "loop",
@@ -559,13 +834,24 @@
       "while_loop",
       "generation_error"
     ],
+    "title": "Wrong Loop Structure — while value <= 4 Instead of Proper for Loop",
+    "symptom": "Steps UI generates 'while value <= 4:' with unnamed variable 'value' instead of 'for i in range(5):' from the original Blockly loop.",
+    "root_cause": "The sweep conversion from Blockly controls_for to Steps UI sweep step lost the variable name and loop structure. Steps UI always generates while loops for sweeps, but the variable name ('i') wasn't carried through.",
+    "fix": "Ensure variableName parameter is correctly mapped in the blockToStep converter so Steps UI while loops use the correct variable name from the Blockly source.",
+    "body": "Steps UI sweep generation (App.tsx lines 4466-4501) always produces while loops: 'variableName = start; while variableName <= stop: ... variableName += step'. This is correct behavior, but requires the variableName parameter to be set. Without it, the generator uses a generic 'value' variable. The fix in blockToStep.ts ensures variableName is always populated from the Blockly loop's VAR field.\nSteps UI generates 'while value <= 4:' with unnamed variable 'value' instead of 'for i in range(5):' from the original Blockly loop.\nThe sweep conversion from Blockly controls_for to Steps UI sweep step lost the variable name and loop structure. Steps UI always generates while loops for sweeps, but the variable name ('i') wasn't carried through.\nEnsure variableName parameter is correctly mapped in the blockToStep converter so Steps UI while loops use the correct variable name from the Blockly source.\n# WRONG - generic variable name\nvalue = 0\nwhile value <= 4:\n    psu.write('VOLT 1.0')  # no variable reference!\n    value += 1\n# CORRECT - proper variable name carried through\ni = 0\nwhile i <= 4:\n    voltage = (1 + (i * 0.5))\n    psu.write(f'VOLT {voltage}')\n    i += 1",
+    "code_before": "# WRONG - generic variable name\nvalue = 0\nwhile value <= 4:\n    psu.write('VOLT 1.0')  # no variable reference!\n    value += 1",
+    "code_after": "# CORRECT - proper variable name carried through\ni = 0\nwhile i <= 4:\n    voltage = (1 + (i * 0.5))\n    psu.write(f'VOLT {voltage}')\n    i += 1",
+    "affected_files": [
+      "src/components/BlocklyBuilder/converters/blockToStep.ts"
+    ],
+    "related_commands": [],
+    "corpus": "errors",
     "source": "rag/corpus/error_patterns/error_patterns_index.json"
   },
   {
     "id": "err_missing_device_connections_export",
-    "corpus": "errors",
-    "title": "Missing Device Connections — Blockly→Steps Export Drops Connect Blocks",
-    "body": "Steps UI needs at least one device configured in the main UI devices array. The converter now: 1) Looks up device in devices array by name, 2) Extracts backend, host, connectionType, deviceType, timeout, 3) Sets internal state (currentBackend_, currentConnType_, currentDevType_), 4) Updates block shape to show correct fields, 5) Populates all fields using setTimeout for async rendering.\nAfter exporting Blockly workflow to Steps UI, no device connections are present. Generated Python has no connect/open_resource calls.\nThe blockToStep converter did not properly translate Blockly connect_scope blocks into Steps UI connect steps with full device configuration (backend, IP, timeout, connectionType, deviceType).\nEnhanced convertStepToBlock() in stepToBlock.ts to look up devices in the devices array by name, extract all configuration (backend, host, connectionType, deviceType, timeout), and populate connect steps with full device config.\n// Export created connect steps without device config\n{type: 'connect', label: 'Connect to Scope', params: {}}\n// Export now includes full device config\n{type: 'connect', label: 'Connect to Scope', params: {\n  deviceName: 'scope', backend: 'tm_devices',\n  host: '192.168.1.10', deviceType: 'SCOPE'\n}}",
+    "type": "generation_error",
+    "severity": "high",
     "tags": [
       "blockly",
       "steps_ui",
@@ -574,13 +860,25 @@
       "device",
       "generation_error"
     ],
+    "title": "Missing Device Connections — Blockly→Steps Export Drops Connect Blocks",
+    "symptom": "After exporting Blockly workflow to Steps UI, no device connections are present. Generated Python has no connect/open_resource calls.",
+    "root_cause": "The blockToStep converter did not properly translate Blockly connect_scope blocks into Steps UI connect steps with full device configuration (backend, IP, timeout, connectionType, deviceType).",
+    "fix": "Enhanced convertStepToBlock() in stepToBlock.ts to look up devices in the devices array by name, extract all configuration (backend, host, connectionType, deviceType, timeout), and populate connect steps with full device config.",
+    "body": "Steps UI needs at least one device configured in the main UI devices array. The converter now: 1) Looks up device in devices array by name, 2) Extracts backend, host, connectionType, deviceType, timeout, 3) Sets internal state (currentBackend_, currentConnType_, currentDevType_), 4) Updates block shape to show correct fields, 5) Populates all fields using setTimeout for async rendering.\nAfter exporting Blockly workflow to Steps UI, no device connections are present. Generated Python has no connect/open_resource calls.\nThe blockToStep converter did not properly translate Blockly connect_scope blocks into Steps UI connect steps with full device configuration (backend, IP, timeout, connectionType, deviceType).\nEnhanced convertStepToBlock() in stepToBlock.ts to look up devices in the devices array by name, extract all configuration (backend, host, connectionType, deviceType, timeout), and populate connect steps with full device config.\n// Export created connect steps without device config\n{type: 'connect', label: 'Connect to Scope', params: {}}\n// Export now includes full device config\n{type: 'connect', label: 'Connect to Scope', params: {\n  deviceName: 'scope', backend: 'tm_devices',\n  host: '192.168.1.10', deviceType: 'SCOPE'\n}}",
+    "code_before": "// Export created connect steps without device config\n{type: 'connect', label: 'Connect to Scope', params: {}}",
+    "code_after": "// Export now includes full device config\n{type: 'connect', label: 'Connect to Scope', params: {\n  deviceName: 'scope', backend: 'tm_devices',\n  host: '192.168.1.10', deviceType: 'SCOPE'\n}}",
+    "affected_files": [
+      "src/components/BlocklyBuilder/converters/blockToStep.ts",
+      "src/components/BlocklyBuilder/converters/stepToBlock.ts"
+    ],
+    "related_commands": [],
+    "corpus": "errors",
     "source": "rag/corpus/error_patterns/error_patterns_index.json"
   },
   {
     "id": "err_redundant_imports",
-    "corpus": "errors",
-    "title": "Redundant Imports — PyVISA Imported Multiple Times",
-    "body": "The generator now collects all needed imports during the block traversal phase, then emits them once in the header. This applies to pyvisa, time, tm_devices (DeviceManager), os, pathlib, and any other imports. The dedup also handles the case where both 'import pyvisa' and 'from pyvisa import ResourceManager' might be generated.\nGenerated Python contains 'import pyvisa' multiple times, once per device connection block.\nEach connect block independently generated its import statement without checking if it had already been emitted.\nDeduplicate imports at generation time. Collect all required imports first, then emit unique imports once at the top of the script.\nimport pyvisa\nrm = pyvisa.ResourceManager()\nscope = rm.open_resource(...)\nimport pyvisa  # ❌ Duplicate!\nrm = pyvisa.ResourceManager()\npsu = rm.open_resource(...)\nimport pyvisa\n\nrm = pyvisa.ResourceManager()\nscope = rm.open_resource(...)\npsu = rm.open_resource(...)",
+    "type": "generation_error",
+    "severity": "low",
     "tags": [
       "generator",
       "imports",
@@ -588,13 +886,24 @@
       "dedup",
       "generation_error"
     ],
+    "title": "Redundant Imports — PyVISA Imported Multiple Times",
+    "symptom": "Generated Python contains 'import pyvisa' multiple times, once per device connection block.",
+    "root_cause": "Each connect block independently generated its import statement without checking if it had already been emitted.",
+    "fix": "Deduplicate imports at generation time. Collect all required imports first, then emit unique imports once at the top of the script.",
+    "body": "The generator now collects all needed imports during the block traversal phase, then emits them once in the header. This applies to pyvisa, time, tm_devices (DeviceManager), os, pathlib, and any other imports. The dedup also handles the case where both 'import pyvisa' and 'from pyvisa import ResourceManager' might be generated.\nGenerated Python contains 'import pyvisa' multiple times, once per device connection block.\nEach connect block independently generated its import statement without checking if it had already been emitted.\nDeduplicate imports at generation time. Collect all required imports first, then emit unique imports once at the top of the script.\nimport pyvisa\nrm = pyvisa.ResourceManager()\nscope = rm.open_resource(...)\nimport pyvisa  # ❌ Duplicate!\nrm = pyvisa.ResourceManager()\npsu = rm.open_resource(...)\nimport pyvisa\n\nrm = pyvisa.ResourceManager()\nscope = rm.open_resource(...)\npsu = rm.open_resource(...)",
+    "code_before": "import pyvisa\nrm = pyvisa.ResourceManager()\nscope = rm.open_resource(...)\nimport pyvisa  # ❌ Duplicate!\nrm = pyvisa.ResourceManager()\npsu = rm.open_resource(...)",
+    "code_after": "import pyvisa\n\nrm = pyvisa.ResourceManager()\nscope = rm.open_resource(...)\npsu = rm.open_resource(...)",
+    "affected_files": [
+      "src/components/BlocklyBuilder/generators/pythonGenerators.ts"
+    ],
+    "related_commands": [],
+    "corpus": "errors",
     "source": "rag/corpus/error_patterns/error_patterns_index.json"
   },
   {
     "id": "err_acquire_stopafter_enum_case",
-    "corpus": "errors",
-    "title": "Acquire Stopafter Enum — SEQUENCE vs SEQuence Mixed Case",
-    "body": "SCPI standard allows case-insensitive matching, but some Tektronix firmware versions have bugs where only the canonical mixed-case form is accepted. Using 'SEQuence' matches the form shown in programming manuals and works across MSO/DPO 5k/7k/70k and MSO 4/5/6 series.\nscope.write('ACQUIRE:STOPAFTER SEQUENCE') works on some scopes but fails silently on others. Acquisition doesn't stop after single sequence.\nSome Tektronix driver implementations expect mixed-case SCPI enum values (e.g., 'SEQuence') while the generator was using all-caps ('SEQUENCE').\nChanged to use 'SEQuence' (mixed case) which is compatible with more driver implementations.\ncode += `${device}.commands.acquire.stopafter.write(\"SEQUENCE\")\\n`;\ncode += `${device}.commands.acquire.stopafter.write(\"SEQuence\")\\n`;",
+    "type": "bug_fix",
+    "severity": "medium",
     "tags": [
       "scpi",
       "enum",
@@ -603,13 +912,27 @@
       "driver",
       "bug_fix"
     ],
+    "title": "Acquire Stopafter Enum — SEQUENCE vs SEQuence Mixed Case",
+    "symptom": "scope.write('ACQUIRE:STOPAFTER SEQUENCE') works on some scopes but fails silently on others. Acquisition doesn't stop after single sequence.",
+    "root_cause": "Some Tektronix driver implementations expect mixed-case SCPI enum values (e.g., 'SEQuence') while the generator was using all-caps ('SEQUENCE').",
+    "fix": "Changed to use 'SEQuence' (mixed case) which is compatible with more driver implementations.",
+    "body": "SCPI standard allows case-insensitive matching, but some Tektronix firmware versions have bugs where only the canonical mixed-case form is accepted. Using 'SEQuence' matches the form shown in programming manuals and works across MSO/DPO 5k/7k/70k and MSO 4/5/6 series.\nscope.write('ACQUIRE:STOPAFTER SEQUENCE') works on some scopes but fails silently on others. Acquisition doesn't stop after single sequence.\nSome Tektronix driver implementations expect mixed-case SCPI enum values (e.g., 'SEQuence') while the generator was using all-caps ('SEQUENCE').\nChanged to use 'SEQuence' (mixed case) which is compatible with more driver implementations.\ncode += `${device}.commands.acquire.stopafter.write(\"SEQUENCE\")\\n`;\ncode += `${device}.commands.acquire.stopafter.write(\"SEQuence\")\\n`;",
+    "code_before": "code += `${device}.commands.acquire.stopafter.write(\"SEQUENCE\")\\n`;",
+    "code_after": "code += `${device}.commands.acquire.stopafter.write(\"SEQuence\")\\n`;",
+    "affected_files": [
+      "src/components/BlocklyBuilder/generators/pythonGenerators.ts"
+    ],
+    "related_commands": [
+      "ACQUIRE:STOPAFTER",
+      "ACQuire:STOPAfter"
+    ],
+    "corpus": "errors",
     "source": "rag/corpus/error_patterns/error_patterns_index.json"
   },
   {
     "id": "err_verbose_opc_polling_pattern",
-    "corpus": "errors",
-    "title": "Verbose OPC Wait Pattern — Polling Loop Instead of Simple Write/Read for tm_devices",
-    "body": "The polling pattern (start_time = time.time(); while time.time() - start_time < 30: if scope.query('*OPC?').strip() == '1': break; time.sleep(0.1)) was replaced with a simpler pattern for tm_devices. Detection is based on the device backend setting.\nGenerated tm_devices code uses a 10-line polling loop for OPC wait instead of a clean 2-line pattern.\nGenerator used a universal polling pattern (while loop with time check) for all backends, even tm_devices which supports a cleaner write/read pattern.\nFor tm_devices: generate scope.write('*OPC?') + scope.read() pattern. For PyVISA: keep polling pattern (required for some VISA implementations).\n# Verbose polling (tm_devices)\nstart_time = time.time()\nwhile time.time() - start_time < 30:\n    if scope.query('*OPC?').strip() == '1':\n        break\n    time.sleep(0.1)\nelse:\n    print('Warning: OPC timeout on scope')\n# Clean pattern (tm_devices)\nscope.write('*OPC?')\nresponse = scope.read()\nif response.strip() != '1':\n    print('Warning: OPC did not return 1 on scope')",
+    "type": "bug_fix",
+    "severity": "medium",
     "tags": [
       "generator",
       "opc",
@@ -618,13 +941,26 @@
       "cleanup",
       "bug_fix"
     ],
+    "title": "Verbose OPC Wait Pattern — Polling Loop Instead of Simple Write/Read for tm_devices",
+    "symptom": "Generated tm_devices code uses a 10-line polling loop for OPC wait instead of a clean 2-line pattern.",
+    "root_cause": "Generator used a universal polling pattern (while loop with time check) for all backends, even tm_devices which supports a cleaner write/read pattern.",
+    "fix": "For tm_devices: generate scope.write('*OPC?') + scope.read() pattern. For PyVISA: keep polling pattern (required for some VISA implementations).",
+    "body": "The polling pattern (start_time = time.time(); while time.time() - start_time < 30: if scope.query('*OPC?').strip() == '1': break; time.sleep(0.1)) was replaced with a simpler pattern for tm_devices. Detection is based on the device backend setting.\nGenerated tm_devices code uses a 10-line polling loop for OPC wait instead of a clean 2-line pattern.\nGenerator used a universal polling pattern (while loop with time check) for all backends, even tm_devices which supports a cleaner write/read pattern.\nFor tm_devices: generate scope.write('*OPC?') + scope.read() pattern. For PyVISA: keep polling pattern (required for some VISA implementations).\n# Verbose polling (tm_devices)\nstart_time = time.time()\nwhile time.time() - start_time < 30:\n    if scope.query('*OPC?').strip() == '1':\n        break\n    time.sleep(0.1)\nelse:\n    print('Warning: OPC timeout on scope')\n# Clean pattern (tm_devices)\nscope.write('*OPC?')\nresponse = scope.read()\nif response.strip() != '1':\n    print('Warning: OPC did not return 1 on scope')",
+    "code_before": "# Verbose polling (tm_devices)\nstart_time = time.time()\nwhile time.time() - start_time < 30:\n    if scope.query('*OPC?').strip() == '1':\n        break\n    time.sleep(0.1)\nelse:\n    print('Warning: OPC timeout on scope')",
+    "code_after": "# Clean pattern (tm_devices)\nscope.write('*OPC?')\nresponse = scope.read()\nif response.strip() != '1':\n    print('Warning: OPC did not return 1 on scope')",
+    "affected_files": [
+      "src/components/BlocklyBuilder/generators/pythonGenerators.ts"
+    ],
+    "related_commands": [
+      "*OPC?"
+    ],
+    "corpus": "errors",
     "source": "rag/corpus/error_patterns/error_patterns_index.json"
   },
   {
     "id": "err_missing_type_hints_tm_devices",
-    "corpus": "errors",
-    "title": "Missing/Wrong Type Hints for tm_devices — Default MSO6B Applied Universally",
-    "body": "Without DRIVER_NAME in XML: scope = device_manager.add_scope('192.168.1.10'). With DRIVER_NAME='MSO6B' in XML: scope: MSO6B = device_manager.add_scope('192.168.1.10'). This prevents incorrect type hints from causing confusion or import errors.\nGenerated code always has 'scope: MSO6B = device_manager.add_scope(...)' even when no driver name was specified in the XML.\nGenerator defaulted DRIVER_NAME to 'MSO6B' when not explicitly set in the Blockly XML, producing incorrect type hints.\nChanged default from 'MSO6B' to empty string. Type hints only added when DRIVER_NAME is explicitly provided in XML.\n// Default always applied\nscope: MSO6B = device_manager.add_scope(\"192.168.1.10\")\n// No type hint without explicit DRIVER_NAME\nscope = device_manager.add_scope(\"192.168.1.10\")",
+    "type": "bug_fix",
+    "severity": "low",
     "tags": [
       "generator",
       "tm_devices",
@@ -632,13 +968,24 @@
       "default",
       "bug_fix"
     ],
+    "title": "Missing/Wrong Type Hints for tm_devices — Default MSO6B Applied Universally",
+    "symptom": "Generated code always has 'scope: MSO6B = device_manager.add_scope(...)' even when no driver name was specified in the XML.",
+    "root_cause": "Generator defaulted DRIVER_NAME to 'MSO6B' when not explicitly set in the Blockly XML, producing incorrect type hints.",
+    "fix": "Changed default from 'MSO6B' to empty string. Type hints only added when DRIVER_NAME is explicitly provided in XML.",
+    "body": "Without DRIVER_NAME in XML: scope = device_manager.add_scope('192.168.1.10'). With DRIVER_NAME='MSO6B' in XML: scope: MSO6B = device_manager.add_scope('192.168.1.10'). This prevents incorrect type hints from causing confusion or import errors.\nGenerated code always has 'scope: MSO6B = device_manager.add_scope(...)' even when no driver name was specified in the XML.\nGenerator defaulted DRIVER_NAME to 'MSO6B' when not explicitly set in the Blockly XML, producing incorrect type hints.\nChanged default from 'MSO6B' to empty string. Type hints only added when DRIVER_NAME is explicitly provided in XML.\n// Default always applied\nscope: MSO6B = device_manager.add_scope(\"192.168.1.10\")\n// No type hint without explicit DRIVER_NAME\nscope = device_manager.add_scope(\"192.168.1.10\")",
+    "code_before": "// Default always applied\nscope: MSO6B = device_manager.add_scope(\"192.168.1.10\")",
+    "code_after": "// No type hint without explicit DRIVER_NAME\nscope = device_manager.add_scope(\"192.168.1.10\")",
+    "affected_files": [
+      "src/components/BlocklyBuilder/generators/pythonGenerators.ts"
+    ],
+    "related_commands": [],
+    "corpus": "errors",
     "source": "rag/corpus/error_patterns/error_patterns_index.json"
   },
   {
     "id": "err_opc_dedup_multiple_waits",
-    "corpus": "errors",
-    "title": "OPC Dedup — Single Acquisition + OPC Wait Not Combined",
-    "body": "The combined pattern uses ACQUIRE:STOPAFTER SEQUENCE + ACQUIRE:STATE ON;*OPC? + read() which blocks until acquisition is complete. This is more efficient and idiomatic than separate stop-after, state-run, and polling-loop sequences.\nGenerated code has separate single_acquisition and wait_for_opc blocks producing redundant command sequences instead of a combined efficient pattern.\nsingle_acquisition and wait_for_opc were independently generating their command sequences without awareness of adjacent blocks.\nsingle_acquisition now detects if the next block is wait_for_opc. If detected, it generates a combined command. wait_for_opc detects single_acquisition as previous block and defers to it.\nscope.write('ACQUIRE:STOPAFTER SEQUENCE')\nscope.write('ACQUIRE:STATE RUN')\n# Wait for operation complete\nstart_time = time.time()\nwhile time.time() - start_time < 30:\n    if scope.query('*OPC?').strip() == '1': break\n    time.sleep(0.1)\nscope.write('ACQUIRE:STOPAFTER SEQUENCE')\nscope.write('ACQUIRE:STATE ON;*OPC?')\nscope.read()  # Block until acquisition complete",
+    "type": "bug_fix",
+    "severity": "low",
     "tags": [
       "generator",
       "opc",
@@ -646,13 +993,28 @@
       "acquisition",
       "bug_fix"
     ],
+    "title": "OPC Dedup — Single Acquisition + OPC Wait Not Combined",
+    "symptom": "Generated code has separate single_acquisition and wait_for_opc blocks producing redundant command sequences instead of a combined efficient pattern.",
+    "root_cause": "single_acquisition and wait_for_opc were independently generating their command sequences without awareness of adjacent blocks.",
+    "fix": "single_acquisition now detects if the next block is wait_for_opc. If detected, it generates a combined command. wait_for_opc detects single_acquisition as previous block and defers to it.",
+    "body": "The combined pattern uses ACQUIRE:STOPAFTER SEQUENCE + ACQUIRE:STATE ON;*OPC? + read() which blocks until acquisition is complete. This is more efficient and idiomatic than separate stop-after, state-run, and polling-loop sequences.\nGenerated code has separate single_acquisition and wait_for_opc blocks producing redundant command sequences instead of a combined efficient pattern.\nsingle_acquisition and wait_for_opc were independently generating their command sequences without awareness of adjacent blocks.\nsingle_acquisition now detects if the next block is wait_for_opc. If detected, it generates a combined command. wait_for_opc detects single_acquisition as previous block and defers to it.\nscope.write('ACQUIRE:STOPAFTER SEQUENCE')\nscope.write('ACQUIRE:STATE RUN')\n# Wait for operation complete\nstart_time = time.time()\nwhile time.time() - start_time < 30:\n    if scope.query('*OPC?').strip() == '1': break\n    time.sleep(0.1)\nscope.write('ACQUIRE:STOPAFTER SEQUENCE')\nscope.write('ACQUIRE:STATE ON;*OPC?')\nscope.read()  # Block until acquisition complete",
+    "code_before": "scope.write('ACQUIRE:STOPAFTER SEQUENCE')\nscope.write('ACQUIRE:STATE RUN')\n# Wait for operation complete\nstart_time = time.time()\nwhile time.time() - start_time < 30:\n    if scope.query('*OPC?').strip() == '1': break\n    time.sleep(0.1)",
+    "code_after": "scope.write('ACQUIRE:STOPAFTER SEQUENCE')\nscope.write('ACQUIRE:STATE ON;*OPC?')\nscope.read()  # Block until acquisition complete",
+    "affected_files": [
+      "src/components/BlocklyBuilder/generators/pythonGenerators.ts"
+    ],
+    "related_commands": [
+      "ACQUIRE:STOPAFTER",
+      "ACQUIRE:STATE",
+      "*OPC?"
+    ],
+    "corpus": "errors",
     "source": "rag/corpus/error_patterns/error_patterns_index.json"
   },
   {
     "id": "err_gpt_xml_missing_connection_details",
-    "corpus": "errors",
-    "title": "GPT Missing Connection Details — connect_scope Blocks Without IP Addresses",
-    "body": "Added to GPT validation checklist: 1) All connect_scope blocks have IP addresses, 2) All SCPI commands use correct DEVICE_CONTEXT, 3) Count instruments vs disconnects. GPT must now self-validate before providing XML.\nGPT-generated XML has connect_scope blocks without RESOURCE field containing the IP address. Blocks won't actually connect to instruments.\nGPT instructions didn't explicitly require IP addresses in every connect_scope block. GPT omitted the RESOURCE field or the mutation element.\nUpdated GPT instructions to mandate: connect_scope: DEVICE_NAME, IP, BACKEND — IP ALWAYS REQUIRED. Include mutation: <mutation show_advanced=\"true\" current_backend=\"pyvisa\"></mutation>.\n<block type=\"connect_scope\">\n  <field name=\"DEVICE_NAME\">scope</field>\n  <field name=\"BACKEND\">pyvisa</field>\n  <!-- MISSING: RESOURCE field! -->\n</block>\n<block type=\"connect_scope\">\n  <field name=\"DEVICE_NAME\">scope</field>\n  <field name=\"BACKEND\">pyvisa</field>\n  <field name=\"RESOURCE\">TCPIP::192.168.1.100::INSTR</field>\n  <mutation show_advanced=\"true\" current_backend=\"pyvisa\"></mutation>\n</block>",
+    "type": "generation_error",
+    "severity": "high",
     "tags": [
       "gpt",
       "xml_generation",
@@ -660,13 +1022,24 @@
       "ip_address",
       "generation_error"
     ],
+    "title": "GPT Missing Connection Details — connect_scope Blocks Without IP Addresses",
+    "symptom": "GPT-generated XML has connect_scope blocks without RESOURCE field containing the IP address. Blocks won't actually connect to instruments.",
+    "root_cause": "GPT instructions didn't explicitly require IP addresses in every connect_scope block. GPT omitted the RESOURCE field or the mutation element.",
+    "fix": "Updated GPT instructions to mandate: connect_scope: DEVICE_NAME, IP, BACKEND — IP ALWAYS REQUIRED. Include mutation: <mutation show_advanced=\"true\" current_backend=\"pyvisa\"></mutation>.",
+    "body": "Added to GPT validation checklist: 1) All connect_scope blocks have IP addresses, 2) All SCPI commands use correct DEVICE_CONTEXT, 3) Count instruments vs disconnects. GPT must now self-validate before providing XML.\nGPT-generated XML has connect_scope blocks without RESOURCE field containing the IP address. Blocks won't actually connect to instruments.\nGPT instructions didn't explicitly require IP addresses in every connect_scope block. GPT omitted the RESOURCE field or the mutation element.\nUpdated GPT instructions to mandate: connect_scope: DEVICE_NAME, IP, BACKEND — IP ALWAYS REQUIRED. Include mutation: <mutation show_advanced=\"true\" current_backend=\"pyvisa\"></mutation>.\n<block type=\"connect_scope\">\n  <field name=\"DEVICE_NAME\">scope</field>\n  <field name=\"BACKEND\">pyvisa</field>\n  <!-- MISSING: RESOURCE field! -->\n</block>\n<block type=\"connect_scope\">\n  <field name=\"DEVICE_NAME\">scope</field>\n  <field name=\"BACKEND\">pyvisa</field>\n  <field name=\"RESOURCE\">TCPIP::192.168.1.100::INSTR</field>\n  <mutation show_advanced=\"true\" current_backend=\"pyvisa\"></mutation>\n</block>",
+    "code_before": "<block type=\"connect_scope\">\n  <field name=\"DEVICE_NAME\">scope</field>\n  <field name=\"BACKEND\">pyvisa</field>\n  <!-- MISSING: RESOURCE field! -->\n</block>",
+    "code_after": "<block type=\"connect_scope\">\n  <field name=\"DEVICE_NAME\">scope</field>\n  <field name=\"BACKEND\">pyvisa</field>\n  <field name=\"RESOURCE\">TCPIP::192.168.1.100::INSTR</field>\n  <mutation show_advanced=\"true\" current_backend=\"pyvisa\"></mutation>\n</block>",
+    "affected_files": [
+      "CUSTOM_GPT_INSTRUCTIONS.txt"
+    ],
+    "related_commands": [],
+    "corpus": "errors",
     "source": "rag/corpus/error_patterns/error_patterns_index.json"
   },
   {
     "id": "err_gpt_variable_substitution_syntax",
-    "corpus": "errors",
-    "title": "GPT Variable Substitution Assumptions — ${voltage} in SCPI Commands",
-    "body": "For SCPI commands with dynamic values, the recommended approach is to use a python_code block with proper f-string: scope.write(f'VOLT {voltage}'). The ${} syntax in SCPI command fields is converted by the generator but may have edge cases.\nGPT generates XML with ${voltage} syntax in SCPI command fields. May not be supported in all TekAutomate code paths.\nGPT assumed JavaScript template literal syntax (${variable}) works universally in SCPI command strings. This works in filename fields but may need different handling (Python f-string) for SCPI commands.\nGPT instructions updated to use Python f-string syntax in python_code blocks instead of ${} in SCPI command fields.\n<field name=\"COMMAND\">:SOURce:VOLTage:LEVel ${voltage}</field>\n<!-- Use python_code block instead -->\nscope.write(f':SOURce:VOLTage:LEVel {voltage}')",
+    "type": "generation_error",
+    "severity": "medium",
     "tags": [
       "gpt",
       "variable",
@@ -675,13 +1048,26 @@
       "syntax",
       "generation_error"
     ],
+    "title": "GPT Variable Substitution Assumptions — ${voltage} in SCPI Commands",
+    "symptom": "GPT generates XML with ${voltage} syntax in SCPI command fields. May not be supported in all TekAutomate code paths.",
+    "root_cause": "GPT assumed JavaScript template literal syntax (${variable}) works universally in SCPI command strings. This works in filename fields but may need different handling (Python f-string) for SCPI commands.",
+    "fix": "GPT instructions updated to use Python f-string syntax in python_code blocks instead of ${} in SCPI command fields.",
+    "body": "For SCPI commands with dynamic values, the recommended approach is to use a python_code block with proper f-string: scope.write(f'VOLT {voltage}'). The ${} syntax in SCPI command fields is converted by the generator but may have edge cases.\nGPT generates XML with ${voltage} syntax in SCPI command fields. May not be supported in all TekAutomate code paths.\nGPT assumed JavaScript template literal syntax (${variable}) works universally in SCPI command strings. This works in filename fields but may need different handling (Python f-string) for SCPI commands.\nGPT instructions updated to use Python f-string syntax in python_code blocks instead of ${} in SCPI command fields.\n<field name=\"COMMAND\">:SOURce:VOLTage:LEVel ${voltage}</field>\n<!-- Use python_code block instead -->\nscope.write(f':SOURce:VOLTage:LEVel {voltage}')",
+    "code_before": "<field name=\"COMMAND\">:SOURce:VOLTage:LEVel ${voltage}</field>",
+    "code_after": "<!-- Use python_code block instead -->\nscope.write(f':SOURce:VOLTage:LEVel {voltage}')",
+    "affected_files": [
+      "CUSTOM_GPT_INSTRUCTIONS.txt"
+    ],
+    "related_commands": [
+      ":SOURce:VOLTage:LEVel"
+    ],
+    "corpus": "errors",
     "source": "rag/corpus/error_patterns/error_patterns_index.json"
   },
   {
     "id": "err_backend_compatibility_forbidden",
-    "corpus": "errors",
-    "title": "Backend Compatibility Validation — scpi_write/scpi_query FORBIDDEN with tm_devices",
-    "body": "The generator walks all blocks and checks compatibility: scpi_write and scpi_query blocks are only valid with pyvisa backend. With tm_devices, users must use the command-tree blocks or python_code blocks. The validation report shows each violating command so users can fix them before generation.\nGenerator produces errors listing SCPI commands that are incompatible with the selected backend. E.g., raw scpi_write blocks cannot be used with tm_devices backend.\ntm_devices uses a command tree API (scope.commands.horizontal.scale.write()) not raw SCPI strings (scope.write('HOR:SCALE 1e-6')). Using scpi_write blocks with tm_devices backend produces code that won't work.\nGenerator detects backend and validates that block types are compatible. Lists all violations with specific command names and suggests switching to appropriate block types or backend.",
+    "type": "validation_rule",
+    "severity": "critical",
     "tags": [
       "validation",
       "backend",
@@ -691,13 +1077,24 @@
       "compatibility",
       "validation_rule"
     ],
+    "title": "Backend Compatibility Validation — scpi_write/scpi_query FORBIDDEN with tm_devices",
+    "symptom": "Generator produces errors listing SCPI commands that are incompatible with the selected backend. E.g., raw scpi_write blocks cannot be used with tm_devices backend.",
+    "root_cause": "tm_devices uses a command tree API (scope.commands.horizontal.scale.write()) not raw SCPI strings (scope.write('HOR:SCALE 1e-6')). Using scpi_write blocks with tm_devices backend produces code that won't work.",
+    "fix": "Generator detects backend and validates that block types are compatible. Lists all violations with specific command names and suggests switching to appropriate block types or backend.",
+    "body": "The generator walks all blocks and checks compatibility: scpi_write and scpi_query blocks are only valid with pyvisa backend. With tm_devices, users must use the command-tree blocks or python_code blocks. The validation report shows each violating command so users can fix them before generation.\nGenerator produces errors listing SCPI commands that are incompatible with the selected backend. E.g., raw scpi_write blocks cannot be used with tm_devices backend.\ntm_devices uses a command tree API (scope.commands.horizontal.scale.write()) not raw SCPI strings (scope.write('HOR:SCALE 1e-6')). Using scpi_write blocks with tm_devices backend produces code that won't work.\nGenerator detects backend and validates that block types are compatible. Lists all violations with specific command names and suggests switching to appropriate block types or backend.",
+    "code_before": "",
+    "code_after": "",
+    "affected_files": [
+      "src/components/BlocklyBuilder/generators/pythonGenerators.ts"
+    ],
+    "related_commands": [],
+    "corpus": "errors",
     "source": "rag/corpus/error_patterns/error_patterns_index.json"
   },
   {
     "id": "err_loop_index_not_available",
-    "corpus": "errors",
-    "title": "Loop Index Variable Not Available — repeat N Times Block Has No Index",
-    "body": "The repeat N times block is designed for simple repetition without needing an index. For cases requiring an index (dynamic filenames like capture_{i}.wfm, voltage calculations like 1.0 + i * 0.5), users must use the 'count with i from 1 to 5 by 1' block instead. This is a Blockly design choice, not a TekAutomate bug.\nUsing 'repeat 5 times' block produces 'for _ in range(5):' with no loop index variable. Cannot use index for dynamic filenames or voltage calculations.\nBlockly's controls_repeat_ext block uses '_' as the loop variable (convention for unused). Users expect to reference the iteration count for dynamic values like filenames or voltage steps.\nUsers should use controls_for block (count with i) instead of controls_repeat_ext. The for block provides a named index variable.\n# repeat 5 times block - no index\nfor _ in range(5):\n    psu.write('VOLT 1.0')  # Always 1.0!\n    scope.write('SAVE:WAVEFORM CH1, \"capture.wfm\"')  # Overwrites!\n# count with i block - has index\nfor i in range(5):\n    voltage = 1.0 + (i * 0.5)\n    psu.write(f'VOLT {voltage}')  # 1.0, 1.5, 2.0...\n    scope.write(f'SAVE:WAVEFORM CH1, \"capture_{i}.wfm\"')  # Unique files",
+    "type": "generation_error",
+    "severity": "high",
     "tags": [
       "blockly",
       "loop",
@@ -706,13 +1103,22 @@
       "controls_repeat",
       "generation_error"
     ],
+    "title": "Loop Index Variable Not Available — repeat N Times Block Has No Index",
+    "symptom": "Using 'repeat 5 times' block produces 'for _ in range(5):' with no loop index variable. Cannot use index for dynamic filenames or voltage calculations.",
+    "root_cause": "Blockly's controls_repeat_ext block uses '_' as the loop variable (convention for unused). Users expect to reference the iteration count for dynamic values like filenames or voltage steps.",
+    "fix": "Users should use controls_for block (count with i) instead of controls_repeat_ext. The for block provides a named index variable.",
+    "body": "The repeat N times block is designed for simple repetition without needing an index. For cases requiring an index (dynamic filenames like capture_{i}.wfm, voltage calculations like 1.0 + i * 0.5), users must use the 'count with i from 1 to 5 by 1' block instead. This is a Blockly design choice, not a TekAutomate bug.\nUsing 'repeat 5 times' block produces 'for _ in range(5):' with no loop index variable. Cannot use index for dynamic filenames or voltage calculations.\nBlockly's controls_repeat_ext block uses '_' as the loop variable (convention for unused). Users expect to reference the iteration count for dynamic values like filenames or voltage steps.\nUsers should use controls_for block (count with i) instead of controls_repeat_ext. The for block provides a named index variable.\n# repeat 5 times block - no index\nfor _ in range(5):\n    psu.write('VOLT 1.0')  # Always 1.0!\n    scope.write('SAVE:WAVEFORM CH1, \"capture.wfm\"')  # Overwrites!\n# count with i block - has index\nfor i in range(5):\n    voltage = 1.0 + (i * 0.5)\n    psu.write(f'VOLT {voltage}')  # 1.0, 1.5, 2.0...\n    scope.write(f'SAVE:WAVEFORM CH1, \"capture_{i}.wfm\"')  # Unique files",
+    "code_before": "# repeat 5 times block - no index\nfor _ in range(5):\n    psu.write('VOLT 1.0')  # Always 1.0!\n    scope.write('SAVE:WAVEFORM CH1, \"capture.wfm\"')  # Overwrites!",
+    "code_after": "# count with i block - has index\nfor i in range(5):\n    voltage = 1.0 + (i * 0.5)\n    psu.write(f'VOLT {voltage}')  # 1.0, 1.5, 2.0...\n    scope.write(f'SAVE:WAVEFORM CH1, \"capture_{i}.wfm\"')  # Unique files",
+    "affected_files": [],
+    "related_commands": [],
+    "corpus": "errors",
     "source": "rag/corpus/error_patterns/error_patterns_index.json"
   },
   {
     "id": "err_file_overwriting_in_loop",
-    "corpus": "errors",
-    "title": "File Overwriting in Loop — Same Filename Every Iteration",
-    "body": "When using save_waveform or save_screenshot blocks inside a loop, the filename is static. Users must replace the save block with a python_code block that constructs a dynamic filename using the loop variable. This is documented in the examples (example_scope_psu_sweep.xml) which use f-strings for unique filenames per iteration.\nWaveform or screenshot save inside a loop always writes to the same filename, overwriting previous captures. Only the last iteration's data survives.\nsave_waveform and save_screenshot blocks use a static filename field. Inside a loop, the same filename is used every iteration.\nUse python_code block with f-string to include loop index in filename: scope.write(f'SAVE:WAVEFORM CH1, \"C:/Captures/capture_{i}.wfm\"')\n# Static filename - overwrites every iteration\nfor i in range(5):\n    scope.write('SAVE:WAVEFORM CH1, \"C:/Captures/capture.wfm\"')\n# Dynamic filename - unique per iteration\nfor i in range(5):\n    scope.write(f'SAVE:WAVEFORM CH1, \"C:/Captures/capture_{i}.wfm\"')",
+    "type": "generation_error",
+    "severity": "high",
     "tags": [
       "blockly",
       "loop",
@@ -721,13 +1127,24 @@
       "waveform",
       "generation_error"
     ],
+    "title": "File Overwriting in Loop — Same Filename Every Iteration",
+    "symptom": "Waveform or screenshot save inside a loop always writes to the same filename, overwriting previous captures. Only the last iteration's data survives.",
+    "root_cause": "save_waveform and save_screenshot blocks use a static filename field. Inside a loop, the same filename is used every iteration.",
+    "fix": "Use python_code block with f-string to include loop index in filename: scope.write(f'SAVE:WAVEFORM CH1, \"C:/Captures/capture_{i}.wfm\"')",
+    "body": "When using save_waveform or save_screenshot blocks inside a loop, the filename is static. Users must replace the save block with a python_code block that constructs a dynamic filename using the loop variable. This is documented in the examples (example_scope_psu_sweep.xml) which use f-strings for unique filenames per iteration.\nWaveform or screenshot save inside a loop always writes to the same filename, overwriting previous captures. Only the last iteration's data survives.\nsave_waveform and save_screenshot blocks use a static filename field. Inside a loop, the same filename is used every iteration.\nUse python_code block with f-string to include loop index in filename: scope.write(f'SAVE:WAVEFORM CH1, \"C:/Captures/capture_{i}.wfm\"')\n# Static filename - overwrites every iteration\nfor i in range(5):\n    scope.write('SAVE:WAVEFORM CH1, \"C:/Captures/capture.wfm\"')\n# Dynamic filename - unique per iteration\nfor i in range(5):\n    scope.write(f'SAVE:WAVEFORM CH1, \"C:/Captures/capture_{i}.wfm\"')",
+    "code_before": "# Static filename - overwrites every iteration\nfor i in range(5):\n    scope.write('SAVE:WAVEFORM CH1, \"C:/Captures/capture.wfm\"')",
+    "code_after": "# Dynamic filename - unique per iteration\nfor i in range(5):\n    scope.write(f'SAVE:WAVEFORM CH1, \"C:/Captures/capture_{i}.wfm\"')",
+    "affected_files": [],
+    "related_commands": [
+      "SAVE:WAVEFORM"
+    ],
+    "corpus": "errors",
     "source": "rag/corpus/error_patterns/error_patterns_index.json"
   },
   {
     "id": "err_comment_vs_code_confusion",
-    "corpus": "errors",
-    "title": "Comment vs Python Code Block — User Confusion",
-    "body": "Comment blocks generate '# Set PSU voltage (START_VOLTAGE + i * VOLTAGE_STEP)' which is a Python comment and does nothing. For actual calculation, users need a python_code block containing 'voltage = START_VOLTAGE + i * VOLTAGE_STEP' followed by an scpi_write using f-string: psu.write(f'VOLT {voltage}').\nUser adds a comment block containing 'Set PSU voltage (START_VOLTAGE + i * VOLTAGE_STEP)' expecting it to calculate the voltage. Nothing happens because it's just a comment.\nUsers confuse Blockly comment blocks (which produce Python # comments) with python_code blocks (which produce executable Python). A comment that looks like code does nothing.\nReplace comment blocks with python_code blocks for actual calculations. Add user guidance distinguishing comments from executable code.\n# Comment block output (does nothing):\n# Set PSU voltage (START_VOLTAGE + i * VOLTAGE_STEP)\npsu.write('VOLT 1.0')  # Static value, comment was ignored\n# python_code block output (executes):\nvoltage = 1.0 + (i * 0.5)  # Real calculation\npsu.write(f'VOLT {voltage}')  # Dynamic value",
+    "type": "generation_error",
+    "severity": "medium",
     "tags": [
       "blockly",
       "comment",
@@ -735,13 +1152,22 @@
       "user_confusion",
       "generation_error"
     ],
+    "title": "Comment vs Python Code Block — User Confusion",
+    "symptom": "User adds a comment block containing 'Set PSU voltage (START_VOLTAGE + i * VOLTAGE_STEP)' expecting it to calculate the voltage. Nothing happens because it's just a comment.",
+    "root_cause": "Users confuse Blockly comment blocks (which produce Python # comments) with python_code blocks (which produce executable Python). A comment that looks like code does nothing.",
+    "fix": "Replace comment blocks with python_code blocks for actual calculations. Add user guidance distinguishing comments from executable code.",
+    "body": "Comment blocks generate '# Set PSU voltage (START_VOLTAGE + i * VOLTAGE_STEP)' which is a Python comment and does nothing. For actual calculation, users need a python_code block containing 'voltage = START_VOLTAGE + i * VOLTAGE_STEP' followed by an scpi_write using f-string: psu.write(f'VOLT {voltage}').\nUser adds a comment block containing 'Set PSU voltage (START_VOLTAGE + i * VOLTAGE_STEP)' expecting it to calculate the voltage. Nothing happens because it's just a comment.\nUsers confuse Blockly comment blocks (which produce Python # comments) with python_code blocks (which produce executable Python). A comment that looks like code does nothing.\nReplace comment blocks with python_code blocks for actual calculations. Add user guidance distinguishing comments from executable code.\n# Comment block output (does nothing):\n# Set PSU voltage (START_VOLTAGE + i * VOLTAGE_STEP)\npsu.write('VOLT 1.0')  # Static value, comment was ignored\n# python_code block output (executes):\nvoltage = 1.0 + (i * 0.5)  # Real calculation\npsu.write(f'VOLT {voltage}')  # Dynamic value",
+    "code_before": "# Comment block output (does nothing):\n# Set PSU voltage (START_VOLTAGE + i * VOLTAGE_STEP)\npsu.write('VOLT 1.0')  # Static value, comment was ignored",
+    "code_after": "# python_code block output (executes):\nvoltage = 1.0 + (i * 0.5)  # Real calculation\npsu.write(f'VOLT {voltage}')  # Dynamic value",
+    "affected_files": [],
+    "related_commands": [],
+    "corpus": "errors",
     "source": "rag/corpus/error_patterns/error_patterns_index.json"
   },
   {
     "id": "err_export_filename_ugly",
-    "corpus": "errors",
-    "title": "Export File Naming — Ugly Names with Spaces and Dashes",
-    "body": "New naming pattern: workflow_20260130_143022.xml (snake_case + timestamp). Works for both XML and Python exports. Filenames are filesystem-safe and sortable by timestamp.\nExported files had names like 'my workflow-v2.xml' with spaces and special characters. Difficult to manage and sort.\nFile naming used poor sanitization that preserved spaces and dashes from the workflow name.\nCreated generateCleanFilename() helper: converts to snake_case, collapses multiple underscores, adds timestamp for uniqueness.\n// Old: 'my workflow-v2.xml'\nconst filename = workflowName + '.xml';\n// New: 'my_workflow_20260130_143022.xml'\nconst filename = generateCleanFilename(workflowName, 'xml');",
+    "type": "bug_fix",
+    "severity": "low",
     "tags": [
       "export",
       "filename",
@@ -749,13 +1175,24 @@
       "timestamp",
       "bug_fix"
     ],
+    "title": "Export File Naming — Ugly Names with Spaces and Dashes",
+    "symptom": "Exported files had names like 'my workflow-v2.xml' with spaces and special characters. Difficult to manage and sort.",
+    "root_cause": "File naming used poor sanitization that preserved spaces and dashes from the workflow name.",
+    "fix": "Created generateCleanFilename() helper: converts to snake_case, collapses multiple underscores, adds timestamp for uniqueness.",
+    "body": "New naming pattern: workflow_20260130_143022.xml (snake_case + timestamp). Works for both XML and Python exports. Filenames are filesystem-safe and sortable by timestamp.\nExported files had names like 'my workflow-v2.xml' with spaces and special characters. Difficult to manage and sort.\nFile naming used poor sanitization that preserved spaces and dashes from the workflow name.\nCreated generateCleanFilename() helper: converts to snake_case, collapses multiple underscores, adds timestamp for uniqueness.\n// Old: 'my workflow-v2.xml'\nconst filename = workflowName + '.xml';\n// New: 'my_workflow_20260130_143022.xml'\nconst filename = generateCleanFilename(workflowName, 'xml');",
+    "code_before": "// Old: 'my workflow-v2.xml'\nconst filename = workflowName + '.xml';",
+    "code_after": "// New: 'my_workflow_20260130_143022.xml'\nconst filename = generateCleanFilename(workflowName, 'xml');",
+    "affected_files": [
+      "src/components/BlocklyBuilder/BlocklyBuilder.tsx"
+    ],
+    "related_commands": [],
+    "corpus": "errors",
     "source": "rag/corpus/error_patterns/error_patterns_index.json"
   },
   {
     "id": "err_scpi_corpus_validation",
-    "corpus": "errors",
-    "title": "SCPI Corpus Tests — Every Command → Step → Python Validation (~13k Commands)",
-    "body": "npm run test:product loads every command from every JSON file (8 device families: afg, awg, smu, rsa, tekexpress, dpojet, MSO_DPO_5k_7k_70K, mso_2_4_5_6_7), builds a step, runs through the real generator, validates Python output. Per command checks: generator doesn't throw, scpi.write( or scpi.query( present, no unresolved {param} placeholders, SCPI command header appears in output. Results grouped by device family + command group with confidence score. Separately, npm run test:param-pipeline validates ~8,793 parameterized commands ensuring every {param} resolves correctly.\nN/A — test infrastructure pattern\nN/A — validation infrastructure\nN/A — test implementation",
+    "type": "test_pattern",
+    "severity": "high",
     "tags": [
       "testing",
       "scpi",
@@ -764,13 +1201,25 @@
       "regression",
       "test_pattern"
     ],
+    "title": "SCPI Corpus Tests — Every Command → Step → Python Validation (~13k Commands)",
+    "symptom": "N/A — test infrastructure pattern",
+    "root_cause": "N/A — validation infrastructure",
+    "fix": "N/A — test implementation",
+    "body": "npm run test:product loads every command from every JSON file (8 device families: afg, awg, smu, rsa, tekexpress, dpojet, MSO_DPO_5k_7k_70K, mso_2_4_5_6_7), builds a step, runs through the real generator, validates Python output. Per command checks: generator doesn't throw, scpi.write( or scpi.query( present, no unresolved {param} placeholders, SCPI command header appears in output. Results grouped by device family + command group with confidence score. Separately, npm run test:param-pipeline validates ~8,793 parameterized commands ensuring every {param} resolves correctly.\nN/A — test infrastructure pattern\nN/A — validation infrastructure\nN/A — test implementation",
+    "code_before": "",
+    "code_after": "",
+    "affected_files": [
+      "src/validation/scpiCommandValidator.test.ts",
+      "src/validation/scpiParameterExposure.test.ts"
+    ],
+    "related_commands": [],
+    "corpus": "errors",
     "source": "rag/corpus/error_patterns/error_patterns_index.json"
   },
   {
     "id": "err_parameter_pipeline_validation",
-    "corpus": "errors",
-    "title": "Parameter Pipeline Tests — Every {param} Resolves Correctly (~8k Commands)",
-    "body": "npm run test:param-pipeline tests every command with {param} placeholders: substitutes realistic test values, asserts the resolved value appears in generated Python, asserts no {param} remains unresolved, reports which commands are partially or fully broken. Uses AJV schema validation: every command must have unique identifier, commands with {param} in SCPI string must declare matching arguments/params entries, no orphaned placeholders allowed.\nN/A — test infrastructure pattern\nN/A — validation infrastructure\nN/A — test implementation",
+    "type": "test_pattern",
+    "severity": "high",
     "tags": [
       "testing",
       "parameters",
@@ -779,13 +1228,25 @@
       "validation",
       "test_pattern"
     ],
+    "title": "Parameter Pipeline Tests — Every {param} Resolves Correctly (~8k Commands)",
+    "symptom": "N/A — test infrastructure pattern",
+    "root_cause": "N/A — validation infrastructure",
+    "fix": "N/A — test implementation",
+    "body": "npm run test:param-pipeline tests every command with {param} placeholders: substitutes realistic test values, asserts the resolved value appears in generated Python, asserts no {param} remains unresolved, reports which commands are partially or fully broken. Uses AJV schema validation: every command must have unique identifier, commands with {param} in SCPI string must declare matching arguments/params entries, no orphaned placeholders allowed.\nN/A — test infrastructure pattern\nN/A — validation infrastructure\nN/A — test implementation",
+    "code_before": "",
+    "code_after": "",
+    "affected_files": [
+      "src/generators/paramBinding.test.ts",
+      "src/validation/scpiParameterExposure.test.ts"
+    ],
+    "related_commands": [],
+    "corpus": "errors",
     "source": "rag/corpus/error_patterns/error_patterns_index.json"
   },
   {
     "id": "err_e2e_coverage_matrix",
-    "corpus": "errors",
-    "title": "E2E Coverage Matrix — What's Covered and Known Gaps",
-    "body": "Covered: Steps-only (palette actions, save waveform options, save screenshot, recall), Blockly-only (toolbar actions, browse commands modal, code generation), Roundtrip/Fidelity (Steps→Blockly→Steps for write/query, set_and_query preservation canary). Known gaps: 1) Exhaustive option permutations for each step type, 2) Full Blockly block option permutations, 3) Save Waveform advanced options across Steps↔Blockly, 4) Multi-device binding permutations, 5) Negative-path UX assertions (disabled states, validation messages, malformed inputs). Test files: default-controls.spec.ts, flow-fidelity.spec.ts, set-and-query-canary.spec.ts, regression.spec.ts, scpi-corpus.spec.ts.\nN/A — test coverage tracking\nN/A — coverage analysis\nN/A — gap documentation",
+    "type": "test_pattern",
+    "severity": "medium",
     "tags": [
       "testing",
       "e2e",
@@ -794,13 +1255,28 @@
       "gaps",
       "test_pattern"
     ],
+    "title": "E2E Coverage Matrix — What's Covered and Known Gaps",
+    "symptom": "N/A — test coverage tracking",
+    "root_cause": "N/A — coverage analysis",
+    "fix": "N/A — gap documentation",
+    "body": "Covered: Steps-only (palette actions, save waveform options, save screenshot, recall), Blockly-only (toolbar actions, browse commands modal, code generation), Roundtrip/Fidelity (Steps→Blockly→Steps for write/query, set_and_query preservation canary). Known gaps: 1) Exhaustive option permutations for each step type, 2) Full Blockly block option permutations, 3) Save Waveform advanced options across Steps↔Blockly, 4) Multi-device binding permutations, 5) Negative-path UX assertions (disabled states, validation messages, malformed inputs). Test files: default-controls.spec.ts, flow-fidelity.spec.ts, set-and-query-canary.spec.ts, regression.spec.ts, scpi-corpus.spec.ts.\nN/A — test coverage tracking\nN/A — coverage analysis\nN/A — gap documentation",
+    "code_before": "",
+    "code_after": "",
+    "affected_files": [
+      "e2e/default-controls.spec.ts",
+      "e2e/flow-fidelity.spec.ts",
+      "e2e/set-and-query-canary.spec.ts",
+      "e2e/regression.spec.ts",
+      "e2e/scpi-corpus.spec.ts"
+    ],
+    "related_commands": [],
+    "corpus": "errors",
     "source": "rag/corpus/error_patterns/error_patterns_index.json"
   },
   {
     "id": "err_snapshot_regression_tests",
-    "corpus": "errors",
-    "title": "Snapshot Regression Tests — Generated Python Frozen for Known Step Sequences",
-    "body": "generatorSnapshots.test.ts freezes generated Python output for known step sequences. Any change to generator output causes snapshot mismatch, immediately flagging regressions. Combined with 14 named regression scenarios in regression.spec.ts covering: SCPI command string integrity (R1.1-R1.6), set_and_query roundtrip (R6.1-R6.4), and import/template load regression (R7.1-R7.4). Run with: npm run test:regression (~60s, most targeted test for generator changes).\nN/A — regression detection pattern\nN/A — test infrastructure\nN/A — test implementation",
+    "type": "test_pattern",
+    "severity": "medium",
     "tags": [
       "testing",
       "snapshot",
@@ -809,13 +1285,25 @@
       "frozen",
       "test_pattern"
     ],
+    "title": "Snapshot Regression Tests — Generated Python Frozen for Known Step Sequences",
+    "symptom": "N/A — regression detection pattern",
+    "root_cause": "N/A — test infrastructure",
+    "fix": "N/A — test implementation",
+    "body": "generatorSnapshots.test.ts freezes generated Python output for known step sequences. Any change to generator output causes snapshot mismatch, immediately flagging regressions. Combined with 14 named regression scenarios in regression.spec.ts covering: SCPI command string integrity (R1.1-R1.6), set_and_query roundtrip (R6.1-R6.4), and import/template load regression (R7.1-R7.4). Run with: npm run test:regression (~60s, most targeted test for generator changes).\nN/A — regression detection pattern\nN/A — test infrastructure\nN/A — test implementation",
+    "code_before": "",
+    "code_after": "",
+    "affected_files": [
+      "src/generators/generatorSnapshots.test.ts",
+      "e2e/regression.spec.ts"
+    ],
+    "related_commands": [],
+    "corpus": "errors",
     "source": "rag/corpus/error_patterns/error_patterns_index.json"
   },
   {
     "id": "err_regression_scpi_string_integrity",
-    "corpus": "errors",
-    "title": "Regression Tests — SCPI Command String Integrity Scenarios",
-    "body": "R1.1: MSO CH1:SCAle with value 1.0 — catches {value} unresolved. R1.2: MSO SAVEONEVent:WAVEform:SOUrce with CH3 — catches {CH<x>} or <x> leaking. R1.3: AFG SOURce1:FREQuency:FIXed with 1000 — catches {ch}/{freq} unsubstituted. R1.4: AWG OUTPut1:STATe with ON — catches {0|1|OFF|ON} options string in output. R1.5: SMU :MEASure:VOLTage:DC? — catches query commands silently dropped. R1.6: RSA INITIATE:CONTINUOUS with OFF — catches {state} not resolved.\nRegression scenarios R1.1-R1.6 catch: {value} placeholder left unresolved, <x> token leaking into output, {ch}/{freq} not substituted, options string {0|1|OFF|ON} appearing in output, query commands silently dropped, enumeration {state} not resolved.\nGenerator parameter substitution can regress when code changes affect the substituteSCPI or genSteps functions.\nAutomated regression tests run on every push. Each scenario exports Python and checks for specific resolved values.",
+    "type": "test_pattern",
+    "severity": "high",
     "tags": [
       "testing",
       "regression",
@@ -824,13 +1312,31 @@
       "placeholder",
       "test_pattern"
     ],
+    "title": "Regression Tests — SCPI Command String Integrity Scenarios",
+    "symptom": "Regression scenarios R1.1-R1.6 catch: {value} placeholder left unresolved, <x> token leaking into output, {ch}/{freq} not substituted, options string {0|1|OFF|ON} appearing in output, query commands silently dropped, enumeration {state} not resolved.",
+    "root_cause": "Generator parameter substitution can regress when code changes affect the substituteSCPI or genSteps functions.",
+    "fix": "Automated regression tests run on every push. Each scenario exports Python and checks for specific resolved values.",
+    "body": "R1.1: MSO CH1:SCAle with value 1.0 — catches {value} unresolved. R1.2: MSO SAVEONEVent:WAVEform:SOUrce with CH3 — catches {CH<x>} or <x> leaking. R1.3: AFG SOURce1:FREQuency:FIXed with 1000 — catches {ch}/{freq} unsubstituted. R1.4: AWG OUTPut1:STATe with ON — catches {0|1|OFF|ON} options string in output. R1.5: SMU :MEASure:VOLTage:DC? — catches query commands silently dropped. R1.6: RSA INITIATE:CONTINUOUS with OFF — catches {state} not resolved.\nRegression scenarios R1.1-R1.6 catch: {value} placeholder left unresolved, <x> token leaking into output, {ch}/{freq} not substituted, options string {0|1|OFF|ON} appearing in output, query commands silently dropped, enumeration {state} not resolved.\nGenerator parameter substitution can regress when code changes affect the substituteSCPI or genSteps functions.\nAutomated regression tests run on every push. Each scenario exports Python and checks for specific resolved values.",
+    "code_before": "",
+    "code_after": "",
+    "affected_files": [
+      "e2e/regression.spec.ts"
+    ],
+    "related_commands": [
+      "CH1:SCAle",
+      "SAVEONEVent:WAVEform:SOUrce",
+      "SOURce1:FREQuency:FIXed",
+      "OUTPut1:STATe",
+      ":MEASure:VOLTage:DC?",
+      "INITIATE:CONTINUOUS"
+    ],
+    "corpus": "errors",
     "source": "rag/corpus/error_patterns/error_patterns_index.json"
   },
   {
     "id": "err_regression_set_and_query_roundtrip",
-    "corpus": "errors",
-    "title": "Regression Tests — set_and_query Roundtrip Scenarios",
-    "body": "R6.1: CH1:SCAle 2.0 — both write('CH1:SCAle 2.0') and query('CH1:SCAle?') present. R6.2: ACQuire:MODe — write always appears before query. R6.3: CH1:COUPling (empty value) — header-only command doesn't crash, both emitted. R6.4: CH1:SCAle + CH2:SCAle — two steps produce two independent pairs, no bleed-over. Run with: npm run test:regression.\nRegression scenarios R6.1-R6.4 catch: missing query after write, wrong ordering (query before write), header-only command crash, multi-step bleed-over between pairs.\nset_and_query produces both write('CMD value') and query('CMD?'). Either half can be lost during conversion or generation.\nAutomated regression tests validate both write and query appear, in correct order, for each set_and_query step.",
+    "type": "test_pattern",
+    "severity": "high",
     "tags": [
       "testing",
       "regression",
@@ -839,13 +1345,29 @@
       "write_query_pair",
       "test_pattern"
     ],
+    "title": "Regression Tests — set_and_query Roundtrip Scenarios",
+    "symptom": "Regression scenarios R6.1-R6.4 catch: missing query after write, wrong ordering (query before write), header-only command crash, multi-step bleed-over between pairs.",
+    "root_cause": "set_and_query produces both write('CMD value') and query('CMD?'). Either half can be lost during conversion or generation.",
+    "fix": "Automated regression tests validate both write and query appear, in correct order, for each set_and_query step.",
+    "body": "R6.1: CH1:SCAle 2.0 — both write('CH1:SCAle 2.0') and query('CH1:SCAle?') present. R6.2: ACQuire:MODe — write always appears before query. R6.3: CH1:COUPling (empty value) — header-only command doesn't crash, both emitted. R6.4: CH1:SCAle + CH2:SCAle — two steps produce two independent pairs, no bleed-over. Run with: npm run test:regression.\nRegression scenarios R6.1-R6.4 catch: missing query after write, wrong ordering (query before write), header-only command crash, multi-step bleed-over between pairs.\nset_and_query produces both write('CMD value') and query('CMD?'). Either half can be lost during conversion or generation.\nAutomated regression tests validate both write and query appear, in correct order, for each set_and_query step.",
+    "code_before": "",
+    "code_after": "",
+    "affected_files": [
+      "e2e/regression.spec.ts"
+    ],
+    "related_commands": [
+      "CH1:SCAle",
+      "ACQuire:MODe",
+      "CH1:COUPling",
+      "CH2:SCAle"
+    ],
+    "corpus": "errors",
     "source": "rag/corpus/error_patterns/error_patterns_index.json"
   },
   {
     "id": "err_regression_import_template_load",
-    "corpus": "errors",
-    "title": "Regression Tests — Import/Template Load Roundtrip Scenarios",
-    "body": "R7.1: Export → save flow JSON → import (replace) → re-export — Python must be byte-identical. R7.2: Import flow JSON → export Python — all commands survive. R7.3: Import in append mode — existing steps + imported steps both present. R7.4: Load Hello Scope template → export — *IDN?, *OPT? present, Python valid. Run with: npm run test:regression.\nRegression scenarios R7.1-R7.4 catch: import mutating step data, commands lost on roundtrip, append mode failure, template loading issues.\nImport/export cycle can corrupt step data through mutation, field loss, or incorrect merge logic.\nFour regression scenarios validate import/export fidelity: export→import→re-export byte-identical, all commands survive roundtrip, append mode preserves existing + imported, template loads produce expected commands.",
+    "type": "test_pattern",
+    "severity": "medium",
     "tags": [
       "testing",
       "regression",
@@ -855,13 +1377,27 @@
       "roundtrip",
       "test_pattern"
     ],
+    "title": "Regression Tests — Import/Template Load Roundtrip Scenarios",
+    "symptom": "Regression scenarios R7.1-R7.4 catch: import mutating step data, commands lost on roundtrip, append mode failure, template loading issues.",
+    "root_cause": "Import/export cycle can corrupt step data through mutation, field loss, or incorrect merge logic.",
+    "fix": "Four regression scenarios validate import/export fidelity: export→import→re-export byte-identical, all commands survive roundtrip, append mode preserves existing + imported, template loads produce expected commands.",
+    "body": "R7.1: Export → save flow JSON → import (replace) → re-export — Python must be byte-identical. R7.2: Import flow JSON → export Python — all commands survive. R7.3: Import in append mode — existing steps + imported steps both present. R7.4: Load Hello Scope template → export — *IDN?, *OPT? present, Python valid. Run with: npm run test:regression.\nRegression scenarios R7.1-R7.4 catch: import mutating step data, commands lost on roundtrip, append mode failure, template loading issues.\nImport/export cycle can corrupt step data through mutation, field loss, or incorrect merge logic.\nFour regression scenarios validate import/export fidelity: export→import→re-export byte-identical, all commands survive roundtrip, append mode preserves existing + imported, template loads produce expected commands.",
+    "code_before": "",
+    "code_after": "",
+    "affected_files": [
+      "e2e/regression.spec.ts"
+    ],
+    "related_commands": [
+      "*IDN?",
+      "*OPT?"
+    ],
+    "corpus": "errors",
     "source": "rag/corpus/error_patterns/error_patterns_index.json"
   },
   {
     "id": "err_xml_wait_seconds_value_vs_field",
-    "corpus": "errors",
-    "title": "XML wait_seconds Using <value> Instead of <field> — Python Generation Fails",
-    "body": "When a Blockly block definition uses FieldNumber, the XML must use <field name=\"SECONDS\">2</field>, not <value name=\"SECONDS\"><shadow ...>. The <value> format is for input connections (pluggable blocks), while <field> is for inline field values. The visual rendering may look similar but the generator accesses them differently: block.getFieldValue('SECONDS') vs block.getInputValue('SECONDS').\nTekExpress_USB.xml wait_seconds blocks fail to generate Python. Block appears correct in UI but produces no output.\nwait_seconds block definition uses FieldNumber (a <field> element), but the XML used <value> with shadow blocks. Blockly renders it visually but the generator doesn't find the expected field.\nChanged all 6 instances in TekExpress_USB.xml from <value name=\"SECONDS\"><shadow type=\"math_number\"><field name=\"NUM\">2</field></shadow></value> to <field name=\"SECONDS\">2</field>.\n<block type=\"wait_seconds\" id=\"tx_wait_1\">\n  <value name=\"SECONDS\">\n    <shadow type=\"math_number\" id=\"num_2s_1\">\n      <field name=\"NUM\">2</field>\n    </shadow>\n  </value>\n</block>\n<block type=\"wait_seconds\" id=\"tx_wait_1\">\n  <field name=\"SECONDS\">2</field>\n</block>",
+    "type": "bug_fix",
+    "severity": "medium",
     "tags": [
       "xml",
       "validation",
@@ -870,13 +1406,24 @@
       "field",
       "bug_fix"
     ],
+    "title": "XML wait_seconds Using <value> Instead of <field> — Python Generation Fails",
+    "symptom": "TekExpress_USB.xml wait_seconds blocks fail to generate Python. Block appears correct in UI but produces no output.",
+    "root_cause": "wait_seconds block definition uses FieldNumber (a <field> element), but the XML used <value> with shadow blocks. Blockly renders it visually but the generator doesn't find the expected field.",
+    "fix": "Changed all 6 instances in TekExpress_USB.xml from <value name=\"SECONDS\"><shadow type=\"math_number\"><field name=\"NUM\">2</field></shadow></value> to <field name=\"SECONDS\">2</field>.",
+    "body": "When a Blockly block definition uses FieldNumber, the XML must use <field name=\"SECONDS\">2</field>, not <value name=\"SECONDS\"><shadow ...>. The <value> format is for input connections (pluggable blocks), while <field> is for inline field values. The visual rendering may look similar but the generator accesses them differently: block.getFieldValue('SECONDS') vs block.getInputValue('SECONDS').\nTekExpress_USB.xml wait_seconds blocks fail to generate Python. Block appears correct in UI but produces no output.\nwait_seconds block definition uses FieldNumber (a <field> element), but the XML used <value> with shadow blocks. Blockly renders it visually but the generator doesn't find the expected field.\nChanged all 6 instances in TekExpress_USB.xml from <value name=\"SECONDS\"><shadow type=\"math_number\"><field name=\"NUM\">2</field></shadow></value> to <field name=\"SECONDS\">2</field>.\n<block type=\"wait_seconds\" id=\"tx_wait_1\">\n  <value name=\"SECONDS\">\n    <shadow type=\"math_number\" id=\"num_2s_1\">\n      <field name=\"NUM\">2</field>\n    </shadow>\n  </value>\n</block>\n<block type=\"wait_seconds\" id=\"tx_wait_1\">\n  <field name=\"SECONDS\">2</field>\n</block>",
+    "code_before": "<block type=\"wait_seconds\" id=\"tx_wait_1\">\n  <value name=\"SECONDS\">\n    <shadow type=\"math_number\" id=\"num_2s_1\">\n      <field name=\"NUM\">2</field>\n    </shadow>\n  </value>\n</block>",
+    "code_after": "<block type=\"wait_seconds\" id=\"tx_wait_1\">\n  <field name=\"SECONDS\">2</field>\n</block>",
+    "affected_files": [
+      "examples/TekExpress_USB.xml"
+    ],
+    "related_commands": [],
+    "corpus": "errors",
     "source": "rag/corpus/error_patterns/error_patterns_index.json"
   },
   {
     "id": "err_xml_missing_termination_field",
-    "corpus": "errors",
-    "title": "XML Missing TERMINATION Field — configure_channel Block Incomplete",
-    "body": "The configure_channel block now generates scope.write('CH1:TERMINATION ONEMEG') in addition to SCALE, OFFSET, and COUPLING commands. Without the field, the termination command was silently omitted.\nbasic_setup_waveform.xml configure_channel block missing TERMINATION field. Block definition updated to include termination but XML not updated.\nBlock definition for configure_channel was updated to include a TERMINATION field (50Ω vs 1MΩ selection), but the example XML file was not updated to match.\nAdded <field name=\"TERMINATION\">ONEMEG</field> to the configure_channel block in basic_setup_waveform.xml.\n<block type=\"configure_channel\">\n  <field name=\"CHANNEL\">CH1</field>\n  <field name=\"SCALE\">1.0</field>\n  <field name=\"OFFSET\">0.0</field>\n  <field name=\"COUPLING\">DC</field>\n</block>\n<block type=\"configure_channel\">\n  <field name=\"CHANNEL\">CH1</field>\n  <field name=\"SCALE\">1.0</field>\n  <field name=\"OFFSET\">0.0</field>\n  <field name=\"COUPLING\">DC</field>\n  <field name=\"TERMINATION\">ONEMEG</field>\n</block>",
+    "type": "bug_fix",
+    "severity": "low",
     "tags": [
       "xml",
       "validation",
@@ -885,13 +1432,26 @@
       "termination",
       "bug_fix"
     ],
+    "title": "XML Missing TERMINATION Field — configure_channel Block Incomplete",
+    "symptom": "basic_setup_waveform.xml configure_channel block missing TERMINATION field. Block definition updated to include termination but XML not updated.",
+    "root_cause": "Block definition for configure_channel was updated to include a TERMINATION field (50Ω vs 1MΩ selection), but the example XML file was not updated to match.",
+    "fix": "Added <field name=\"TERMINATION\">ONEMEG</field> to the configure_channel block in basic_setup_waveform.xml.",
+    "body": "The configure_channel block now generates scope.write('CH1:TERMINATION ONEMEG') in addition to SCALE, OFFSET, and COUPLING commands. Without the field, the termination command was silently omitted.\nbasic_setup_waveform.xml configure_channel block missing TERMINATION field. Block definition updated to include termination but XML not updated.\nBlock definition for configure_channel was updated to include a TERMINATION field (50Ω vs 1MΩ selection), but the example XML file was not updated to match.\nAdded <field name=\"TERMINATION\">ONEMEG</field> to the configure_channel block in basic_setup_waveform.xml.\n<block type=\"configure_channel\">\n  <field name=\"CHANNEL\">CH1</field>\n  <field name=\"SCALE\">1.0</field>\n  <field name=\"OFFSET\">0.0</field>\n  <field name=\"COUPLING\">DC</field>\n</block>\n<block type=\"configure_channel\">\n  <field name=\"CHANNEL\">CH1</field>\n  <field name=\"SCALE\">1.0</field>\n  <field name=\"OFFSET\">0.0</field>\n  <field name=\"COUPLING\">DC</field>\n  <field name=\"TERMINATION\">ONEMEG</field>\n</block>",
+    "code_before": "<block type=\"configure_channel\">\n  <field name=\"CHANNEL\">CH1</field>\n  <field name=\"SCALE\">1.0</field>\n  <field name=\"OFFSET\">0.0</field>\n  <field name=\"COUPLING\">DC</field>\n</block>",
+    "code_after": "<block type=\"configure_channel\">\n  <field name=\"CHANNEL\">CH1</field>\n  <field name=\"SCALE\">1.0</field>\n  <field name=\"OFFSET\">0.0</field>\n  <field name=\"COUPLING\">DC</field>\n  <field name=\"TERMINATION\">ONEMEG</field>\n</block>",
+    "affected_files": [
+      "examples/basic_setup_waveform.xml"
+    ],
+    "related_commands": [
+      "CH1:TERMINATION"
+    ],
+    "corpus": "errors",
     "source": "rag/corpus/error_patterns/error_patterns_index.json"
   },
   {
     "id": "err_transport_selection_rule",
-    "corpus": "errors",
-    "title": "Transport Selection Rule — VISA vs Raw Socket Per Command Type",
-    "body": "Decision matrix: *IDN?, ACQ:MODE, MEASU:IMM? → PyVISA (message-based). HARDCopy:DATA? → PyVISA INSTR only (definite-length block). SAVE:IMAGe + READFile → raw socket (file-based stream). FILESystem:READFile → raw socket (unframed binary). CURVE? (large) → raw socket preferred. Hard fail: agent must refuse to execute FILESystem:READFile over PyVISA. Mixed-transport workflows are expected and correct — use PyVISA for setup/measurement, switch to raw socket for binary transfers.\nBinary file transfers fail over PyVISA. Timeout errors on READFILE. UnicodeDecodeError on mixed binary/text traffic.\nVISA enforces message-based completion rules (termination character, block header, or driver-level end condition). FILESYSTEM:READFILE produces unframed binary with no such markers. These are fundamentally incompatible.\nMandatory transport selection: PyVISA for message-based operations (config, measurements, queries); raw TCP socket for stream-based operations (screenshots, file transfer, binary data). AI agents must inspect each SCPI command and select transport accordingly.",
+    "type": "validation_rule",
+    "severity": "critical",
     "tags": [
       "transport",
       "pyvisa",
@@ -901,13 +1461,29 @@
       "rule",
       "validation_rule"
     ],
+    "title": "Transport Selection Rule — VISA vs Raw Socket Per Command Type",
+    "symptom": "Binary file transfers fail over PyVISA. Timeout errors on READFILE. UnicodeDecodeError on mixed binary/text traffic.",
+    "root_cause": "VISA enforces message-based completion rules (termination character, block header, or driver-level end condition). FILESYSTEM:READFILE produces unframed binary with no such markers. These are fundamentally incompatible.",
+    "fix": "Mandatory transport selection: PyVISA for message-based operations (config, measurements, queries); raw TCP socket for stream-based operations (screenshots, file transfer, binary data). AI agents must inspect each SCPI command and select transport accordingly.",
+    "body": "Decision matrix: *IDN?, ACQ:MODE, MEASU:IMM? → PyVISA (message-based). HARDCopy:DATA? → PyVISA INSTR only (definite-length block). SAVE:IMAGe + READFile → raw socket (file-based stream). FILESystem:READFile → raw socket (unframed binary). CURVE? (large) → raw socket preferred. Hard fail: agent must refuse to execute FILESystem:READFile over PyVISA. Mixed-transport workflows are expected and correct — use PyVISA for setup/measurement, switch to raw socket for binary transfers.\nBinary file transfers fail over PyVISA. Timeout errors on READFILE. UnicodeDecodeError on mixed binary/text traffic.\nVISA enforces message-based completion rules (termination character, block header, or driver-level end condition). FILESYSTEM:READFILE produces unframed binary with no such markers. These are fundamentally incompatible.\nMandatory transport selection: PyVISA for message-based operations (config, measurements, queries); raw TCP socket for stream-based operations (screenshots, file transfer, binary data). AI agents must inspect each SCPI command and select transport accordingly.",
+    "code_before": "",
+    "code_after": "",
+    "affected_files": [
+      "helper/capture_screenshot.py"
+    ],
+    "related_commands": [
+      "FILESYSTEM:READFILE",
+      "SAVE:IMAGe",
+      "HARDCopy:DATA?",
+      "CURVE?"
+    ],
+    "corpus": "errors",
     "source": "rag/corpus/error_patterns/error_patterns_index.json"
   },
   {
     "id": "err_python_runtime_validation",
-    "corpus": "errors",
-    "title": "Python Runtime Validation — Generated Code Compiles and Runs with Mock PyVISA",
-    "body": "npm run test:python-validate generates a script for a known step sequence, runs python -m py_compile (syntax check), then runs it with a mock PyVISA module (no hardware needed). Skips gracefully if Python is not installed. This catches: syntax errors in generated Python, import errors, undefined variable references, and basic runtime errors. Does not catch SCPI-level errors since instruments are mocked.\nN/A — validation infrastructure\nN/A — test infrastructure\nN/A — test implementation",
+    "type": "test_pattern",
+    "severity": "medium",
     "tags": [
       "testing",
       "python",
@@ -916,13 +1492,24 @@
       "mock_pyvisa",
       "test_pattern"
     ],
+    "title": "Python Runtime Validation — Generated Code Compiles and Runs with Mock PyVISA",
+    "symptom": "N/A — validation infrastructure",
+    "root_cause": "N/A — test infrastructure",
+    "fix": "N/A — test implementation",
+    "body": "npm run test:python-validate generates a script for a known step sequence, runs python -m py_compile (syntax check), then runs it with a mock PyVISA module (no hardware needed). Skips gracefully if Python is not installed. This catches: syntax errors in generated Python, import errors, undefined variable references, and basic runtime errors. Does not catch SCPI-level errors since instruments are mocked.\nN/A — validation infrastructure\nN/A — test infrastructure\nN/A — test implementation",
+    "code_before": "",
+    "code_after": "",
+    "affected_files": [
+      "src/generators/pythonRuntimeValidation.test.ts"
+    ],
+    "related_commands": [],
+    "corpus": "errors",
     "source": "rag/corpus/error_patterns/error_patterns_index.json"
   },
   {
     "id": "err_gpt_loop_mutation_missing",
-    "corpus": "errors",
-    "title": "GPT Missing Loop Variable Mutation in XML — controls_for Without <mutation>",
-    "body": "Without the mutation element, Blockly may: 1) Not properly register the loop variable in its variable model, 2) Break variable scoping, 3) Cause unstable XML roundtrip import/export. The generator uses the VAR field as a fallback so code generation still works, but the Blockly UI behavior may be incorrect.\nGPT-generated XML has controls_for blocks with <field name=\"VAR\">frame</field> but missing <mutation><variable>frame</variable></mutation>. Blockly may not properly track the loop variable.\nCustom GPT instructions did not include the mutation element in loop block examples. GPT generates the VAR field but omits the mutation.\nUpdated GPT instructions to require mutation in controls_for blocks. Generator also handles this gracefully by using VAR field as fallback when mutation is missing.\n<block type=\"controls_for\">\n  <field name=\"VAR\">frame</field>\n  <!-- MISSING mutation -->\n</block>\n<block type=\"controls_for\">\n  <field name=\"VAR\">frame</field>\n  <mutation><variable>frame</variable></mutation>\n</block>",
+    "type": "generation_error",
+    "severity": "medium",
     "tags": [
       "gpt",
       "xml_generation",
@@ -931,6 +1518,18 @@
       "controls_for",
       "generation_error"
     ],
+    "title": "GPT Missing Loop Variable Mutation in XML — controls_for Without <mutation>",
+    "symptom": "GPT-generated XML has controls_for blocks with <field name=\"VAR\">frame</field> but missing <mutation><variable>frame</variable></mutation>. Blockly may not properly track the loop variable.",
+    "root_cause": "Custom GPT instructions did not include the mutation element in loop block examples. GPT generates the VAR field but omits the mutation.",
+    "fix": "Updated GPT instructions to require mutation in controls_for blocks. Generator also handles this gracefully by using VAR field as fallback when mutation is missing.",
+    "body": "Without the mutation element, Blockly may: 1) Not properly register the loop variable in its variable model, 2) Break variable scoping, 3) Cause unstable XML roundtrip import/export. The generator uses the VAR field as a fallback so code generation still works, but the Blockly UI behavior may be incorrect.\nGPT-generated XML has controls_for blocks with <field name=\"VAR\">frame</field> but missing <mutation><variable>frame</variable></mutation>. Blockly may not properly track the loop variable.\nCustom GPT instructions did not include the mutation element in loop block examples. GPT generates the VAR field but omits the mutation.\nUpdated GPT instructions to require mutation in controls_for blocks. Generator also handles this gracefully by using VAR field as fallback when mutation is missing.\n<block type=\"controls_for\">\n  <field name=\"VAR\">frame</field>\n  <!-- MISSING mutation -->\n</block>\n<block type=\"controls_for\">\n  <field name=\"VAR\">frame</field>\n  <mutation><variable>frame</variable></mutation>\n</block>",
+    "code_before": "<block type=\"controls_for\">\n  <field name=\"VAR\">frame</field>\n  <!-- MISSING mutation -->\n</block>",
+    "code_after": "<block type=\"controls_for\">\n  <field name=\"VAR\">frame</field>\n  <mutation><variable>frame</variable></mutation>\n</block>",
+    "affected_files": [
+      "CUSTOM_GPT_INSTRUCTIONS.txt"
+    ],
+    "related_commands": [],
+    "corpus": "errors",
     "source": "rag/corpus/error_patterns/error_patterns_index.json"
   }
 ]

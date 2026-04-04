@@ -1,10 +1,11 @@
 {
   "version": "1.0.0",
-  "generatedAt": "2026-04-04T06:49:07.981Z",
+  "generatedAt": "2026-04-04T07:19:47.783Z",
   "corpora": {
     "scpi": "scpi_index.json",
     "tmdevices": "tmdevices_index.json",
     "app_logic": "app_logic_index.json",
+    "scope_logic": "scope_logic_index.json",
     "templates": "templates_index.json",
     "errors": "errors_index.json",
     "pyvisa_tekhsi": "pyvisa_tekhsi_index.json"
@@ -13,8 +14,9 @@
     "scpi": 31229,
     "tmdevices": 4408,
     "app_logic": 152,
+    "scope_logic": 12,
     "templates": 42,
-    "errors": 70,
+    "errors": 71,
     "pyvisa_tekhsi": 38
   }
 }

@@ -2,9 +2,9 @@ import fs from 'fs';
 import path from 'path';
 import { fileURLToPath } from 'url';
 
-type RagCorpus = 'scpi' | 'tmdevices' | 'app_logic' | 'templates' | 'errors' | 'pyvisa_tekhsi';
+type RagCorpus = 'scpi' | 'tmdevices' | 'app_logic' | 'scope_logic' | 'templates' | 'errors' | 'pyvisa_tekhsi';
 
-interface RagChunk {
+interface RagChunk extends Record<string, unknown> {
   id: string;
   corpus: RagCorpus;
   title: string;
@@ -166,6 +166,7 @@ function inferCorpusFromPath(filePath: string, fallback: RagCorpus): RagCorpus {
   if (normalized.includes('/error_patterns/')) return 'errors';
   if (normalized.includes('/tmdevices/')) return 'tmdevices';
   if (normalized.includes('/scpi/')) return 'scpi';
+  if (normalized.includes('/scope_logic/')) return 'scope_logic';
   if (normalized.includes('/templates/')) return 'templates';
   if (normalized.includes('/pyvisa_tekhsi/')) return 'pyvisa_tekhsi';
   return fallback;
@@ -198,6 +199,7 @@ function buildChunksFromAiCorpusJson(filePath: string, defaultCorpus: RagCorpus)
       const typeTag = toText(obj.type);
       if (typeTag) tags.push(slugify(typeTag));
       return {
+        ...obj,
         id: slugify(toText(obj.id) || `${path.basename(filePath, '.json')}_${idx + 1}`),
         corpus: resolvedCorpus,
         title: title.slice(0, 180),
@@ -242,6 +244,7 @@ function main(): void {
   const tmChunks: RagChunk[] = [];
   const templateChunks: RagChunk[] = [];
   const appLogicChunks: RagChunk[] = [];
+  const scopeLogicChunks: RagChunk[] = [];
   const errorChunks: RagChunk[] = [];
   const pyvisaTekhsiChunks: RagChunk[] = [];
 
@@ -272,6 +275,7 @@ function main(): void {
     chunks.forEach((chunk) => {
       if (chunk.corpus === 'scpi') scpiChunks.push(chunk);
       else if (chunk.corpus === 'tmdevices') tmChunks.push(chunk);
+      else if (chunk.corpus === 'scope_logic') scopeLogicChunks.push(chunk);
       else if (chunk.corpus === 'templates') templateChunks.push(chunk);
       else if (chunk.corpus === 'errors') errorChunks.push(chunk);
       else if (chunk.corpus === 'pyvisa_tekhsi') pyvisaTekhsiChunks.push(chunk);
@@ -284,6 +288,7 @@ function main(): void {
     chunks.forEach((chunk) => {
       if (chunk.corpus === 'scpi') scpiChunks.push(chunk);
       else if (chunk.corpus === 'tmdevices') tmChunks.push(chunk);
+      else if (chunk.corpus === 'scope_logic') scopeLogicChunks.push(chunk);
       else if (chunk.corpus === 'templates') templateChunks.push(chunk);
       else if (chunk.corpus === 'errors') errorChunks.push(chunk);
       else if (chunk.corpus === 'pyvisa_tekhsi') pyvisaTekhsiChunks.push(chunk);
@@ -295,6 +300,7 @@ function main(): void {
   writeShard('tmdevices_index.json', tmChunks);
   writeShard('templates_index.json', templateChunks);
   writeShard('app_logic_index.json', appLogicChunks);
+  writeShard('scope_logic_index.json', scopeLogicChunks);
   writeShard('errors_index.json', errorChunks);
   writeShard('pyvisa_tekhsi_index.json', pyvisaTekhsiChunks);
 
@@ -305,6 +311,7 @@ function main(): void {
       scpi: 'scpi_index.json',
       tmdevices: 'tmdevices_index.json',
       app_logic: 'app_logic_index.json',
+      scope_logic: 'scope_logic_index.json',
       templates: 'templates_index.json',
       errors: 'errors_index.json',
       pyvisa_tekhsi: 'pyvisa_tekhsi_index.json',
@@ -313,6 +320,7 @@ function main(): void {
       scpi: scpiChunks.length,
       tmdevices: tmChunks.length,
       app_logic: appLogicChunks.length,
+      scope_logic: scopeLogicChunks.length,
       templates: templateChunks.length,
       errors: errorChunks.length,
       pyvisa_tekhsi: pyvisaTekhsiChunks.length,
@@ -321,7 +329,7 @@ function main(): void {
   fs.writeFileSync(path.join(OUT_DIR, 'manifest.json'), JSON.stringify(manifest, null, 2));
 
   // eslint-disable-next-line no-console
-  console.log(`RAG shards generated in public/rag (scpi=${scpiChunks.length}, tmdevices=${tmChunks.length}, app_logic=${appLogicChunks.length}, templates=${templateChunks.length}, errors=${errorChunks.length}, pyvisa_tekhsi=${pyvisaTekhsiChunks.length})`);
+  console.log(`RAG shards generated in public/rag (scpi=${scpiChunks.length}, tmdevices=${tmChunks.length}, app_logic=${appLogicChunks.length}, scope_logic=${scopeLogicChunks.length}, templates=${templateChunks.length}, errors=${errorChunks.length}, pyvisa_tekhsi=${pyvisaTekhsiChunks.length})`);
 }
 
 main();
