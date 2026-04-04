@@ -14856,6 +14856,28 @@ scpi.query('*OPC?')`;
                     />
                   </div>
                 )}
+                <div>
+                  <label className="block font-semibold mb-1">VNC Target Host</label>
+                  <input
+                    type="text"
+                    value={editingDevice.vncHost || ''}
+                    onChange={(e) => updateDevice(editingDevice.id, { vncHost: e.target.value })}
+                    placeholder={editingDevice.host || 'Uses Host by default'}
+                    className="w-full px-2 py-1 border rounded text-xs font-mono"
+                  />
+                  <div className="mt-1 text-[11px] text-gray-500">
+                    Leave blank to use the main device host. Set this to another machine to test the VNC bridge separately.
+                  </div>
+                </div>
+                <div>
+                  <label className="block font-semibold mb-1">VNC Target Port</label>
+                  <input
+                    type="number"
+                    value={editingDevice.vncPort || 5900}
+                    onChange={(e) => updateDevice(editingDevice.id, { vncPort: parseInt(e.target.value, 10) || 5900 })}
+                    className="w-full px-2 py-1 border rounded text-xs"
+                  />
+                </div>
               </>
             )}
             <div>
