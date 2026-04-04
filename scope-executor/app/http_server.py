@@ -4,7 +4,12 @@ HTTP server for the Tek Automate executor.
 Endpoints:
 - GET /health
 - GET /stream
+- GET /scan
+- GET /vnc/probe
+- GET /vnc/status
 - POST /run
+- POST /vnc/start
+- POST /vnc/stop
 """
 
 import json
@@ -14,10 +19,12 @@ import threading
 import time
 from http.server import BaseHTTPRequestHandler, HTTPServer
 from socketserver import ThreadingMixIn
+from urllib.parse import parse_qs, urlparse
 
 from app.code_runner import run_executor_action, run_python_code
 from app.live_token_manager import LiveTokenManager
 from app.tk_utils import TkSignal
+from app.vnc_proxy import VncProxyManager
 
 PROTOCOL_VERSION = 1
 _HIDDEN_STREAM_PREFIXES = ("__TEKA_LIVE_CAPTURE__", "__TEKA_CAPTURE__")
@@ -131,23 +138,46 @@ class _Handler(BaseHTTPRequestHandler):
         self.end_headers()
 
     def do_GET(self):
-        if self.path in ("/", "/health"):
+        parsed = urlparse(self.path)
+        path = parsed.path
+        query = parse_qs(parsed.query)
+        if path in ("/", "/health"):
             self._json_response(200, {"status": "ok", "protocol_version": PROTOCOL_VERSION})
-            self._emit("GET", self.path, 200, "health check")
+            self._emit("GET", path, 200, "health check")
             return
-        if self.path == "/token/status":
+        if path == "/token/status":
             if not self._require_localhost():
                 return
             self._json_response(200, {"ok": True, **(self.server_thread.get_live_token_status() if self.server_thread else {})})
             self._emit("GET", "/token/status", 200, "token status")
             return
-        if self.path == "/stream":
+        if path == "/stream":
             self._handle_sse()
             return
-        if self.path == "/scan":
+        if path == "/scan":
             if not self._require_live_token():
                 return
             self._handle_scan()
+            return
+        if path == "/vnc/probe":
+            if not self._require_live_token():
+                return
+            target_host = (query.get("target_host") or [""])[0]
+            target_port = int((query.get("target_port") or ["5900"])[0] or "5900")
+            result = self.server_thread.vnc_probe(target_host, target_port) if self.server_thread else {"ok": False, "error": "Server unavailable"}
+            code = 200 if result.get("ok") else 400
+            self._json_response(code, result)
+            self._emit("GET", "/vnc/probe", code, f"target={target_host}:{target_port} available={result.get('available')}")
+            return
+        if path == "/vnc/status":
+            if not self._require_live_token():
+                return
+            target_host = (query.get("target_host") or [""])[0] or None
+            target_port = int((query.get("target_port") or ["5900"])[0] or "5900")
+            result = self.server_thread.vnc_status(target_host, target_port) if self.server_thread else {"ok": False, "error": "Server unavailable"}
+            code = 200 if result.get("ok") else 400
+            self._json_response(code, result)
+            self._emit("GET", "/vnc/status", code, f"target={target_host or '*'}:{target_port} running={result.get('running')}")
             return
         self.send_response(404)
         self.end_headers()
@@ -226,6 +256,12 @@ class _Handler(BaseHTTPRequestHandler):
             return
         if self.path == "/token/revoke":
             self._handle_token_revoke()
+            return
+        if self.path == "/vnc/start":
+            self._handle_vnc_start()
+            return
+        if self.path == "/vnc/stop":
+            self._handle_vnc_stop()
             return
         if self.path != "/run":
             self.send_response(404)
@@ -470,6 +506,52 @@ class _Handler(BaseHTTPRequestHandler):
         self._json_response(200, {"ok": True, **status})
         self._emit("POST", "/token/revoke", 200, "revoked live token")
 
+    def _handle_vnc_start(self):
+        if not self._require_live_token():
+            return
+        try:
+            data = self._read_json_body()
+        except ValueError as exc:
+            self._json_response(400, {"ok": False, "error": str(exc)})
+            self._emit("POST", "/vnc/start", 400, str(exc))
+            return
+        except json.JSONDecodeError:
+            self._json_response(400, {"ok": False, "error": "Invalid JSON"})
+            self._emit("POST", "/vnc/start", 400, "invalid JSON")
+            return
+        target_host = str(data.get("target_host") or "").strip()
+        target_port = int(data.get("target_port") or 5900)
+        listen_port = int(data.get("listen_port") or 6080)
+        try:
+            result = self.server_thread.vnc_start(target_host, target_port, listen_port) if self.server_thread else {"ok": False, "error": "Server unavailable"}
+            code = 200 if result.get("ok") else 400
+            self._json_response(code, result)
+            self._emit("POST", "/vnc/start", code, f"target={target_host}:{target_port} ws={result.get('ws_url') or '-'}")
+        except Exception as exc:
+            self._json_response(500, {"ok": False, "error": str(exc)})
+            self._emit("POST", "/vnc/start", 500, str(exc))
+
+    def _handle_vnc_stop(self):
+        if not self._require_live_token():
+            return
+        session_id = None
+        try:
+            if int(self.headers.get("Content-Length", "0") or "0") > 0:
+                data = self._read_json_body()
+                session_id = data.get("session_id")
+        except ValueError as exc:
+            self._json_response(400, {"ok": False, "error": str(exc)})
+            self._emit("POST", "/vnc/stop", 400, str(exc))
+            return
+        except json.JSONDecodeError:
+            self._json_response(400, {"ok": False, "error": "Invalid JSON"})
+            self._emit("POST", "/vnc/stop", 400, "invalid JSON")
+            return
+        result = self.server_thread.vnc_stop(session_id) if self.server_thread else {"ok": False, "error": "Server unavailable"}
+        code = 200 if result.get("ok") else 400
+        self._json_response(code, result)
+        self._emit("POST", "/vnc/stop", code, f"stopped={result.get('stopped')}")
+
 
 class HTTPServerThread(threading.Thread):
     def __init__(self, host: str, port: int):
@@ -480,6 +562,10 @@ class HTTPServerThread(threading.Thread):
         self._prepare_error: str | None = None
         self.get_timeout = lambda: 30
         self._live_token_manager = LiveTokenManager()
+        self._vnc_proxy_manager = VncProxyManager(
+            listen_host=host,
+            live_token_status_provider=self.get_live_token_status,
+        )
 
         self.server_started = TkSignal()
         self.server_error = TkSignal()
@@ -514,6 +600,7 @@ class HTTPServerThread(threading.Thread):
             self.server_status_changed.emit("error")
 
     def stop(self):
+        self._vnc_proxy_manager.shutdown()
         if self._server:
             try:
                 self._server.shutdown()
@@ -544,3 +631,15 @@ class HTTPServerThread(threading.Thread):
 
     def validate_live_token(self, token: str | None):
         return self._live_token_manager.validate(token)
+
+    def vnc_probe(self, target_host: str, target_port: int = 5900):
+        return self._vnc_proxy_manager.probe(target_host, target_port)
+
+    def vnc_start(self, target_host: str, target_port: int = 5900, listen_port: int = 6080):
+        return self._vnc_proxy_manager.start(target_host, target_port, listen_port)
+
+    def vnc_stop(self, session_id: str | None = None):
+        return self._vnc_proxy_manager.stop(session_id)
+
+    def vnc_status(self, target_host: str | None = None, target_port: int = 5900):
+        return self._vnc_proxy_manager.status(target_host, target_port)

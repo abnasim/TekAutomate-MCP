@@ -244,6 +244,9 @@ interface InstrumentConfig {
   connectionType: ConnectionType;
   host: string;
   port: number;
+  vncHost?: string;
+  vncPort?: number;
+  vncEnabled?: boolean;
   usbVendorId: string;
   usbProductId: string;
   usbSerial: string;
@@ -1566,8 +1569,19 @@ function AppInner() {
   const [liveModeCapturing, setLiveModeCapturing] = useState(false);
   const [liveModeAutoRefresh, setLiveModeAutoRefresh] = useState(false);
   const [liveModeRefreshInterval, setLiveModeRefreshInterval] = useState(5); // seconds: 3, 5, or 10
+  const [liveModeVncAvailable, setLiveModeVncAvailable] = useState<boolean | null>(null);
+  const [liveModeVncChecking, setLiveModeVncChecking] = useState(false);
+  const [liveModeVncConnecting, setLiveModeVncConnecting] = useState(false);
+  const [liveModeVncError, setLiveModeVncError] = useState<string | null>(null);
+  const [liveModeVncSession, setLiveModeVncSession] = useState<null | {
+    sessionId: string;
+    wsUrl: string;
+    targetHost: string;
+    targetPort: number;
+  }>(null);
   const [liveModeInitialCaptureDone, setLiveModeInitialCaptureDone] = useState(false);
   const liveModeConsecutiveFailures = React.useRef(0);
+  const liveModeVncTargetKeyRef = React.useRef('');
   const [connectedInstrumentIdn, setConnectedInstrumentIdn] = useState<string | null>(null);
   const [executorScannedInstruments, setExecutorScannedInstruments] = useState<Array<{
     resource: string;
@@ -4127,6 +4141,133 @@ function AppInner() {
     };
   }, [config, devices]);
 
+  const liveModeVncTarget = useMemo(() => {
+    const enabled = activeInstrumentConfig.vncEnabled !== false;
+    const targetHost = String(activeInstrumentConfig.vncHost || activeInstrumentConfig.host || '').trim();
+    const targetPort = Number(activeInstrumentConfig.vncPort || 5900);
+    return {
+      enabled,
+      targetHost,
+      targetPort: Number.isFinite(targetPort) && targetPort > 0 ? targetPort : 5900,
+    };
+  }, [activeInstrumentConfig]);
+
+  const probeLiveModeVncAvailability = useCallback(async () => {
+    if (!executorEndpoint || !liveModeVncTarget.enabled || !liveModeVncTarget.targetHost) {
+      setLiveModeVncAvailable(false);
+      setLiveModeVncSession(null);
+      return;
+    }
+    setLiveModeVncChecking(true);
+    try {
+      const params = new URLSearchParams({
+        target_host: liveModeVncTarget.targetHost,
+        target_port: String(liveModeVncTarget.targetPort),
+      });
+      const res = await fetch(`http://${executorEndpoint.host}:${executorEndpoint.port}/vnc/probe?${params.toString()}`, {
+        headers: buildExecutorHeaders(),
+        signal: AbortSignal.timeout(5000),
+      });
+      const json = await res.json() as { ok?: boolean; available?: boolean; error?: string | null };
+      setLiveModeVncAvailable(Boolean(json.ok && json.available));
+      if (json.ok && json.available) {
+        setLiveModeVncError(null);
+      } else if (json.error) {
+        setLiveModeVncError(json.error);
+      }
+    } catch (error) {
+      setLiveModeVncAvailable(false);
+      setLiveModeVncError(error instanceof Error ? error.message : 'Failed to probe VNC availability.');
+    } finally {
+      setLiveModeVncChecking(false);
+    }
+  }, [buildExecutorHeaders, executorEndpoint, liveModeVncTarget]);
+
+  const toggleLiveModeVnc = useCallback(async () => {
+    if (!executorEndpoint) {
+      setLiveModeVncError('Executor not configured. Connect to the executor before using VNC.');
+      return;
+    }
+    setLiveModeVncError(null);
+    if (liveModeVncSession) {
+      setLiveModeVncConnecting(true);
+      try {
+        await fetch(`http://${executorEndpoint.host}:${executorEndpoint.port}/vnc/stop`, {
+          method: 'POST',
+          headers: buildExecutorHeaders({ 'Content-Type': 'application/json' }),
+          body: JSON.stringify({ session_id: liveModeVncSession.sessionId }),
+          signal: AbortSignal.timeout(5000),
+        });
+        setLiveModeVncSession(null);
+      } catch (error) {
+        setLiveModeVncError(error instanceof Error ? error.message : 'Failed to stop VNC session.');
+      } finally {
+        setLiveModeVncConnecting(false);
+      }
+      return;
+    }
+    if (!liveModeVncTarget.enabled || !liveModeVncTarget.targetHost) {
+      setLiveModeVncAvailable(false);
+      setLiveModeVncError('VNC is not configured for this scope.');
+      return;
+    }
+    setLiveModeVncConnecting(true);
+    try {
+      const res = await fetch(`http://${executorEndpoint.host}:${executorEndpoint.port}/vnc/start`, {
+        method: 'POST',
+        headers: buildExecutorHeaders({ 'Content-Type': 'application/json' }),
+        body: JSON.stringify({
+          target_host: liveModeVncTarget.targetHost,
+          target_port: liveModeVncTarget.targetPort,
+        }),
+        signal: AbortSignal.timeout(7000),
+      });
+      const json = await res.json() as {
+        ok?: boolean;
+        error?: string;
+        session_id?: string;
+        ws_url?: string;
+        target?: { host?: string; port?: number };
+      };
+      if (!json.ok || !json.session_id || !json.ws_url) {
+        throw new Error(json.error || 'Failed to start VNC session.');
+      }
+      setLiveModeVncAvailable(true);
+      setLiveModeVncSession({
+        sessionId: json.session_id,
+        wsUrl: json.ws_url,
+        targetHost: String(json.target?.host || liveModeVncTarget.targetHost),
+        targetPort: Number(json.target?.port || liveModeVncTarget.targetPort),
+      });
+    } catch (error) {
+      setLiveModeVncError(error instanceof Error ? error.message : 'Failed to start VNC session.');
+    } finally {
+      setLiveModeVncConnecting(false);
+    }
+  }, [buildExecutorHeaders, executorEndpoint, liveModeVncSession, liveModeVncTarget]);
+
+  useEffect(() => {
+    const targetKey = executorEndpoint && liveModeVncTarget.enabled && liveModeVncTarget.targetHost
+      ? `${executorEndpoint.host}:${executorEndpoint.port}|${liveModeVncTarget.targetHost}:${liveModeVncTarget.targetPort}`
+      : '';
+    const previousTargetKey = liveModeVncTargetKeyRef.current;
+    if (previousTargetKey && previousTargetKey !== targetKey && executorEndpoint && liveModeVncSession) {
+      fetch(`http://${executorEndpoint.host}:${executorEndpoint.port}/vnc/stop`, {
+        method: 'POST',
+        headers: buildExecutorHeaders({ 'Content-Type': 'application/json' }),
+        body: JSON.stringify({ session_id: liveModeVncSession.sessionId }),
+      }).catch(() => undefined);
+      setLiveModeVncSession(null);
+    }
+    liveModeVncTargetKeyRef.current = targetKey;
+    setLiveModeVncError(null);
+    if (!executorEndpoint || !liveModeVncTarget.enabled || !liveModeVncTarget.targetHost) {
+      setLiveModeVncAvailable(false);
+      return;
+    }
+    void probeLiveModeVncAvailability();
+  }, [buildExecutorHeaders, executorEndpoint, liveModeVncSession, liveModeVncTarget, probeLiveModeVncAvailability]);
+
   // Live-mode screenshots are available on-demand via the MCP capture_screenshot tool.
   // We no longer auto-attach them to every chat message to avoid excessive token usage.
 
@@ -6443,7 +6584,8 @@ if __name__ == "__main__":
       clearTimeout(masterTimeout);
       const isAbort = controllers.some(c => c.signal.aborted);
       if (isAbort) throw new Error('Request timed out.');
-      throw new Error('Executor not found/open. Please check the tool is running.');
+      const msg = err instanceof Error ? err.message : String(err);
+      throw new Error(`Could not reach executor (${urls.join(' | ')}): ${msg}`);
     }
   }, [buildExecutorHeaders, buildExecutorRunUrls]);
 
@@ -9725,6 +9867,15 @@ Keep under 120 words. No headings. Bullets only. Stay on this command. Do not de
                 }}
                 onToggleLiveTokenEditor={() => {
                   window.dispatchEvent(new CustomEvent('tekautomate:toggle-live-token-editor'));
+                }}
+                vncAvailable={liveModeVncAvailable}
+                vncChecking={liveModeVncChecking}
+                vncActive={Boolean(liveModeVncSession)}
+                vncConnecting={liveModeVncConnecting}
+                vncError={liveModeVncError}
+                vncSessionInfo={liveModeVncSession}
+                onToggleVnc={() => {
+                  void toggleLiveModeVnc();
                 }}
               />
             }

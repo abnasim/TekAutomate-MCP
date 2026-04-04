@@ -4,3 +4,4 @@ pyvisa-py>=0.5.0
 tm_devices>=0.15.0
 qrcode[pil]>=7.0
 Pillow>=9.0.0
+websockify>=0.12.0

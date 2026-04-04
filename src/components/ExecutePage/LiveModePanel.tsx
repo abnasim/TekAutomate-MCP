@@ -1,5 +1,6 @@
-import React, { useEffect, useState } from 'react';
-import { Camera, ChevronDown, ChevronRight, Image as ImageIcon, KeyRound, Loader2, RefreshCw, Terminal } from 'lucide-react';
+import React, { useState } from 'react';
+import { Camera, ChevronDown, ChevronRight, Image as ImageIcon, KeyRound, Loader2, MonitorSmartphone, RefreshCw, Terminal } from 'lucide-react';
+import { VncViewer } from './VncViewer';
 
 export interface LiveModeCapture {
   dataUrl: string;
@@ -19,6 +20,13 @@ interface LiveModePanelProps {
   onToggleAutoRefresh: () => void;
   onChangeRefreshInterval: (seconds: number) => void;
   onToggleLiveTokenEditor?: () => void;
+  vncAvailable?: boolean | null;
+  vncChecking?: boolean;
+  vncActive?: boolean;
+  vncConnecting?: boolean;
+  vncError?: string | null;
+  vncSessionInfo?: { wsUrl: string; targetHost: string; targetPort: number; sessionId: string } | null;
+  onToggleVnc?: () => void;
 }
 
 function formatBytes(size: number): string {
@@ -49,39 +57,25 @@ export function LiveModePanel({
   onToggleAutoRefresh,
   onChangeRefreshInterval,
   onToggleLiveTokenEditor,
+  vncAvailable = null,
+  vncChecking = false,
+  vncActive = false,
+  vncConnecting = false,
+  vncError = null,
+  vncSessionInfo = null,
+  onToggleVnc,
 }: LiveModePanelProps) {
   const [showLogs, setShowLogs] = useState(false);
-  const [freshCapture, setFreshCapture] = useState(false);
+  const [viewMode, setViewMode] = useState<'screenshot' | 'vnc'>('screenshot');
   const logLines = (runLog || '').split(/\r?\n/).filter(Boolean);
   const hasLogs = logLines.length > 0;
-
-  // Flash green LED when new screenshot arrives
-  useEffect(() => {
-    if (capture?.capturedAt) {
-      setFreshCapture(true);
-      const timer = setTimeout(() => setFreshCapture(false), 2000);
-      return () => clearTimeout(timer);
-    }
-  }, [capture?.capturedAt]);
+  const canShowVncTab = Boolean(vncActive || vncAvailable);
 
   return (
     <div className="h-full flex flex-col bg-slate-100 dark:bg-slate-950">
       {/* Header */}
       <div className="flex items-center justify-between gap-3 border-b border-slate-200 px-4 py-2.5 dark:border-slate-800/50">
-        <div className="flex items-center gap-2">
-          <span className="text-sm font-semibold text-slate-900 dark:text-white">Live Mode</span>
-          {onToggleLiveTokenEditor ? (
-            <button
-              type="button"
-              onClick={onToggleLiveTokenEditor}
-              className="inline-flex items-center justify-center rounded-lg border border-slate-300 bg-white p-1.5 text-slate-500 transition-colors hover:bg-slate-50 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-400 dark:hover:bg-slate-800"
-              title="Live token settings"
-              aria-label="Live token settings"
-            >
-              <KeyRound size={11} />
-            </button>
-          ) : null}
-        </div>
+        <div className="text-sm font-semibold text-slate-900 dark:text-white">Live Mode</div>
         <div className="flex items-center gap-2">
           <div className="flex items-center gap-1">
             <button
@@ -104,11 +98,41 @@ export function LiveModePanel({
               <option value={5}>5s</option>
               <option value={10}>10s</option>
             </select>
+            {onToggleLiveTokenEditor ? (
+              <button
+                type="button"
+                onClick={onToggleLiveTokenEditor}
+                className="inline-flex items-center justify-center rounded-lg border border-slate-300 bg-white p-1.5 text-slate-700 transition-colors hover:bg-slate-50 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-200 dark:hover:bg-slate-800"
+                title="Show live token"
+                aria-label="Show live token"
+              >
+                <KeyRound size={12} />
+              </button>
+            ) : null}
+            {onToggleVnc ? (
+              <button
+                type="button"
+                onClick={onToggleVnc}
+                disabled={vncChecking || vncConnecting || vncAvailable === false}
+                className={`inline-flex items-center gap-1.5 rounded-lg border px-2.5 py-1 text-[11px] font-medium transition-colors disabled:cursor-not-allowed disabled:opacity-50 ${
+                  vncActive
+                    ? 'border-violet-300 bg-violet-50 text-violet-700 dark:border-violet-800 dark:bg-violet-950/40 dark:text-violet-300'
+                    : 'border-slate-300 bg-white text-slate-700 hover:bg-slate-50 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-200 dark:hover:bg-slate-800'
+                }`}
+                title={
+                  vncAvailable === false
+                    ? 'VNC not available on this scope'
+                    : vncActive
+                      ? 'Stop VNC session'
+                      : 'Start VNC session'
+                }
+                aria-label={vncActive ? 'Stop VNC session' : 'Start VNC session'}
+              >
+                {vncChecking || vncConnecting ? <Loader2 size={12} className="animate-spin" /> : <MonitorSmartphone size={12} />}
+                {vncActive ? 'VNC on' : 'VNC'}
+              </button>
+            ) : null}
           </div>
-          {/* Green LED indicator for fresh screenshot */}
-          {freshCapture && (
-            <span className="h-2 w-2 rounded-full bg-emerald-500 animate-pulse" title="New screenshot received" />
-          )}
           <button
             type="button"
             onClick={onRefresh}
@@ -123,14 +147,76 @@ export function LiveModePanel({
 
       {/* Main content: screenshot + logs */}
       <div className="flex-1 min-h-0 overflow-auto p-4 space-y-3">
+        {canShowVncTab ? (
+          <div className="inline-flex rounded-xl border border-slate-200 bg-white/80 p-1 shadow-sm dark:border-slate-800 dark:bg-slate-900/50">
+            <button
+              type="button"
+              onClick={() => setViewMode('screenshot')}
+              className={`rounded-lg px-3 py-1.5 text-xs font-medium transition-colors ${
+                viewMode === 'screenshot'
+                  ? 'bg-sky-600 text-white shadow-sm'
+                  : 'text-slate-600 hover:bg-slate-100 dark:text-slate-300 dark:hover:bg-slate-800'
+              }`}
+            >
+              Screenshot
+            </button>
+            <button
+              type="button"
+              onClick={() => setViewMode('vnc')}
+              disabled={!vncActive || !vncSessionInfo}
+              className={`rounded-lg px-3 py-1.5 text-xs font-medium transition-colors disabled:cursor-not-allowed disabled:opacity-50 ${
+                viewMode === 'vnc'
+                  ? 'bg-violet-600 text-white shadow-sm'
+                  : 'text-slate-600 hover:bg-slate-100 dark:text-slate-300 dark:hover:bg-slate-800'
+              }`}
+            >
+              VNC
+            </button>
+          </div>
+        ) : null}
+
         {error && (
           <div className="rounded-xl border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-700 dark:border-rose-900/60 dark:bg-rose-950/40 dark:text-rose-300">
             {error}
           </div>
         )}
 
-        {/* Screenshot */}
-        {capture ? (
+        {vncError && (
+          <div className="rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800 dark:border-amber-900/60 dark:bg-amber-950/40 dark:text-amber-300">
+            {vncError}
+          </div>
+        )}
+
+        {vncActive && vncSessionInfo && (
+          <div className="rounded-2xl border border-violet-200 bg-violet-50/90 px-4 py-3 text-sm text-violet-900 shadow-sm dark:border-violet-900/60 dark:bg-violet-950/30 dark:text-violet-100">
+            <div className="flex items-center gap-2 font-semibold">
+              <MonitorSmartphone size={14} />
+              VNC session ready
+            </div>
+            <div className="mt-2 text-xs text-violet-800/90 dark:text-violet-200/90">
+              Manual session started only after your click. Viewer embed comes next; for now the executor session is live and reusable.
+            </div>
+            <div className="mt-2 grid gap-1 text-[11px] text-violet-900/80 dark:text-violet-200/80">
+              <div>Target: {vncSessionInfo.targetHost}:{vncSessionInfo.targetPort}</div>
+              <div>WebSocket: {vncSessionInfo.wsUrl}</div>
+              <div>Session: {vncSessionInfo.sessionId}</div>
+            </div>
+            {viewMode !== 'vnc' ? (
+              <button
+                type="button"
+                onClick={() => setViewMode('vnc')}
+                className="mt-3 inline-flex items-center gap-1 rounded-lg bg-violet-600 px-2.5 py-1.5 text-xs font-semibold text-white transition-colors hover:bg-violet-500"
+              >
+                <MonitorSmartphone size={12} />
+                Open VNC Viewer
+              </button>
+            ) : null}
+          </div>
+        )}
+
+        {viewMode === 'vnc' && vncActive && vncSessionInfo ? (
+          <VncViewer wsUrl={vncSessionInfo.wsUrl} />
+        ) : capture ? (
           <div className="relative">
             <div className="overflow-hidden rounded-2xl border border-slate-200 bg-black shadow-sm dark:border-slate-800">
               <img
@@ -155,10 +241,14 @@ export function LiveModePanel({
             )}
             <div>
               <div className="text-sm font-semibold text-slate-900 dark:text-white">
-                {isCapturing ? 'Capturing scope screen...' : 'No screenshot yet'}
+                {viewMode === 'vnc'
+                  ? (vncConnecting ? 'Starting VNC session...' : 'VNC session not started')
+                  : (isCapturing ? 'Capturing scope screen...' : 'No screenshot yet')}
               </div>
               <div className="mt-1 text-xs text-slate-500 dark:text-slate-400">
-                Capture the scope screen to inspect it here and share with AI.
+                {viewMode === 'vnc'
+                  ? 'Click the VNC pill to start a live session. Screenshot mode stays separate.'
+                  : 'Capture the scope screen to inspect it here and share with AI.'}
               </div>
             </div>
           </div>
