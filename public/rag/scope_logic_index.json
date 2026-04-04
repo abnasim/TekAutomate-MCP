@@ -160,6 +160,86 @@
     "source": "rag/corpus/scope_logic/invalid-measurement-results.md"
   },
   {
+    "id": "opc_wai_busy_synchronization_md_1_p1",
+    "corpus": "scope_logic",
+    "title": "Synchronization with *OPC, *OPC?, *WAI, and BUSY?",
+    "body": "Use this procedure when the scope needs time to finish an operation before the next command is safe, especially for single-sequence acquisition, autoset, save/recall, waveform recall, trigger level set, calibration, or measurement result queries that depend on acquisition completion.",
+    "tags": [
+      "opc_wai_busy_synchronization_md"
+    ],
+    "source": "rag/corpus/scope_logic/opc-wai-busy-synchronization.md"
+  },
+  {
+    "id": "opc_wai_busy_synchronization_md_2_p1",
+    "corpus": "scope_logic",
+    "title": "Trigger Signals",
+    "body": "- `*OPC`\n- `*OPC?`\n- `*WAI`\n- `BUSY?`\n- `single sequence acquisition`\n- `acquire complete`\n- `wait until operation complete`\n- `timeout while waiting`\n- `no trigger`\n- `operation pending`\n- `measurement query returned too early`\n- `synchronization`\n- `ACQUIRE:STOPAFTER SEQUENCE`\n- `MEASUREMENT after acquisition`",
+    "tags": [
+      "opc_wai_busy_synchronization_md"
+    ],
+    "source": "rag/corpus/scope_logic/opc-wai-busy-synchronization.md"
+  },
+  {
+    "id": "opc_wai_busy_synchronization_md_3_p1",
+    "corpus": "scope_logic",
+    "title": "Procedure",
+    "body": "1. Identify whether the operation is one of the long-running or completion-generating operations.\n2. Prefer `*OPC?` when you want the simplest blocking synchronization and can afford to wait on the output queue.\n3. Prefer `*WAI` when you want the instrument to defer later command execution until pending OPC-generating work is complete, but you do not need a query response.\n4. Prefer `BUSY?` only when polling is acceptable and you intentionally want an explicit busy loop.\n5. Prefer bare `*OPC` with status handling when you are using serial poll or SRQ-based synchronization.\n6. Set the controller timeout long enough for the slowest expected operation before using `*OPC?` or a busy loop.\n7. If the operation may never complete, such as single-sequence acquisition with no trigger, do not wait forever. Handle timeout by checking `*ESR?` and the event queue (`EVMsg?`, `ALLEv?`, or equivalent status/event tools for the scope).\n8. After synchronization confirms completion, issue the measurement or follow-up command.",
+    "tags": [
+      "opc_wai_busy_synchronization_md"
+    ],
+    "source": "rag/corpus/scope_logic/opc-wai-busy-synchronization.md"
+  },
+  {
+    "id": "opc_wai_busy_synchronization_md_5_p1",
+    "corpus": "scope_logic",
+    "title": "Simplest Blocking Wait",
+    "body": "Use `*OPC?` when you want a single blocking wait and then continue:\n\n```text\nACQUIRE:STATE OFF\nDISPLAY:WAVEVIEW1:CH1:STATE 1\nHORIZONTAL:RECORDLENGTH 1000\nACQUIRE:MODE SAMPLE\nACQUIRE:STOPAFTER SEQUENCE\nMEASUREMENT:MEAS1:TYPE AMPLITUDE\nMEASUREMENT:MEAS1:SOURCE CH1\nACQUIRE:STATE ON\n*OPC?\nMEASUREMENT:MEAS1:RESUlts:CURRentacq:MEAN?\n```",
+    "tags": [
+      "opc_wai_busy_synchronization_md"
+    ],
+    "source": "rag/corpus/scope_logic/opc-wai-busy-synchronization.md"
+  },
+  {
+    "id": "opc_wai_busy_synchronization_md_6_p1",
+    "corpus": "scope_logic",
+    "title": "Instrument-Gated Sequence",
+    "body": "Use `*WAI` when later commands should not execute until pending work is complete:\n\n```text\nACQUIRE:STATE ON\n*WAI\nMEASUREMENT:MEAS1:RESUlts:CURRentacq:MEAN?\n```",
+    "tags": [
+      "opc_wai_busy_synchronization_md"
+    ],
+    "source": "rag/corpus/scope_logic/opc-wai-busy-synchronization.md"
+  },
+  {
+    "id": "opc_wai_busy_synchronization_md_7_p1",
+    "corpus": "scope_logic",
+    "title": "Polling Loop",
+    "body": "Use `BUSY?` only when explicit polling is acceptable:\n\n```text\nACQUIRE:STATE ON\nWhile BUSY? keep looping\nMEASUREMENT:IMMED:VALUE?\n```",
+    "tags": [
+      "opc_wai_busy_synchronization_md"
+    ],
+    "source": "rag/corpus/scope_logic/opc-wai-busy-synchronization.md"
+  },
+  {
+    "id": "opc_wai_busy_synchronization_md_8_p1",
+    "corpus": "scope_logic",
+    "title": "Status/SRQ Synchronization",
+    "body": "Use `*OPC` with status registers when polling or service request workflow is desired:\n\n```text\nDESE 1\n*ESE 1\n*SRE 32\nACQUIRE:STATE ON\n*OPC\n```",
+    "tags": [
+      "opc_wai_busy_synchronization_md"
+    ],
+    "source": "rag/corpus/scope_logic/opc-wai-busy-synchronization.md"
+  },
+  {
+    "id": "opc_wai_busy_synchronization_md_9_p1",
+    "corpus": "scope_logic",
+    "title": "Notes",
+    "body": "- `*OPC` sets bit 0 of the Standard Event Status Register when all pending OPC-generating operations are complete. Read it through `*ESR?` or status handling.\n- `*OPC?` returns `1` only after all pending OPC-generating operations complete, or a device clear is received.\n- `*WAI` blocks instrument-side processing of later commands until pending OPC-generating operations complete.\n- `BUSY?` returns `1` while operations are still pending and `0` when complete.\n- Not every command supports OPC. Important examples that can generate OPC include `ACQuire:STATE ON` in single-sequence mode, `AUTOSet EXECute`, `*RST`, `SAVe:IMAGe`, `SAVe:SETUp`, `SAVe:WAVEform`, `RECAll:SETUp`, `RECAll:WAVEform`, internal calibration commands, probe auto-zero/degauss, `TRIGger:A SETLevel`, and some measurement result operations in single sequence or waveform recall contexts.\n- Single-sequence acquisition may never complete if no trigger event occurs. Timeout handling is mandatory.\n- If the AI is unsure which synchronization primitive to choose, default to `*OPC?` for simple blocking waits and use a generous timeout.",
+    "tags": [
+      "opc_wai_busy_synchronization_md"
+    ],
+    "source": "rag/corpus/scope_logic/opc-wai-busy-synchronization.md"
+  },
+  {
     "id": "probe_compensation_md_1_p1",
     "corpus": "scope_logic",
     "title": "Probe Compensation Check",
