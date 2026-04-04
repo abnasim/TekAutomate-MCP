@@ -20,6 +20,7 @@ RED      = "#E05555"
 WHITE    = "#FFFFFF"
 MUTED    = "#777777"
 DIM      = "#444444"
+DEFAULT_MCP_URL = "https://tekautomate-mcp-production.up.railway.app/mcp"
 
 
 def _local_ip() -> str:
@@ -42,6 +43,7 @@ class ConnectionPanel(ttk.Frame):
         self._qr_photo = None  # prevent GC
         self._qr_visible = False
         self._active_token = ""
+        self._active_mcp_link = ""
         self._build()
 
     def _build(self):
@@ -102,6 +104,13 @@ class ConnectionPanel(ttk.Frame):
         self._token_entry = ttk.Entry(token_row, textvariable=self._token_var)
         self._token_entry.pack(side=tk.LEFT, fill=tk.X, expand=True)
         ttk.Button(token_row, text="Copy", command=self._copy_token).pack(side=tk.LEFT, padx=(6, 0))
+
+        self._mcp_link_var = tk.StringVar(value="No active MCP link")
+        mcp_row = ttk.Frame(token_frame)
+        mcp_row.pack(fill=tk.X, padx=8, pady=(0, 2))
+        self._mcp_link_entry = ttk.Entry(mcp_row, textvariable=self._mcp_link_var)
+        self._mcp_link_entry.pack(side=tk.LEFT, fill=tk.X, expand=True)
+        ttk.Button(mcp_row, text="Copy MCP Link", command=self._copy_mcp_link).pack(side=tk.LEFT, padx=(6, 0))
 
         self._token_status_var = tk.StringVar(value="Generate a token to allow remote live control.")
         ttk.Label(
@@ -181,6 +190,12 @@ class ConnectionPanel(ttk.Frame):
     def _url(self):
         return f"tekautomate://connect?v=1&host={self.get_host()}&port={self.get_port()}"
 
+    def _mcp_link(self, token: str | None = None) -> str:
+        live_token = (token or self._active_token or "").strip()
+        if not live_token:
+            return ""
+        return f"{DEFAULT_MCP_URL}?token={live_token}"
+
     def _refresh_qr(self):
         url = self._url()
         self._url_lbl.configure(text=url)
@@ -215,12 +230,16 @@ class ConnectionPanel(ttk.Frame):
             self._active_token = ""
             self._token_var.set("No active token")
 
+        link = self._mcp_link(token=token if token else None) if active else ""
+        self._active_mcp_link = link
+        self._mcp_link_var.set(link or "No active MCP link")
+
         remaining = int(status.get("remainingSec") or 0)
         if active:
             minutes, seconds = divmod(remaining, 60)
             hours, minutes = divmod(minutes, 60)
             ttl = f"{hours:02d}:{minutes:02d}:{seconds:02d}" if hours else f"{minutes:02d}:{seconds:02d}"
-            self._token_status_var.set(f"Active live token. Expires in {ttl}. Paste this into TekAutomate Live mode.")
+            self._token_status_var.set(f"Active live token. Expires in {ttl}. Paste the MCP link into Claude or paste the token into TekAutomate Live mode.")
         else:
             self._token_status_var.set("Generate a token to allow remote live control.")
 
@@ -270,3 +289,15 @@ class ConnectionPanel(ttk.Frame):
             self.update_idletasks()
         except Exception:
             messagebox.showerror("Live Token", "Failed to copy token to clipboard.")
+
+    def _copy_mcp_link(self):
+        link = self._active_mcp_link or self._mcp_link_var.get().strip()
+        if not link or link == "No active MCP link":
+            messagebox.showinfo("MCP Link", "Generate a token first.")
+            return
+        try:
+            self.clipboard_clear()
+            self.clipboard_append(link)
+            self.update_idletasks()
+        except Exception:
+            messagebox.showerror("MCP Link", "Failed to copy MCP link to clipboard.")
