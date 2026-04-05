@@ -454,13 +454,12 @@ class VncProxyManager:
             for task in pending:
                 task.cancel()
             await asyncio.gather(*pending, return_exceptions=True)
-            for task in done:
-                exc = task.exception()
-                if exc:
-                    raise exc
+            # Don't re-raise clean WebSocket close — it's normal disconnect
         except Exception as exc:
-            session.last_error = str(exc)
-            self._log(f"VNC bridge error for {session.target_host}:{session.target_port}: {exc}")
+            err_str = str(exc)
+            if 'ConnectionClosedOK' not in type(exc).__name__ and '1001' not in err_str and '1005' not in err_str:
+                session.last_error = err_str
+                self._log(f"VNC bridge error for {session.target_host}:{session.target_port}: {exc}")
             try:
                 await websocket.close()
             except Exception:
