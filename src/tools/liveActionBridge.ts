@@ -4,7 +4,10 @@ export type LiveActionToolName =
   | 'send_scpi'
   | 'capture_screenshot'
   | 'get_instrument_state'
-  | 'probe_command';
+  | 'probe_command'
+  | 'get_visa_resources'
+  | 'get_environment'
+  | 'discover_scpi';
 
 export interface LiveActionRequest {
   id: string;
@@ -229,4 +232,3 @@ export function completeLiveAction(input: {
   notifySession(record.sessionKey);
   return true;
 }
-
