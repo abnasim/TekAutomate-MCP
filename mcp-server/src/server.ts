@@ -415,6 +415,64 @@ export async function createServer(port = 8787): Promise<http.Server> {
   // Per-session MCP transport map
   const mcpTransports = new Map<string, any>();
 
+  // ── Stateless JSON-RPC handler (shared by all non-SSE paths) ─────
+  async function handleStatelessJsonRpc(res: http.ServerResponse, body: string) {
+    try {
+      const rpc = JSON.parse(body) as { jsonrpc?: string; id?: unknown; method?: string; params?: Record<string, unknown> };
+      const rpcId = rpc.id ?? null;
+      const method = rpc.method || '';
+      console.log(`[MCP:json] ${method} id=${rpcId}`);
+
+      if (startupInitPromise) {
+        try { await startupInitPromise; } catch { /* degrade gracefully */ }
+      }
+
+      if (method === 'initialize') {
+        sendJson(res, 200, {
+          jsonrpc: '2.0', id: rpcId,
+          result: { protocolVersion: '2024-11-05', capabilities: { tools: {} }, serverInfo: { name: 'tekautomate', version: '3.2.0' } },
+        });
+      } else if (method === 'notifications/initialized') {
+        res.statusCode = 204;
+        res.end();
+      } else if (method === 'tools/list') {
+        const toolDefs = getMcpExposedTools();
+        const tools = toolDefs.map((def: any) => ({
+          name: def.name,
+          description: def.description ?? def.name,
+          inputSchema: {
+            type: 'object' as const,
+            properties: (def.parameters as any)?.properties ?? {},
+            ...((def.parameters as any)?.required?.length
+              ? { required: (def.parameters as any).required }
+              : {}),
+          },
+        }));
+        sendJson(res, 200, { jsonrpc: '2.0', id: rpcId, result: { tools } });
+      } else if (method === 'tools/call') {
+        const toolName = rpc.params?.name as string;
+        const toolArgs = (rpc.params?.arguments as Record<string, unknown>) ?? {};
+        console.log(`[MCP:json] call ${toolName} args=${JSON.stringify(toolArgs).slice(0, 200)}`);
+        try {
+          const result = await runTool(toolName, toolArgs);
+          const safe = sanitizeToolResultForExternalMcp(toolName, result);
+          const text = typeof safe === 'string' ? safe : JSON.stringify(safe, null, 2);
+          sendJson(res, 200, { jsonrpc: '2.0', id: rpcId, result: { content: [{ type: 'text', text }] } });
+        } catch (err) {
+          const msg = err instanceof Error ? err.message : String(err);
+          console.error(`[MCP:json] tool error: ${msg}`);
+          sendJson(res, 200, { jsonrpc: '2.0', id: rpcId, result: { content: [{ type: 'text', text: `Error: ${msg}` }], isError: true } });
+        }
+      } else {
+        sendJson(res, 200, { jsonrpc: '2.0', id: rpcId, error: { code: -32601, message: `Method not found: ${method}` } });
+      }
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err);
+      console.error(`[MCP:json] parse error: ${msg}`);
+      sendJson(res, 200, { jsonrpc: '2.0', id: null, error: { code: -32700, message: 'Parse error' } });
+    }
+  }
+
   // ── HTML Tools Page ───────────────────────────────────────────────
   function buildToolsHtml(): string {
     const toolDefs = getToolDefinitions();
@@ -657,7 +715,7 @@ function filterTools(q) {
       return;
     }
 
-    // ── /mcp — MCP Streamable HTTP + stateless JSON-RPC fallback ──
+    // ── /mcp — MCP protocol endpoint ───────────────────────────────
     // Also handle POST / — some MCP clients POST to root instead of /mcp
     if (req.url === '/mcp' || req.url?.startsWith('/mcp?') || (req.method === 'POST' && req.url === '/')) {
       res.setHeader('Access-Control-Allow-Origin', '*');
@@ -666,8 +724,8 @@ function filterTools(q) {
 
       const accept = req.headers['accept'] || '';
       const sessionId = req.headers['mcp-session-id'] as string | undefined;
-      let clientSupportsSSE = accept.includes('text/event-stream');
-      console.log(`[MCP] method=${req.method} session=${sessionId || 'none'} accept=${accept || 'none'} sse=${clientSupportsSSE}`);
+      const clientSupportsSSE = accept.includes('text/event-stream');
+      console.log(`[MCP] ${req.method} session=${sessionId || 'none'} sse=${clientSupportsSSE}`);
 
       // ── Read body ──
       let body: string | undefined;
@@ -680,80 +738,41 @@ function filterTools(q) {
         });
       }
 
-      // ── Route A: Full StreamableHTTP for SSE-capable clients ─────
-      if (clientSupportsSSE && (req.method === 'POST' || req.method === 'GET' || req.method === 'DELETE')) {
+      // ── Active SSE session — use the existing transport ──────────
+      if (sessionId && mcpTransports.has(sessionId)) {
+        try {
+          const transport = mcpTransports.get(sessionId)!;
+          await transport.handleRequest(req, res, body ? JSON.parse(body) : undefined);
+        } catch (err) {
+          const msg = err instanceof Error ? err.message : String(err);
+          console.error(`[MCP:sse] Error: ${msg}`);
+          if (!res.headersSent) sendJson(res, 500, { error: `MCP transport error: ${msg}` });
+        }
+        return;
+      }
+
+      // ── New SSE session — only for first POST with no session ID ─
+      if (clientSupportsSSE && req.method === 'POST' && !sessionId) {
         try {
           const sdk = await getMcpSdk();
-          if (!sdk) {
-            sendJson(res, 501, { error: 'MCP SDK not installed.' });
-            return;
-          }
-
-          if (sessionId && mcpTransports.has(sessionId)) {
-            // Active session — use it
-            const transport = mcpTransports.get(sessionId)!;
-            await transport.handleRequest(req, res, body ? JSON.parse(body) : undefined);
-          } else if (sessionId && req.method === 'POST' && body) {
-            // Stale session — DON'T create a new SSE session (causes churn).
-            // Handle as stateless JSON-RPC right here.
-            console.log(`[MCP] stale session ${sessionId} — stateless JSON-RPC fallback`);
-            // Skip to Route B logic inline
-            const rpc = JSON.parse(body) as { jsonrpc?: string; id?: unknown; method?: string; params?: Record<string, unknown> };
-            const rpcId = rpc.id ?? null;
-            const method = rpc.method || '';
-            if (startupInitPromise) { try { await startupInitPromise; } catch { /* */ } }
-            if (method === 'initialize') {
-              sendJson(res, 200, { jsonrpc: '2.0', id: rpcId, result: { protocolVersion: '2024-11-05', capabilities: { tools: {} }, serverInfo: { name: 'tekautomate', version: '3.2.0' } } });
-            } else if (method === 'notifications/initialized') {
-              res.statusCode = 204; res.end();
-            } else if (method === 'tools/list') {
-              const toolDefs = getMcpExposedTools();
-              const tools = toolDefs.map((def: any) => ({ name: def.name, description: def.description ?? def.name, inputSchema: { type: 'object' as const, properties: (def.parameters as any)?.properties ?? {}, ...((def.parameters as any)?.required?.length ? { required: (def.parameters as any).required } : {}) } }));
-              sendJson(res, 200, { jsonrpc: '2.0', id: rpcId, result: { tools } });
-            } else if (method === 'tools/call') {
-              const tn = rpc.params?.name as string;
-              const ta = (rpc.params?.arguments as Record<string, unknown>) ?? {};
-              try {
-                const result = await runTool(tn, ta);
-                const safe = sanitizeToolResultForExternalMcp(tn, result);
-                const text = typeof safe === 'string' ? safe : JSON.stringify(safe, null, 2);
-                sendJson(res, 200, { jsonrpc: '2.0', id: rpcId, result: { content: [{ type: 'text', text }] } });
-              } catch (err) {
-                sendJson(res, 200, { jsonrpc: '2.0', id: rpcId, result: { content: [{ type: 'text', text: `Error: ${err instanceof Error ? err.message : String(err)}` }], isError: true } });
-              }
-            } else {
-              sendJson(res, 200, { jsonrpc: '2.0', id: rpcId, error: { code: -32601, message: `Method not found: ${method}` } });
-            }
-          } else if (sessionId && req.method === 'GET') {
-            // Stale SSE reconnect — return 404 to trigger re-init
-            console.log(`[MCP] stale GET session ${sessionId} — 404`);
-            res.statusCode = 404;
-            res.end();
-            return;
-          } else if (req.method === 'POST') {
-            // Brand new session (no session ID at all) — create SSE transport
-            const newSessionId = `tek-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
-            const transport = new sdk.StreamableHTTPServerTransport({
-              sessionIdGenerator: () => newSessionId,
-            });
-            const mcpServer = await createMcpProtocolServer(newSessionId);
-            await mcpServer.connect(transport);
-            transport.onclose = () => {
-              if (transport.sessionId) {
-                mcpTransports.delete(transport.sessionId);
-                clearSessionContext(transport.sessionId);
-                console.log(`[MCP] session closed: ${transport.sessionId}`);
-              }
-            };
-            await transport.handleRequest(req, res, body ? JSON.parse(body) : undefined);
+          if (!sdk) { sendJson(res, 501, { error: 'MCP SDK not installed.' }); return; }
+          const newSessionId = `tek-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+          const transport = new sdk.StreamableHTTPServerTransport({
+            sessionIdGenerator: () => newSessionId,
+          });
+          const mcpServer = await createMcpProtocolServer(newSessionId);
+          await mcpServer.connect(transport);
+          transport.onclose = () => {
             if (transport.sessionId) {
-              mcpTransports.set(transport.sessionId, transport);
-              console.log(`[MCP] new session: ${transport.sessionId}`);
+              mcpTransports.delete(transport.sessionId);
+              clearSessionContext(transport.sessionId);
+              console.log(`[MCP] session closed: ${transport.sessionId}`);
             }
-          } else if (req.method === 'DELETE') {
-            sendJson(res, 200, { ok: true });
-          } else {
-            sendJson(res, 400, { error: 'No valid session. POST to /mcp to initialize.' });
+          };
+          await transport.handleRequest(req, res, body ? JSON.parse(body) : undefined);
+          if (transport.sessionId) {
+            mcpTransports.set(transport.sessionId, transport);
+            console.log(`[MCP] new session: ${transport.sessionId}`);
           }
         } catch (err) {
           const msg = err instanceof Error ? err.message : String(err);
@@ -763,91 +782,27 @@ function filterTools(q) {
         return;
       }
 
-      // ── Route B: Stateless JSON-RPC for non-SSE clients ──────────
-      // Claude.ai connectors and other clients that don't support SSE
-      // get plain JSON responses — no sessions, no streaming.
-      if (req.method === 'POST' && body) {
-        try {
-          const rpc = JSON.parse(body) as { jsonrpc?: string; id?: unknown; method?: string; params?: Record<string, unknown> };
-          const rpcId = rpc.id ?? null;
-          const method = rpc.method || '';
-          console.log(`[MCP:json] method=${method} id=${rpcId}`);
-
-          if (startupInitPromise) {
-            try { await startupInitPromise; } catch { /* degrade gracefully */ }
-          }
-
-          if (method === 'initialize') {
-            const jsonRes = {
-              jsonrpc: '2.0',
-              id: rpcId,
-              result: {
-                protocolVersion: '2024-11-05',
-                capabilities: { tools: {} },
-                serverInfo: { name: 'tekautomate', version: '3.2.0' },
-              },
-            };
-            sendJson(res, 200, jsonRes);
-          } else if (method === 'notifications/initialized') {
-            // No response needed for notifications
-            res.statusCode = 204;
-            res.end();
-          } else if (method === 'tools/list') {
-            const toolDefs = getMcpExposedTools();
-            const tools = toolDefs.map((def: any) => ({
-              name: def.name,
-              description: def.description ?? def.name,
-              inputSchema: {
-                type: 'object' as const,
-                properties: (def.parameters as any)?.properties ?? {},
-                ...((def.parameters as any)?.required?.length
-                  ? { required: (def.parameters as any).required }
-                  : {}),
-              },
-            }));
-            sendJson(res, 200, { jsonrpc: '2.0', id: rpcId, result: { tools } });
-          } else if (method === 'tools/call') {
-            const toolName = rpc.params?.name as string;
-            const toolArgs = (rpc.params?.arguments as Record<string, unknown>) ?? {};
-            console.log(`[MCP:json] call_tool name=${toolName} args=${JSON.stringify(toolArgs).slice(0, 200)}`);
-            try {
-              const result = await runTool(toolName, toolArgs);
-              const safeResult = sanitizeToolResultForExternalMcp(toolName, result);
-              const text = typeof safeResult === 'string' ? safeResult : JSON.stringify(safeResult, null, 2);
-              sendJson(res, 200, {
-                jsonrpc: '2.0',
-                id: rpcId,
-                result: { content: [{ type: 'text', text }] },
-              });
-            } catch (err) {
-              const msg = err instanceof Error ? err.message : String(err);
-              console.error(`[MCP:json] tool error: ${msg}`);
-              sendJson(res, 200, {
-                jsonrpc: '2.0',
-                id: rpcId,
-                result: { content: [{ type: 'text', text: `Error: ${msg}` }], isError: true },
-              });
-            }
-          } else {
-            sendJson(res, 200, {
-              jsonrpc: '2.0',
-              id: rpcId,
-              error: { code: -32601, message: `Method not found: ${method}` },
-            });
-          }
-        } catch (err) {
-          const msg = err instanceof Error ? err.message : String(err);
-          console.error(`[MCP:json] parse error: ${msg}`);
-          sendJson(res, 200, {
-            jsonrpc: '2.0',
-            id: null,
-            error: { code: -32700, message: 'Parse error' },
-          });
-        }
+      // ── Stale GET — session expired, tell client to re-init ──────
+      if (req.method === 'GET' && sessionId) {
+        console.log(`[MCP] stale GET ${sessionId} — 404`);
+        res.statusCode = 404;
+        res.end();
         return;
       }
 
-      // Fallback for anything else
+      // ── DELETE — always OK (idempotent) ──────────────────────────
+      if (req.method === 'DELETE') {
+        sendJson(res, 200, { ok: true });
+        return;
+      }
+
+      // ── Stateless JSON-RPC — everything else (stale sessions,
+      //    non-SSE clients, Claude.ai connector) ────────────────────
+      if (req.method === 'POST' && body) {
+        await handleStatelessJsonRpc(res, body);
+        return;
+      }
+
       sendJson(res, 405, { error: 'POST to /mcp with JSON-RPC body.' });
       return;
     }
