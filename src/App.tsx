@@ -40,7 +40,7 @@ import { LiveModePanel, type LiveModeCapture } from './components/ExecutePage/Li
 import { resolveCommandSelection } from './utils/commandMaterializer';
 import type { AiAction } from './utils/aiActions';
 import { applyAiActionsToSteps } from './utils/aiActions';
-import { streamMcpChat, type McpChatAttachment } from './utils/ai/mcpClient';
+import { resolveMcpHost, streamMcpChat, type McpChatAttachment } from './utils/ai/mcpClient';
 import { generateExecutionAudit, type ExecutionAuditReport } from './utils/executionAudit';
 import { decodeStatusFromText } from './utils/statusDecoder';
 import { getDocstring, ensureDocstringsLoaded, areDocstringsLoaded } from './components/docstrings';
@@ -4330,6 +4330,48 @@ function AppInner() {
       targetPort: Number.isFinite(targetPort) && targetPort > 0 ? targetPort : 5900,
     };
   }, [liveModeInstrumentConfig, selectedLiveModeTarget]);
+
+  useEffect(() => {
+    const mcpHost = resolveMcpHost();
+    if (!mcpHost) return;
+
+    const executorUrl = executorEndpoint ? `http://${executorEndpoint.host}:${executorEndpoint.port}` : null;
+    const instrumentPayload = executorUrl
+      ? {
+          connected: true,
+          executorUrl,
+          visaResource: liveModeVisaResource || null,
+          backend: liveModeInstrumentConfig.backend || 'pyvisa',
+          modelFamily: liveModeInstrumentConfig.modelFamily || 'unknown',
+          deviceDriver: liveModeInstrumentConfig.deviceDriver || null,
+          liveMode: true,
+        }
+      : {
+          connected: false,
+          executorUrl: null,
+          visaResource: null,
+          backend: liveModeInstrumentConfig.backend || 'pyvisa',
+          modelFamily: liveModeInstrumentConfig.modelFamily || 'unknown',
+          deviceDriver: liveModeInstrumentConfig.deviceDriver || null,
+          liveMode: false,
+        };
+
+    void fetch(`${mcpHost.replace(/\/$/, '')}/runtime-context`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        instrument: instrumentPayload,
+        runLog: String(runWindowLog || ''),
+      }),
+    }).catch(() => {});
+  }, [
+    executorEndpoint,
+    liveModeInstrumentConfig.backend,
+    liveModeInstrumentConfig.deviceDriver,
+    liveModeInstrumentConfig.modelFamily,
+    liveModeVisaResource,
+    runWindowLog,
+  ]);
 
   const toggleLiveModeVnc = useCallback(async () => {
     if (!executorEndpoint) {
