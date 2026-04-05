@@ -260,12 +260,6 @@ function ExecutePageContent({
 
   const securedInstrumentEndpoint = instrumentEndpoint;
 
-  useEffect(() => {
-    if (centerTab === 'live' && liveVncActive) {
-      setAssistantPanelOpen(false);
-    }
-  }, [centerTab, liveVncActive]);
-
   const appendStepLog = useCallback((line: string) => {
     setStepLog(prev => prev + line + '\n');
   }, []);
