@@ -1685,9 +1685,18 @@ function AppInner() {
   }, [config, parseScannedInstrumentHost, parseScannedInstrumentPort]);
 
   const liveModeTargetOptions = useMemo<LiveModeTargetOption[]>(() => {
+    const formatConfiguredLiveLabel = (device: DeviceEntry) => {
+      const alias = String(device.alias || '').trim();
+      const model = String(device.deviceType || '').trim();
+      const host = String(device.host || '').trim();
+      if (alias && model && alias.toLowerCase() !== model.toLowerCase()) {
+        return `${alias} — ${model}`;
+      }
+      return alias || model || host || device.id;
+    };
     const configured = enabledDevices.map((device) => ({
       id: device.id,
-      label: device.alias || device.host || device.id,
+      label: formatConfiguredLiveLabel(device),
       visaResource: getVisaResourceString(device),
       targetHost: String(device.vncHost || device.host || '').trim(),
       targetPort: Number(device.vncPort || 5900),
@@ -4451,23 +4460,18 @@ function AppInner() {
     const targetKey = executorEndpoint && liveModeVncTarget.enabled && liveModeVncTarget.targetHost
       ? `${executorEndpoint.host}:${executorEndpoint.port}|${liveModeVncTarget.targetHost}:${liveModeVncTarget.targetPort}`
       : '';
-    const previousTargetKey = liveModeVncTargetKeyRef.current;
-    if (previousTargetKey && previousTargetKey !== targetKey && executorEndpoint && liveModeVncSession) {
-      fetch(`http://${executorEndpoint.host}:${executorEndpoint.port}/vnc/stop`, {
-        method: 'POST',
-        headers: buildExecutorHeaders({ 'Content-Type': 'application/json' }),
-        body: JSON.stringify({ session_id: liveModeVncSession.sessionId }),
-      }).catch(() => undefined);
-      setLiveModeVncSession(null);
-    }
     liveModeVncTargetKeyRef.current = targetKey;
-    setLiveModeVncError(null);
+    if (!liveModeVncSession) {
+      setLiveModeVncError(null);
+    }
     if (!executorEndpoint || !liveModeVncTarget.enabled || !liveModeVncTarget.targetHost) {
       setLiveModeVncAvailable(null);
       return;
     }
-    setLiveModeVncAvailable(null);
-  }, [buildExecutorHeaders, executorEndpoint, liveModeVncSession, liveModeVncTarget]);
+    if (!liveModeVncSession) {
+      setLiveModeVncAvailable(null);
+    }
+  }, [executorEndpoint, liveModeVncSession, liveModeVncTarget]);
 
   useEffect(() => {
     setLiveModeCapture(null);
