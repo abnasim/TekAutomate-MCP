@@ -325,11 +325,6 @@ class VncProxyManager:
                 self._remove_session_locked(session)
 
     def _sweep_locked(self):
-        live_status = self._live_token_status_provider() or {}
-        if not live_status.get("active"):
-            self._stop_all_locked()
-            return
-
         now_dt = _utc_now()
         for session in list(self._sessions_by_id.values()):
             if not session.running():
