@@ -5,7 +5,7 @@ import { initTmDevicesIndex } from './core/tmDevicesIndex';
 import { initRagIndexes } from './core/ragIndex';
 import { initTemplateIndex } from './core/templateIndex';
 import { runToolLoop } from './core/toolLoop';
-import { getToolDefinitions, getMcpExposedTools, isProtectedMcpTool, runTool } from './tools/index';
+import { getToolDefinitions, getMcpExposedTools, runTool } from './tools/index';
 import type { McpChatRequest } from './core/schemas';
 import { getLastWorkflowProposal } from './tools/stageWorkflowProposal';
 import { getRuntimeContextState, updateRuntimeContext } from './tools/runtimeContextStore';
@@ -208,8 +208,6 @@ async function readJsonBody(req: http.IncomingMessage): Promise<Record<string, u
 }
 
 function extractRequestToken(req: http.IncomingMessage): string {
-  const direct = String(req.headers['x-live-token'] || '').trim();
-  if (direct) return direct;
   const raw = String(req.headers.authorization || '').trim();
   if (raw.toLowerCase().startsWith('bearer ')) {
     return raw.slice(7).trim();
@@ -219,39 +217,6 @@ function extractRequestToken(req: http.IncomingMessage): string {
     return String(requestUrl.searchParams.get('token') || '').trim();
   } catch {
     return '';
-  }
-}
-
-async function validateProtectedToolToken(liveToken: string): Promise<boolean> {
-  const token = String(liveToken || '').trim();
-  if (!token) return false;
-  const runtime = getRuntimeContextState();
-  const executorUrl = String(runtime.instrument.executorUrl || '').trim();
-  if (!executorUrl) return true;
-  try {
-    const res = await fetch(`${executorUrl.replace(/\/$/, '')}/scan`, {
-      method: 'GET',
-      headers: {
-        'Content-Type': 'application/json',
-        'X-Live-Token': token,
-      },
-      signal: AbortSignal.timeout(5000),
-    });
-    return res.ok;
-  } catch {
-    return false;
-  }
-}
-
-async function assertProtectedToolAccess(toolName: string, liveToken: string) {
-  if (!isProtectedMcpTool(toolName)) return;
-  const token = String(liveToken || '').trim();
-  if (!token) {
-    throw new Error(`Tool "${toolName}" requires a live token.`);
-  }
-  const valid = await validateProtectedToolToken(token);
-  if (!valid) {
-    throw new Error(`Tool "${toolName}" requires a valid live token.`);
   }
 }
 
@@ -407,7 +372,7 @@ export async function createServer(port = 8787): Promise<http.Server> {
     }
   }
 
-  async function createMcpProtocolServer(authState: { liveToken: string }) {
+  async function createMcpProtocolServer() {
     const sdk = await getMcpSdk();
     if (!sdk) throw new Error('MCP SDK not installed. Run: npm install @modelcontextprotocol/sdk');
     const mcp = new sdk.Server(
@@ -419,8 +384,7 @@ export async function createServer(port = 8787): Promise<http.Server> {
         try { await startupInitPromise; } catch { /* degrade gracefully */ }
       }
       // Slim MCP surface — only gateway + live tools exposed
-      const token = String(authState.liveToken || '').trim();
-      const toolDefs = getMcpExposedTools().filter((def: any) => token || !isProtectedMcpTool(def.name));
+      const toolDefs = getMcpExposedTools();
       const mcpTools = toolDefs.map((def: any) => ({
         name: def.name,
         description: def.description ?? def.name,
@@ -441,12 +405,7 @@ export async function createServer(port = 8787): Promise<http.Server> {
       }
       const { name, arguments: args } = request.params;
       try {
-        await assertProtectedToolAccess(name, authState.liveToken);
-        const toolArgs = { ...((args as Record<string, unknown>) ?? {}) };
-        if (String(authState.liveToken || '').trim() && isProtectedMcpTool(name) && !('liveToken' in toolArgs)) {
-          toolArgs.liveToken = String(authState.liveToken || '').trim();
-        }
-        const result = await runTool(name, toolArgs);
+        const result = await runTool(name, (args as Record<string, unknown>) ?? {});
         const text = typeof result === 'string' ? result : JSON.stringify(result, null, 2);
         return { content: [{ type: 'text' as const, text }] };
       } catch (err) {
@@ -458,7 +417,7 @@ export async function createServer(port = 8787): Promise<http.Server> {
   }
 
   // Per-session MCP transport map
-  const mcpTransports = new Map<string, { transport: any; authState: { liveToken: string } }>();
+  const mcpTransports = new Map<string, any>();
 
   // ── HTML Tools Page ───────────────────────────────────────────────
   function buildToolsHtml(): string {
@@ -666,7 +625,7 @@ function filterTools(q) {
     if (req.method === 'OPTIONS') {
       res.statusCode = 204;
       res.setHeader('Access-Control-Allow-Origin', '*');
-      res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Accept, Mcp-Session-Id, Authorization, X-Live-Token');
+      res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Accept, Mcp-Session-Id');
       res.setHeader('Access-Control-Allow-Methods', 'GET,POST,DELETE,OPTIONS');
       res.setHeader('Access-Control-Expose-Headers', 'Mcp-Session-Id');
       res.end();
@@ -690,7 +649,6 @@ function filterTools(q) {
 
       // Debug logging — capture what different MCP clients send
       const sessionId = req.headers['mcp-session-id'] as string | undefined;
-      const requestToken = extractRequestToken(req);
       console.log(`[MCP] transport method=${req.method} session=${sessionId || 'none'} accept=${req.headers['accept'] || 'none'} content-type=${req.headers['content-type'] || 'none'}`);
 
       if (req.method === 'POST' || req.method === 'GET' || req.method === 'DELETE') {
@@ -716,18 +674,14 @@ function filterTools(q) {
 
           if (sessionId && mcpTransports.has(sessionId)) {
             // Existing session
-            const existing = mcpTransports.get(sessionId)!;
-            if (requestToken && !existing.authState.liveToken) {
-              existing.authState.liveToken = requestToken;
-            }
-            await existing.transport.handleRequest(req, res, body ? JSON.parse(body) : undefined);
+            const transport = mcpTransports.get(sessionId)!;
+            await transport.handleRequest(req, res, body ? JSON.parse(body) : undefined);
           } else if (req.method === 'POST') {
             // New session — create transport and MCP server
             const transport = new sdk.StreamableHTTPServerTransport({
               sessionIdGenerator: () => `tek-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
             });
-            const authState = { liveToken: requestToken };
-            const mcpServer = await createMcpProtocolServer(authState);
+            const mcpServer = await createMcpProtocolServer();
             await mcpServer.connect(transport);
 
             // Store transport by session ID after first handle
@@ -740,7 +694,7 @@ function filterTools(q) {
             await transport.handleRequest(req, res, body ? JSON.parse(body) : undefined);
 
             if (transport.sessionId) {
-              mcpTransports.set(transport.sessionId, { transport, authState });
+              mcpTransports.set(transport.sessionId, transport);
             }
           } else {
             sendJson(res, 400, { error: 'No valid session. Send a POST to /mcp to initialize.' });
@@ -804,12 +758,6 @@ function filterTools(q) {
     }
 
     if (req.method === 'GET' && req.url === '/runtime-context/latest') {
-      try {
-        await assertProtectedToolAccess('get_instrument_info', extractRequestToken(req));
-      } catch (err) {
-        sendJson(res, 401, { ok: false, error: err instanceof Error ? err.message : 'Unauthorized', requiresLiveToken: true });
-        return;
-      }
       sendJson(res, 200, { ok: true, context: getRuntimeContextState() });
       return;
     }
@@ -871,8 +819,7 @@ function filterTools(q) {
     // ── Tool endpoints: browser calls these directly, AI proxy not needed ──
 
     if (req.method === 'GET' && req.url === '/tools/list') {
-      const token = extractRequestToken(req);
-      const tools = getToolDefinitions().filter((tool: any) => token || !isProtectedMcpTool(tool.name));
+      const tools = getToolDefinitions();
       sendJson(res, 200, { ok: true, tools });
       return;
     }
@@ -880,7 +827,6 @@ function filterTools(q) {
     // Disconnect live VISA session — call before switching away from live mode
     if (req.method === 'POST' && req.url === '/tools/disconnect') {
       try {
-        await assertProtectedToolAccess('send_scpi', extractRequestToken(req));
         const body = (await readJsonBody(req)) as {
           instrumentEndpoint?: { executorUrl: string; visaResource: string; liveToken?: string };
         };
@@ -905,8 +851,7 @@ function filterTools(q) {
         const json = (await execRes.json()) as Record<string, unknown>;
         sendJson(res, 200, { ok: json.ok === true, disconnected: ep.visaResource });
       } catch (err) {
-        const message = err instanceof Error ? err.message : 'Disconnect failed';
-        sendJson(res, /requires (?:a )?valid live token|requires a live token/i.test(message) ? 401 : 500, { ok: false, error: message, requiresLiveToken: true });
+        sendJson(res, 500, { ok: false, error: err instanceof Error ? err.message : 'Disconnect failed' });
       }
       return;
     }
@@ -935,7 +880,6 @@ function filterTools(q) {
           return;
         }
         const forwardedToken = extractRequestToken(req);
-        await assertProtectedToolAccess(toolName, forwardedToken || String(body.instrumentEndpoint?.liveToken || ''));
         // Inject instrument endpoint for live tools
         let args = body.args || {};
         const liveTools = ['get_instrument_state', 'probe_command', 'send_scpi', 'capture_screenshot', 'get_visa_resources', 'get_environment', 'discover_scpi'];
@@ -956,8 +900,7 @@ function filterTools(q) {
         const safeResult = sanitizeToolResultForExternalMcp(toolName, result);
         sendJson(res, 200, { ok: true, tool: toolName, result: safeResult });
       } catch (err) {
-        const message = err instanceof Error ? err.message : 'Tool execution error';
-        sendJson(res, /requires (?:a )?valid live token|requires a live token/i.test(message) ? 401 : 500, { ok: false, error: message, requiresLiveToken: true });
+        sendJson(res, 500, { ok: false, error: err instanceof Error ? err.message : 'Tool execution error' });
       }
       return;
     }
