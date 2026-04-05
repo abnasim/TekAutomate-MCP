@@ -255,7 +255,7 @@ class VncProxyManager:
             self._log(f"Bridge ready for {host}:{port} on {session.ws_url}")
             return {"ok": True, **session.payload(), "reused": False}
 
-    def stop(self, session_id: str | None = None) -> dict:
+    def stop(self, session_id: str | None = None, force: bool = False) -> dict:
         with self._lock:
             if session_id:
                 session = self._sessions_by_id.get(str(session_id).strip())
