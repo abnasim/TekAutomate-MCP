@@ -108,29 +108,10 @@ export async function sendScpi(input: Input): Promise<ToolResult<Record<string, 
     return fail('NOT_LIVE', 'No live instrument session. Make sure TekAutomate is open with an instrument connected in Live mode.');
   }
 
-  // ── Bridge through TekAutomate browser ──
-  if (shouldBridgeToTekAutomate(input)) {
-    try {
-      const bridged = await dispatchLiveActionThroughTekAutomate('send_scpi', input, Math.max((input.timeoutMs ?? 10_000) + 5_000, 15_000));
-      if (!bridged.ok) {
-        return fail('BRIDGE_FAILED', bridged.error || 'TekAutomate browser did not complete send_scpi. Is TekAutomate open?');
-      }
-      return {
-        ok: true,
-        data: (bridged.result && typeof bridged.result === 'object' ? bridged.result : { result: bridged.result }) as Record<string, unknown>,
-        sourceMeta: [], warnings: [],
-      };
-    } catch (err) {
-      return fail('BRIDGE_TIMEOUT', `send_scpi bridge timed out: ${err instanceof Error ? err.message : String(err)}. Is TekAutomate open in the browser?`);
-    }
-  }
-
   // ── Normalize commands — split semicolon-concatenated strings ──
-  // OpenAI sometimes sends "*IDN?; CH1:SCAle?" as one string instead of separate array items.
   input.commands = input.commands.flatMap(cmd => splitScpiCommandString(String(cmd)));
 
   // ── SCPI Verify Gate (server-side) ──
-  // Bypass for discover_scpi (probing mode) or when explicitly bypassed.
   if (!input._bypassVerifyGate) {
     const failures = await verifyCommandsLocally(input.commands, input.modelFamily);
     if (failures.length > 0) {
@@ -150,5 +131,27 @@ export async function sendScpi(input: Input): Promise<ToolResult<Record<string, 
     }
   }
 
-  return sendScpiProxy(input, input.commands, input.timeoutMs);
+  // ── Direct executor call (preferred — no polling gap) ──
+  try {
+    const result = await sendScpiProxy(input, input.commands, input.timeoutMs);
+    return result;
+  } catch (directErr) {
+    // Direct call failed — try bridge as fallback
+    if (shouldBridgeToTekAutomate(input)) {
+      try {
+        const bridged = await dispatchLiveActionThroughTekAutomate('send_scpi', input, Math.max((input.timeoutMs ?? 10_000) + 5_000, 15_000));
+        if (bridged.ok) {
+          return {
+            ok: true,
+            data: (bridged.result && typeof bridged.result === 'object' ? bridged.result : { result: bridged.result }) as Record<string, unknown>,
+            sourceMeta: [], warnings: [],
+          };
+        }
+      } catch {
+        // Bridge also failed — return the direct error
+      }
+    }
+    const msg = directErr instanceof Error ? directErr.message : String(directErr);
+    return fail('EXECUTOR_UNREACHABLE', `Could not reach executor: ${msg}. Is the executor running?`);
+  }
 }
