@@ -43,23 +43,7 @@ export async function captureScreenshot(input: Input): Promise<ToolResult<Record
       'No live instrument session. Make sure TekAutomate is open with an instrument connected in Live mode.');
   }
 
-  // ── Bridge through TekAutomate browser if live session is active ──
-  if (shouldBridgeToTekAutomate(input)) {
-    try {
-      const bridged = await dispatchLiveActionThroughTekAutomate('capture_screenshot', input, 20_000);
-      if (!bridged.ok) {
-        return fail('BRIDGE_FAILED', bridged.error || 'TekAutomate browser did not complete the screenshot. Is TekAutomate open in the browser?');
-      }
-      const data = (bridged.result && typeof bridged.result === 'object'
-        ? bridged.result
-        : { result: bridged.result }) as Record<string, unknown>;
-      return { ok: true, data: input.analyze ? data : stripBase64(data), sourceMeta: [], warnings: [] };
-    } catch (err) {
-      return fail('BRIDGE_TIMEOUT', `Screenshot bridge timed out: ${err instanceof Error ? err.message : String(err)}. Is TekAutomate open in the browser?`);
-    }
-  }
-
-  // ── Direct executor call ──
+  // ── Direct executor call (preferred — no polling gap) ──
   try {
     const res = await fetch(`${input.executorUrl.replace(/\/$/, '')}/run`, {
       method: 'POST',
@@ -76,7 +60,8 @@ export async function captureScreenshot(input: Input): Promise<ToolResult<Record
     });
     if (!res.ok) {
       const body = await res.text().catch(() => '');
-      return fail('EXECUTOR_ERROR', `Executor returned ${res.status}. ${body}`.trim());
+      // Don't fail yet — fall through to bridge
+      throw new Error(`Executor returned ${res.status}. ${body}`.trim());
     }
     const json = await res.json() as Record<string, unknown>;
     const data = (json.result_data ?? json) as Record<string, unknown>;
@@ -84,8 +69,22 @@ export async function captureScreenshot(input: Input): Promise<ToolResult<Record
       return fail('CAPTURE_FAILED', String(data.error || 'Scope did not return screenshot data.'));
     }
     return { ok: true, data: input.analyze ? data : stripBase64(data), sourceMeta: [], warnings: [] };
-  } catch (err) {
-    const msg = err instanceof Error ? err.message : String(err);
+  } catch (directErr) {
+    // Direct call failed — try bridge as fallback
+    if (shouldBridgeToTekAutomate(input)) {
+      try {
+        const bridged = await dispatchLiveActionThroughTekAutomate('capture_screenshot', input, 15_000);
+        if (bridged.ok) {
+          const data = (bridged.result && typeof bridged.result === 'object'
+            ? bridged.result
+            : { result: bridged.result }) as Record<string, unknown>;
+          return { ok: true, data: input.analyze ? data : stripBase64(data), sourceMeta: [], warnings: [] };
+        }
+      } catch {
+        // Bridge also failed — return the direct error
+      }
+    }
+    const msg = directErr instanceof Error ? directErr.message : String(directErr);
     if (msg.includes('timed out') || msg.includes('abort')) {
       return fail('EXECUTOR_TIMEOUT', 'Executor did not respond in 20s. The VISA session may be locked — try sending *RST or restart the executor.');
     }
