@@ -60,6 +60,7 @@ const MAX_ATTACHMENT_COUNT = 6;
 const MAX_ATTACHMENT_BYTES = 8 * 1024 * 1024;
 const MAX_TEXT_EXCERPT = 12000;
 const INSTRUMENT_OUTPUT_MODE_STORAGE = 'tekautomate.ai.instrument_output_mode';
+const CLAUDE_CHAT_SURFACE_STORAGE = 'tekautomate.ai.claude.surface';
 
 const TEXT_MIME_PREFIXES = ['text/'];
 const TEXT_EXTENSIONS = new Set([
@@ -243,6 +244,14 @@ export function AiChatPanel({
     }
   });
   const [openAiChatSurface, setOpenAiChatSurface] = useState<'chatkit' | 'native'>('chatkit');
+  const [claudeChatSurface, setClaudeChatSurface] = useState<'native' | 'desktop-mcp'>(() => {
+    if (typeof window === 'undefined') return 'native';
+    try {
+      return window.localStorage.getItem(CLAUDE_CHAT_SURFACE_STORAGE) === 'desktop-mcp' ? 'desktop-mcp' : 'native';
+    } catch {
+      return 'native';
+    }
+  });
   const [transientUiNow, setTransientUiNow] = useState(() => Date.now());
   const CHATKIT_WORKFLOW_ID_KEY = 'tekautomate.chatkit.workflow_id';
   const CHATKIT_LIVE_WORKFLOW_ID = 'wf_69ccc162bc34819089705162201bc4b80128ecc0657c5932';
@@ -1687,6 +1696,42 @@ export function AiChatPanel({
                             );
                           })}
                         </div>
+                      </div>
+                    )}
+                    {pid === 'anthropic' && (
+                      <div className="space-y-1">
+                        <div className="text-[10px] text-slate-500 dark:text-white/50">Chat surface</div>
+                        <div className="inline-flex rounded-full border border-slate-200 dark:border-white/10 bg-slate-100 dark:bg-white/5 p-0.5">
+                          {[
+                            { id: 'native', label: 'Native Chat' },
+                            { id: 'desktop-mcp', label: 'Claude Desktop MCP' },
+                          ].map((surface) => {
+                            const selected = claudeChatSurface === surface.id;
+                            return (
+                              <button
+                                key={surface.id}
+                                type="button"
+                                onClick={() => {
+                                  const next = surface.id as 'native' | 'desktop-mcp';
+                                  setClaudeChatSurface(next);
+                                  try { localStorage.setItem(CLAUDE_CHAT_SURFACE_STORAGE, next); } catch {}
+                                }}
+                                className={`px-2.5 py-1 rounded-full text-[10px] font-semibold transition-colors ${
+                                  selected
+                                    ? 'bg-violet-500/15 text-violet-700 dark:text-violet-200'
+                                    : 'text-slate-500 dark:text-white/55 hover:text-slate-800 dark:hover:text-white/85'
+                                }`}
+                              >
+                                {surface.label}
+                              </button>
+                            );
+                          })}
+                        </div>
+                        {claudeChatSurface === 'desktop-mcp' && (
+                          <div className="rounded-lg border border-cyan-200/70 bg-cyan-50/80 px-2.5 py-2 text-[10px] text-cyan-800 dark:border-cyan-500/20 dark:bg-cyan-500/8 dark:text-cyan-200">
+                            Use Claude Desktop with the TekAutomate MCP connector for live instrument work. Claude desktop calls MCP, MCP mirrors runtime context from TekAutomate, and live actions relay back through the local app/executor.
+                          </div>
+                        )}
                       </div>
                     )}
                     <select
