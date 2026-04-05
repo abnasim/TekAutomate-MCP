@@ -414,10 +414,6 @@ export async function createServer(port = 8787): Promise<http.Server> {
 
   // Per-session MCP transport map
   const mcpTransports = new Map<string, any>();
-  // Maps stale session IDs to their replacement session IDs, so parallel
-  // retries from Claude's client reuse the same new session instead of
-  // creating one per request.
-  const mcpStaleRedirects = new Map<string, string>();
 
   // ── HTML Tools Page ───────────────────────────────────────────────
   function buildToolsHtml(): string {
@@ -670,7 +666,7 @@ function filterTools(q) {
 
       const accept = req.headers['accept'] || '';
       const sessionId = req.headers['mcp-session-id'] as string | undefined;
-      const clientSupportsSSE = accept.includes('text/event-stream');
+      let clientSupportsSSE = accept.includes('text/event-stream');
       console.log(`[MCP] method=${req.method} session=${sessionId || 'none'} accept=${accept || 'none'} sse=${clientSupportsSSE}`);
 
       // ── Read body ──
@@ -694,20 +690,48 @@ function filterTools(q) {
           }
 
           if (sessionId && mcpTransports.has(sessionId)) {
+            // Active session — use it
             const transport = mcpTransports.get(sessionId)!;
             await transport.handleRequest(req, res, body ? JSON.parse(body) : undefined);
-          } else if (req.method === 'POST') {
-            // New session, OR stale session ID — reuse recent session if one exists
-            if (sessionId) {
-              // Check if we already created a replacement for this stale session
-              const replacement = mcpStaleRedirects.get(sessionId);
-              if (replacement && mcpTransports.has(replacement)) {
-                const transport = mcpTransports.get(replacement)!;
-                await transport.handleRequest(req, res, body ? JSON.parse(body) : undefined);
-                return;
+          } else if (sessionId && req.method === 'POST' && body) {
+            // Stale session — DON'T create a new SSE session (causes churn).
+            // Handle as stateless JSON-RPC right here.
+            console.log(`[MCP] stale session ${sessionId} — stateless JSON-RPC fallback`);
+            // Skip to Route B logic inline
+            const rpc = JSON.parse(body) as { jsonrpc?: string; id?: unknown; method?: string; params?: Record<string, unknown> };
+            const rpcId = rpc.id ?? null;
+            const method = rpc.method || '';
+            if (startupInitPromise) { try { await startupInitPromise; } catch { /* */ } }
+            if (method === 'initialize') {
+              sendJson(res, 200, { jsonrpc: '2.0', id: rpcId, result: { protocolVersion: '2024-11-05', capabilities: { tools: {} }, serverInfo: { name: 'tekautomate', version: '3.2.0' } } });
+            } else if (method === 'notifications/initialized') {
+              res.statusCode = 204; res.end();
+            } else if (method === 'tools/list') {
+              const toolDefs = getMcpExposedTools();
+              const tools = toolDefs.map((def: any) => ({ name: def.name, description: def.description ?? def.name, inputSchema: { type: 'object' as const, properties: (def.parameters as any)?.properties ?? {}, ...((def.parameters as any)?.required?.length ? { required: (def.parameters as any).required } : {}) } }));
+              sendJson(res, 200, { jsonrpc: '2.0', id: rpcId, result: { tools } });
+            } else if (method === 'tools/call') {
+              const tn = rpc.params?.name as string;
+              const ta = (rpc.params?.arguments as Record<string, unknown>) ?? {};
+              try {
+                const result = await runTool(tn, ta);
+                const safe = sanitizeToolResultForExternalMcp(tn, result);
+                const text = typeof safe === 'string' ? safe : JSON.stringify(safe, null, 2);
+                sendJson(res, 200, { jsonrpc: '2.0', id: rpcId, result: { content: [{ type: 'text', text }] } });
+              } catch (err) {
+                sendJson(res, 200, { jsonrpc: '2.0', id: rpcId, result: { content: [{ type: 'text', text: `Error: ${err instanceof Error ? err.message : String(err)}` }], isError: true } });
               }
-              console.log(`[MCP] stale session ${sessionId} — creating new`);
+            } else {
+              sendJson(res, 200, { jsonrpc: '2.0', id: rpcId, error: { code: -32601, message: `Method not found: ${method}` } });
             }
+          } else if (sessionId && req.method === 'GET') {
+            // Stale SSE reconnect — return 404 to trigger re-init
+            console.log(`[MCP] stale GET session ${sessionId} — 404`);
+            res.statusCode = 404;
+            res.end();
+            return;
+          } else if (req.method === 'POST') {
+            // Brand new session (no session ID at all) — create SSE transport
             const newSessionId = `tek-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
             const transport = new sdk.StreamableHTTPServerTransport({
               sessionIdGenerator: () => newSessionId,
@@ -718,29 +742,16 @@ function filterTools(q) {
               if (transport.sessionId) {
                 mcpTransports.delete(transport.sessionId);
                 clearSessionContext(transport.sessionId);
-                // Clean up stale redirects pointing to this session
-                for (const [k, v] of mcpStaleRedirects) {
-                  if (v === transport.sessionId) mcpStaleRedirects.delete(k);
-                }
                 console.log(`[MCP] session closed: ${transport.sessionId}`);
               }
             };
             await transport.handleRequest(req, res, body ? JSON.parse(body) : undefined);
             if (transport.sessionId) {
               mcpTransports.set(transport.sessionId, transport);
-              // Map the stale session ID to the new one so parallel retries reuse it
-              if (sessionId) {
-                mcpStaleRedirects.set(sessionId, transport.sessionId);
-              }
-              console.log(`[MCP] new session: ${transport.sessionId}${sessionId ? ` (replaces ${sessionId})` : ''}`);
+              console.log(`[MCP] new session: ${transport.sessionId}`);
             }
           } else if (req.method === 'DELETE') {
             sendJson(res, 200, { ok: true });
-          } else if (req.method === 'GET' && sessionId) {
-            // Stale SSE reconnect — session expired, tell client to re-init
-            console.log(`[MCP] stale GET session ${sessionId} — returning 404 to trigger re-init`);
-            res.statusCode = 404;
-            res.end();
           } else {
             sendJson(res, 400, { error: 'No valid session. POST to /mcp to initialize.' });
           }
