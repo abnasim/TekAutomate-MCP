@@ -563,6 +563,16 @@ const getStepBackend = (step: Step, defaultBackend: Backend): Backend => {
 };
 
 const getVisaResourceString = (device: DeviceEntry): string => {
+  const isTekScopePc =
+    device.deviceType === 'TEKSCOPE_PC' ||
+    /tekscope/i.test(`${device.deviceDriver || ''} ${device.modelFamily || ''} ${device.alias || ''}`);
+
+  if (isTekScopePc) {
+    const host = String(device.host || '127.0.0.1').trim() || '127.0.0.1';
+    const port = Number(device.port || 4000);
+    return `TCPIP::${host}::${Number.isFinite(port) && port > 0 ? port : 4000}::SOCKET`;
+  }
+
   if (device.connectionType === 'tcpip') {
     return `TCPIP::${device.host}::INSTR`;
   } else if (device.connectionType === 'socket') {
@@ -4255,8 +4265,18 @@ function AppInner() {
   }, [selectedDeviceFamily]);
 
   const getLiveInstrumentVisaResourceString = (
-      source: Pick<InstrumentConfig, 'connectionType' | 'host' | 'port' | 'usbVendorId' | 'usbProductId' | 'usbSerial' | 'gpibBoard' | 'gpibAddress'> = config
+      source: Pick<InstrumentConfig, 'connectionType' | 'host' | 'port' | 'usbVendorId' | 'usbProductId' | 'usbSerial' | 'gpibBoard' | 'gpibAddress' | 'deviceType' | 'deviceDriver' | 'modelFamily' | 'alias'> = config
     ): string => {
+      const isTekScopePc =
+        source.deviceType === 'TEKSCOPE_PC' ||
+        /tekscope/i.test(`${source.deviceDriver || ''} ${source.modelFamily || ''} ${source.alias || ''}`);
+
+      if (isTekScopePc) {
+        const host = String(source.host || '127.0.0.1').trim() || '127.0.0.1';
+        const port = Number(source.port || 4000);
+        return `TCPIP::${host}::${Number.isFinite(port) && port > 0 ? port : 4000}::SOCKET`;
+      }
+
       switch (source.connectionType) {
         case 'tcpip':
           return `TCPIP::${source.host}::INSTR`;
