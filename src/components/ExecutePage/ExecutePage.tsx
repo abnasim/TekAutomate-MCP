@@ -56,6 +56,7 @@ export interface ExecutePageProps {
   onLiveScreenshot?: (screenshot: { dataUrl: string; mimeType: string; sizeBytes: number; capturedAt: string }) => void;
   blocklyContent: React.ReactNode;
   liveModeContent: React.ReactNode;
+  liveModeToolbar?: React.ReactNode;
   liveVncActive?: boolean;
 }
 
@@ -216,6 +217,7 @@ function ExecutePageContent({
   onLiveScreenshot,
   blocklyContent,
   liveModeContent,
+  liveModeToolbar,
   liveVncActive = false,
 }: ExecutePageProps) {
   const [centerTab, setCenterTab] = useState<ExecutionSource | 'proposals'>(() => loadStoredCenterTab(executionSource));
@@ -664,6 +666,11 @@ function ExecutePageContent({
                     <Play size={16} />
                     {runStatus === 'running' || runStatus === 'connecting' ? 'Running...' : executorEndpoint ? 'Run' : 'Not Connected'}
                   </button>
+                </>
+              )}
+              {centerTab === 'live' && (
+                <>
+                  {liveModeToolbar}
                 </>
               )}
               {centerTab === 'live' && (

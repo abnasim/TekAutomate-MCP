@@ -36,7 +36,7 @@ import { publicAssetUrl } from './utils/publicUrl';
 import { parseConnectQR } from './utils/parseConnectQR';
 import { QRConnectScanner } from './components/QRConnectScanner';
 import { ExecutePage } from './components/ExecutePage';
-import { LiveModePanel, type LiveModeCapture } from './components/ExecutePage/LiveModePanel';
+import { LiveModePanel, LiveModeToolbar, type LiveModeCapture } from './components/ExecutePage/LiveModePanel';
 import { resolveCommandSelection } from './utils/commandMaterializer';
 import type { AiAction } from './utils/aiActions';
 import { applyAiActionsToSteps } from './utils/aiActions';
@@ -1611,6 +1611,7 @@ function AppInner() {
     targetHost: string;
     targetPort: number;
   }>(null);
+  const [liveModeViewMode, setLiveModeViewMode] = useState<'screenshot' | 'vnc'>('screenshot');
   const [liveModeInitialCaptureDone, setLiveModeInitialCaptureDone] = useState(false);
   const liveModeConsecutiveFailures = React.useRef(0);
   const liveModeVncTargetKeyRef = React.useRef('');
@@ -4383,6 +4384,7 @@ function AppInner() {
         targetHost: String(json.target?.host || liveModeVncTarget.targetHost),
         targetPort: Number(json.target?.port || liveModeVncTarget.targetPort),
       });
+      setLiveModeViewMode('vnc');
     } catch (error) {
       setLiveModeVncError(describeExecutorVncError(error, 'Failed to start VNC session.'));
     } finally {
@@ -4412,6 +4414,7 @@ function AppInner() {
       setLiveModeVncSession(null);
       setLiveModeVncError(null);
       setLiveModeVncAvailable(null);
+      setLiveModeViewMode('screenshot');
     }
   }, [buildExecutorHeaders, executorEndpoint, liveModeVncSession]);
 
@@ -4455,6 +4458,7 @@ function AppInner() {
         if (cancelled) return;
         if (!json.ok || json.running === false) {
           setLiveModeVncSession(null);
+          setLiveModeViewMode('screenshot');
           if (json.error) {
             setLiveModeVncError(json.error);
           }
@@ -10057,6 +10061,8 @@ Keep under 120 words. No headings. Bullets only. Stay on this command. Do not de
             }
             liveModeContent={
               <LiveModePanel
+                viewMode={liveModeViewMode}
+                onChangeViewMode={setLiveModeViewMode}
                 capture={liveModeCapture}
                 isCapturing={liveModeCapturing}
                 error={liveModeError}
@@ -10078,6 +10084,32 @@ Keep under 120 words. No headings. Bullets only. Stay on this command. Do not de
                 vncConnecting={liveModeVncConnecting}
                 vncError={liveModeVncError}
                 vncSessionInfo={liveModeVncSession}
+                onToggleVnc={() => {
+                  void toggleLiveModeVnc();
+                }}
+              />
+            }
+            liveModeToolbar={
+              <LiveModeToolbar
+                viewMode={liveModeViewMode}
+                onChangeViewMode={setLiveModeViewMode}
+                isCapturing={liveModeCapturing}
+                autoRefresh={liveModeAutoRefresh}
+                refreshInterval={liveModeRefreshInterval}
+                vncAvailable={liveModeVncAvailable}
+                vncActive={Boolean(liveModeVncSession)}
+                vncConnecting={liveModeVncConnecting}
+                vncSessionInfo={liveModeVncSession}
+                onRefresh={() => {
+                  void captureLiveScopeScreenshot('manual');
+                }}
+                onToggleAutoRefresh={() => {
+                  liveModeConsecutiveFailures.current = 0;
+                  setLiveModeAutoRefresh((prev) => !prev);
+                }}
+                onChangeRefreshInterval={(seconds) => {
+                  setLiveModeRefreshInterval(seconds);
+                }}
                 onToggleVnc={() => {
                   void toggleLiveModeVnc();
                 }}
