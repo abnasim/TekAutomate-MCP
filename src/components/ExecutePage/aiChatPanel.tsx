@@ -459,7 +459,7 @@ export function AiChatPanel({
   ]);
 
   useEffect(() => {
-    if (!(state.provider === 'anthropic' && claudeChatSurface === 'desktop-mcp')) return;
+    // Open SSE stream whenever in live mode — works for all providers
     if (executionSource !== 'live') return;
     const mcpHost = resolveMcpHost();
     if (!mcpHost) return;
