@@ -40,7 +40,7 @@ export async function captureScreenshot(input: Input): Promise<ToolResult<Record
   }
   if (!input.liveMode) {
     return fail('NOT_LIVE',
-      'liveMode must be true. Pass liveMode:true with your request.');
+      'No live instrument session. Make sure TekAutomate is open with an instrument connected in Live mode.');
   }
 
   // ── Bridge through TekAutomate browser if live session is active ──
