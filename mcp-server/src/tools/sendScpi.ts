@@ -105,7 +105,7 @@ export async function sendScpi(input: Input): Promise<ToolResult<Record<string, 
     return fail('MISSING_VISA_RESOURCE', 'visaResource is required. Call get_instrument_info or get_visa_resources to get it.');
   }
   if (!input.liveMode) {
-    return fail('NOT_LIVE', 'liveMode must be true. Pass liveMode:true with your request.');
+    return fail('NOT_LIVE', 'No live instrument session. Make sure TekAutomate is open with an instrument connected in Live mode.');
   }
 
   // ── Bridge through TekAutomate browser ──
