@@ -391,12 +391,15 @@ export async function createServer(port = 8787): Promise<http.Server> {
         try { await startupInitPromise; } catch { /* degrade gracefully */ }
       }
       const { name, arguments: args } = request.params;
+      console.log(`[MCP] call_tool name=${name} args=${JSON.stringify(args).slice(0, 200)}`);
       try {
         const result = await runTool(name, (args as Record<string, unknown>) ?? {});
-        const text = typeof result === 'string' ? result : JSON.stringify(result, null, 2);
+        const safeResult = sanitizeToolResultForExternalMcp(name, result);
+        const text = typeof safeResult === 'string' ? safeResult : JSON.stringify(safeResult, null, 2);
         return { content: [{ type: 'text' as const, text }] };
       } catch (err) {
         const msg = err instanceof Error ? err.message : String(err);
+        console.error(`[MCP] call_tool error name=${name}: ${msg}`);
         return { content: [{ type: 'text' as const, text: `Error: ${msg}` }], isError: true };
       }
     });
