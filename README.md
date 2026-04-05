@@ -1,391 +1,109 @@
 # TekAutomate MCP Server
 
-This server is the AI orchestration layer for TekAutomate. It accepts full workspace context from the app, runs tool-assisted reasoning (or deterministic shortcuts), validates output, and returns applyable `ACTIONS_JSON`.
+AI orchestration layer for [TekAutomate](https://github.com/abnasim/TekAutomate) — Tektronix oscilloscope test automation.
 
-## What it does
+[![Deploy on Railway](https://railway.com/button.svg)](https://railway.com/new?template=https://github.com/abnasim/TekAutomate-MCP)
 
-- Hosts AI chat endpoint used by TekAutomate (`/ai/chat`).
-- Proxies OpenAI Responses API with a server-owned key and vector store (`/ai/responses-proxy`).
-- Loads and indexes local project knowledge.
-- `public/commands/*.json` (SCPI command truth source).
-- `public/rag/*.json` (retrieval chunks).
-- `public/templates/*.json` (workflow examples).
-- `mcp-server/policies/*.md` (behavior and output constraints).
-- Exposes a tool catalog for retrieval, validation, and optional live instrument probing.
-- Applies post-check and repair logic before returning final text.
-- Stores request/debug artifacts for diagnostics.
+## What is this?
 
-## High-level flow
+An MCP server that gives AI assistants access to 9,300+ SCPI commands across Tektronix oscilloscopes, signal generators, power supplies, and spectrum analyzers. Search commands, verify syntax, browse by group, build workflows, and control live instruments.
 
-1. TekAutomate sends `POST /ai/chat` with:
-- `userMessage`
-- provider/model/key
-- full `flowContext` (steps, backend, model family, selected step, validation state)
-- full `runContext` (logs/audit/exit code)
-- optional `instrumentEndpoint` (code executor + VISA resource)
-2. MCP server runs `runToolLoop(...)`:
-- deterministic shortcut path when eligible
-- or provider path (OpenAI hosted Responses/tool loop, OpenAI chat-completions fallback, Anthropic)
-3. Post-check validates and normalizes response:
-- `ACTIONS_JSON` structure
-- step schema and IDs
-- `saveAs` presence/deduplication
-- SCPI verification pipeline
-- prose truncation guard
-4. Server returns JSON payload:
-- `text`
-- `displayText`
-- `openaiThreadId`
-- `errors`
-- `warnings`
-- `metrics`
+**No environment variables needed.** Fork, deploy, use.
 
-## Endpoints
+## Quick Start
 
-- `GET /health`
-- returns `{ ok: true, status: "ready" }` when indexes are loaded.
-- `GET /ai/debug/last`
-- returns last debug bundle (prompts, timings, tool trace metadata).
-- `POST /ai/chat`
-- main orchestration endpoint for TekAutomate assistant.
-- `POST /ai/responses-proxy`
-- streaming Responses proxy using `OPENAI_SERVER_API_KEY` and optional `COMMAND_VECTOR_STORE_ID`.
-- `POST /ai/key-test`
-- validates provider/key/model reachability (`openai` or `anthropic`).
-- `POST /ai/models`
-- lists available models for given provider/key.
+### Remote (One-Click Deploy)
 
-## Tooling surface
+Click the Railway button above. Once deployed, use the URL as your MCP connector:
 
-Server tools are grouped into retrieval, materialization, validation, and live-instrument calls.
+| Client | Config |
+|--------|--------|
+| **ChatKit** | Workflow Settings > MCP Connector > paste URL |
+| **Claude Desktop** | `~/.claude/claude_desktop_config.json` |
+| **VS Code** | `.vscode/mcp.json` |
+| **Cursor** | `.cursor/mcp.json` |
 
-- Retrieval tools:
-- `search_scpi`
-- `get_command_group`
-- `get_command_by_header`
-- `get_commands_by_header_batch`
-- `search_tm_devices`
-- `retrieve_rag_chunks`
-- `search_known_failures`
-- `get_template_examples`
-- `get_policy`
-- `list_valid_step_types`
-- `get_block_schema`
-- Materialization tools:
-- `materialize_scpi_command`
-- `materialize_scpi_commands`
-- `finalize_scpi_commands`
-- `materialize_tm_devices_call`
-- Validation tools:
-- `validate_action_payload`
-- `validate_device_context`
-- `verify_scpi_commands`
-- Live instrument tools (via code executor):
-- `get_instrument_state`
-- `probe_command`
-- `get_visa_resources`
-- `get_environment`
-
-## Deterministic shortcut features
-
-The server includes shortcut builders for common requests to produce fast, consistent actions without full model/tool loops when conditions match.
-
-- Measurement shortcut (including scoped channel handling and standard measurement sets).
-- FastFrame shortcut for pyvisa flows.
-- Common pyvisa server shortcut for frequent setup/build patterns.
-- `tm_devices` measurement shortcut.
-- Planner-driven deterministic shortcut from parsed intent + command index.
-
-These shortcuts still pass through post-check before response.
-
-## Safety and output enforcement
-
-- Strict action schema validation (`validate_action_payload`).
-- Replace-flow hardening.
-- ensures step IDs are present and unique
-- can auto-group long flat flows into logical groups
-- enforces/repairs query `saveAs`
-- deduplicates save names
-- SCPI verification and source-backed command handling.
-- Python substitution guard in non-python flows.
-- Response prose truncation guard (`MCP_POSTCHECK_MAX_PROSE_CHARS`, default 1200).
-- Prompt/policy driven constraints loaded from:
-- `mcp-server/prompts/*.md`
-- `mcp-server/policies/*.md`
-
-## Data and indexes
-
-At startup, the server initializes:
-
-- Command index (`public/commands/*.json`)
-- tm_devices index
-- RAG indexes (`public/rag/*.json`)
-- Template index (`public/templates/*.json`)
-
-Command sources include modern and legacy scope families plus AFG, AWG, SMU, DPOJET, TekExpress, and RSA datasets.
-
-## RAG corpora
-
-RAG source content now lives inside this repo so the MCP package is self-contained.
-
-- Source corpus: `rag/corpus/`
-- Built shards: `public/rag/*.json`
-- Build script: `scripts/buildRagIndex.ts`
-
-Current corpora:
-
-- `scpi`
-- `tmdevices`
-- `app_logic`
-- `scope_logic`
-- `errors`
-- `templates`
-- `pyvisa_tekhsi`
-
-### What each corpus is for
-
-- `scpi`: command/reference content
-- `tmdevices`: tm_devices API usage
-- `app_logic`: TekAutomate app behavior, workflow rules, generator logic
-- `scope_logic`: procedural scope knowledge such as clipping recovery, autoset-first setup, trigger stabilization, and decode bring-up
-- `errors`: curated bug/fix records
-- `templates`: workflow examples
-- `pyvisa_tekhsi`: connection/runtime guidance
-
-### How retrieval works
-
-- `retrieve_rag_chunks` searches a specific corpus directly
-- `tek_router` and other server paths can auto-inject RAG for question-style queries
-- RAG chunks are not hydrated as standalone tools at startup anymore
-- Hosted startup should show `0 RAG` in hydrated tool count; that is expected and means chunk tools are no longer materialized individually
-
-### Adding new corpus content
-
-Add files under `rag/corpus/<corpus-name>/`.
-
-For `scope_logic`, prefer one procedure per markdown file with headings like:
-
-- `# Title`
-- `## Trigger Signals`
-- `## Procedure`
-- `## Notes`
-
-Example:
-
-```md
-# Trigger Stabilization Procedure
-
-Use this procedure when the waveform is rolling or the trigger is unstable.
-
-## Trigger Signals
-
-- rolling waveform
-- unstable trigger
-- jittery display
-
-## Procedure
-
-1. Set the trigger source to the active signal channel.
-2. Start with edge trigger.
-3. Put trigger level near the midpoint.
-4. Switch from AUTO to NORMAL once the signal is understood.
-
-## Notes
-
-- Stabilize trigger before troubleshooting measurements or decode.
+```json
+{
+  "mcpServers": {
+    "tekautomate": {
+      "type": "http",
+      "url": "https://YOUR-DEPLOY.up.railway.app/mcp"
+    }
+  }
+}
 ```
 
-### Building RAG shards
-
-The hosted MCP environment should consume prebuilt shards from `public/rag`.
-
-That means the expected workflow is:
-
-1. Add or edit files in `rag/corpus/...`
-2. Run `npm run build:rag` locally
-3. Commit both the source files and the regenerated `public/rag/*.json`
-4. Push the repo
-
-This is intentional. Railway/hosted deploys do not need to author corpus content interactively; contributors can build locally and push generated shards.
-
-## Frontend integration
-
-Current app integration resolves MCP host from:
-
-- `localStorage["tekautomate.mcp.host"]`
-- or `REACT_APP_MCP_HOST`
-- fallback: `http://localhost:8787` only on localhost app hosts
-
-Example:
-
-```js
-localStorage.setItem('tekautomate.mcp.host', 'http://localhost:8787');
-```
-
-## Run locally
+### Local (From Repo)
 
 ```bash
-cd mcp-server
+git clone https://github.com/abnasim/TekAutomate-MCP.git
+cd TekAutomate-MCP
 npm install
-npm run start
+npm start        # HTTP server on port 8787
 ```
 
-Default port is `8787` unless `MCP_PORT` is set.
+For stdio transport (Claude Desktop/Code):
+```json
+{
+  "mcpServers": {
+    "tekautomate": {
+      "command": "npx",
+      "args": ["tsx", "src/stdio.ts"],
+      "cwd": "/path/to/TekAutomate-MCP"
+    }
+  }
+}
+```
 
-## Environment variables
+## Tools
 
-Copy `.env.example` to `.env` and set what you need.
+### SCPI Knowledge (works everywhere)
+| Tool | Description |
+|------|-------------|
+| `search_scpi` | Keyword search across SCPI command database |
+| `smart_scpi_lookup` | Natural language to SCPI command finder |
+| `get_command_by_header` | Exact lookup by header (e.g. `TRIGger:A:EDGE:SOUrce`) |
+| `verify_scpi_commands` | Validate command strings before sending |
+| `browse_scpi_commands` | Drill-down browser: groups > commands > details |
+| `retrieve_rag_chunks` | Knowledge base: procedures, bugs, patterns |
+| `get_template_examples` | Workflow templates and examples |
 
-- Required for `/ai/responses-proxy`:
-- `OPENAI_SERVER_API_KEY`
-- Optional retrieval augmentation:
-- `COMMAND_VECTOR_STORE_ID`
-- OpenAI routing/model controls:
-- `OPENAI_BASE_URL`
-- `OPENAI_DEFAULT_MODEL`
-- `OPENAI_FLOW_MODEL`
-- `OPENAI_REASONING_MODEL`
-- `OPENAI_ASSISTANT_MODEL`
-- `OPENAI_MAX_OUTPUT_TOKENS`
-- Hosted prompt controls:
-- `OPENAI_PROMPT_ID`
-- `OPENAI_PROMPT_VERSION`
-- legacy fallback accepted: `OPENAI_ASSISTANT_ID`
-- Prompt file overrides:
-- `TEKAUTOMATE_STEPS_INSTRUCTIONS_FILE`
-- `TEKAUTOMATE_BLOCKLY_INSTRUCTIONS_FILE`
-- Post-check tuning:
-- `MCP_POSTCHECK_MAX_PROSE_CHARS`
-- Server:
-- `MCP_PORT`
+### Live Instrument Control (requires TekAutomate app)
+| Tool | Description |
+|------|-------------|
+| `send_scpi` | Send SCPI commands to connected instrument |
+| `capture_screenshot` | Capture scope display |
+| `discover_scpi` | Snapshot/diff instrument state via `*LRN?` |
+| `get_visa_resources` | List connected VISA instruments |
+| `get_instrument_info` | Current connection context |
 
-## Scripts and verification
+### Workflow Builder
+| Tool | Description |
+|------|-------------|
+| `tek_router` | Gateway for build, materialize, save/learn flows |
+| `stage_workflow_proposal` | Push workflow changes to TekAutomate UI |
 
-- `npm run start` / `npm run dev`
-- `npm run build:rag`
-- `npm run eval:comprehensive`
-- `npm run eval:levels`
-- `npm run verify:command-groups`
+## Supported Instruments
 
-Reference benchmark:
+- **Modern Scopes:** MSO2, MSO4, MSO5, MSO6 Series
+- **Legacy Scopes:** DPO5000, DPO7000, DPO70000, MSO5000
+- **Signal Generators:** AFG, AWG Series
+- **Power Supplies:** SMU Series
+- **Spectrum Analyzers:** RSA Series
+- **Software:** DPOJET, TekExpress
 
-- `mcp-server/reports/level-benchmark-2026-03-18.md` shows 40/40 PASS in that run.
+## API Endpoints
 
-## Logs and debug artifacts
+| Method | Path | Description |
+|--------|------|-------------|
+| `GET` | `/` | Tools and API reference page |
+| `GET` | `/health` | Health check |
+| `POST` | `/mcp` | MCP Streamable HTTP transport |
+| `GET` | `/tools/list` | List all tools as JSON |
+| `POST` | `/tools/execute` | Execute a tool directly |
+| `POST` | `/ai/chat` | AI orchestration endpoint |
 
-- Last debug state: `GET /ai/debug/last`
-- Request logs are written under `mcp-server/src/logs/requests` (rotated, max 500 files).
-- Additional logs and reports are under `mcp-server/logs` and `mcp-server/reports`.
+## License
 
-## Internals: Planner, Materializers, and AI Routing
-
-### Intent planner (`src/core/intentPlanner.ts`)
-
-The planner is a deterministic parser + resolver layer used before (and sometimes instead of) LLM output.
-
-Main responsibilities:
-
-- Parse user text into structured intent fields (channels, trigger, measurements, bus decode, acquisition, save/recall, status, AFG/AWG/SMU/RSA).
-- Detect device type and map request to relevant command families.
-- Resolve concrete SCPI candidates against the command index.
-- Return unresolved intents when command mapping is ambiguous.
-- Run conflict checks (resource collisions / inconsistent intent combinations).
-
-Core exported functions:
-
-- `parseIntent(...)`: builds `PlannerIntent` from natural language.
-- `planIntent(...)`: parse + resolve + conflict check, returning `PlannerOutput`.
-- `resolve*Commands(...)`: domain resolvers such as `resolveTriggerCommands`, `resolveMeasurementCommands`, `resolveBusCommands`, `resolveSaveCommands`, etc.
-- `parse*Intent(...)`: focused parsers such as `parseChannelIntent`, `parseTriggerIntent`, `parseMeasurementIntent`, `parseBusIntent`, etc.
-
-### SCPI source of truth (`src/core/commandIndex.ts`)
-
-- Loads command JSON files from `public/commands` once at startup.
-- Normalizes heterogeneous command shapes (manual-entry rich format and flat format).
-- Builds fast lookup structures for:
-- exact header lookup (`getByHeader`)
-- prefix lookup (`getByHeaderPrefix`)
-- ranked query search (`searchByQuery`)
-- Supports placeholder-aware header normalization (`CH<x>`, `MEAS<x>`, `BUS<x>`, `{A|B}`, etc.).
-
-Current local index size (measured):
-
-- ~`9307` normalized command records.
-
-### SCPI retrieval functions
-
-- `search_scpi` (`src/tools/searchScpi.ts`): query search + header-like direct matching merge.
-- `get_command_by_header`: exact deterministic match for known headers.
-- `get_commands_by_header_batch`: batch exact lookup for multiple headers.
-- `get_command_group`: feature-area retrieval (group-level).
-- `verify_scpi_commands` (`src/tools/verifyScpiCommands.ts`): validates commands (including exact syntax mode).
-
-### Materializers
-
-Materializers convert canonical records into concrete, applyable commands/calls.
-
-- `materialize_scpi_command`:
-- selects set/query syntax
-- infers placeholder bindings from `concreteHeader`
-- applies explicit bindings + argument values
-- checks unresolved placeholders
-- runs exact verification before returning success
-- `materialize_scpi_commands`: batch wrapper around single materializer.
-- `finalize_scpi_commands`: batch materialize + verified output packaging, used as endgame tool in hosted flows.
-- `materialize_tm_devices_call`: builds exact Python call from verified `methodPath` and arguments.
-
-### Tool loop and when server goes to AI for more info
-
-Routing is centralized in `src/core/toolLoop.ts`.
-
-Deterministic path first (no external model):
-
-- In `mcp_only` mode, server tries deterministic shortcuts and planner synthesis first.
-- If planner fully resolves commands, it can return applyable `ACTIONS_JSON` directly.
-- If unresolved in `mcp_only`, server returns findings/suggested fixes instead of calling external AI.
-
-AI path (`mcp_ai` and normal hosted usage):
-
-- If deterministic path is not enough, server calls provider path:
-- OpenAI hosted Responses (preferred for structured build/edit)
-- OpenAI chat-completions fallback
-- Anthropic messages path
-- For hosted structured build, server preloads source-of-truth context via tools (`search_scpi`, `get_command_group`, `get_commands_by_header_batch`, or `search_tm_devices`) before/within the loop.
-- Tool rounds are capped (`4` for hosted structured build, `3` default, `8` when forced tool mode).
-
-Reliability fallbacks after AI response:
-
-- Post-check pass validates and normalizes output.
-- If model returns non-actionable output, server attempts hybrid planner gap-fill.
-- If `ACTIONS_JSON` is malformed, server retries once with strict JSON-only instruction.
-- If model output is weak in specific cases, server can fallback to deterministic shortcut output.
-
-### Performance snapshot
-
-From checked-in benchmark report:
-
-- `mcp-server/reports/level-benchmark-2026-03-18.md`: 40/40 PASS.
-- In that run, per-case `totalMs` ranged from about `1ms` to `254ms`.
-
-Local micro-benchmark (quick developer run on this workspace; indicative, not production SLA):
-
-- `searchByQuery` average: ~`0.54 ms` per lookup.
-- `getByHeader` average: ~`0.009 ms` per lookup (hot path).
-- `materializeScpiCommand` average (single-command path with verification): ~`25.4 ms`.
-- `finalizeScpiCommands` average for 3-command batch: ~`1.8 ms`.
-
-Use these as practical engineering baselines; real end-to-end latency depends more on provider/model calls than local index lookup.
-
-### When to use MCP-only vs MCP+AI
-
-Use `mcp_only` when:
-
-- You want deterministic/local command resolution.
-- You prefer speed and strictness over open-ended reasoning.
-- The request is explicit enough for planner/materializers.
-
-Use `mcp_ai` when:
-
-- Request is complex, ambiguous, or cross-domain.
-- You need richer reasoning, explanation, or conflict tradeoffs.
-- Deterministic planner reports unresolved intent and you want model help.
+MIT

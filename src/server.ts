@@ -628,6 +628,26 @@ function filterTools(q) {
       return;
     }
 
+    // ── OAuth discovery — tell MCP clients no auth is needed ─────
+    if (req.url === '/.well-known/oauth-protected-resource' || req.url === '/.well-known/oauth-authorization-server') {
+      res.setHeader('Access-Control-Allow-Origin', '*');
+      sendJson(res, 200, {
+        resource: process.env.MCP_PUBLIC_URL || `https://${req.headers.host || 'localhost'}`,
+        bearer_methods_supported: [],
+        resource_signing_alg_values_supported: [],
+      });
+      return;
+    }
+    if (req.method === 'POST' && req.url === '/register') {
+      res.setHeader('Access-Control-Allow-Origin', '*');
+      sendJson(res, 200, {
+        client_id: 'tekautomate-public',
+        client_name: 'TekAutomate MCP',
+        token_endpoint_auth_method: 'none',
+      });
+      return;
+    }
+
     // ── GET / — Tools & API reference page ────────────────────────
     if (req.method === 'GET' && (req.url === '/' || req.url === '/index.html')) {
       res.statusCode = 200;
@@ -638,7 +658,8 @@ function filterTools(q) {
     }
 
     // ── /mcp — MCP Streamable HTTP + stateless JSON-RPC fallback ──
-    if (req.url === '/mcp' || req.url?.startsWith('/mcp?')) {
+    // Also handle POST / — some MCP clients POST to root instead of /mcp
+    if (req.url === '/mcp' || req.url?.startsWith('/mcp?') || (req.method === 'POST' && req.url === '/')) {
       res.setHeader('Access-Control-Allow-Origin', '*');
       res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Accept, Mcp-Session-Id');
       res.setHeader('Access-Control-Expose-Headers', 'Mcp-Session-Id');
