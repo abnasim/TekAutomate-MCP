@@ -9,8 +9,9 @@
  * Usage:
  *   npx tsx mcp-server/src/stdio.ts
  *
- * Nothing in the existing HTTP server is modified — this is an
- * additive, parallel entry point.
+ * Indexes are loaded lazily in the background so the MCP handshake
+ * completes instantly.  Tools called before indexes are ready return
+ * a friendly "still loading" message instead of crashing.
  */
 
 import { config } from 'dotenv';
@@ -68,32 +69,12 @@ config({ path: resolve(__dirname, '..', '.env') });
 // ── main ─────────────────────────────────────────────────────────────
 
 async function main() {
-  // All logs go to stderr so they don't corrupt the stdio JSON-RPC stream
-  console.error('[tekautomate-mcp] Initializing indexes…');
-
-  const initTasks = [
-    initCommandIndex(),
-    initTmDevicesIndex(),
-    initRagIndexes(),
-    initTemplateIndex(),
-    ...(providerSupplementsEnabled() ? [initProviderCatalog()] : []),
-  ];
-  await Promise.all(initTasks);
-  console.error('[tekautomate-mcp] Indexes ready');
-
-  if (String(process.env.MCP_ROUTER_DISABLED || '').trim() !== 'true') {
-    await bootRouter();
-    console.error('[tekautomate-mcp] Router ready');
-  }
-
-  // ── Create low-level MCP server ──────────────────────────────────
+  // ── Create MCP server immediately — don't block on indexes ────────
   const server = new Server(
     { name: 'tekautomate', version: '3.2.0' },
     { capabilities: { tools: {} } },
   );
 
-  // Only expose the slim MCP surface (gateway + live tools)
-  // All other tools are routed internally via tek_router
   const toolDefs = getMcpExposedTools();
   const mcpTools = toolDefs.map((def) => ({
     name: def.name,
@@ -112,9 +93,56 @@ async function main() {
     tools: mcpTools,
   }));
 
+  // ── Lazy index loading — runs in background ──────────────────────
+  let indexesReady = false;
+  let indexError: string | null = null;
+
+  const initPromise = (async () => {
+    try {
+      console.error('[tekautomate-mcp] Loading indexes in background…');
+      const initTasks = [
+        initCommandIndex(),
+        initTmDevicesIndex(),
+        initRagIndexes(),
+        initTemplateIndex(),
+        ...(providerSupplementsEnabled() ? [initProviderCatalog()] : []),
+      ];
+      await Promise.all(initTasks);
+      console.error('[tekautomate-mcp] Indexes ready');
+
+      if (String(process.env.MCP_ROUTER_DISABLED || '').trim() !== 'true') {
+        await bootRouter();
+        console.error('[tekautomate-mcp] Router ready');
+      }
+      indexesReady = true;
+    } catch (err) {
+      indexError = err instanceof Error ? err.message : String(err);
+      console.error('[tekautomate-mcp] Index init failed:', indexError);
+    }
+  })();
+
   // ── tools/call handler ───────────────────────────────────────────
   server.setRequestHandler(CallToolRequestSchema, async (request) => {
     const { name, arguments: args } = request.params;
+
+    // If indexes aren't ready yet, wait briefly then check again
+    if (!indexesReady && !indexError) {
+      await Promise.race([initPromise, new Promise(r => setTimeout(r, 10_000))]);
+    }
+
+    if (indexError) {
+      return {
+        content: [{ type: 'text' as const, text: `TekAutomate server failed to initialize: ${indexError}` }],
+        isError: true,
+      };
+    }
+
+    if (!indexesReady) {
+      return {
+        content: [{ type: 'text' as const, text: 'TekAutomate indexes are still loading. Please try again in a few seconds.' }],
+        isError: true,
+      };
+    }
 
     try {
       const result = await runTool(name, (args as Record<string, unknown>) ?? {});
@@ -138,7 +166,7 @@ async function main() {
 
   console.error(`[tekautomate-mcp] Registered ${mcpTools.length} tools via stdio`);
 
-  // ── Connect stdio transport ──────────────────────────────────────
+  // ── Connect stdio transport immediately ──────────────────────────
   const transport = new StdioServerTransport();
   await server.connect(transport);
   console.error('[tekautomate-mcp] Stdio transport connected — ready for requests');
@@ -148,4 +176,3 @@ main().catch((err) => {
   console.error('[tekautomate-mcp] Fatal:', err);
   process.exit(1);
 });
-

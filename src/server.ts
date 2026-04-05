@@ -8,7 +8,7 @@ import { runToolLoop } from './core/toolLoop';
 import { getToolDefinitions, getMcpExposedTools, runTool } from './tools/index';
 import type { McpChatRequest } from './core/schemas';
 import { getLastWorkflowProposal } from './tools/stageWorkflowProposal';
-import { getRuntimeContextState, updateRuntimeContext } from './tools/runtimeContextStore';
+import { getRuntimeContextState, updateRuntimeContext, runInSession, clearSessionContext } from './tools/runtimeContextStore';
 import { completeLiveAction, getPendingLiveActionCount, waitForNextLiveAction } from './tools/liveActionBridge';
 import { bootRouter, createReloadProvidersHandler, createRouterHandler, getRouterHealth } from './core/routerIntegration';
 import { getCommandIndex } from './core/commandIndex';
@@ -207,38 +207,6 @@ async function readJsonBody(req: http.IncomingMessage): Promise<Record<string, u
   return JSON.parse(raw || '{}') as Record<string, unknown>;
 }
 
-function injectRuntimeInstrumentContext(
-  toolName: string,
-  toolArgs: Record<string, unknown>,
-): Record<string, unknown> {
-  const liveTools = new Set([
-    'get_instrument_state',
-    'probe_command',
-    'send_scpi',
-    'capture_screenshot',
-    'get_visa_resources',
-    'get_environment',
-    'discover_scpi',
-  ]);
-  if (!liveTools.has(toolName)) return toolArgs;
-
-  const instrument = getRuntimeContextState().instrument;
-  const merged: Record<string, unknown> = { ...toolArgs };
-  if (!('executorUrl' in merged) && instrument.executorUrl) {
-    merged.executorUrl = instrument.executorUrl;
-  }
-  if (!('visaResource' in merged) && instrument.visaResource) {
-    merged.visaResource = instrument.visaResource;
-  }
-  if (!('backend' in merged) && instrument.backend) {
-    merged.backend = instrument.backend;
-  }
-  if (!('liveMode' in merged)) {
-    merged.liveMode = instrument.liveMode === true || instrument.connected === true;
-  }
-  return merged;
-}
-
 function sendJson(res: http.ServerResponse, status: number, payload: unknown) {
   res.statusCode = status;
   res.setHeader('Content-Type', 'application/json');
@@ -391,7 +359,7 @@ export async function createServer(port = 8787): Promise<http.Server> {
     }
   }
 
-  async function createMcpProtocolServer() {
+  async function createMcpProtocolServer(sessionId?: string) {
     const sdk = await getMcpSdk();
     if (!sdk) throw new Error('MCP SDK not installed. Run: npm install @modelcontextprotocol/sdk');
     const mcp = new sdk.Server(
@@ -423,22 +391,29 @@ export async function createServer(port = 8787): Promise<http.Server> {
         try { await startupInitPromise; } catch { /* degrade gracefully */ }
       }
       const { name, arguments: args } = request.params;
-      try {
-        let toolArgs = { ...((args as Record<string, unknown>) ?? {}) };
-        toolArgs = injectRuntimeInstrumentContext(name, toolArgs);
-        const result = await runTool(name, toolArgs);
-        const text = typeof result === 'string' ? result : JSON.stringify(result, null, 2);
-        return { content: [{ type: 'text' as const, text }] };
-      } catch (err) {
-        const msg = err instanceof Error ? err.message : String(err);
-        return { content: [{ type: 'text' as const, text: `Error: ${msg}` }], isError: true };
-      }
+      const sid = sessionId || 'global';
+      console.log(`[MCP:${sid}] call_tool name=${name} args=${JSON.stringify(args).slice(0, 200)}`);
+
+      // Run inside session scope so tools see this session's context, not another user's
+      const exec = async () => {
+        try {
+          const result = await runTool(name, (args as Record<string, unknown>) ?? {});
+          const safeResult = sanitizeToolResultForExternalMcp(name, result);
+          const text = typeof safeResult === 'string' ? safeResult : JSON.stringify(safeResult, null, 2);
+          return { content: [{ type: 'text' as const, text }] };
+        } catch (err) {
+          const msg = err instanceof Error ? err.message : String(err);
+          console.error(`[MCP:${sid}] call_tool error name=${name}: ${msg}`);
+          return { content: [{ type: 'text' as const, text: `Error: ${msg}` }], isError: true };
+        }
+      };
+      return sessionId ? runInSession(sessionId, exec) : exec();
     });
     return mcp;
   }
 
   // Per-session MCP transport map
-  const mcpTransports = new Map<string, { transport: any }>();
+  const mcpTransports = new Map<string, any>();
 
   // ── HTML Tools Page ───────────────────────────────────────────────
   function buildToolsHtml(): string {
@@ -672,6 +647,12 @@ function filterTools(q) {
       const sessionId = req.headers['mcp-session-id'] as string | undefined;
       console.log(`[MCP] transport method=${req.method} session=${sessionId || 'none'} accept=${req.headers['accept'] || 'none'} content-type=${req.headers['content-type'] || 'none'}`);
 
+      // Workaround: some MCP clients (e.g. Claude) don't send the required
+      // Accept header.  Inject it so StreamableHTTPServerTransport doesn't reject.
+      if (!req.headers['accept'] || !req.headers['accept'].includes('text/event-stream')) {
+        req.headers['accept'] = 'application/json, text/event-stream';
+      }
+
       if (req.method === 'POST' || req.method === 'GET' || req.method === 'DELETE') {
         try {
           const sdk = await getMcpSdk();
@@ -695,27 +676,31 @@ function filterTools(q) {
 
           if (sessionId && mcpTransports.has(sessionId)) {
             // Existing session
-            const existing = mcpTransports.get(sessionId)!;
-            await existing.transport.handleRequest(req, res, body ? JSON.parse(body) : undefined);
+            const transport = mcpTransports.get(sessionId)!;
+            await transport.handleRequest(req, res, body ? JSON.parse(body) : undefined);
           } else if (req.method === 'POST') {
             // New session — create transport and MCP server
+            const newSessionId = `tek-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
             const transport = new sdk.StreamableHTTPServerTransport({
-              sessionIdGenerator: () => `tek-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+              sessionIdGenerator: () => newSessionId,
             });
-            const mcpServer = await createMcpProtocolServer();
+            const mcpServer = await createMcpProtocolServer(newSessionId);
             await mcpServer.connect(transport);
 
-            // Store transport by session ID after first handle
+            // Clean up session context when transport closes
             transport.onclose = () => {
               if (transport.sessionId) {
                 mcpTransports.delete(transport.sessionId);
+                clearSessionContext(transport.sessionId);
+                console.log(`[MCP] session closed: ${transport.sessionId}`);
               }
             };
 
             await transport.handleRequest(req, res, body ? JSON.parse(body) : undefined);
 
             if (transport.sessionId) {
-              mcpTransports.set(transport.sessionId, { transport });
+              mcpTransports.set(transport.sessionId, transport);
+              console.log(`[MCP] new session: ${transport.sessionId}`);
             }
           } else {
             sendJson(res, 400, { error: 'No valid session. Send a POST to /mcp to initialize.' });
@@ -870,8 +855,7 @@ function filterTools(q) {
         const json = (await execRes.json()) as Record<string, unknown>;
         sendJson(res, 200, { ok: json.ok === true, disconnected: ep.visaResource });
       } catch (err) {
-        const message = err instanceof Error ? err.message : 'Disconnect failed';
-        sendJson(res, 500, { ok: false, error: message });
+        sendJson(res, 500, { ok: false, error: err instanceof Error ? err.message : 'Disconnect failed' });
       }
       return;
     }
@@ -917,8 +901,7 @@ function filterTools(q) {
         const safeResult = sanitizeToolResultForExternalMcp(toolName, result);
         sendJson(res, 200, { ok: true, tool: toolName, result: safeResult });
       } catch (err) {
-        const message = err instanceof Error ? err.message : 'Tool execution error';
-        sendJson(res, 500, { ok: false, error: message });
+        sendJson(res, 500, { ok: false, error: err instanceof Error ? err.message : 'Tool execution error' });
       }
       return;
     }

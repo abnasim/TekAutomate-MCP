@@ -1,3 +1,28 @@
+import { AsyncLocalStorage } from 'node:async_hooks';
+
+// ── Per-session isolation ────────────────────────────────────────────
+// When a tool runs inside an MCP session, AsyncLocalStorage holds the
+// session ID.  getRuntimeContextState() returns that session's context
+// instead of the shared global, so one user's instrument/executor never
+// leaks to another user.
+const _sessionStore = new AsyncLocalStorage<string>();
+const _perSessionState = new Map<string, RuntimeContextState>();
+
+/** Run `fn` scoped to the given MCP session. */
+export function runInSession<T>(sessionId: string, fn: () => T): T {
+  return _sessionStore.run(sessionId, fn);
+}
+
+/** Return the current MCP session ID, or undefined if not in a session. */
+export function currentSessionId(): string | undefined {
+  return _sessionStore.getStore();
+}
+
+/** Remove a session's context when the transport closes. */
+export function clearSessionContext(sessionId: string): void {
+  _perSessionState.delete(sessionId);
+}
+
 export interface RuntimeWorkflowStep {
   id?: string;
   index?: number;
@@ -86,13 +111,32 @@ const DEFAULT_LIVE_SESSION: RuntimeLiveSessionInfo = {
   userId: null,
 };
 
-let runtimeContextState: RuntimeContextState = {
+let _globalState: RuntimeContextState = {
   updatedAt: new Date(0).toISOString(),
   workflow: DEFAULT_WORKFLOW,
   instrument: DEFAULT_INSTRUMENT,
   runLog: DEFAULT_RUN_LOG,
   liveSession: DEFAULT_LIVE_SESSION,
 };
+
+function _getState(): RuntimeContextState {
+  const sid = _sessionStore.getStore();
+  if (sid) {
+    let s = _perSessionState.get(sid);
+    if (!s) {
+      s = {
+        updatedAt: new Date(0).toISOString(),
+        workflow: { ...DEFAULT_WORKFLOW },
+        instrument: { ...DEFAULT_INSTRUMENT },
+        runLog: { ...DEFAULT_RUN_LOG },
+        liveSession: { ...DEFAULT_LIVE_SESSION },
+      };
+      _perSessionState.set(sid, s);
+    }
+    return s;
+  }
+  return _globalState;
+}
 
 function toStringList(value: unknown): string[] {
   if (!Array.isArray(value)) return [];
@@ -135,6 +179,7 @@ export function updateRuntimeContext(input: {
   runLog?: unknown;
   liveSession?: unknown;
 }) {
+  const runtimeContextState = _getState();
   if (input.workflow && typeof input.workflow === 'object') {
     const workflow = input.workflow as Record<string, unknown>;
     const steps = normalizeSteps(workflow.steps);
@@ -182,16 +227,17 @@ export function updateRuntimeContext(input: {
 }
 
 export function getRuntimeContextState(): RuntimeContextState {
+  const s = _getState();
   return {
-    updatedAt: runtimeContextState.updatedAt,
+    updatedAt: s.updatedAt,
     workflow: {
-      ...runtimeContextState.workflow,
-      steps: runtimeContextState.workflow.steps.map((step) => ({ ...step })),
-      validationErrors: [...runtimeContextState.workflow.validationErrors],
+      ...s.workflow,
+      steps: s.workflow.steps.map((step) => ({ ...step })),
+      validationErrors: [...s.workflow.validationErrors],
     },
-    instrument: { ...runtimeContextState.instrument },
-    runLog: { ...runtimeContextState.runLog },
-    liveSession: { ...runtimeContextState.liveSession },
+    instrument: { ...s.instrument },
+    runLog: { ...s.runLog },
+    liveSession: { ...s.liveSession },
   };
 }
 
