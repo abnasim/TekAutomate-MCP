@@ -97,24 +97,19 @@ export function LiveModePanel({
         <div className="text-sm font-semibold text-slate-900 dark:text-white">Live Mode</div>
         <div className="flex items-center gap-2">
           {deviceOptions.length > 1 && onSelectDevice ? (
-            <div className="flex items-center gap-1 rounded-lg border border-slate-300 bg-white px-2 py-1 dark:border-slate-700 dark:bg-slate-900">
-              <span className="text-[10px] font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">
-                Instrument
-              </span>
-              <select
-                value={selectedDeviceId || ''}
-                onChange={(e) => onSelectDevice(e.target.value)}
-                className="bg-transparent text-[11px] font-medium text-slate-700 outline-none dark:text-slate-200"
-                title="Select which instrument Live Mode should target"
-                aria-label="Select live-mode instrument"
-              >
-                {deviceOptions.map((device) => (
-                  <option key={device.id} value={device.id}>
-                    {device.label}
-                  </option>
-                ))}
-              </select>
-            </div>
+            <select
+              value={selectedDeviceId || ''}
+              onChange={(e) => onSelectDevice(e.target.value)}
+              className="rounded-lg border border-slate-300 bg-white px-2 py-1 text-[11px] font-medium text-slate-700 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-200"
+              title="Select which instrument Live Mode should target"
+              aria-label="Select live-mode instrument"
+            >
+              {deviceOptions.map((device) => (
+                <option key={device.id} value={device.id}>
+                  {device.label}
+                </option>
+              ))}
+            </select>
           ) : null}
           <div className="flex items-center gap-1">
             {canShowVncTab ? (
