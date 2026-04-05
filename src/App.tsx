@@ -385,6 +385,15 @@ interface DeviceEntry extends InstrumentConfig {
   status?: 'online' | 'offline' | 'idle' | 'acquiring';
 }
 
+interface LiveModeTargetOption {
+  id: string;
+  label: string;
+  visaResource: string;
+  targetHost?: string;
+  targetPort?: number;
+  config: InstrumentConfig;
+}
+
 interface InstrumentNode {
   id: string;
   deviceId?: string; // links to DeviceEntry.id
@@ -1597,6 +1606,15 @@ function AppInner() {
   const liveModeConsecutiveFailures = React.useRef(0);
   const liveModeVncTargetKeyRef = React.useRef('');
   const [connectedInstrumentIdn, setConnectedInstrumentIdn] = useState<string | null>(null);
+  const [executorScannedInstruments, setExecutorScannedInstruments] = useState<Array<{
+    resource: string;
+    identity: string;
+    manufacturer: string;
+    model: string;
+    serial: string;
+    reachable: boolean;
+    connType: string;
+  }>>([]);
 
   useEffect(() => {
     if (!liveModeVncError) return undefined;
@@ -1628,25 +1646,83 @@ function AppInner() {
     return () => window.removeEventListener('message', handleVncViewerMessage);
   }, []);
 
+  const parseScannedInstrumentHost = useCallback((resource: string): string => {
+    const tcpipMatch = resource.match(/TCPIP\d*::([^:]+)::/i);
+    if (tcpipMatch?.[1]) return tcpipMatch[1];
+    return '';
+  }, []);
+
+  const parseScannedInstrumentPort = useCallback((resource: string, connType: string): number => {
+    if (String(connType || '').toLowerCase() === 'socket') {
+      const socketMatch = resource.match(/::(\d+)::SOCKET/i);
+      if (socketMatch?.[1]) {
+        const parsed = Number(socketMatch[1]);
+        if (Number.isFinite(parsed) && parsed > 0) return parsed;
+      }
+    }
+    return 4000;
+  }, []);
+
+  const buildScannedInstrumentConfig = useCallback((instrument: {
+    resource: string;
+    manufacturer: string;
+    model: string;
+    connType: string;
+  }): InstrumentConfig => {
+    const host = parseScannedInstrumentHost(instrument.resource);
+    const connectionType = String(instrument.connType || '').toLowerCase() === 'socket'
+      ? 'socket'
+      : 'tcpip';
+    return {
+      ...config,
+      connectionType,
+      host,
+      port: connectionType === 'socket' ? parseScannedInstrumentPort(instrument.resource, instrument.connType) : config.port,
+      alias: instrument.model ? `${instrument.manufacturer} ${instrument.model}`.trim() : instrument.resource,
+      vncHost: host || config.vncHost,
+      vncPort: config.vncPort || 5900,
+    };
+  }, [config, parseScannedInstrumentHost, parseScannedInstrumentPort]);
+
+  const liveModeTargetOptions = useMemo<LiveModeTargetOption[]>(() => {
+    const configured = enabledDevices.map((device) => ({
+      id: device.id,
+      label: device.alias || device.host || device.id,
+      visaResource: getVisaResourceString(device),
+      targetHost: String(device.vncHost || device.host || '').trim(),
+      targetPort: Number(device.vncPort || 5900),
+      config: {
+        ...config,
+        ...device,
+      },
+    }));
+    const configuredResources = new Set(configured.map((option) => option.visaResource));
+    const scanned = executorScannedInstruments
+      .filter((instrument) => !configuredResources.has(instrument.resource))
+      .map((instrument) => {
+        const scannedConfig = buildScannedInstrumentConfig(instrument);
+        return {
+          id: `scan:${instrument.resource}`,
+          label: scannedConfig.alias || instrument.resource,
+          visaResource: instrument.resource,
+          targetHost: String(scannedConfig.vncHost || scannedConfig.host || '').trim(),
+          targetPort: Number(scannedConfig.vncPort || 5900),
+          config: scannedConfig,
+        };
+      });
+    return [...configured, ...scanned];
+  }, [buildScannedInstrumentConfig, config, enabledDevices, executorScannedInstruments, getVisaResourceString]);
+
   useEffect(() => {
-    if (enabledDevices.length === 0) {
+    if (liveModeTargetOptions.length === 0) {
       setLiveModeDeviceId(null);
       return;
     }
-    if (liveModeDeviceId && enabledDevices.some((device) => device.id === liveModeDeviceId)) {
+    if (liveModeDeviceId && liveModeTargetOptions.some((device) => device.id === liveModeDeviceId)) {
       return;
     }
-    setLiveModeDeviceId(enabledDevices[0]?.id || null);
-  }, [enabledDevices, liveModeDeviceId]);
-  const [executorScannedInstruments, setExecutorScannedInstruments] = useState<Array<{
-    resource: string;
-    identity: string;
-    manufacturer: string;
-    model: string;
-    serial: string;
-    reachable: boolean;
-    connType: string;
-  }>>([]);
+    setLiveModeDeviceId(liveModeTargetOptions[0]?.id || null);
+  }, [liveModeDeviceId, liveModeTargetOptions]);
   const [runWindowResult, setRunWindowResult] = useState<{ ok: boolean; stdout: string; stderr: string; error: string | null; exit_code?: number } | null>(null);
   const [lastExecutionAudit, setLastExecutionAudit] = useState<ExecutionAuditReport | null>(null);
   const [askAiModalOpen, setAskAiModalOpen] = useState(false);
@@ -4196,38 +4272,50 @@ function AppInner() {
     };
   }, [config, devices]);
 
+  const selectedLiveModeTarget = useMemo<LiveModeTargetOption | null>(
+    () => liveModeTargetOptions.find((device) => device.id === liveModeDeviceId) || liveModeTargetOptions[0] || null,
+    [liveModeDeviceId, liveModeTargetOptions]
+  );
+
   const liveModeInstrumentConfig = useMemo<InstrumentConfig>(() => {
+    if (selectedLiveModeTarget) {
+      return selectedLiveModeTarget.config;
+    }
     const selectedDevice =
-      (liveModeDeviceId ? devices.find((device) => device.id === liveModeDeviceId && device.enabled !== false) : undefined) ||
       devices.find((device) => device.enabled !== false) ||
       devices[0];
     return {
       ...config,
       ...(selectedDevice || {}),
     };
-  }, [config, devices, liveModeDeviceId]);
+  }, [config, devices, selectedLiveModeTarget]);
+
+  const liveModeVisaResource = useMemo(
+    () => selectedLiveModeTarget?.visaResource || getVisaResourceString(liveModeInstrumentConfig),
+    [getVisaResourceString, liveModeInstrumentConfig, selectedLiveModeTarget]
+  );
 
   const liveModeDeviceOptions = useMemo(
     () =>
-      enabledDevices.map((device) => ({
+      liveModeTargetOptions.map((device) => ({
         id: device.id,
-        label: device.alias || device.host || device.id,
-        targetHost: String(device.vncHost || device.host || '').trim(),
-        targetPort: Number(device.vncPort || 5900),
+        label: device.label,
+        targetHost: device.targetHost,
+        targetPort: device.targetPort,
       })),
-    [enabledDevices]
+    [liveModeTargetOptions]
   );
 
   const liveModeVncTarget = useMemo(() => {
     const enabled = liveModeInstrumentConfig.vncEnabled !== false;
-    const targetHost = String(liveModeInstrumentConfig.vncHost || liveModeInstrumentConfig.host || '').trim();
-    const targetPort = Number(liveModeInstrumentConfig.vncPort || 5900);
+    const targetHost = String(selectedLiveModeTarget?.targetHost || liveModeInstrumentConfig.vncHost || liveModeInstrumentConfig.host || '').trim();
+    const targetPort = Number(selectedLiveModeTarget?.targetPort || liveModeInstrumentConfig.vncPort || 5900);
     return {
       enabled,
       targetHost,
       targetPort: Number.isFinite(targetPort) && targetPort > 0 ? targetPort : 5900,
     };
-  }, [liveModeInstrumentConfig]);
+  }, [liveModeInstrumentConfig, selectedLiveModeTarget]);
 
   const toggleLiveModeVnc = useCallback(async () => {
     if (!executorEndpoint) {
@@ -6711,7 +6799,7 @@ if __name__ == "__main__":
     }
     if (liveModeCapturing) return;
 
-    const visaResource = getVisaResourceString(liveModeInstrumentConfig);
+    const visaResource = liveModeVisaResource;
     const familyHint = `${liveModeInstrumentConfig.modelFamily || ''} ${liveModeInstrumentConfig.deviceDriver || ''}`.toLowerCase();
     const scopeType = liveModeInstrumentConfig.scopeGeneration || (/70[0-9]{3}/i.test(familyHint) ? 'export' : /dpo|mdo|tds/i.test(familyHint) ? 'legacy' : 'modern');
     setLiveModeCapturing(true);
@@ -6789,10 +6877,10 @@ if __name__ == "__main__":
     }
   }, [
     executorEndpoint,
-    getVisaResourceString,
     liveModeAutoRefresh,
     liveModeCapturing,
     liveModeInstrumentConfig,
+    liveModeVisaResource,
     postToExecutor,
   ]);
 
@@ -9871,7 +9959,7 @@ Keep under 120 words. No headings. Bullets only. Stay on this command. Do not de
             executorEndpoint={executorEndpoint}
             instrumentEndpoint={executorEndpoint ? {
               executorUrl: `http://${executorEndpoint.host}:${executorEndpoint.port}`,
-              visaResource: getVisaResourceString(liveModeInstrumentConfig),
+              visaResource: liveModeVisaResource,
               backend: liveModeInstrumentConfig.backend,
               liveMode: true,
             } : null}
