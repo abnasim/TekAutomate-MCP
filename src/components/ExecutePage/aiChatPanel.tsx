@@ -14,6 +14,7 @@ import {
   setStoredMcpHost,
   type McpChatAttachment,
 } from '../../utils/ai/mcpClient';
+import { buildWorkflowContext, executeMcpTool } from '../../utils/ai/liveToolLoop';
 import { OpenAiChatKitPanel, type ParsedActionsPreview } from './OpenAiChatKitPanel';
 
 interface AiChatPanelProps {
@@ -61,6 +62,7 @@ const MAX_ATTACHMENT_BYTES = 8 * 1024 * 1024;
 const MAX_TEXT_EXCERPT = 12000;
 const INSTRUMENT_OUTPUT_MODE_STORAGE = 'tekautomate.ai.instrument_output_mode';
 const CLAUDE_CHAT_SURFACE_STORAGE = 'tekautomate.ai.claude.surface';
+const CLAUDE_DESKTOP_LIVE_SESSION_KEY = 'tekautomate.claude.desktop.live_session_key';
 
 const TEXT_MIME_PREFIXES = ['text/'];
 const TEXT_EXTENSIONS = new Set([
@@ -196,6 +198,55 @@ function stripOpenAIFileCitations(text: string): string {
     .replace(/\s{2,}/g, ' ')
     .replace(/[ \t]+\n/g, '\n')
     .trim();
+}
+
+function getOrCreateClaudeDesktopLiveSessionKey(): string {
+  try {
+    const existing = window.localStorage.getItem(CLAUDE_DESKTOP_LIVE_SESSION_KEY);
+    if (existing && existing.trim()) return existing.trim();
+    const created = `claude-desktop:live-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+    window.localStorage.setItem(CLAUDE_DESKTOP_LIVE_SESSION_KEY, created);
+    return created;
+  } catch {
+    return 'claude-desktop:live-fallback';
+  }
+}
+
+function buildRuntimeInstrumentPayload(
+  instrumentEndpoint?: AiChatPanelProps['instrumentEndpoint'] | null,
+  flowContext?: AiChatPanelProps['flowContext'],
+  isLiveMode?: boolean,
+) {
+  return {
+    connected: !!instrumentEndpoint?.executorUrl,
+    executorUrl: instrumentEndpoint?.executorUrl || null,
+    visaResource: instrumentEndpoint?.visaResource || null,
+    backend: instrumentEndpoint?.backend || flowContext?.backend || 'pyvisa',
+    modelFamily: flowContext?.modelFamily || 'unknown',
+    deviceDriver: flowContext?.deviceDriver || null,
+    liveMode: Boolean(isLiveMode || instrumentEndpoint?.liveMode),
+  };
+}
+
+function extractScreenshotPayload(value: unknown): { dataUrl: string; mimeType: string; sizeBytes: number; capturedAt: string } | null {
+  if (!value || typeof value !== 'object') return null;
+  const record = value as Record<string, unknown>;
+  const nested = record.data && typeof record.data === 'object'
+    ? (record.data as Record<string, unknown>)
+    : null;
+  const source = typeof record.base64 === 'string' ? record : nested;
+  if (!source || typeof source.base64 !== 'string' || !source.base64) return null;
+  const mimeType = typeof source.mimeType === 'string' ? source.mimeType : 'image/png';
+  const capturedAt = typeof source.capturedAt === 'string' ? source.capturedAt : new Date().toISOString();
+  const sizeBytes = typeof source.sizeBytes === 'number'
+    ? source.sizeBytes
+    : Math.floor((source.base64.length * 3) / 4);
+  return {
+    dataUrl: `data:${mimeType};base64,${source.base64}`,
+    mimeType,
+    sizeBytes,
+    capturedAt,
+  };
 }
 
 export function AiChatPanel({
@@ -368,6 +419,140 @@ export function AiChatPanel({
   }, [state.history, state.isLoading]);
 
   useEffect(() => {
+    if (!(state.provider === 'anthropic' && claudeChatSurface === 'desktop-mcp')) return;
+    if (executionSource !== 'live') return;
+    const mcpHost = resolveMcpHost();
+    if (!mcpHost) return;
+
+    const payload = {
+      workflow: buildWorkflowContext(
+        steps as any[],
+        flowContext?.validationErrors as string[] | undefined,
+        flowContext?.selectedStep?.id,
+      ),
+      instrument: buildRuntimeInstrumentPayload(instrumentEndpoint, flowContext, true),
+      runLog: String(runLog || ''),
+      liveSession: {
+        sessionKey: claudeDesktopLiveSessionKeyRef.current,
+        threadId: null,
+        workflowId: null,
+        userId: 'claude-desktop',
+      },
+    };
+
+    void fetch(`${mcpHost.replace(/\/$/, '')}/runtime-context`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload),
+    }).catch((error) => {
+      console.warn('[Claude Desktop MCP] Failed to sync runtime context:', error);
+    });
+  }, [
+    state.provider,
+    claudeChatSurface,
+    executionSource,
+    steps,
+    flowContext,
+    instrumentEndpoint,
+    runLog,
+    workspaceRevision,
+  ]);
+
+  useEffect(() => {
+    if (!(state.provider === 'anthropic' && claudeChatSurface === 'desktop-mcp')) return;
+    if (executionSource !== 'live') return;
+    const mcpHost = resolveMcpHost();
+    if (!mcpHost) return;
+    if (!instrumentEndpoint?.executorUrl) return;
+
+    let cancelled = false;
+    const sessionKey = claudeDesktopLiveSessionKeyRef.current;
+
+    const loop = async () => {
+      while (!cancelled) {
+        let currentAction: { id: string; toolName: string; args?: Record<string, unknown> } | null = null;
+        try {
+          const nextRes = await fetch(
+            `${mcpHost.replace(/\/$/, '')}/live-actions/next?sessionKey=${encodeURIComponent(sessionKey)}&timeoutMs=20000`,
+          );
+          if (!nextRes.ok) {
+            await new Promise((resolve) => window.setTimeout(resolve, 1500));
+            continue;
+          }
+
+          const nextJson = (await nextRes.json()) as {
+            ok?: boolean;
+            action?: { id: string; toolName: string; args?: Record<string, unknown> } | null;
+          };
+          currentAction = nextJson.action || null;
+          if (!currentAction?.id || !currentAction.toolName) {
+            continue;
+          }
+
+          const result = await executeMcpTool(
+            currentAction.toolName,
+            currentAction.args || {},
+            instrumentEndpoint || undefined,
+            {
+              modelFamily: flowContext?.modelFamily,
+              deviceDriver: flowContext?.deviceDriver,
+            },
+          );
+
+          if (currentAction.toolName === 'capture_screenshot') {
+            const screenshot = extractScreenshotPayload(result);
+            if (screenshot) {
+              onLiveScreenshot?.(screenshot);
+            }
+          }
+
+          await fetch(`${mcpHost.replace(/\/$/, '')}/live-actions/result`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              id: currentAction.id,
+              sessionKey,
+              ok: true,
+              result,
+            }),
+          });
+        } catch (error) {
+          if (currentAction?.id) {
+            try {
+              await fetch(`${mcpHost.replace(/\/$/, '')}/live-actions/result`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                  id: currentAction.id,
+                  sessionKey,
+                  ok: false,
+                  error: error instanceof Error ? error.message : 'Live action execution failed.',
+                }),
+              });
+            } catch {
+              // Ignore secondary reporting failures.
+            }
+          }
+          await new Promise((resolve) => window.setTimeout(resolve, 1200));
+        }
+      }
+    };
+
+    void loop();
+    return () => {
+      cancelled = true;
+    };
+  }, [
+    state.provider,
+    claudeChatSurface,
+    executionSource,
+    instrumentEndpoint,
+    flowContext?.modelFamily,
+    flowContext?.deviceDriver,
+    onLiveScreenshot,
+  ]);
+
+  useEffect(() => {
     let active = true;
     const hosts = resolveMcpHostCandidates();
     if (!hosts.length) {
@@ -533,6 +718,7 @@ export function AiChatPanel({
     && activeChatKitWorkflowId.length > 0;
   const useClaudeDesktopMcpSurface =
     state.provider === 'anthropic' && claudeChatSurface === 'desktop-mcp';
+  const claudeDesktopLiveSessionKeyRef = useRef<string>(getOrCreateClaudeDesktopLiveSessionKey());
 
   const interactionSummary = state.tekMode === 'mcp'
     ? 'Search commands, build flows, validate SCPI. No AI calls.'

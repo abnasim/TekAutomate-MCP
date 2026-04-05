@@ -413,7 +413,8 @@ export function getToolDefinitions() {
       name: 'get_instrument_info',
       description:
         'Return the latest TekAutomate instrument connection context mirrored from the browser. ' +
-        'Use when connected instrument details, backend, model family, executor context, selected live target, or VISA resource matter.',
+        'Use when connected instrument details, backend, model family, executor context, selected live target, or VISA resource matter. ' +
+        'Treat this as the authoritative live context, then execute live tools directly instead of asking the user to restate executorUrl, visaResource, backend, or liveMode.',
       parameters: {
         type: 'object',
         properties: {},
@@ -792,7 +793,7 @@ export function getToolDefinitions() {
     },
     {
       name: 'get_instrument_state',
-      description: 'Probe instrument identity/state via the local executor. In TekAutomate this is usually auto-targeted from the active live instrument. When multiple instruments are connected, call get_visa_resources first and pass visaResource explicitly (for example "TCPIP::192.168.1.100::INSTR"). Use outputMode="verbose" for full Python stdout/stderr/transcript.',
+      description: 'Probe instrument identity/state via the local executor. In TekAutomate this is usually auto-targeted from the active live instrument. When multiple instruments are connected, call get_visa_resources first and pass visaResource explicitly (for example "TCPIP::192.168.1.100::INSTR"). Use outputMode="verbose" for full Python stdout/stderr/transcript. Prefer get_instrument_info for session context and use this when you want fresh instrument queries.',
       parameters: {
         type: 'object',
         properties: {
@@ -808,7 +809,7 @@ export function getToolDefinitions() {
     },
     {
       name: 'probe_command',
-      description: 'Probe a single SCPI command on the selected VISA instrument via the local executor. In TekAutomate this usually uses the active live instrument automatically. When multiple instruments are connected, call get_visa_resources first and pass visaResource explicitly. Use outputMode="verbose" to return full runtime output instead of only the query result.',
+      description: 'Probe a single SCPI command on the selected VISA instrument via the local executor. In TekAutomate this usually uses the active live instrument automatically. When multiple instruments are connected, call get_visa_resources first and pass visaResource explicitly. Use outputMode="verbose" to return full runtime output instead of only the query result. If live context already exists, execute the probe instead of narrating the routing fields back to the user.',
       parameters: {
         type: 'object',
         properties: {
@@ -825,7 +826,7 @@ export function getToolDefinitions() {
     },
     {
       name: 'send_scpi',
-      description: 'Send one or more SCPI commands to the selected VISA instrument via the local executor. Queries return responses; writes return OK or error status. In TekAutomate this usually uses the active live instrument automatically. When multiple instruments are connected, call get_visa_resources first and pass visaResource explicitly.',
+      description: 'Send one or more SCPI commands to the selected VISA instrument via the local executor. Queries return responses; writes return OK or error status. In TekAutomate this usually uses the active live instrument automatically. When multiple instruments are connected, call get_visa_resources first and pass visaResource explicitly. If get_instrument_info already provided executorUrl, visaResource, backend, and liveMode, use them directly and execute without restating them to the user.',
       parameters: {
         type: 'object',
         properties: {
@@ -863,7 +864,7 @@ export function getToolDefinitions() {
     },
     {
       name: 'get_visa_resources',
-      description: 'List available VISA resources from the local executor. Use this first when more than one instrument may be connected, then pass the chosen visaResource into send_scpi, probe_command, capture_screenshot, or other live tools. Prefer this over guessing instrument selection.',
+      description: 'List available VISA resources from the active TekAutomate live session. Use this first when more than one instrument may be connected, then pass the chosen visaResource into send_scpi, probe_command, capture_screenshot, or other live tools. Prefer this over guessing instrument selection.',
       parameters: {
         type: 'object',
         properties: {
