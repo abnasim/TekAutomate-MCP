@@ -100,12 +100,14 @@ class VncProxyManager:
         listen_host: str,
         bind_host: str | None = None,
         live_token_status_provider: Callable[[], dict],
+        log_callback: Callable[[str], None] | None = None,
         inactivity_timeout_sec: int = 300,
         probe_cache_ttl_sec: int = 60,
     ):
         self._listen_host = listen_host or "127.0.0.1"
         self._bind_host = bind_host or "0.0.0.0"
         self._live_token_status_provider = live_token_status_provider
+        self._log_callback = log_callback
         self._inactivity_timeout_sec = max(60, int(inactivity_timeout_sec))
         self._probe_cache_ttl_sec = max(5, int(probe_cache_ttl_sec))
         self._lock = threading.Lock()
@@ -250,6 +252,7 @@ class VncProxyManager:
                 self._remove_session_locked(session)
                 raise RuntimeError("VNC bridge did not start cleanly.")
             session.last_touched_at = _utc_now()
+            self._log(f"Bridge ready for {host}:{port} on {session.ws_url}")
             return {"ok": True, **session.payload(), "reused": False}
 
     def stop(self, session_id: str | None = None) -> dict:
@@ -320,11 +323,6 @@ class VncProxyManager:
                 self._remove_session_locked(session)
 
     def _sweep_locked(self):
-        live_status = self._live_token_status_provider() or {}
-        if not live_status.get("active"):
-            self._stop_all_locked()
-            return
-
         now_dt = _utc_now()
         for session in list(self._sessions_by_id.values()):
             if not session.running():
@@ -339,6 +337,7 @@ class VncProxyManager:
             self._stop_session_locked(session)
 
     def _stop_session_locked(self, session: _VncSession):
+        self._log(f"Bridge stopping for {session.target_host}:{session.target_port}")
         session.stop_event.set()
         loop = session.loop
         stop_future = session.stop_future
@@ -389,11 +388,16 @@ class VncProxyManager:
                     ping_interval=20,
                     ping_timeout=20,
                 ):
+                    self._log(
+                        f"WebSocket server listening on {session.bind_host}:{session.listen_port} "
+                        f"for {session.target_host}:{session.target_port}"
+                    )
                     session.ready_event.set()
                     await stop_future
             except Exception as exc:
                 session.start_error = str(exc)
                 session.last_error = str(exc)
+                self._log(f"VNC bridge failed for {session.target_host}:{session.target_port}: {exc}")
                 session.ready_event.set()
 
         try:
@@ -408,10 +412,12 @@ class VncProxyManager:
 
     async def _handle_client(self, session: _VncSession, websocket: ServerConnection):
         self._touch_session(session, connected_delta=1)
+        self._log(f"VNC WS client connected for {session.target_host}:{session.target_port}")
         reader = None
         writer = None
         try:
             reader, writer = await asyncio.open_connection(session.target_host, session.target_port)
+            self._log(f"TCP tunnel connected to {session.target_host}:{session.target_port}")
             sock = writer.get_extra_info("socket")
             if sock is not None:
                 sock.setsockopt(socket.IPPROTO_TCP, socket.TCP_NODELAY, 1)
@@ -428,10 +434,15 @@ class VncProxyManager:
                     self._touch_session(session)
 
             async def _tcp_to_ws():
+                first_chunk = True
                 while True:
                     data = await reader.read(65536)
                     if not data:
                         break
+                    if first_chunk:
+                        first_chunk = False
+                        banner = data.decode("ascii", errors="replace").strip()
+                        self._log(f"Received first TCP bytes from {session.target_host}:{session.target_port}: {banner}")
                     await websocket.send(data)
                     self._touch_session(session)
 
@@ -449,6 +460,7 @@ class VncProxyManager:
                     raise exc
         except Exception as exc:
             session.last_error = str(exc)
+            self._log(f"VNC bridge error for {session.target_host}:{session.target_port}: {exc}")
             try:
                 await websocket.close()
             except Exception:
@@ -461,6 +473,7 @@ class VncProxyManager:
                 except Exception:
                     pass
             self._touch_session(session, connected_delta=-1)
+            self._log(f"VNC WS client disconnected for {session.target_host}:{session.target_port}")
 
     def _touch_session(self, session: _VncSession, *, connected_delta: int = 0):
         with self._lock:
@@ -472,3 +485,12 @@ class VncProxyManager:
 
     def _target_key(self, host: str, port: int) -> str:
         return f"{host}:{int(port)}"
+
+    def _log(self, message: str):
+        callback = self._log_callback
+        if not callable(callback):
+            return
+        try:
+            callback(message)
+        except Exception:
+            pass
