@@ -73,6 +73,9 @@ export function VncViewer({ wsUrl, title = 'Scope VNC Viewer' }: VncViewerProps)
             message,
             visible: true,
           });
+          try {
+            rfb.disconnect();
+          } catch (_) {}
           postToParent({ type: 'error', message });
         }, 5000);
 
