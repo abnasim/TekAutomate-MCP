@@ -10,14 +10,10 @@ interface Endpoint {
   scopeType?: 'modern' | 'legacy';
   modelFamily?: string;
   deviceDriver?: string;
-  liveToken?: string;
 }
 
 function buildExecutorHeaders(endpoint: Endpoint): Record<string, string> {
-  const headers: Record<string, string> = { 'Content-Type': 'application/json' };
-  const token = String(endpoint.liveToken || '').trim();
-  if (token) headers['X-Live-Token'] = token;
-  return headers;
+  return { 'Content-Type': 'application/json' };
 }
 
 interface RunPythonResult {
