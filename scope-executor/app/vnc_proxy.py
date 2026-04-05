@@ -257,12 +257,17 @@ class VncProxyManager:
             self._log(f"Bridge ready for {host}:{port} on ws://{session.listen_host}:{session.listen_port}")
             return {"ok": True, **session.payload(), "reused": False}
 
-    def stop(self, session_id: str | None = None) -> dict:
+    def stop(self, session_id: str | None = None, force: bool = False) -> dict:
         with self._lock:
             if session_id:
                 session = self._sessions_by_id.get(str(session_id).strip())
                 if not session:
                     return {"ok": True, "stopped": 0}
+                if session.active_connections > 0 and not force:
+                    self._log(
+                        f"Ignoring non-forced stop for active session {session.target_host}:{session.target_port}"
+                    )
+                    return {"ok": True, "stopped": 0, "ignored": True, "reason": "session_active"}
                 self._stop_session_locked(session)
                 return {"ok": True, "stopped": 1}
             count = len(self._sessions_by_id)

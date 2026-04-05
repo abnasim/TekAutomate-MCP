@@ -532,10 +532,12 @@ class _Handler(BaseHTTPRequestHandler):
 
     def _handle_vnc_stop(self):
         session_id = None
+        force = False
         try:
             if int(self.headers.get("Content-Length", "0") or "0") > 0:
                 data = self._read_json_body()
                 session_id = data.get("session_id")
+                force = bool(data.get("force"))
         except ValueError as exc:
             self._json_response(400, {"ok": False, "error": str(exc)})
             self._emit("POST", "/vnc/stop", 400, str(exc))
@@ -544,10 +546,10 @@ class _Handler(BaseHTTPRequestHandler):
             self._json_response(400, {"ok": False, "error": "Invalid JSON"})
             self._emit("POST", "/vnc/stop", 400, "invalid JSON")
             return
-        result = self.server_thread.vnc_stop(session_id) if self.server_thread else {"ok": False, "error": "Server unavailable"}
+        result = self.server_thread.vnc_stop(session_id, force=force) if self.server_thread else {"ok": False, "error": "Server unavailable"}
         code = 200 if result.get("ok") else 400
         self._json_response(code, result)
-        self._emit("POST", "/vnc/stop", code, f"stopped={result.get('stopped')}")
+        self._emit("POST", "/vnc/stop", code, f"stopped={result.get('stopped')} force={force} ignored={result.get('ignored')}")
 
 
 class HTTPServerThread(threading.Thread):
@@ -640,8 +642,8 @@ class HTTPServerThread(threading.Thread):
     def vnc_start(self, target_host: str, target_port: int = 5900, listen_port: int = 6080):
         return self._vnc_proxy_manager.start(target_host, target_port, listen_port)
 
-    def vnc_stop(self, session_id: str | None = None):
-        return self._vnc_proxy_manager.stop(session_id)
+    def vnc_stop(self, session_id: str | None = None, force: bool = False):
+        return self._vnc_proxy_manager.stop(session_id, force=force)
 
     def vnc_status(self, target_host: str | None = None, target_port: int = 5900):
         return self._vnc_proxy_manager.status(target_host, target_port)

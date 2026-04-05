@@ -4358,7 +4358,7 @@ function AppInner() {
         await fetch(`http://${executorEndpoint.host}:${executorEndpoint.port}/vnc/stop`, {
           method: 'POST',
           headers: buildExecutorHeaders({ 'Content-Type': 'application/json' }),
-          body: JSON.stringify({ session_id: liveModeVncSession.sessionId }),
+          body: JSON.stringify({ session_id: liveModeVncSession.sessionId, force: true }),
           signal: AbortSignal.timeout(5000),
         });
         setLiveModeVncSession(null);
@@ -4422,7 +4422,7 @@ function AppInner() {
       await fetch(`http://${executorEndpoint.host}:${executorEndpoint.port}/vnc/stop`, {
         method: 'POST',
         headers: buildExecutorHeaders({ 'Content-Type': 'application/json' }),
-        body: JSON.stringify({ session_id: liveModeVncSession.sessionId }),
+        body: JSON.stringify({ session_id: liveModeVncSession.sessionId, force: true }),
         signal: AbortSignal.timeout(5000),
       });
     } catch {
