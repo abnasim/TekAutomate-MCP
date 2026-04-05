@@ -69,7 +69,6 @@ export function LiveModePanel({
 }: LiveModePanelProps) {
   const [showLogs, setShowLogs] = useState(false);
   const [viewMode, setViewMode] = useState<'screenshot' | 'vnc'>('screenshot');
-  const [showVncReadyCard, setShowVncReadyCard] = useState(false);
   const logLines = (runLog || '').split(/\r?\n/).filter(Boolean);
   const hasLogs = logLines.length > 0;
   const canShowVncTab = Boolean(vncActive || vncAvailable);
@@ -77,15 +76,9 @@ export function LiveModePanel({
   const isVncViewActive = viewMode === 'vnc' && vncActive && vncSessionInfo;
 
   useEffect(() => {
-    if (!vncActive || !vncSessionInfo) {
-      setShowVncReadyCard(false);
-      return undefined;
+    if (vncActive && vncSessionInfo) {
+      setViewMode('vnc');
     }
-    setShowVncReadyCard(true);
-    const timeoutId = window.setTimeout(() => {
-      setShowVncReadyCard(false);
-    }, 5000);
-    return () => window.clearTimeout(timeoutId);
   }, [vncActive, vncSessionInfo?.sessionId]);
 
   return (
@@ -208,40 +201,6 @@ export function LiveModePanel({
         {vncError && (
           <div className="rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800 dark:border-amber-900/60 dark:bg-amber-950/40 dark:text-amber-300">
             {vncError}
-          </div>
-        )}
-
-        {!vncError && !vncActive && vncAvailable === true && (
-          <div className="rounded-xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-800 dark:border-emerald-900/60 dark:bg-emerald-950/40 dark:text-emerald-300">
-            VNC is reachable on this scope. Click <span className="font-semibold">VNC</span> to start a live session.
-          </div>
-        )}
-
-        {showVncReadyCard && vncActive && vncSessionInfo && !isVncViewActive && (
-          <div className="rounded-2xl border border-violet-200 bg-violet-50/90 px-4 py-3 text-sm text-violet-900 shadow-sm dark:border-violet-900/60 dark:bg-violet-950/30 dark:text-violet-100">
-            <div className="flex items-center gap-2 font-semibold">
-              <MonitorSmartphone size={14} />
-              VNC session ready
-            </div>
-            <div className="mt-2 text-xs text-violet-800/90 dark:text-violet-200/90">
-              Manual session started only after your click. Screenshot mode stays separate, and you can switch into the embedded VNC viewer when ready.
-            </div>
-            <div className="mt-2 grid gap-1 text-[11px] text-violet-900/80 dark:text-violet-200/80">
-              {selectedDevice ? <div>Instrument: {selectedDevice.label}</div> : null}
-              <div>Target: {vncSessionInfo.targetHost}:{vncSessionInfo.targetPort}</div>
-              <div>WebSocket: {vncSessionInfo.wsUrl}</div>
-              <div>Session: {vncSessionInfo.sessionId}</div>
-            </div>
-            {viewMode !== 'vnc' ? (
-              <button
-                type="button"
-                onClick={() => setViewMode('vnc')}
-                className="mt-3 inline-flex items-center gap-1 rounded-lg bg-violet-600 px-2.5 py-1.5 text-xs font-semibold text-white transition-colors hover:bg-violet-500"
-              >
-                <MonitorSmartphone size={12} />
-                Open VNC Viewer
-              </button>
-            ) : null}
           </div>
         )}
 
