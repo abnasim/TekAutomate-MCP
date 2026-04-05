@@ -222,36 +222,11 @@ function extractRequestToken(req: http.IncomingMessage): string {
   }
 }
 
-async function validateProtectedToolToken(liveToken: string): Promise<boolean> {
-  const token = String(liveToken || '').trim();
-  if (!token) return false;
-  const runtime = getRuntimeContextState();
-  const executorUrl = String(runtime.instrument.executorUrl || '').trim();
-  if (!executorUrl) return true;
-  try {
-    const res = await fetch(`${executorUrl.replace(/\/$/, '')}/scan`, {
-      method: 'GET',
-      headers: {
-        'Content-Type': 'application/json',
-        'X-Live-Token': token,
-      },
-      signal: AbortSignal.timeout(5000),
-    });
-    return res.ok;
-  } catch {
-    return false;
-  }
-}
-
 async function assertProtectedToolAccess(toolName: string, liveToken: string) {
   if (!isProtectedMcpTool(toolName)) return;
   const token = String(liveToken || '').trim();
   if (!token) {
     throw new Error(`Tool "${toolName}" requires a live token.`);
-  }
-  const valid = await validateProtectedToolToken(token);
-  if (!valid) {
-    throw new Error(`Tool "${toolName}" requires a valid live token.`);
   }
 }
 
