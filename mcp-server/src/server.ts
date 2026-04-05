@@ -222,6 +222,14 @@ function extractRequestToken(req: http.IncomingMessage): string {
   }
 }
 
+async function assertProtectedToolAccess(toolName: string, liveToken: string) {
+  if (!isProtectedMcpTool(toolName)) return;
+  const token = String(liveToken || '').trim();
+  if (!token) {
+    throw new Error(`Tool "${toolName}" requires a live token.`);
+  }
+}
+
 function injectRuntimeInstrumentContext(
   toolName: string,
   toolArgs: Record<string, unknown>,
@@ -422,7 +430,8 @@ export async function createServer(port = 8787): Promise<http.Server> {
         try { await startupInitPromise; } catch { /* degrade gracefully */ }
       }
       // Slim MCP surface — only gateway + live tools exposed
-      const toolDefs = getMcpExposedTools();
+      const token = String(authState.liveToken || '').trim();
+      const toolDefs = getMcpExposedTools().filter((def: any) => token || !isProtectedMcpTool(def.name));
       const mcpTools = toolDefs.map((def: any) => ({
         name: def.name,
         description: def.description ?? def.name,
@@ -443,6 +452,7 @@ export async function createServer(port = 8787): Promise<http.Server> {
       }
       const { name, arguments: args } = request.params;
       try {
+        await assertProtectedToolAccess(name, authState.liveToken);
         let toolArgs = { ...((args as Record<string, unknown>) ?? {}) };
         if (String(authState.liveToken || '').trim() && isProtectedMcpTool(name) && !('liveToken' in toolArgs)) {
           toolArgs.liveToken = String(authState.liveToken || '').trim();
@@ -806,6 +816,12 @@ function filterTools(q) {
     }
 
     if (req.method === 'GET' && req.url === '/runtime-context/latest') {
+      try {
+        await assertProtectedToolAccess('get_instrument_info', extractRequestToken(req));
+      } catch (err) {
+        sendJson(res, 401, { ok: false, error: err instanceof Error ? err.message : 'Unauthorized', requiresLiveToken: true });
+        return;
+      }
       sendJson(res, 200, { ok: true, context: getRuntimeContextState() });
       return;
     }
@@ -867,7 +883,8 @@ function filterTools(q) {
     // ── Tool endpoints: browser calls these directly, AI proxy not needed ──
 
     if (req.method === 'GET' && req.url === '/tools/list') {
-      const tools = getToolDefinitions();
+      const token = extractRequestToken(req);
+      const tools = getToolDefinitions().filter((tool: any) => token || !isProtectedMcpTool(tool.name));
       sendJson(res, 200, { ok: true, tools });
       return;
     }
@@ -875,6 +892,7 @@ function filterTools(q) {
     // Disconnect live VISA session — call before switching away from live mode
     if (req.method === 'POST' && req.url === '/tools/disconnect') {
       try {
+        await assertProtectedToolAccess('send_scpi', extractRequestToken(req));
         const body = (await readJsonBody(req)) as {
           instrumentEndpoint?: { executorUrl: string; visaResource: string; liveToken?: string };
         };
@@ -900,7 +918,7 @@ function filterTools(q) {
         sendJson(res, 200, { ok: json.ok === true, disconnected: ep.visaResource });
       } catch (err) {
         const message = err instanceof Error ? err.message : 'Disconnect failed';
-        sendJson(res, 500, { ok: false, error: message });
+        sendJson(res, /requires (?:a )?valid live token|requires a live token/i.test(message) ? 401 : 500, { ok: false, error: message, requiresLiveToken: true });
       }
       return;
     }
@@ -929,6 +947,7 @@ function filterTools(q) {
           return;
         }
         const forwardedToken = extractRequestToken(req);
+        await assertProtectedToolAccess(toolName, forwardedToken || String(body.instrumentEndpoint?.liveToken || ''));
         // Inject instrument endpoint for live tools
         let args = body.args || {};
         const liveTools = ['get_instrument_state', 'probe_command', 'send_scpi', 'capture_screenshot', 'get_visa_resources', 'get_environment', 'discover_scpi'];
@@ -950,7 +969,7 @@ function filterTools(q) {
         sendJson(res, 200, { ok: true, tool: toolName, result: safeResult });
       } catch (err) {
         const message = err instanceof Error ? err.message : 'Tool execution error';
-        sendJson(res, 500, { ok: false, error: message });
+        sendJson(res, /requires (?:a )?valid live token|requires a live token/i.test(message) ? 401 : 500, { ok: false, error: message, requiresLiveToken: true });
       }
       return;
     }

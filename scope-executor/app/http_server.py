@@ -103,7 +103,17 @@ class _Handler(BaseHTTPRequestHandler):
         return ""
 
     def _require_live_token(self) -> bool:
-        return True
+        srv = self.server_thread
+        if not srv:
+            self._json_response(500, {"ok": False, "error": "Server unavailable"})
+            return False
+        token = self._extract_live_token()
+        valid, message = srv.validate_live_token(token)
+        if valid:
+            return True
+        self._json_response(401, {"ok": False, "error": message, "requiresLiveToken": True})
+        self._emit("AUTH", self.path, 401, message)
+        return False
 
     def _require_localhost(self) -> bool:
         if self._is_local_request():
