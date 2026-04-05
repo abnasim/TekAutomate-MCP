@@ -1818,8 +1818,9 @@ export function AiChatPanel({
         </div>
       </div>
 
-            {showSettings && (
-        <div className="px-4 py-3 border-b border-slate-200 dark:border-white/10 bg-slate-50 dark:bg-white/5 space-y-4">
+      {showSettings && (
+        <div className="absolute left-0 right-0 top-[53px] z-20 max-h-[70vh] overflow-auto border-b border-slate-200 dark:border-white/10 bg-slate-50/98 shadow-lg backdrop-blur dark:bg-slate-950/98">
+          <div className="px-4 py-3 space-y-4">
 
           {/* ── Provider & Keys ── */}
           {(['openai', 'anthropic'] as const).map((pid) => {
@@ -2052,6 +2053,7 @@ export function AiChatPanel({
             </div>
           </details>
 
+          </div>
         </div>
       )}
       {useChatKitEmbed ? (
