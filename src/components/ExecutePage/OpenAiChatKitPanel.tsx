@@ -1424,17 +1424,16 @@ function OpenAiChatKitPanelInner({
               headers: { 'Content-Type': 'application/json' },
               body: JSON.stringify({
                 id: currentAction.id,
-                  sessionKey: liveSession.sessionKey,
-                  ok: false,
-                  error: error instanceof Error ? error.message : 'Live action execution failed.',
-                }),
-              });
-            } catch {
-              // Ignore secondary reporting failures.
-            }
+                sessionKey: liveSession.sessionKey,
+                ok: false,
+                error: error instanceof Error ? error.message : 'Live action execution failed.',
+              }),
+            });
+          } catch {
+            // Ignore secondary reporting failures.
           }
         }
-      });
+      }
     });
 
     eventSource.onerror = () => {
