@@ -230,42 +230,6 @@ async function assertProtectedToolAccess(toolName: string, liveToken: string) {
   }
 }
 
-function injectRuntimeInstrumentContext(
-  toolName: string,
-  toolArgs: Record<string, unknown>,
-  liveToken: string,
-): Record<string, unknown> {
-  const liveTools = new Set([
-    'get_instrument_state',
-    'probe_command',
-    'send_scpi',
-    'capture_screenshot',
-    'get_visa_resources',
-    'get_environment',
-    'discover_scpi',
-  ]);
-  if (!liveTools.has(toolName)) return toolArgs;
-
-  const instrument = getRuntimeContextState().instrument;
-  const merged: Record<string, unknown> = { ...toolArgs };
-  if (!('executorUrl' in merged) && instrument.executorUrl) {
-    merged.executorUrl = instrument.executorUrl;
-  }
-  if (!('visaResource' in merged) && instrument.visaResource) {
-    merged.visaResource = instrument.visaResource;
-  }
-  if (!('backend' in merged) && instrument.backend) {
-    merged.backend = instrument.backend;
-  }
-  if (!('liveMode' in merged)) {
-    merged.liveMode = instrument.liveMode === true || instrument.connected === true;
-  }
-  if (!('liveToken' in merged) && String(liveToken || '').trim()) {
-    merged.liveToken = String(liveToken || '').trim();
-  }
-  return merged;
-}
-
 function sendJson(res: http.ServerResponse, status: number, payload: unknown) {
   res.statusCode = status;
   res.setHeader('Content-Type', 'application/json');
@@ -453,11 +417,10 @@ export async function createServer(port = 8787): Promise<http.Server> {
       const { name, arguments: args } = request.params;
       try {
         await assertProtectedToolAccess(name, authState.liveToken);
-        let toolArgs = { ...((args as Record<string, unknown>) ?? {}) };
+        const toolArgs = { ...((args as Record<string, unknown>) ?? {}) };
         if (String(authState.liveToken || '').trim() && isProtectedMcpTool(name) && !('liveToken' in toolArgs)) {
           toolArgs.liveToken = String(authState.liveToken || '').trim();
         }
-        toolArgs = injectRuntimeInstrumentContext(name, toolArgs, authState.liveToken);
         const result = await runTool(name, toolArgs);
         const text = typeof result === 'string' ? result : JSON.stringify(result, null, 2);
         return { content: [{ type: 'text' as const, text }] };
