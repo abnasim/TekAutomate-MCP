@@ -25,9 +25,6 @@ interface LiveModePanelProps {
   vncError?: string | null;
   vncSessionInfo?: { wsUrl: string; targetHost: string; targetPort: number; sessionId: string } | null;
   onToggleVnc?: () => void;
-  deviceOptions?: Array<{ id: string; label: string; targetHost?: string; targetPort?: number }>;
-  selectedDeviceId?: string | null;
-  onSelectDevice?: (deviceId: string) => void;
 }
 
 function formatBytes(size: number): string {
@@ -63,16 +60,12 @@ export function LiveModePanel({
   vncError = null,
   vncSessionInfo = null,
   onToggleVnc,
-  deviceOptions = [],
-  selectedDeviceId = null,
-  onSelectDevice,
 }: LiveModePanelProps) {
   const [showLogs, setShowLogs] = useState(false);
   const [viewMode, setViewMode] = useState<'screenshot' | 'vnc'>('screenshot');
   const logLines = (runLog || '').split(/\r?\n/).filter(Boolean);
   const hasLogs = logLines.length > 0;
   const canShowVncTab = Boolean(vncActive || vncAvailable);
-  const selectedDevice = deviceOptions.find((device) => device.id === selectedDeviceId) || null;
   const isVncViewActive = viewMode === 'vnc' && vncActive && vncSessionInfo;
 
   useEffect(() => {
@@ -87,26 +80,6 @@ export function LiveModePanel({
       <div className="flex items-center justify-between gap-3 border-b border-slate-200 px-4 py-2.5 dark:border-slate-800/50">
         <div className="text-sm font-semibold text-slate-900 dark:text-white">Live Mode</div>
         <div className="flex items-center gap-2">
-          {deviceOptions.length > 1 && onSelectDevice ? (
-            <div className="flex items-center gap-1 rounded-lg border border-slate-300 bg-white px-2 py-1 dark:border-slate-700 dark:bg-slate-900">
-              <span className="text-[10px] font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">
-                Instrument
-              </span>
-              <select
-                value={selectedDeviceId || ''}
-                onChange={(e) => onSelectDevice(e.target.value)}
-                className="bg-transparent text-[11px] font-medium text-slate-700 outline-none dark:text-slate-200"
-                title="Select which instrument Live Mode should target"
-                aria-label="Select live-mode instrument"
-              >
-                {deviceOptions.map((device) => (
-                  <option key={device.id} value={device.id}>
-                    {device.label}
-                  </option>
-                ))}
-              </select>
-            </div>
-          ) : null}
           <div className="flex items-center gap-1">
             {canShowVncTab ? (
               <div className="inline-flex rounded-lg border border-slate-300 bg-white p-1 shadow-sm dark:border-slate-700 dark:bg-slate-900">
@@ -240,12 +213,6 @@ export function LiveModePanel({
                   ? 'Click the VNC pill to start a live session. Screenshot mode stays separate.'
                   : 'Capture the scope screen to inspect it here and share with AI.'}
               </div>
-              {selectedDevice ? (
-                <div className="mt-2 text-[11px] text-slate-500 dark:text-slate-400">
-                  Selected instrument: <span className="font-medium">{selectedDevice.label}</span>
-                  {selectedDevice.targetHost ? ` (${selectedDevice.targetHost}:${selectedDevice.targetPort || 5900})` : ''}
-                </div>
-              ) : null}
             </div>
           </div>
         )}

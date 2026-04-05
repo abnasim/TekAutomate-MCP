@@ -1611,7 +1611,6 @@ function AppInner() {
     targetHost: string;
     targetPort: number;
   }>(null);
-  const [liveModeDeviceId, setLiveModeDeviceId] = useState<string | null>(null);
   const [liveModeInitialCaptureDone, setLiveModeInitialCaptureDone] = useState(false);
   const liveModeConsecutiveFailures = React.useRef(0);
   const liveModeVncTargetKeyRef = React.useRef('');
@@ -1732,16 +1731,6 @@ function AppInner() {
     return [...configured, ...scanned];
   }, [buildScannedInstrumentConfig, config, enabledDevices, executorScannedInstruments, getVisaResourceString]);
 
-  useEffect(() => {
-    if (liveModeTargetOptions.length === 0) {
-      setLiveModeDeviceId(null);
-      return;
-    }
-    if (liveModeDeviceId && liveModeTargetOptions.some((device) => device.id === liveModeDeviceId)) {
-      return;
-    }
-    setLiveModeDeviceId(liveModeTargetOptions[0]?.id || null);
-  }, [liveModeDeviceId, liveModeTargetOptions]);
   const [runWindowResult, setRunWindowResult] = useState<{ ok: boolean; stdout: string; stderr: string; error: string | null; exit_code?: number } | null>(null);
   const [lastExecutionAudit, setLastExecutionAudit] = useState<ExecutionAuditReport | null>(null);
   const [askAiModalOpen, setAskAiModalOpen] = useState(false);
@@ -4301,15 +4290,7 @@ function AppInner() {
     };
   }, [config, devices]);
 
-  const selectedLiveModeTarget = useMemo<LiveModeTargetOption | null>(
-    () => liveModeTargetOptions.find((device) => device.id === liveModeDeviceId) || liveModeTargetOptions[0] || null,
-    [liveModeDeviceId, liveModeTargetOptions]
-  );
-
   const liveModeInstrumentConfig = useMemo<InstrumentConfig>(() => {
-    if (selectedLiveModeTarget) {
-      return selectedLiveModeTarget.config;
-    }
     const selectedDevice =
       devices.find((device) => device.enabled !== false) ||
       devices[0];
@@ -4317,11 +4298,11 @@ function AppInner() {
       ...config,
       ...(selectedDevice || {}),
     };
-  }, [config, devices, selectedLiveModeTarget]);
+  }, [config, devices]);
 
   const liveModeVisaResource = useMemo(
-    () => selectedLiveModeTarget?.visaResource || getLiveInstrumentVisaResourceString(liveModeInstrumentConfig),
-    [getLiveInstrumentVisaResourceString, liveModeInstrumentConfig, selectedLiveModeTarget]
+    () => getLiveInstrumentVisaResourceString(liveModeInstrumentConfig),
+    [getLiveInstrumentVisaResourceString, liveModeInstrumentConfig]
   );
 
   const liveModeDeviceOptions = useMemo(
@@ -4337,14 +4318,14 @@ function AppInner() {
 
   const liveModeVncTarget = useMemo(() => {
     const enabled = liveModeInstrumentConfig.vncEnabled !== false;
-    const targetHost = String(selectedLiveModeTarget?.targetHost || liveModeInstrumentConfig.vncHost || liveModeInstrumentConfig.host || '').trim();
-    const targetPort = Number(selectedLiveModeTarget?.targetPort || liveModeInstrumentConfig.vncPort || 5900);
+    const targetHost = String(liveModeInstrumentConfig.vncHost || liveModeInstrumentConfig.host || '').trim();
+    const targetPort = Number(liveModeInstrumentConfig.vncPort || 5900);
     return {
       enabled,
       targetHost,
       targetPort: Number.isFinite(targetPort) && targetPort > 0 ? targetPort : 5900,
     };
-  }, [liveModeInstrumentConfig, selectedLiveModeTarget]);
+  }, [liveModeInstrumentConfig]);
 
   const toggleLiveModeVnc = useCallback(async () => {
     if (!executorEndpoint) {
@@ -4455,7 +4436,7 @@ function AppInner() {
     setLiveModeCapture(null);
     setLiveModeInitialCaptureDone(false);
     liveModeConsecutiveFailures.current = 0;
-  }, [liveModeDeviceId]);
+  }, [liveModeVisaResource]);
 
   useEffect(() => {
     if (!executorEndpoint || !liveModeVncSession) return undefined;
@@ -10099,11 +10080,6 @@ Keep under 120 words. No headings. Bullets only. Stay on this command. Do not de
                 vncSessionInfo={liveModeVncSession}
                 onToggleVnc={() => {
                   void toggleLiveModeVnc();
-                }}
-                deviceOptions={liveModeDeviceOptions}
-                selectedDeviceId={liveModeDeviceId}
-                onSelectDevice={(deviceId) => {
-                  setLiveModeDeviceId(deviceId);
                 }}
               />
             }

@@ -574,100 +574,104 @@ function ExecutePageContent({
               </button>
             </div>
             <div className="flex items-center gap-2 py-2 overflow-x-auto flex-nowrap min-w-0 nav-tabs-scroll">
-              <button
-                type="button"
-                onClick={() => setAutoApplyProposals((value) => !value)}
-                className={`inline-flex h-9 w-9 items-center justify-center rounded-lg border transition ${
-                  autoApplyProposals
-                    ? 'border-cyan-400/50 bg-cyan-500/15 text-cyan-700 dark:border-cyan-500/50 dark:text-cyan-300'
-                    : 'border-slate-200 bg-white text-slate-600 hover:bg-slate-100 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-300 dark:hover:bg-slate-800'
-                }`}
-                title={autoApplyProposals ? 'Auto-apply on (click to disable)' : 'Auto-apply off (click to enable)'}
-              >
-                <Sparkles size={16} />
-              </button>
-              <button
-                type="button"
-                onClick={clearProposalHistory}
-                disabled={!proposalHistory.length}
-                className="inline-flex h-9 w-9 items-center justify-center rounded-lg border border-slate-200 bg-white text-slate-600 hover:bg-slate-100 disabled:cursor-not-allowed disabled:opacity-40 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-200 dark:hover:bg-slate-800"
-                title="Clear proposal history"
-              >
-                <Trash2 size={16} />
-              </button>
-              <button
-                type="button"
-                onClick={onUndo}
-                disabled={!canUndo}
-                className="inline-flex h-9 w-9 items-center justify-center rounded-lg border border-slate-200 bg-white text-slate-600 hover:bg-slate-100 disabled:cursor-not-allowed disabled:opacity-40 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-200 dark:hover:bg-slate-800"
-                title="Undo"
-              >
-                <RotateCcw size={16} />
-              </button>
-              <button
-                type="button"
-                onClick={onRedo}
-                disabled={!canRedo}
-                className="inline-flex h-9 w-9 items-center justify-center rounded-lg border border-slate-200 bg-white text-slate-600 hover:bg-slate-100 disabled:cursor-not-allowed disabled:opacity-40 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-200 dark:hover:bg-slate-800"
-                title="Redo"
-              >
-                <RotateCw size={16} />
-              </button>
-              <button
-                type="button"
-                onClick={() => { void handleApplyProposal(); }}
-                disabled={!workflowProposal?.actions?.length || applyingProposal || !onApplyAiActions}
-                className="inline-flex items-center gap-2 rounded-lg border border-emerald-400/40 bg-emerald-500/15 px-3 py-2 text-sm font-semibold text-emerald-700 hover:bg-emerald-500/20 disabled:cursor-not-allowed disabled:opacity-40 dark:border-emerald-500/40 dark:text-emerald-300"
-                title="Apply the latest workflow proposal"
-              >
-                <Sparkles size={16} />
-                {applyingProposal ? 'Applying...' : 'Apply'}
-              </button>
-              {executorEndpoint && (
-                stepping ? (
-                  <>
-                    <button
-                      type="button"
-                      onClick={nextStep}
-                      disabled={stepRunning || stepIndex >= flatSteps.length}
-                      className="inline-flex h-9 w-9 items-center justify-center rounded-lg bg-amber-500 text-white hover:bg-amber-600 disabled:cursor-not-allowed disabled:opacity-40"
-                      title={stepIndex >= flatSteps.length ? 'Done' : `Step ${stepIndex + 1}/${flatSteps.length}`}
-                    >
-                      <SkipForward size={16} />
-                    </button>
-                    <button
-                      type="button"
-                      onClick={stopStepping}
-                      className="inline-flex h-9 w-9 items-center justify-center rounded-lg border border-red-300 text-red-600 hover:bg-red-50 dark:border-red-700 dark:text-red-400 dark:hover:bg-red-900/20"
-                      title="Stop stepping"
-                    >
-                      <Square size={14} />
-                    </button>
-                  </>
-                ) : (
+              {centerTab !== 'live' && (
+                <>
                   <button
                     type="button"
-                    onClick={startStepping}
-                    disabled={runStatus === 'running' || flatSteps.length === 0}
-                    className="inline-flex h-9 w-9 items-center justify-center rounded-lg border border-amber-300 text-amber-600 hover:bg-amber-50 dark:border-amber-600 dark:text-amber-400 dark:hover:bg-amber-900/20 disabled:cursor-not-allowed disabled:opacity-40"
-                    title="Step through workflow"
+                    onClick={() => setAutoApplyProposals((value) => !value)}
+                    className={`inline-flex h-9 w-9 items-center justify-center rounded-lg border transition ${
+                      autoApplyProposals
+                        ? 'border-cyan-400/50 bg-cyan-500/15 text-cyan-700 dark:border-cyan-500/50 dark:text-cyan-300'
+                        : 'border-slate-200 bg-white text-slate-600 hover:bg-slate-100 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-300 dark:hover:bg-slate-800'
+                    }`}
+                    title={autoApplyProposals ? 'Auto-apply on (click to disable)' : 'Auto-apply off (click to enable)'}
                   >
-                    <SkipForward size={16} />
+                    <Sparkles size={16} />
                   </button>
-                )
+                  <button
+                    type="button"
+                    onClick={clearProposalHistory}
+                    disabled={!proposalHistory.length}
+                    className="inline-flex h-9 w-9 items-center justify-center rounded-lg border border-slate-200 bg-white text-slate-600 hover:bg-slate-100 disabled:cursor-not-allowed disabled:opacity-40 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-200 dark:hover:bg-slate-800"
+                    title="Clear proposal history"
+                  >
+                    <Trash2 size={16} />
+                  </button>
+                  <button
+                    type="button"
+                    onClick={onUndo}
+                    disabled={!canUndo}
+                    className="inline-flex h-9 w-9 items-center justify-center rounded-lg border border-slate-200 bg-white text-slate-600 hover:bg-slate-100 disabled:cursor-not-allowed disabled:opacity-40 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-200 dark:hover:bg-slate-800"
+                    title="Undo"
+                  >
+                    <RotateCcw size={16} />
+                  </button>
+                  <button
+                    type="button"
+                    onClick={onRedo}
+                    disabled={!canRedo}
+                    className="inline-flex h-9 w-9 items-center justify-center rounded-lg border border-slate-200 bg-white text-slate-600 hover:bg-slate-100 disabled:cursor-not-allowed disabled:opacity-40 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-200 dark:hover:bg-slate-800"
+                    title="Redo"
+                  >
+                    <RotateCw size={16} />
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => { void handleApplyProposal(); }}
+                    disabled={!workflowProposal?.actions?.length || applyingProposal || !onApplyAiActions}
+                    className="inline-flex items-center gap-2 rounded-lg border border-emerald-400/40 bg-emerald-500/15 px-3 py-2 text-sm font-semibold text-emerald-700 hover:bg-emerald-500/20 disabled:cursor-not-allowed disabled:opacity-40 dark:border-emerald-500/40 dark:text-emerald-300"
+                    title="Apply the latest workflow proposal"
+                  >
+                    <Sparkles size={16} />
+                    {applyingProposal ? 'Applying...' : 'Apply'}
+                  </button>
+                  {executorEndpoint && (
+                    stepping ? (
+                      <>
+                        <button
+                          type="button"
+                          onClick={nextStep}
+                          disabled={stepRunning || stepIndex >= flatSteps.length}
+                          className="inline-flex h-9 w-9 items-center justify-center rounded-lg bg-amber-500 text-white hover:bg-amber-600 disabled:cursor-not-allowed disabled:opacity-40"
+                          title={stepIndex >= flatSteps.length ? 'Done' : `Step ${stepIndex + 1}/${flatSteps.length}`}
+                        >
+                          <SkipForward size={16} />
+                        </button>
+                        <button
+                          type="button"
+                          onClick={stopStepping}
+                          className="inline-flex h-9 w-9 items-center justify-center rounded-lg border border-red-300 text-red-600 hover:bg-red-50 dark:border-red-700 dark:text-red-400 dark:hover:bg-red-900/20"
+                          title="Stop stepping"
+                        >
+                          <Square size={14} />
+                        </button>
+                      </>
+                    ) : (
+                      <button
+                        type="button"
+                        onClick={startStepping}
+                        disabled={runStatus === 'running' || flatSteps.length === 0}
+                        className="inline-flex h-9 w-9 items-center justify-center rounded-lg border border-amber-300 text-amber-600 hover:bg-amber-50 dark:border-amber-600 dark:text-amber-400 dark:hover:bg-amber-900/20 disabled:cursor-not-allowed disabled:opacity-40"
+                        title="Step through workflow"
+                      >
+                        <SkipForward size={16} />
+                      </button>
+                    )
+                  )}
+                  <button
+                    type="button"
+                    onClick={onRun}
+                    disabled={runStatus === 'running' || runStatus === 'connecting' || !executorEndpoint}
+                    className={`inline-flex items-center gap-2 rounded-lg px-3 py-2 text-sm font-semibold text-white disabled:cursor-not-allowed disabled:opacity-40 ${
+                      executorEndpoint ? 'bg-green-600 hover:bg-green-700' : 'bg-gray-500'
+                    }`}
+                    title={executorEndpoint ? 'Run all on scope' : 'Connect to executor first'}
+                  >
+                    <Play size={16} />
+                    {runStatus === 'running' || runStatus === 'connecting' ? 'Running...' : executorEndpoint ? 'Run' : 'Not Connected'}
+                  </button>
+                </>
               )}
-              <button
-                type="button"
-                onClick={onRun}
-                disabled={runStatus === 'running' || runStatus === 'connecting' || !executorEndpoint}
-                className={`inline-flex items-center gap-2 rounded-lg px-3 py-2 text-sm font-semibold text-white disabled:cursor-not-allowed disabled:opacity-40 ${
-                  executorEndpoint ? 'bg-green-600 hover:bg-green-700' : 'bg-gray-500'
-                }`}
-                title={executorEndpoint ? 'Run all on scope' : 'Connect to executor first'}
-              >
-                <Play size={16} />
-                {runStatus === 'running' || runStatus === 'connecting' ? 'Running...' : executorEndpoint ? 'Run' : 'Not Connected'}
-              </button>
               {centerTab === 'live' && (
                 <button
                   type="button"
