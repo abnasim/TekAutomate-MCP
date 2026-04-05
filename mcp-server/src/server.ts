@@ -414,6 +414,10 @@ export async function createServer(port = 8787): Promise<http.Server> {
 
   // Per-session MCP transport map
   const mcpTransports = new Map<string, any>();
+  // Maps stale session IDs to their replacement session IDs, so parallel
+  // retries from Claude's client reuse the same new session instead of
+  // creating one per request.
+  const mcpStaleRedirects = new Map<string, string>();
 
   // ── HTML Tools Page ───────────────────────────────────────────────
   function buildToolsHtml(): string {
@@ -693,8 +697,15 @@ function filterTools(q) {
             const transport = mcpTransports.get(sessionId)!;
             await transport.handleRequest(req, res, body ? JSON.parse(body) : undefined);
           } else if (req.method === 'POST') {
-            // New session, OR stale session ID — create fresh either way
+            // New session, OR stale session ID — reuse recent session if one exists
             if (sessionId) {
+              // Check if we already created a replacement for this stale session
+              const replacement = mcpStaleRedirects.get(sessionId);
+              if (replacement && mcpTransports.has(replacement)) {
+                const transport = mcpTransports.get(replacement)!;
+                await transport.handleRequest(req, res, body ? JSON.parse(body) : undefined);
+                return;
+              }
               console.log(`[MCP] stale session ${sessionId} — creating new`);
             }
             const newSessionId = `tek-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
@@ -707,13 +718,21 @@ function filterTools(q) {
               if (transport.sessionId) {
                 mcpTransports.delete(transport.sessionId);
                 clearSessionContext(transport.sessionId);
+                // Clean up stale redirects pointing to this session
+                for (const [k, v] of mcpStaleRedirects) {
+                  if (v === transport.sessionId) mcpStaleRedirects.delete(k);
+                }
                 console.log(`[MCP] session closed: ${transport.sessionId}`);
               }
             };
             await transport.handleRequest(req, res, body ? JSON.parse(body) : undefined);
             if (transport.sessionId) {
               mcpTransports.set(transport.sessionId, transport);
-              console.log(`[MCP] new session: ${transport.sessionId}`);
+              // Map the stale session ID to the new one so parallel retries reuse it
+              if (sessionId) {
+                mcpStaleRedirects.set(sessionId, transport.sessionId);
+              }
+              console.log(`[MCP] new session: ${transport.sessionId}${sessionId ? ` (replaces ${sessionId})` : ''}`);
             }
           } else if (req.method === 'DELETE') {
             sendJson(res, 200, { ok: true });
