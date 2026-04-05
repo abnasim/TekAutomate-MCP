@@ -172,7 +172,6 @@ class _Handler(BaseHTTPRequestHandler):
                 result = self.server_thread.vnc_status(target_host, target_port) if self.server_thread else {"ok": False, "error": "Server unavailable"}
                 code = 200 if result.get("ok") else 400
                 self._json_response(code, result)
-                self._emit("GET", "/vnc/status", code, f"target={target_host or '*'}:{target_port} running={result.get('running')}")
             except ValueError as exc:
                 self._json_response(400, {"ok": False, "error": str(exc)})
                 self._emit("GET", "/vnc/status", 400, str(exc))
