@@ -79,6 +79,14 @@ function getWorkflowId(explicitWorkflowId?: string): string {
   }
 }
 
+function getStoredThreadId(threadStorageKey?: string): string {
+  try {
+    return localStorage.getItem(threadStorageKey || CHATKIT_THREAD_KEY) || '';
+  } catch {
+    return '';
+  }
+}
+
 function setStoredThreadId(id: string, threadStorageKey?: string): void {
   try {
     localStorage.setItem(threadStorageKey || CHATKIT_THREAD_KEY, id);
@@ -668,7 +676,7 @@ function OpenAiChatKitPanelInner({
   chatKitTheme,
 }: OpenAiChatKitPanelProps & { chatKitTheme: 'dark' | 'light' }) {
   const [initError, setInitError] = useState<string | null>(null);
-  const [activeThreadId, setActiveThreadId] = useState<string | null>(null);
+  const [activeThreadId, setActiveThreadId] = useState<string | null>(() => getStoredThreadId(threadStorageKey) || null);
   const chatKitThemeOptions = getChatKitThemeOptions(chatKitTheme);
   const [isSendingPrompt, setIsSendingPrompt] = useState(false);
   const [activeQuickAction, setActiveQuickAction] = useState<string | null>(null);
@@ -1043,10 +1051,9 @@ function OpenAiChatKitPanelInner({
       showDelete: historyEnabled,
       showRename: historyEnabled,
     },
-    // Don't restore threads from localStorage — ChatKit manages thread history
-    // internally via its built-in history UI. Reusing stale thread ids can
-    // leave the surface blank until the user manually recovers.
-    initialThread: null,
+    // Restore the last thread for continuity, but clear it automatically if
+    // ChatKit reports the thread is stale or invalid.
+    initialThread: getStoredThreadId(threadStorageKey) || null,
     onThreadChange: (detail: { threadId: string | null }) => {
       setActiveThreadId(detail.threadId ?? null);
       setStoredThreadId(detail.threadId || '', threadStorageKey);
