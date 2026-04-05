@@ -419,7 +419,8 @@ export function AiChatPanel({
   }, [state.history, state.isLoading]);
 
   useEffect(() => {
-    if (!(state.provider === 'anthropic' && claudeChatSurface === 'desktop-mcp')) return;
+    // Sync runtime context for all live modes — ensures MCP tools know
+    // the session key, executor URL, and instrument details.
     if (executionSource !== 'live') return;
     const mcpHost = resolveMcpHost();
     if (!mcpHost) return;
@@ -445,11 +446,9 @@ export function AiChatPanel({
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(payload),
     }).catch((error) => {
-      console.warn('[Claude Desktop MCP] Failed to sync runtime context:', error);
+      console.warn('[Native Chat] Failed to sync runtime context:', error);
     });
   }, [
-    state.provider,
-    claudeChatSurface,
     executionSource,
     steps,
     flowContext,
