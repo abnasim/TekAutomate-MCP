@@ -1376,62 +1376,54 @@ function OpenAiChatKitPanelInner({
     if (!instrumentEndpoint?.executorUrl) return;
 
     let cancelled = false;
+    const baseUrl = mcpHost.replace(/\/$/, '');
 
-    const loop = async () => {
-      while (!cancelled) {
-        let currentAction: { id: string; toolName: string; args?: Record<string, unknown> } | null = null;
-        try {
-          const nextRes = await fetch(
-            `${mcpHost.replace(/\/$/, '')}/live-actions/next?sessionKey=${encodeURIComponent(liveSession.sessionKey)}&timeoutMs=20000`,
-          );
-          if (!nextRes.ok) {
-            await new Promise((resolve) => window.setTimeout(resolve, 1500));
-            continue;
+    // ── SSE stream — instant action delivery, no polling gap ──
+    const streamUrl = `${baseUrl}/live-actions/stream?sessionKey=${encodeURIComponent(liveSession.sessionKey)}`;
+    const eventSource = new EventSource(streamUrl);
+
+    eventSource.addEventListener('action', async (event) => {
+      if (cancelled) return;
+      let currentAction: { id: string; toolName: string; args?: Record<string, unknown> } | null = null;
+      try {
+        currentAction = JSON.parse(event.data) as { id: string; toolName: string; args?: Record<string, unknown> };
+        if (!currentAction?.id || !currentAction.toolName) return;
+
+        const result = await executeMcpTool(
+          currentAction.toolName,
+          currentAction.args || {},
+          instrumentEndpointRef.current || undefined,
+          {
+            modelFamily: flowContextRef.current?.modelFamily,
+            deviceDriver: flowContextRef.current?.deviceDriver,
+          },
+        );
+
+        if (currentAction.toolName === 'capture_screenshot') {
+          const screenshot = extractScreenshotPayload(result);
+          if (screenshot) {
+            onLiveScreenshotRef.current?.(screenshot);
           }
-          const nextJson = (await nextRes.json()) as {
-            ok?: boolean;
-            action?: { id: string; toolName: string; args?: Record<string, unknown> } | null;
-          };
-          currentAction = nextJson.action || null;
-          if (!currentAction?.id || !currentAction.toolName) {
-            continue;
-          }
+        }
 
-          const result = await executeMcpTool(
-            currentAction.toolName,
-            currentAction.args || {},
-            instrumentEndpointRef.current || undefined,
-            {
-              modelFamily: flowContextRef.current?.modelFamily,
-              deviceDriver: flowContextRef.current?.deviceDriver,
-            },
-          );
-
-          if (currentAction.toolName === 'capture_screenshot') {
-            const screenshot = extractScreenshotPayload(result);
-            if (screenshot) {
-              onLiveScreenshotRef.current?.(screenshot);
-            }
-          }
-
-          await fetch(`${mcpHost.replace(/\/$/, '')}/live-actions/result`, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-              id: currentAction.id,
-              sessionKey: liveSession.sessionKey,
-              ok: true,
-              result,
-            }),
-          });
-        } catch (error) {
-          if (currentAction?.id) {
-            try {
-              await fetch(`${mcpHost.replace(/\/$/, '')}/live-actions/result`, {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({
-                  id: currentAction.id,
+        await fetch(`${baseUrl}/live-actions/result`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            id: currentAction.id,
+            sessionKey: liveSession.sessionKey,
+            ok: true,
+            result,
+          }),
+        });
+      } catch (error) {
+        if (currentAction?.id) {
+          try {
+            await fetch(`${baseUrl}/live-actions/result`, {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({
+                id: currentAction.id,
                   sessionKey: liveSession.sessionKey,
                   ok: false,
                   error: error instanceof Error ? error.message : 'Live action execution failed.',
@@ -1441,14 +1433,17 @@ function OpenAiChatKitPanelInner({
               // Ignore secondary reporting failures.
             }
           }
-          await new Promise((resolve) => window.setTimeout(resolve, 1200));
         }
-      }
+      });
+    });
+
+    eventSource.onerror = () => {
+      // EventSource auto-reconnects — no manual retry needed
     };
 
-    void loop();
     return () => {
       cancelled = true;
+      eventSource.close();
     };
   }, [activeThreadId, instrumentEndpoint?.executorUrl, userId, workflowId, flowContext?.deviceDriver, flowContext?.modelFamily, isLiveMode]);
 

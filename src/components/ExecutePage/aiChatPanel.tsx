@@ -467,80 +467,73 @@ export function AiChatPanel({
 
     let cancelled = false;
     const sessionKey = claudeDesktopLiveSessionKeyRef.current;
+    const baseUrl = mcpHost.replace(/\/$/, '');
 
-    const loop = async () => {
-      while (!cancelled) {
-        let currentAction: { id: string; toolName: string; args?: Record<string, unknown> } | null = null;
-        try {
-          const nextRes = await fetch(
-            `${mcpHost.replace(/\/$/, '')}/live-actions/next?sessionKey=${encodeURIComponent(sessionKey)}&timeoutMs=20000`,
-          );
-          if (!nextRes.ok) {
-            await new Promise((resolve) => window.setTimeout(resolve, 1500));
-            continue;
+    // ── SSE stream — instant action delivery, no polling gap ──
+    const streamUrl = `${baseUrl}/live-actions/stream?sessionKey=${encodeURIComponent(sessionKey)}`;
+    const eventSource = new EventSource(streamUrl);
+
+    eventSource.addEventListener('action', async (event) => {
+      if (cancelled) return;
+      let currentAction: { id: string; toolName: string; args?: Record<string, unknown> } | null = null;
+      try {
+        currentAction = JSON.parse(event.data) as { id: string; toolName: string; args?: Record<string, unknown> };
+        if (!currentAction?.id || !currentAction.toolName) return;
+
+        const result = await executeMcpTool(
+          currentAction.toolName,
+          currentAction.args || {},
+          instrumentEndpoint || undefined,
+          {
+            modelFamily: flowContext?.modelFamily,
+            deviceDriver: flowContext?.deviceDriver,
+          },
+        );
+
+        if (currentAction.toolName === 'capture_screenshot') {
+          const screenshot = extractScreenshotPayload(result);
+          if (screenshot) {
+            onLiveScreenshot?.(screenshot);
           }
+        }
 
-          const nextJson = (await nextRes.json()) as {
-            ok?: boolean;
-            action?: { id: string; toolName: string; args?: Record<string, unknown> } | null;
-          };
-          currentAction = nextJson.action || null;
-          if (!currentAction?.id || !currentAction.toolName) {
-            continue;
+        await fetch(`${baseUrl}/live-actions/result`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            id: currentAction.id,
+            sessionKey,
+            ok: true,
+            result,
+          }),
+        });
+      } catch (error) {
+        if (currentAction?.id) {
+          try {
+            await fetch(`${baseUrl}/live-actions/result`, {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({
+                id: currentAction.id,
+                sessionKey,
+                ok: false,
+                error: error instanceof Error ? error.message : 'Live action execution failed.',
+              }),
+            });
+          } catch {
+            // Ignore secondary reporting failures.
           }
-
-          const result = await executeMcpTool(
-            currentAction.toolName,
-            currentAction.args || {},
-            instrumentEndpoint || undefined,
-            {
-              modelFamily: flowContext?.modelFamily,
-              deviceDriver: flowContext?.deviceDriver,
-            },
-          );
-
-          if (currentAction.toolName === 'capture_screenshot') {
-            const screenshot = extractScreenshotPayload(result);
-            if (screenshot) {
-              onLiveScreenshot?.(screenshot);
-            }
-          }
-
-          await fetch(`${mcpHost.replace(/\/$/, '')}/live-actions/result`, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-              id: currentAction.id,
-              sessionKey,
-              ok: true,
-              result,
-            }),
-          });
-        } catch (error) {
-          if (currentAction?.id) {
-            try {
-              await fetch(`${mcpHost.replace(/\/$/, '')}/live-actions/result`, {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({
-                  id: currentAction.id,
-                  sessionKey,
-                  ok: false,
-                  error: error instanceof Error ? error.message : 'Live action execution failed.',
-                }),
-              });
-            } catch {
-              // Ignore secondary reporting failures.
-            }
-          }
-          await new Promise((resolve) => window.setTimeout(resolve, 1200));
         }
       }
+    });
+
+    eventSource.onerror = () => {
+      // EventSource auto-reconnects
     };
 
-    void loop();
     return () => {
       cancelled = true;
+      eventSource.close();
     };
   }, [
     state.provider,
