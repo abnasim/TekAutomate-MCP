@@ -399,7 +399,7 @@ export async function createServer(port = 8787): Promise<http.Server> {
         try {
           const toolPromise = runTool(name, (args as Record<string, unknown>) ?? {});
           const timeoutPromise = new Promise<never>((_, reject) =>
-            setTimeout(() => reject(new Error(`Tool ${name} timed out after 45s`)), 45_000)
+            setTimeout(() => reject(new Error(`Tool ${name} timed out after 20s. Check executor connection.`)), 20_000)
           );
           const result = await Promise.race([toolPromise, timeoutPromise]);
           const safeResult = sanitizeToolResultForExternalMcp(name, result);
@@ -461,7 +461,7 @@ export async function createServer(port = 8787): Promise<http.Server> {
           // Hard 45s timeout — always return an error, never hang
           const toolPromise = runTool(toolName, toolArgs);
           const timeoutPromise = new Promise<never>((_, reject) =>
-            setTimeout(() => reject(new Error(`Tool ${toolName} timed out after 45s`)), 45_000)
+            setTimeout(() => reject(new Error(`Tool ${toolName} timed out after 20s. Check executor connection.`)), 20_000)
           );
           const result = await Promise.race([toolPromise, timeoutPromise]);
           const safe = sanitizeToolResultForExternalMcp(toolName, result);
