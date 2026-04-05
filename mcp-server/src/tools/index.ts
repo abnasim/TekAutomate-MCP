@@ -960,7 +960,6 @@ const MCP_EXPOSED_TOOLS = new Set([
   'retrieve_rag_chunks',     // { corpus: "errors", query: "OPC Query Return Type" }
   'get_template_examples',   // { query: "jitter measurement" }
   // Live instrument tools
-  'get_visa_resources',
   'send_scpi',
   'capture_screenshot',
   'discover_scpi',
