@@ -397,7 +397,11 @@ export async function createServer(port = 8787): Promise<http.Server> {
       // Run inside session scope so tools see this session's context, not another user's
       const exec = async () => {
         try {
-          const result = await runTool(name, (args as Record<string, unknown>) ?? {});
+          const toolPromise = runTool(name, (args as Record<string, unknown>) ?? {});
+          const timeoutPromise = new Promise<never>((_, reject) =>
+            setTimeout(() => reject(new Error(`Tool ${name} timed out after 20s. Check executor connection.`)), 20_000)
+          );
+          const result = await Promise.race([toolPromise, timeoutPromise]);
           const safeResult = sanitizeToolResultForExternalMcp(name, result);
           const text = typeof safeResult === 'string' ? safeResult : JSON.stringify(safeResult, null, 2);
           return { content: [{ type: 'text' as const, text }] };
@@ -454,7 +458,12 @@ export async function createServer(port = 8787): Promise<http.Server> {
         const toolArgs = (rpc.params?.arguments as Record<string, unknown>) ?? {};
         console.log(`[MCP:json] call ${toolName} args=${JSON.stringify(toolArgs).slice(0, 200)}`);
         try {
-          const result = await runTool(toolName, toolArgs);
+          // Hard 45s timeout — always return an error, never hang
+          const toolPromise = runTool(toolName, toolArgs);
+          const timeoutPromise = new Promise<never>((_, reject) =>
+            setTimeout(() => reject(new Error(`Tool ${toolName} timed out after 20s. Check executor connection.`)), 20_000)
+          );
+          const result = await Promise.race([toolPromise, timeoutPromise]);
           const safe = sanitizeToolResultForExternalMcp(toolName, result);
           const text = typeof safe === 'string' ? safe : JSON.stringify(safe, null, 2);
           sendJson(res, 200, { jsonrpc: '2.0', id: rpcId, result: { content: [{ type: 'text', text }] } });

@@ -83,28 +83,46 @@ async function verifyCommandsLocally(
   return failures;
 }
 
-export async function sendScpi(input: Input): Promise<ToolResult<Record<string, unknown>>> {
-  if (shouldBridgeToTekAutomate(input)) {
-    const bridged = await dispatchLiveActionThroughTekAutomate('send_scpi', input, Math.max((input.timeoutMs ?? 10_000) + 10_000, 30_000));
-    return {
-      ok: bridged.ok,
-      data: bridged.ok
-        ? ((bridged.result && typeof bridged.result === 'object' ? bridged.result : { result: bridged.result }) as Record<string, unknown>)
-        : { error: 'LIVE_ACTION_FAILED', message: bridged.error || 'TekAutomate failed to execute send_scpi.' },
-      sourceMeta: [],
-      warnings: bridged.ok ? [] : [bridged.error || 'TekAutomate live action failed.'],
-    };
-  }
+function fail(error: string, hint: string): ToolResult<Record<string, unknown>> {
+  return { ok: false, data: { error, hint }, sourceMeta: [], warnings: [hint] };
+}
 
+export async function sendScpi(input: Input): Promise<ToolResult<Record<string, unknown>>> {
   input = withRuntimeInstrumentDefaults(input);
+
+  // ── Fast validation — tell the AI exactly what's wrong ──
   if (!input.commands?.length) {
-    return { ok: false, data: { error: 'NO_COMMANDS' }, sourceMeta: [], warnings: ['No commands provided. Pass commands:["CH1:SCAle?"] array.'] };
+    return fail('NO_COMMANDS', 'Pass commands:["*IDN?"] — an array of SCPI command strings.');
+  }
+  if (!input.executorUrl && !input.visaResource) {
+    return fail('MISSING_CONTEXT',
+      'No instrument context. Call get_instrument_info first, then pass executorUrl, visaResource, backend, and liveMode from its response.');
   }
   if (!input.executorUrl) {
-    return { ok: false, data: { error: 'NO_INSTRUMENT', message: 'No instrument connected. Connect to a scope via the Execute page first.' }, sourceMeta: [], warnings: ['No executorUrl — instrument not connected.'] };
+    return fail('MISSING_EXECUTOR_URL', 'executorUrl is required. Call get_instrument_info to get it.');
+  }
+  if (!input.visaResource) {
+    return fail('MISSING_VISA_RESOURCE', 'visaResource is required. Call get_instrument_info or get_visa_resources to get it.');
   }
   if (!input.liveMode) {
-    return { ok: false, data: { error: 'NOT_LIVE', message: 'liveMode must be true to send SCPI commands.' }, sourceMeta: [], warnings: ['liveMode is not enabled.'] };
+    return fail('NOT_LIVE', 'liveMode must be true. Pass liveMode:true with your request.');
+  }
+
+  // ── Bridge through TekAutomate browser ──
+  if (shouldBridgeToTekAutomate(input)) {
+    try {
+      const bridged = await dispatchLiveActionThroughTekAutomate('send_scpi', input, Math.max((input.timeoutMs ?? 10_000) + 5_000, 15_000));
+      if (!bridged.ok) {
+        return fail('BRIDGE_FAILED', bridged.error || 'TekAutomate browser did not complete send_scpi. Is TekAutomate open?');
+      }
+      return {
+        ok: true,
+        data: (bridged.result && typeof bridged.result === 'object' ? bridged.result : { result: bridged.result }) as Record<string, unknown>,
+        sourceMeta: [], warnings: [],
+      };
+    } catch (err) {
+      return fail('BRIDGE_TIMEOUT', `send_scpi bridge timed out: ${err instanceof Error ? err.message : String(err)}. Is TekAutomate open in the browser?`);
+    }
   }
 
   // ── Normalize commands — split semicolon-concatenated strings ──
