@@ -693,6 +693,10 @@ function filterTools(q) {
             const transport = mcpTransports.get(sessionId)!;
             await transport.handleRequest(req, res, body ? JSON.parse(body) : undefined);
           } else if (req.method === 'POST') {
+            // New session, OR stale session ID — create fresh either way
+            if (sessionId) {
+              console.log(`[MCP] stale session ${sessionId} — creating new`);
+            }
             const newSessionId = `tek-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
             const transport = new sdk.StreamableHTTPServerTransport({
               sessionIdGenerator: () => newSessionId,
@@ -713,6 +717,11 @@ function filterTools(q) {
             }
           } else if (req.method === 'DELETE') {
             sendJson(res, 200, { ok: true });
+          } else if (req.method === 'GET' && sessionId) {
+            // Stale SSE reconnect — session expired, tell client to re-init
+            console.log(`[MCP] stale GET session ${sessionId} — returning 404 to trigger re-init`);
+            res.statusCode = 404;
+            res.end();
           } else {
             sendJson(res, 400, { error: 'No valid session. POST to /mcp to initialize.' });
           }
