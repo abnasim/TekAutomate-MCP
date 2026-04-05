@@ -702,13 +702,26 @@ function filterTools(q) {
               mcpTransports.set(transport.sessionId, transport);
               console.log(`[MCP] new session: ${transport.sessionId}`);
             }
+          } else if (req.method === 'GET' && !sessionId) {
+            // Some clients GET /mcp without a session to discover or open SSE.
+            // Return a helpful JSON hint instead of a hard 400.
+            sendJson(res, 405, {
+              error: 'Method not allowed. POST to /mcp to initialize a session.',
+              jsonrpc: '2.0',
+              hint: 'Send POST with {"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":"2024-11-05","capabilities":{},"clientInfo":{"name":"client","version":"1.0"}}}',
+            });
+          } else if (req.method === 'DELETE') {
+            // Session cleanup — if session not found, just return OK
+            sendJson(res, 200, { ok: true, message: 'Session not found or already closed.' });
           } else {
+            console.log(`[MCP] 400 — method=${req.method} session=${sessionId || 'none'} body=${(body || '').slice(0, 200)}`);
             sendJson(res, 400, { error: 'No valid session. Send a POST to /mcp to initialize.' });
           }
         } catch (err) {
-          console.error('[MCP transport] Error:', err);
+          const msg = err instanceof Error ? err.message : String(err);
+          console.error(`[MCP transport] Error: ${msg}`, err);
           if (!res.headersSent) {
-            sendJson(res, 500, { error: 'MCP transport error' });
+            sendJson(res, 500, { error: `MCP transport error: ${msg}` });
           }
         }
         return;
