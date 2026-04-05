@@ -23,6 +23,10 @@ import string
 
 _real_stdout = sys.stdout
 
+_HERE = os.path.dirname(os.path.abspath(__file__))
+if _HERE not in sys.path:
+    sys.path.insert(0, _HERE)
+
 warnings.filterwarnings("ignore")
 
 _null = open(os.devnull, "w")
@@ -91,7 +95,13 @@ def _parse_socket_address(visa: str) -> tuple[str, int]:
 
 def _get_socket_session(visa: str):
     """Get or create a raw SocketInstr session for SOCKET resources."""
-    from app.socket_instr import SocketInstr
+    try:
+        from app.socket_instr import SocketInstr
+    except ModuleNotFoundError:
+        try:
+            from socket_instr import SocketInstr
+        except ModuleNotFoundError as exc:
+            raise RuntimeError(f"Could not import SocketInstr: {exc}") from exc
     with _session_lock:
         session = _socket_sessions.get(visa)
         if session is not None:
