@@ -5,7 +5,7 @@ import { initTmDevicesIndex } from './core/tmDevicesIndex';
 import { initRagIndexes } from './core/ragIndex';
 import { initTemplateIndex } from './core/templateIndex';
 import { runToolLoop } from './core/toolLoop';
-import { getToolDefinitions, getMcpExposedTools, isProtectedMcpTool, runTool } from './tools/index';
+import { getToolDefinitions, getMcpExposedTools, runTool } from './tools/index';
 import type { McpChatRequest } from './core/schemas';
 import { getLastWorkflowProposal } from './tools/stageWorkflowProposal';
 import { getRuntimeContextState, updateRuntimeContext } from './tools/runtimeContextStore';

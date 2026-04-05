@@ -213,7 +213,7 @@ async function queryLrn(input: Input): Promise<{ ok: boolean; response: string; 
 // ── Main discover function ──────────────────────────────────────────
 export async function discoverScpi(input: Input): Promise<ToolResult<Record<string, unknown>>> {
   if (!input._lrnResponse && shouldBridgeToTekAutomate(input)) {
-    const bridged = await dispatchLiveActionThroughTekAutomate('discover_scpi', input as Record<string, unknown>, 60_000);
+    const bridged = await dispatchLiveActionThroughTekAutomate('discover_scpi', input as unknown as Record<string, unknown>, 60_000);
     return {
       ok: bridged.ok,
       data: bridged.ok
