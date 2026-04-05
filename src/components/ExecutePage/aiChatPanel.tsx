@@ -531,6 +531,8 @@ export function AiChatPanel({
     && openAiChatSurface === 'chatkit'
     && (state.tekMode === 'ai' || state.tekMode === 'live')
     && activeChatKitWorkflowId.length > 0;
+  const useClaudeDesktopMcpSurface =
+    state.provider === 'anthropic' && claudeChatSurface === 'desktop-mcp';
 
   const interactionSummary = state.tekMode === 'mcp'
     ? 'Search commands, build flows, validate SCPI. No AI calls.'
@@ -1728,8 +1730,8 @@ export function AiChatPanel({
                           })}
                         </div>
                         {claudeChatSurface === 'desktop-mcp' && (
-                          <div className="rounded-lg border border-cyan-200/70 bg-cyan-50/80 px-2.5 py-2 text-[10px] text-cyan-800 dark:border-cyan-500/20 dark:bg-cyan-500/8 dark:text-cyan-200">
-                            Use Claude Desktop with the TekAutomate MCP connector for live instrument work. Claude desktop calls MCP, MCP mirrors runtime context from TekAutomate, and live actions relay back through the local app/executor.
+                          <div className="rounded-lg border border-cyan-500/30 bg-slate-950/90 px-2.5 py-2 text-[10px] leading-relaxed text-cyan-100 shadow-inner shadow-cyan-950/40">
+                            Use Claude Desktop with the TekAutomate MCP connector for live instrument work. Claude Desktop talks to MCP over HTTP, MCP mirrors runtime context from TekAutomate, and live actions relay back through the local app/executor.
                           </div>
                         )}
                       </div>
@@ -1887,6 +1889,26 @@ export function AiChatPanel({
             onLiveScreenshot={onLiveScreenshot}
             className="flex-1 min-h-0"
           />
+      ) : useClaudeDesktopMcpSurface ? (
+        <div className="flex-1 min-h-0 overflow-auto px-4 py-4">
+          <div className="rounded-2xl border border-cyan-500/25 bg-slate-950/80 p-4 text-sm text-slate-200 shadow-[inset_0_1px_0_rgba(255,255,255,0.04)]">
+            <div className="flex items-center gap-2">
+              <div className="h-2 w-2 rounded-full bg-cyan-400" />
+              <div className="text-sm font-semibold text-white">Claude Desktop Mode</div>
+            </div>
+            <p className="mt-3 text-sm leading-relaxed text-slate-300">
+              This panel is in Claude Desktop MCP mode. Use Claude Desktop to chat with TekAutomate through the MCP connector.
+            </p>
+            <div className="mt-4 rounded-xl border border-slate-800 bg-slate-900/90 p-3 text-xs leading-6 text-slate-300">
+              <div><span className="font-semibold text-slate-100">Flow:</span> Claude Desktop → TekAutomate MCP → TekAutomate app → local executor</div>
+              <div><span className="font-semibold text-slate-100">Transport:</span> Claude Desktop uses MCP over HTTP, not the in-app native chat surface</div>
+              <div><span className="font-semibold text-slate-100">Live context:</span> mirrored automatically from your active TekAutomate session</div>
+            </div>
+            <div className="mt-4 rounded-xl border border-slate-800 bg-slate-900/70 p-3 text-xs text-slate-400">
+              Native Claude chat is hidden here on purpose so you don’t end up talking to the wrong surface.
+            </div>
+          </div>
+        </div>
       ) : (
       <>
       <div ref={messagesContainerRef} className="flex-1 min-h-0 overflow-auto py-2 space-y-0.5">
