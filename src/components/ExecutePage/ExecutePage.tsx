@@ -492,7 +492,14 @@ function ExecutePageContent({
   return (
     <div className="h-full flex flex-col bg-slate-100 text-slate-900 dark:bg-slate-950 dark:text-white">
       <div className="flex-1 min-h-0 flex">
-        {assistantPanelOpen ? (
+        <div
+          className={
+            assistantPanelOpen
+              ? 'flex-shrink-0 min-h-0'
+              : 'flex-shrink-0 w-0 min-h-0 overflow-hidden pointer-events-none opacity-0'
+          }
+          aria-hidden={!assistantPanelOpen}
+        >
           <AiChatPanel
             steps={steps}
             workspaceRevision={workspaceRevision}
@@ -510,7 +517,8 @@ function ExecutePageContent({
             onLiveScreenshot={onLiveScreenshot}
             onRun={onRun}
           />
-        ) : (
+        </div>
+        {!assistantPanelOpen && (
           <button
             type="button"
             onClick={() => setAssistantPanelOpen(true)}

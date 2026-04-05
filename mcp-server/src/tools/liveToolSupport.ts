@@ -8,28 +8,27 @@ export interface RuntimeBackedEndpoint {
   liveMode?: boolean;
 }
 
-export function withRuntimeInstrumentDefaults<T extends Record<string, unknown>>(input: T): T & RuntimeBackedEndpoint {
+export function withRuntimeInstrumentDefaults<T extends Partial<RuntimeBackedEndpoint>>(input: T): T & RuntimeBackedEndpoint {
   const runtime = getRuntimeContextState();
   const instrument = runtime.instrument;
-  return {
-    executorUrl:
-      typeof input.executorUrl === 'string' && input.executorUrl
-        ? input.executorUrl
-        : instrument.executorUrl || '',
-    visaResource:
-      typeof input.visaResource === 'string' && input.visaResource
-        ? input.visaResource
-        : instrument.visaResource || '',
-    backend:
-      typeof input.backend === 'string' && input.backend
-        ? input.backend
-        : instrument.backend,
-    liveMode:
-      typeof input.liveMode === 'boolean'
-        ? input.liveMode
-        : instrument.liveMode,
-    ...input,
-  } as T & RuntimeBackedEndpoint;
+  const next = { ...input } as T & Partial<RuntimeBackedEndpoint>;
+  next.executorUrl =
+    typeof input.executorUrl === 'string' && input.executorUrl
+      ? input.executorUrl
+      : instrument.executorUrl || '';
+  next.visaResource =
+    typeof input.visaResource === 'string' && input.visaResource
+      ? input.visaResource
+      : instrument.visaResource || '';
+  next.backend =
+    typeof input.backend === 'string' && input.backend
+      ? input.backend
+      : instrument.backend;
+  next.liveMode =
+    typeof input.liveMode === 'boolean'
+      ? input.liveMode
+      : instrument.liveMode;
+  return next as T & RuntimeBackedEndpoint;
 }
 
 export function shouldBridgeToTekAutomate(input: {
@@ -50,13 +49,13 @@ export function shouldBridgeToTekAutomate(input: {
 
 export async function dispatchLiveActionThroughTekAutomate(
   toolName: LiveActionToolName,
-  args: Record<string, unknown>,
+  args: object,
   timeoutMs?: number,
 ): Promise<LiveActionResultEnvelope> {
   const runtime = getRuntimeContextState();
   return enqueueLiveAction({
     toolName,
-    args,
+    args: args as Record<string, unknown>,
     sessionKey: runtime.liveSession.sessionKey,
     timeoutMs,
   });
