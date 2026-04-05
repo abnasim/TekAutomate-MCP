@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { Camera, ChevronDown, ChevronRight, Image as ImageIcon, KeyRound, Loader2, MonitorSmartphone, RefreshCw, Terminal } from 'lucide-react';
+import { Camera, ChevronDown, ChevronRight, Image as ImageIcon, Loader2, MonitorSmartphone, RefreshCw, Terminal } from 'lucide-react';
 import { VncViewer } from './VncViewer';
 
 export interface LiveModeCapture {
@@ -19,7 +19,6 @@ interface LiveModePanelProps {
   onRefresh: () => void;
   onToggleAutoRefresh: () => void;
   onChangeRefreshInterval: (seconds: number) => void;
-  onToggleLiveTokenEditor?: () => void;
   vncAvailable?: boolean | null;
   vncActive?: boolean;
   vncConnecting?: boolean;
@@ -58,7 +57,6 @@ export function LiveModePanel({
   onRefresh,
   onToggleAutoRefresh,
   onChangeRefreshInterval,
-  onToggleLiveTokenEditor,
   vncAvailable = null,
   vncActive = false,
   vncConnecting = false,
@@ -164,17 +162,6 @@ export function LiveModePanel({
               <option value={5}>5s</option>
               <option value={10}>10s</option>
             </select>
-            {onToggleLiveTokenEditor ? (
-              <button
-                type="button"
-                onClick={onToggleLiveTokenEditor}
-                className="inline-flex items-center justify-center rounded-lg border border-slate-300 bg-white p-1.5 text-slate-700 transition-colors hover:bg-slate-50 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-200 dark:hover:bg-slate-800"
-                title="Show live token"
-                aria-label="Show live token"
-              >
-                <KeyRound size={12} />
-              </button>
-            ) : null}
             {onToggleVnc ? (
               <button
                 type="button"

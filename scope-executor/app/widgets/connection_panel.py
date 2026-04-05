@@ -83,7 +83,6 @@ class ConnectionPanel(ttk.Frame):
         self._status_lbl.pack(side=tk.LEFT)
 
         token_frame = ttk.LabelFrame(self, text="LIVE TOKEN")
-        token_frame.pack(fill=tk.X, pady=(0, 8))
 
         token_controls = ttk.Frame(token_frame)
         token_controls.pack(fill=tk.X, padx=8, pady=(4, 2))

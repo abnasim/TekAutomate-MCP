@@ -60,7 +60,6 @@ type AskAiParsedResult = {
   tip?: string;
 };
 
-const EXECUTE_PAGE_LIVE_TOKEN_STORAGE = 'tekautomate.execute.live_token';
 
 const parseAskAiContent = (content: string): AskAiParsedResult => {
   const text = (content || '').trim();
@@ -1551,24 +1550,11 @@ function AppInner() {
   }, [executorEndpoint]);
 
   // Fetch scanned instruments from executor — once per endpoint change (host:port)
-  const getStoredLiveToken = useCallback((): string => {
-    try {
-      return window.localStorage.getItem(EXECUTE_PAGE_LIVE_TOKEN_STORAGE)?.trim() || '';
-    } catch {
-      return '';
-    }
-  }, []);
-
   const buildExecutorHeaders = useCallback(
     (baseHeaders?: Record<string, string>): Record<string, string> => {
-      const headers: Record<string, string> = { ...(baseHeaders || {}) };
-      const liveToken = getStoredLiveToken();
-      if (liveToken) {
-        headers['X-Live-Token'] = liveToken;
-      }
-      return headers;
+      return { ...(baseHeaders || {}) };
     },
-    [getStoredLiveToken]
+    []
   );
 
   const lastScannedEndpoint = React.useRef('');
@@ -4415,14 +4401,10 @@ function AppInner() {
       const json = await res.json() as {
         ok?: boolean;
         error?: string;
-        requiresLiveToken?: boolean;
         session_id?: string;
         ws_url?: string;
         target?: { host?: string; port?: number };
       };
-      if (res.status === 401 && json.requiresLiveToken) {
-        throw new Error('Enter a live token before starting VNC.');
-      }
       if (!json.ok || !json.session_id || !json.ws_url) {
         throw new Error(json.error || 'Failed to start VNC session.');
       }
@@ -10128,10 +10110,7 @@ Keep under 120 words. No headings. Bullets only. Stay on this command. Do not de
                 onChangeRefreshInterval={(seconds) => {
                   setLiveModeRefreshInterval(seconds);
                 }}
-                onToggleLiveTokenEditor={() => {
-                  window.dispatchEvent(new CustomEvent('tekautomate:toggle-live-token-editor'));
-                }}
-                vncAvailable={liveModeVncAvailable}
+            vncAvailable={liveModeVncAvailable}
                 vncActive={Boolean(liveModeVncSession)}
                 vncConnecting={liveModeVncConnecting}
                 vncError={liveModeVncError}
