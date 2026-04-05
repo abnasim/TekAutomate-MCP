@@ -207,19 +207,6 @@ async function readJsonBody(req: http.IncomingMessage): Promise<Record<string, u
   return JSON.parse(raw || '{}') as Record<string, unknown>;
 }
 
-function extractRequestToken(req: http.IncomingMessage): string {
-  const raw = String(req.headers.authorization || '').trim();
-  if (raw.toLowerCase().startsWith('bearer ')) {
-    return raw.slice(7).trim();
-  }
-  try {
-    const requestUrl = new URL(req.url || '/', `http://${req.headers.host || 'localhost'}`);
-    return String(requestUrl.searchParams.get('token') || '').trim();
-  } catch {
-    return '';
-  }
-}
-
 function sendJson(res: http.ServerResponse, status: number, payload: unknown) {
   res.statusCode = status;
   res.setHeader('Content-Type', 'application/json');
@@ -828,19 +815,17 @@ function filterTools(q) {
     if (req.method === 'POST' && req.url === '/tools/disconnect') {
       try {
         const body = (await readJsonBody(req)) as {
-          instrumentEndpoint?: { executorUrl: string; visaResource: string; liveToken?: string };
+          instrumentEndpoint?: { executorUrl: string; visaResource: string };
         };
         const ep = body?.instrumentEndpoint;
         if (!ep?.executorUrl || !ep?.visaResource) {
           sendJson(res, 400, { ok: false, error: 'Missing instrumentEndpoint (executorUrl, visaResource)' });
           return;
         }
-        const forwardedToken = String(ep.liveToken || extractRequestToken(req) || '').trim();
         const execRes = await fetch(`${ep.executorUrl.replace(/\/$/, '')}/run`, {
           method: 'POST',
           headers: {
             'Content-Type': 'application/json',
-            ...(forwardedToken ? { 'X-Live-Token': forwardedToken } : {}),
           },
           body: JSON.stringify({
             protocol_version: 1,
@@ -867,7 +852,6 @@ function filterTools(q) {
             backend: string;
             liveMode?: boolean;
             outputMode?: 'clean' | 'verbose';
-            liveToken?: string;
           };
           flowContext?: {
             modelFamily?: string;
@@ -879,7 +863,6 @@ function filterTools(q) {
           sendJson(res, 400, { ok: false, error: 'Missing tool name' });
           return;
         }
-        const forwardedToken = extractRequestToken(req);
         // Inject instrument endpoint for live tools
         let args = body.args || {};
         const liveTools = ['get_instrument_state', 'probe_command', 'send_scpi', 'capture_screenshot', 'get_visa_resources', 'get_environment', 'discover_scpi'];
@@ -890,7 +873,6 @@ function filterTools(q) {
             backend: body.instrumentEndpoint.backend,
             liveMode: body.instrumentEndpoint.liveMode === true,
             outputMode: body.instrumentEndpoint.outputMode || 'verbose',
-            liveToken: body.instrumentEndpoint.liveToken || forwardedToken,
             modelFamily: body.flowContext?.modelFamily,
             deviceDriver: body.flowContext?.deviceDriver,
             ...args,
@@ -1027,7 +1009,6 @@ function filterTools(q) {
               ? {
                   ...body.instrumentEndpoint,
                   visaResource: '[redacted]',
-                  liveToken: body.instrumentEndpoint.liveToken ? '[redacted]' : undefined,
                 }
               : undefined,
           },

@@ -84,7 +84,7 @@ class _Handler(BaseHTTPRequestHandler):
     def _cors_headers(self):
         self.send_header("Access-Control-Allow-Origin", "*")
         self.send_header("Access-Control-Allow-Methods", "GET, POST, OPTIONS")
-        self.send_header("Access-Control-Allow-Headers", "Content-Type, Authorization, X-Live-Token")
+        self.send_header("Access-Control-Allow-Headers", "Content-Type, Authorization")
 
     def _client_ip(self) -> str:
         return self.client_address[0] if self.client_address else ""
@@ -92,18 +92,6 @@ class _Handler(BaseHTTPRequestHandler):
     def _is_local_request(self) -> bool:
         ip = self._client_ip()
         return ip in {"127.0.0.1", "::1", "::ffff:127.0.0.1", "localhost"}
-
-    def _extract_live_token(self) -> str:
-        token = self.headers.get("X-Live-Token", "")
-        if token:
-            return token.strip()
-        auth = self.headers.get("Authorization", "")
-        if auth.lower().startswith("bearer "):
-            return auth[7:].strip()
-        return ""
-
-    def _require_live_token(self) -> bool:
-        return True
 
     def _require_localhost(self) -> bool:
         if self._is_local_request():
@@ -160,13 +148,9 @@ class _Handler(BaseHTTPRequestHandler):
             self._handle_sse()
             return
         if path == "/scan":
-            if not self._require_live_token():
-                return
             self._handle_scan()
             return
         if path == "/vnc/probe":
-            if not self._require_live_token():
-                return
             target_host = (query.get("target_host") or [""])[0]
             try:
                 target_port = self._parse_int_param((query.get("target_port") or ["5900"])[0], default=5900, name="target_port")
@@ -182,8 +166,6 @@ class _Handler(BaseHTTPRequestHandler):
                 self._emit("GET", "/vnc/probe", 500, str(exc))
             return
         if path == "/vnc/status":
-            if not self._require_live_token():
-                return
             target_host = (query.get("target_host") or [""])[0] or None
             try:
                 target_port = self._parse_int_param((query.get("target_port") or ["5900"])[0], default=5900, name="target_port")
@@ -306,9 +288,6 @@ class _Handler(BaseHTTPRequestHandler):
         if data.get("protocol_version") != PROTOCOL_VERSION or action not in {"run_python", "capture_screenshot", "send_scpi", "disconnect", "device_clear"}:
             self._json_response(400, {"ok": False, "error": "Bad request"})
             self._emit("POST", "/run", 400, f"bad protocol action={action_label}")
-            return
-
-        if action in {"capture_screenshot", "send_scpi", "disconnect", "device_clear"} and not self._require_live_token():
             return
 
         srv = self.server_thread
@@ -526,8 +505,6 @@ class _Handler(BaseHTTPRequestHandler):
         self._emit("POST", "/token/revoke", 200, "revoked live token")
 
     def _handle_vnc_start(self):
-        if not self._require_live_token():
-            return
         try:
             data = self._read_json_body()
         except ValueError as exc:
@@ -554,8 +531,6 @@ class _Handler(BaseHTTPRequestHandler):
             self._emit("POST", "/vnc/start", 500, str(exc))
 
     def _handle_vnc_stop(self):
-        if not self._require_live_token():
-            return
         session_id = None
         try:
             if int(self.headers.get("Content-Length", "0") or "0") > 0:
