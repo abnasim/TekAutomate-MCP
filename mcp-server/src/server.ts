@@ -1,9 +1,5 @@
 import http from 'http';
-import { initCommandIndex } from './core/commandIndex';
-import { initProviderCatalog, providerSupplementsEnabled } from './core/providerCatalog';
 import { initTmDevicesIndex } from './core/tmDevicesIndex';
-import { initRagIndexes } from './core/ragIndex';
-import { initTemplateIndex } from './core/templateIndex';
 import { runToolLoop } from './core/toolLoop';
 import { getToolDefinitions, getMcpExposedTools, runTool } from './tools/index';
 import type { McpChatRequest } from './core/schemas';
@@ -264,71 +260,28 @@ function parseProviderError(status: number, raw: string): { code: string; messag
 
 export async function createServer(port = 8787): Promise<http.Server> {
   const routerDisabled = String(process.env.MCP_ROUTER_DISABLED || '').trim() === 'true';
+  // Indexes and router are already initialized by index.ts before createServer()
+  // is called.  This promise just verifies they're ready and sets the startup state.
   startupInitPromise = (async () => {
     startupState = 'starting';
     startupError = null;
-    const startInit = Date.now();
-    console.log('[SERVER] Initializing all indexes...');
-
-    const initTasks: Promise<unknown>[] = [
-      initCommandIndex(),
-      initTmDevicesIndex(),
-      initRagIndexes(),
-      initTemplateIndex(),
-    ];
-    const names = ['CommandIndex', 'TmDevicesIndex', 'RagIndexes', 'TemplateIndex'];
-    if (providerSupplementsEnabled()) {
-      initTasks.push(initProviderCatalog());
-      names.push('ProviderCatalog');
-    }
-
-    const results = await Promise.allSettled(initTasks);
-    const failures = results
-      .map((r, i) => r.status === 'rejected' ? { index: i, error: r.reason } : null)
-      .filter((f): f is { index: number; error: unknown } => Boolean(f));
-
-    if (failures.length > 0) {
-      const failedNames = failures.map((f) => names[f.index]).join(', ');
-      const error = new Error(`[CRITICAL] Initialization failed: ${failedNames}`);
+    try {
+      // These return cached promises — instant if already loaded by index.ts
+      await Promise.all([
+        getCommandIndex(),
+        initTmDevicesIndex(),
+        getRagIndexes(),
+        getTemplateIndex(),
+      ]);
+      startupState = 'ready';
+      console.log('[SERVER] Startup verified — all indexes ready');
+    } catch (error) {
       startupState = 'error';
-      startupError = error.message;
-      console.error(error.message);
-      for (const failure of failures) {
-        console.error(`  ${names[failure.index]}: ${failure.error}`);
-      }
+      startupError = error instanceof Error ? error.message : String(error);
+      console.error('[SERVER] Startup check failed:', startupError);
       throw error;
     }
-
-    console.log(`✅ All indexes initialized in ${Date.now() - startInit}ms`);
-
-    if (!routerDisabled) {
-      try {
-        const commandIndex = await getCommandIndex();
-        const ragIndexes = await getRagIndexes();
-        const templates = (await getTemplateIndex()).all().map((doc) => ({
-          id: doc.id,
-          name: doc.name,
-          description: doc.description,
-          backend: 'template',
-          deviceType: 'workflow',
-          tags: [],
-          steps: doc.steps,
-        }));
-        const report = await bootRouter({ commandIndex, ragIndexes, templates });
-        console.log(`[MCP:router] ${report.total} tools in ${report.durationMs}ms`);
-      } catch (error) {
-        startupState = 'error';
-        startupError = error instanceof Error ? error.message : String(error);
-        console.error('[MCP:router] Boot failed:', error);
-        throw error;
-      }
-    }
-    startupState = 'ready';
-  })().catch((error) => {
-    startupState = 'error';
-    startupError = error instanceof Error ? error.message : String(error);
-    throw error;
-  });
+  })();
 
   // ── MCP Protocol Server (Streamable HTTP for Claude Web / Desktop) ──
   // SDK is loaded lazily so the server still boots without @modelcontextprotocol/sdk installed.
