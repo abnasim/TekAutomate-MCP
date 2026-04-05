@@ -590,6 +590,7 @@ const MCP_TOOL_TRIGGERS: Record<string, string[]> = {
   materialize_tm_devices_call: ['materialize tm devices', 'tm devices python call'],
   search_tm_devices: ['search tm devices', 'tm devices lookup', 'python method search'],
   retrieve_rag_chunks: ['retrieve rag', 'knowledge base', 'documentation search'],
+  check_scope_logic: ['scope logic', 'scope procedure', 'fix clipping', 'setup decode', 'signal integrity', 'trigger stabilization', 'probe compensation', 'auto setup scope'],
   search_known_failures: ['known failures', 'known errors', 'common problems'],
   get_template_examples: ['template examples', 'workflow examples', 'example flows'],
   validate_action_payload: ['validate actions', 'validate payload', 'validate action payload', 'check actions json'],

@@ -637,57 +637,47 @@ function filterTools(q) {
       return;
     }
 
-    // ── /mcp — MCP Streamable HTTP transport ──────────────────────
+    // ── /mcp — MCP Streamable HTTP + stateless JSON-RPC fallback ──
     if (req.url === '/mcp' || req.url?.startsWith('/mcp?')) {
       res.setHeader('Access-Control-Allow-Origin', '*');
       res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Accept, Mcp-Session-Id');
       res.setHeader('Access-Control-Expose-Headers', 'Mcp-Session-Id');
 
-      // Debug logging — capture what different MCP clients send
+      const accept = req.headers['accept'] || '';
       const sessionId = req.headers['mcp-session-id'] as string | undefined;
-      console.log(`[MCP] transport method=${req.method} session=${sessionId || 'none'} accept=${req.headers['accept'] || 'none'} content-type=${req.headers['content-type'] || 'none'}`);
+      const clientSupportsSSE = accept.includes('text/event-stream');
+      console.log(`[MCP] method=${req.method} session=${sessionId || 'none'} accept=${accept || 'none'} sse=${clientSupportsSSE}`);
 
-      // Workaround: some MCP clients (e.g. Claude) don't send the required
-      // Accept header.  Inject it so StreamableHTTPServerTransport doesn't reject.
-      if (!req.headers['accept'] || !req.headers['accept'].includes('text/event-stream')) {
-        req.headers['accept'] = 'application/json, text/event-stream';
+      // ── Read body ──
+      let body: string | undefined;
+      if (req.method === 'POST') {
+        body = await new Promise<string>((resolve, reject) => {
+          const chunks: Buffer[] = [];
+          req.on('data', (chunk) => chunks.push(chunk));
+          req.on('end', () => resolve(Buffer.concat(chunks).toString()));
+          req.on('error', reject);
+        });
       }
 
-      if (req.method === 'POST' || req.method === 'GET' || req.method === 'DELETE') {
+      // ── Route A: Full StreamableHTTP for SSE-capable clients ─────
+      if (clientSupportsSSE && (req.method === 'POST' || req.method === 'GET' || req.method === 'DELETE')) {
         try {
           const sdk = await getMcpSdk();
           if (!sdk) {
-            sendJson(res, 501, { error: 'MCP protocol not available. Install @modelcontextprotocol/sdk to enable /mcp endpoint.' });
+            sendJson(res, 501, { error: 'MCP SDK not installed.' });
             return;
           }
 
-          // Read body for POST
-          let body: string | undefined;
-          if (req.method === 'POST') {
-            body = await new Promise<string>((resolve, reject) => {
-              const chunks: Buffer[] = [];
-              req.on('data', (chunk) => chunks.push(chunk));
-              req.on('end', () => resolve(Buffer.concat(chunks).toString()));
-              req.on('error', reject);
-            });
-          }
-
-          const sessionId = req.headers['mcp-session-id'] as string | undefined;
-
           if (sessionId && mcpTransports.has(sessionId)) {
-            // Existing session
             const transport = mcpTransports.get(sessionId)!;
             await transport.handleRequest(req, res, body ? JSON.parse(body) : undefined);
           } else if (req.method === 'POST') {
-            // New session — create transport and MCP server
             const newSessionId = `tek-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
             const transport = new sdk.StreamableHTTPServerTransport({
               sessionIdGenerator: () => newSessionId,
             });
             const mcpServer = await createMcpProtocolServer(newSessionId);
             await mcpServer.connect(transport);
-
-            // Clean up session context when transport closes
             transport.onclose = () => {
               if (transport.sessionId) {
                 mcpTransports.delete(transport.sessionId);
@@ -695,24 +685,111 @@ function filterTools(q) {
                 console.log(`[MCP] session closed: ${transport.sessionId}`);
               }
             };
-
             await transport.handleRequest(req, res, body ? JSON.parse(body) : undefined);
-
             if (transport.sessionId) {
               mcpTransports.set(transport.sessionId, transport);
               console.log(`[MCP] new session: ${transport.sessionId}`);
             }
+          } else if (req.method === 'DELETE') {
+            sendJson(res, 200, { ok: true });
           } else {
-            sendJson(res, 400, { error: 'No valid session. Send a POST to /mcp to initialize.' });
+            sendJson(res, 400, { error: 'No valid session. POST to /mcp to initialize.' });
           }
         } catch (err) {
-          console.error('[MCP transport] Error:', err);
-          if (!res.headersSent) {
-            sendJson(res, 500, { error: 'MCP transport error' });
-          }
+          const msg = err instanceof Error ? err.message : String(err);
+          console.error(`[MCP:sse] Error: ${msg}`);
+          if (!res.headersSent) sendJson(res, 500, { error: `MCP transport error: ${msg}` });
         }
         return;
       }
+
+      // ── Route B: Stateless JSON-RPC for non-SSE clients ──────────
+      // Claude.ai connectors and other clients that don't support SSE
+      // get plain JSON responses — no sessions, no streaming.
+      if (req.method === 'POST' && body) {
+        try {
+          const rpc = JSON.parse(body) as { jsonrpc?: string; id?: unknown; method?: string; params?: Record<string, unknown> };
+          const rpcId = rpc.id ?? null;
+          const method = rpc.method || '';
+          console.log(`[MCP:json] method=${method} id=${rpcId}`);
+
+          if (startupInitPromise) {
+            try { await startupInitPromise; } catch { /* degrade gracefully */ }
+          }
+
+          if (method === 'initialize') {
+            const jsonRes = {
+              jsonrpc: '2.0',
+              id: rpcId,
+              result: {
+                protocolVersion: '2024-11-05',
+                capabilities: { tools: {} },
+                serverInfo: { name: 'tekautomate', version: '3.2.0' },
+              },
+            };
+            sendJson(res, 200, jsonRes);
+          } else if (method === 'notifications/initialized') {
+            // No response needed for notifications
+            res.statusCode = 204;
+            res.end();
+          } else if (method === 'tools/list') {
+            const toolDefs = getMcpExposedTools();
+            const tools = toolDefs.map((def: any) => ({
+              name: def.name,
+              description: def.description ?? def.name,
+              inputSchema: {
+                type: 'object' as const,
+                properties: (def.parameters as any)?.properties ?? {},
+                ...((def.parameters as any)?.required?.length
+                  ? { required: (def.parameters as any).required }
+                  : {}),
+              },
+            }));
+            sendJson(res, 200, { jsonrpc: '2.0', id: rpcId, result: { tools } });
+          } else if (method === 'tools/call') {
+            const toolName = rpc.params?.name as string;
+            const toolArgs = (rpc.params?.arguments as Record<string, unknown>) ?? {};
+            console.log(`[MCP:json] call_tool name=${toolName} args=${JSON.stringify(toolArgs).slice(0, 200)}`);
+            try {
+              const result = await runTool(toolName, toolArgs);
+              const safeResult = sanitizeToolResultForExternalMcp(toolName, result);
+              const text = typeof safeResult === 'string' ? safeResult : JSON.stringify(safeResult, null, 2);
+              sendJson(res, 200, {
+                jsonrpc: '2.0',
+                id: rpcId,
+                result: { content: [{ type: 'text', text }] },
+              });
+            } catch (err) {
+              const msg = err instanceof Error ? err.message : String(err);
+              console.error(`[MCP:json] tool error: ${msg}`);
+              sendJson(res, 200, {
+                jsonrpc: '2.0',
+                id: rpcId,
+                result: { content: [{ type: 'text', text: `Error: ${msg}` }], isError: true },
+              });
+            }
+          } else {
+            sendJson(res, 200, {
+              jsonrpc: '2.0',
+              id: rpcId,
+              error: { code: -32601, message: `Method not found: ${method}` },
+            });
+          }
+        } catch (err) {
+          const msg = err instanceof Error ? err.message : String(err);
+          console.error(`[MCP:json] parse error: ${msg}`);
+          sendJson(res, 200, {
+            jsonrpc: '2.0',
+            id: null,
+            error: { code: -32700, message: 'Parse error' },
+          });
+        }
+        return;
+      }
+
+      // Fallback for anything else
+      sendJson(res, 405, { error: 'POST to /mcp with JSON-RPC body.' });
+      return;
     }
 
     if (req.method === 'GET' && req.url === '/health') {

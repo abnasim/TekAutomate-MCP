@@ -113,7 +113,7 @@ export async function getCommandsByHeaderBatch(
     : [];
 
   return {
-    ok: missingHeaders.length === 0,
+    ok: results.length > 0,
     data: {
       results,
       missingHeaders,
