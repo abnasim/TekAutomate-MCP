@@ -99,7 +99,6 @@ export interface McpChatRequest {
     backend: string;
     liveMode?: boolean;
     outputMode?: InstrumentOutputMode;
-    liveToken?: string;
   };
   routerBaselineText?: string;
 }

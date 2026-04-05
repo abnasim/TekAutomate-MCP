@@ -7,7 +7,6 @@ interface Input {
   backend: string;
   liveMode?: boolean;
   outputMode?: 'clean' | 'verbose';
-  liveToken?: string;
 }
 
 interface ScannedInstrument {
@@ -37,7 +36,6 @@ export async function getVisaResources(input: Input): Promise<ToolResult<Record<
       method: 'GET',
       headers: {
         'Content-Type': 'application/json',
-        ...(String(input.liveToken || '').trim() ? { 'X-Live-Token': String(input.liveToken).trim() } : {}),
       },
       signal: AbortSignal.timeout(35000),
     });
