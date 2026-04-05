@@ -1,5 +1,5 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
-import { Code, Terminal, Copy, Pencil, Sparkles, Play, RotateCcw, RotateCw, Trash2, Mail, SkipForward, Square } from 'lucide-react';
+import { Code, Terminal, Copy, Pencil, Sparkles, Play, RotateCcw, RotateCw, Trash2, Mail, SkipForward, Square, MessageSquare, ChevronLeft, ChevronRight } from 'lucide-react';
 import { streamMcpChat } from '../../utils/ai/mcpClient';
 import { StepsListPreview } from './StepsListPreview';
 import type { StepPreview } from './StepsListPreview';
@@ -56,6 +56,7 @@ export interface ExecutePageProps {
   onLiveScreenshot?: (screenshot: { dataUrl: string; mimeType: string; sizeBytes: number; capturedAt: string }) => void;
   blocklyContent: React.ReactNode;
   liveModeContent: React.ReactNode;
+  liveVncActive?: boolean;
 }
 
 interface WorkflowProposalState extends ParsedActionsPreview {
@@ -225,6 +226,7 @@ function ExecutePageContent({
   onLiveScreenshot,
   blocklyContent,
   liveModeContent,
+  liveVncActive = false,
 }: ExecutePageProps) {
   const [centerTab, setCenterTab] = useState<ExecutionSource | 'proposals'>(() => loadStoredCenterTab(executionSource));
   const [rightTab, setRightTab] = useState<'code' | 'logs'>('logs');
@@ -247,6 +249,7 @@ function ExecutePageContent({
   const [liveTokenState, setLiveTokenState] = useState<'none' | 'saved' | 'active' | 'error'>(() =>
     loadStoredLiveToken().trim() ? 'saved' : 'none'
   );
+  const [assistantPanelOpen, setAssistantPanelOpen] = useState(true);
 
   // ── Step-through debugger ──
   const [stepping, setStepping] = useState(false);
@@ -322,6 +325,12 @@ function ExecutePageContent({
       window.removeEventListener('tekautomate:toggle-live-token-editor', handler as EventListener);
     };
   }, [liveToken]);
+
+  useEffect(() => {
+    if (centerTab === 'live' && liveVncActive) {
+      setAssistantPanelOpen(false);
+    }
+  }, [centerTab, liveVncActive]);
 
   const appendStepLog = useCallback((line: string) => {
     setStepLog(prev => prev + line + '\n');
@@ -557,23 +566,36 @@ function ExecutePageContent({
   return (
     <div className="h-full flex flex-col bg-slate-100 text-slate-900 dark:bg-slate-950 dark:text-white">
       <div className="flex-1 min-h-0 flex">
-        <AiChatPanel
-          steps={steps}
-          workspaceRevision={workspaceRevision}
-          runLog={runLog}
-          code={code}
-          executionSource={executionSource}
-          runStatus={runStatus}
-          flowContext={flowContext}
-          executorEndpoint={executorEndpoint}
-          instrumentEndpoint={securedInstrumentEndpoint}
-          latestLiveScreenshot={latestLiveScreenshot}
-          contextAttachments={chatContextAttachments}
-          onApplyAiActions={onApplyAiActions}
-          onWorkflowProposal={handleProposalDetected}
-          onLiveScreenshot={onLiveScreenshot}
-          onRun={onRun}
-        />
+        {assistantPanelOpen ? (
+          <AiChatPanel
+            steps={steps}
+            workspaceRevision={workspaceRevision}
+            runLog={runLog}
+            code={code}
+            executionSource={executionSource}
+            runStatus={runStatus}
+            flowContext={flowContext}
+            executorEndpoint={executorEndpoint}
+            instrumentEndpoint={securedInstrumentEndpoint}
+            latestLiveScreenshot={latestLiveScreenshot}
+            contextAttachments={chatContextAttachments}
+            onApplyAiActions={onApplyAiActions}
+            onWorkflowProposal={handleProposalDetected}
+            onLiveScreenshot={onLiveScreenshot}
+            onRun={onRun}
+          />
+        ) : (
+          <button
+            type="button"
+            onClick={() => setAssistantPanelOpen(true)}
+            className="flex-shrink-0 w-5 flex items-center justify-center border-r border-slate-200 bg-slate-100 hover:bg-slate-200 dark:border-slate-800/50 dark:bg-slate-900/50 dark:hover:bg-slate-800/80 cursor-col-resize transition-colors group"
+            title="Show AI Assistant"
+          >
+            <span className="text-slate-400 dark:text-slate-500 group-hover:text-slate-600 dark:group-hover:text-slate-300 text-xs select-none">
+              ‹
+            </span>
+          </button>
+        )}
 
         <main className="flex-1 flex flex-col min-w-0 bg-slate-100 dark:bg-slate-950">
           <div className="flex items-center justify-between gap-4 border-b border-slate-200 dark:border-slate-800/50 px-2">
@@ -716,6 +738,27 @@ function ExecutePageContent({
                 <Play size={16} />
                 {runStatus === 'running' || runStatus === 'connecting' ? 'Running...' : executorEndpoint ? 'Run' : 'Not Connected'}
               </button>
+              {centerTab === 'live' && (
+                <button
+                  type="button"
+                  onClick={() => setAssistantPanelOpen((value) => !value)}
+                  className="inline-flex items-center gap-2 rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm font-medium text-slate-700 hover:bg-slate-100 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-200 dark:hover:bg-slate-800"
+                  title={assistantPanelOpen ? 'Hide AI Assistant' : 'Show AI Assistant'}
+                >
+                  <MessageSquare size={16} />
+                  {assistantPanelOpen ? (
+                    <>
+                      <ChevronLeft size={14} />
+                      Hide Copilot
+                    </>
+                  ) : (
+                    <>
+                      <ChevronRight size={14} />
+                      Show Copilot
+                    </>
+                  )}
+                </button>
+              )}
             </div>
           </div>
           {securedInstrumentEndpoint?.executorUrl && showLiveTokenEditor ? (

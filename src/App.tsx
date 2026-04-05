@@ -10032,6 +10032,7 @@ Keep under 120 words. No headings. Bullets only. Stay on this command. Do not de
                 }}
               />
             }
+            liveVncActive={Boolean(liveModeVncSession)}
           />
         </div>
       )}
