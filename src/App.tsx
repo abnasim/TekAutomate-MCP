@@ -1598,7 +1598,6 @@ function AppInner() {
   const [liveModeAutoRefresh, setLiveModeAutoRefresh] = useState(false);
   const [liveModeRefreshInterval, setLiveModeRefreshInterval] = useState(5); // seconds: 3, 5, or 10
   const [liveModeVncAvailable, setLiveModeVncAvailable] = useState<boolean | null>(null);
-  const [liveModeVncChecking, setLiveModeVncChecking] = useState(false);
   const [liveModeVncConnecting, setLiveModeVncConnecting] = useState(false);
   const [liveModeVncError, setLiveModeVncError] = useState<string | null>(null);
   const [liveModeVncSession, setLiveModeVncSession] = useState<null | {
@@ -4244,42 +4243,6 @@ function AppInner() {
     };
   }, [liveModeInstrumentConfig]);
 
-  const probeLiveModeVncAvailability = useCallback(async () => {
-    if (!executorEndpoint || !liveModeVncTarget.enabled || !liveModeVncTarget.targetHost) {
-      setLiveModeVncAvailable(false);
-      setLiveModeVncSession(null);
-      return;
-    }
-    setLiveModeVncChecking(true);
-    try {
-      const params = new URLSearchParams({
-        target_host: liveModeVncTarget.targetHost,
-        target_port: String(liveModeVncTarget.targetPort),
-      });
-      const res = await fetch(`http://${executorEndpoint.host}:${executorEndpoint.port}/vnc/probe?${params.toString()}`, {
-        headers: buildExecutorHeaders(),
-        signal: AbortSignal.timeout(8000),
-      });
-      const json = await res.json() as { ok?: boolean; available?: boolean; error?: string | null; requiresLiveToken?: boolean };
-      if (res.status === 401 && json.requiresLiveToken) {
-        setLiveModeVncAvailable(null);
-        setLiveModeVncError('Enter a live token to check VNC availability.');
-        return;
-      }
-      setLiveModeVncAvailable(Boolean(json.ok && json.available));
-      if (json.ok && json.available) {
-        setLiveModeVncError(null);
-      } else if (json.error) {
-        setLiveModeVncError(json.error);
-      }
-    } catch (error) {
-      setLiveModeVncAvailable(false);
-      setLiveModeVncError(describeExecutorVncError(error, 'Failed to probe VNC availability.'));
-    } finally {
-      setLiveModeVncChecking(false);
-    }
-  }, [buildExecutorHeaders, executorEndpoint, liveModeVncTarget]);
-
   const toggleLiveModeVnc = useCallback(async () => {
     if (!executorEndpoint) {
       setLiveModeVncError('Executor not configured. Connect to the executor before using VNC.');
@@ -4346,6 +4309,31 @@ function AppInner() {
       setLiveModeVncConnecting(false);
     }
   }, [buildExecutorHeaders, executorEndpoint, liveModeVncSession, liveModeVncTarget]);
+
+  const stopLiveModeVncSession = useCallback(async () => {
+    if (!liveModeVncSession) {
+      setLiveModeVncSession(null);
+      return;
+    }
+    if (!executorEndpoint) {
+      setLiveModeVncSession(null);
+      return;
+    }
+    try {
+      await fetch(`http://${executorEndpoint.host}:${executorEndpoint.port}/vnc/stop`, {
+        method: 'POST',
+        headers: buildExecutorHeaders({ 'Content-Type': 'application/json' }),
+        body: JSON.stringify({ session_id: liveModeVncSession.sessionId }),
+        signal: AbortSignal.timeout(5000),
+      });
+    } catch {
+      // If the executor is already going away, we still want the app state cleared.
+    } finally {
+      setLiveModeVncSession(null);
+      setLiveModeVncError(null);
+      setLiveModeVncAvailable(null);
+    }
+  }, [buildExecutorHeaders, executorEndpoint, liveModeVncSession]);
 
   useEffect(() => {
     const targetKey = executorEndpoint && liveModeVncTarget.enabled && liveModeVncTarget.targetHost
@@ -10014,14 +10002,10 @@ Keep under 120 words. No headings. Bullets only. Stay on this command. Do not de
                   window.dispatchEvent(new CustomEvent('tekautomate:toggle-live-token-editor'));
                 }}
                 vncAvailable={liveModeVncAvailable}
-                vncChecking={liveModeVncChecking}
                 vncActive={Boolean(liveModeVncSession)}
                 vncConnecting={liveModeVncConnecting}
                 vncError={liveModeVncError}
                 vncSessionInfo={liveModeVncSession}
-                onCheckVnc={() => {
-                  void probeLiveModeVncAvailability();
-                }}
                 onToggleVnc={() => {
                   void toggleLiveModeVnc();
                 }}
@@ -15263,7 +15247,11 @@ scpi.query('*OPC?')`;
                   <button
                     type="button"
                     className="w-full px-4 py-2.5 text-sm font-medium text-red-600 dark:text-red-400 border border-red-300 dark:border-red-700 rounded-lg hover:bg-red-50 dark:hover:bg-red-900/20"
-                    onClick={() => { setExecutorEndpoint(null); setShowExecutorModal(false); }}
+                    onClick={async () => {
+                      await stopLiveModeVncSession();
+                      setExecutorEndpoint(null);
+                      setShowExecutorModal(false);
+                    }}
                   >
                     Disconnect
                   </button>

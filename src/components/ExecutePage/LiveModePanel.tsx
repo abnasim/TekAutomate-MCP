@@ -21,12 +21,10 @@ interface LiveModePanelProps {
   onChangeRefreshInterval: (seconds: number) => void;
   onToggleLiveTokenEditor?: () => void;
   vncAvailable?: boolean | null;
-  vncChecking?: boolean;
   vncActive?: boolean;
   vncConnecting?: boolean;
   vncError?: string | null;
   vncSessionInfo?: { wsUrl: string; targetHost: string; targetPort: number; sessionId: string } | null;
-  onCheckVnc?: () => void;
   onToggleVnc?: () => void;
   deviceOptions?: Array<{ id: string; label: string; targetHost?: string; targetPort?: number }>;
   selectedDeviceId?: string | null;
@@ -62,12 +60,10 @@ export function LiveModePanel({
   onChangeRefreshInterval,
   onToggleLiveTokenEditor,
   vncAvailable = null,
-  vncChecking = false,
   vncActive = false,
   vncConnecting = false,
   vncError = null,
   vncSessionInfo = null,
-  onCheckVnc,
   onToggleVnc,
   deviceOptions = [],
   selectedDeviceId = null,
@@ -175,24 +171,10 @@ export function LiveModePanel({
               </button>
             ) : null}
             {onToggleVnc ? (
-              <>
-                {onCheckVnc ? (
-                  <button
-                    type="button"
-                    onClick={onCheckVnc}
-                    disabled={vncChecking || vncConnecting}
-                    className="inline-flex items-center gap-1.5 rounded-lg border border-slate-300 bg-white px-2.5 py-1 text-[11px] font-medium text-slate-700 transition-colors hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-50 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-200 dark:hover:bg-slate-800"
-                    title="Check whether VNC is reachable on this scope"
-                    aria-label="Check VNC availability"
-                  >
-                    {vncChecking ? <Loader2 size={12} className="animate-spin" /> : <MonitorSmartphone size={12} />}
-                    Check
-                  </button>
-                ) : null}
               <button
                 type="button"
                 onClick={onToggleVnc}
-                disabled={vncChecking || vncConnecting}
+                disabled={vncConnecting}
                 className={`inline-flex items-center gap-1.5 rounded-lg border px-2.5 py-1 text-[11px] font-medium transition-colors disabled:cursor-not-allowed disabled:opacity-50 ${
                   vncActive
                     ? 'border-violet-300 bg-violet-50 text-violet-700 dark:border-violet-800 dark:bg-violet-950/40 dark:text-violet-300'
@@ -205,10 +187,9 @@ export function LiveModePanel({
                 }
                 aria-label={vncActive ? 'Stop VNC session' : 'Start VNC session'}
               >
-                {vncChecking || vncConnecting ? <Loader2 size={12} className="animate-spin" /> : <MonitorSmartphone size={12} />}
+                {vncConnecting ? <Loader2 size={12} className="animate-spin" /> : <MonitorSmartphone size={12} />}
                 {vncActive ? 'VNC on' : 'VNC'}
               </button>
-              </>
             ) : null}
           </div>
           <button
