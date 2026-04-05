@@ -122,18 +122,11 @@ let _globalState: RuntimeContextState = {
 function _getState(): RuntimeContextState {
   const sid = _sessionStore.getStore();
   if (sid) {
-    let s = _perSessionState.get(sid);
-    if (!s) {
-      s = {
-        updatedAt: new Date(0).toISOString(),
-        workflow: { ...DEFAULT_WORKFLOW },
-        instrument: { ...DEFAULT_INSTRUMENT },
-        runLog: { ...DEFAULT_RUN_LOG },
-        liveSession: { ...DEFAULT_LIVE_SESSION },
-      };
-      _perSessionState.set(sid, s);
-    }
-    return s;
+    // If this session has explicit context (set via updateRuntimeContext
+    // while inside runInSession), use it.  Otherwise fall back to the
+    // global state so ChatKit/web-app context is visible to MCP tools.
+    const s = _perSessionState.get(sid);
+    if (s) return s;
   }
   return _globalState;
 }
