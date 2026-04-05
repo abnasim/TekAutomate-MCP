@@ -1051,8 +1051,9 @@ function OpenAiChatKitPanelInner({
       showDelete: historyEnabled,
       showRename: historyEnabled,
     },
-    // Restore the last thread for continuity, but clear it automatically if
-    // ChatKit reports the thread is stale or invalid.
+    // Don't restore threads from localStorage — ChatKit manages thread history
+    // internally via its built-in history UI. Storing thread IDs causes stale
+    // 404s when threads expire or get deleted on OpenAI's side.
     initialThread: getStoredThreadId(threadStorageKey) || null,
     onThreadChange: (detail: { threadId: string | null }) => {
       setActiveThreadId(detail.threadId ?? null);
