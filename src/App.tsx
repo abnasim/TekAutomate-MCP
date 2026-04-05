@@ -4259,7 +4259,7 @@ function AppInner() {
     return true;
   }, [selectedDeviceFamily]);
 
-  const getVisaResourceString = (
+  const getLiveInstrumentVisaResourceString = (
       source: Pick<InstrumentConfig, 'connectionType' | 'host' | 'port' | 'usbVendorId' | 'usbProductId' | 'usbSerial' | 'gpibBoard' | 'gpibAddress'> = config
     ): string => {
       switch (source.connectionType) {
@@ -4305,8 +4305,8 @@ function AppInner() {
   }, [config, devices, selectedLiveModeTarget]);
 
   const liveModeVisaResource = useMemo(
-    () => selectedLiveModeTarget?.visaResource || getVisaResourceString(liveModeInstrumentConfig),
-    [getVisaResourceString, liveModeInstrumentConfig, selectedLiveModeTarget]
+    () => selectedLiveModeTarget?.visaResource || getLiveInstrumentVisaResourceString(liveModeInstrumentConfig),
+    [getLiveInstrumentVisaResourceString, liveModeInstrumentConfig, selectedLiveModeTarget]
   );
 
   const liveModeDeviceOptions = useMemo(
@@ -6087,7 +6087,7 @@ import pyvisa
 
 def main():
     p = argparse.ArgumentParser()
-    p.add_argument("--visa", default="${getVisaResourceString()}")
+    p.add_argument("--visa", default="${getLiveInstrumentVisaResourceString()}")
     p.add_argument("--host", default="${host}")
     p.add_argument("--timeout", type=float, default=${config.timeout})
     args, _unknown = p.parse_known_args()
@@ -6185,7 +6185,7 @@ if __name__ == "__main__":
 
     // Pure PyVISA
     if (isPyVISA) {
-      const resourceStr = getVisaResourceString(effectiveConfig);
+      const resourceStr = getLiveInstrumentVisaResourceString(effectiveConfig);
       return (
         header +
         `
@@ -6250,8 +6250,8 @@ if __name__ == "__main__":
     if (isTmDevices) {
       // For tm_devices, use just the host/IP address, not full VISA resource string
       const host = effectiveConfig.connectionType === 'tcpip' ? effectiveConfig.host : 
-                   effectiveConfig.connectionType === 'socket' ? getVisaResourceString(effectiveConfig) : 
-                   getVisaResourceString(effectiveConfig);
+                   effectiveConfig.connectionType === 'socket' ? getLiveInstrumentVisaResourceString(effectiveConfig) : 
+                   getLiveInstrumentVisaResourceString(effectiveConfig);
       const deviceType = effectiveConfig.deviceType.toLowerCase();
       const deviceDriver = effectiveConfig.deviceDriver || ''; // Empty = auto-detect
       const alias = effectiveConfig.alias || 'scope1';
@@ -7045,7 +7045,7 @@ if __name__ == "__main__":
       await fetch(disconnectUrl, {
         method: 'POST',
         headers: buildExecutorHeaders({ 'Content-Type': 'application/json' }),
-        body: JSON.stringify({ protocol_version: 1, action: 'disconnect', scope_visa: getVisaResourceString(activeInstrumentConfig) }),
+        body: JSON.stringify({ protocol_version: 1, action: 'disconnect', scope_visa: getLiveInstrumentVisaResourceString(activeInstrumentConfig) }),
       });
     } catch { /* non-fatal — executor might not have a live session */ }
     const useBlocklyCode = currentView === 'flow-designer' || (currentView === 'execute' && executionSource === 'blockly');
@@ -14239,7 +14239,7 @@ scpi.query('*OPC?')`;
                                 protocol_version: 1,
                                 action: 'send_scpi',
                                 timeout_sec: 10,
-                                scope_visa: getVisaResourceString(activeInstrumentConfig),
+                                scope_visa: getLiveInstrumentVisaResourceString(activeInstrumentConfig),
                                 liveMode: true,
                                 commands: [isQuery ? cmd : `${cmd};${cmd}?`],
                                 timeout_ms: 5000,
