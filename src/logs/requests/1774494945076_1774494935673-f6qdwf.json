@@ -1,0 +1,86 @@
+{
+  "timestamp": "2026-03-26T03:15:45.076Z",
+  "requestId": "1774494935673-f6qdwf",
+  "provider": "openai",
+  "model": "gpt-5.4-mini",
+  "outputMode": "steps_json",
+  "deviceType": "SCOPE",
+  "modelFamily": "TekscopePC",
+  "backend": "pyvisa",
+  "userMessage": "how can I add that",
+  "flowContext": {
+    "stepCount": 1,
+    "stepTypes": [
+      "group",
+      "connect",
+      "save_screenshot",
+      "disconnect"
+    ],
+    "validationErrors": []
+  },
+  "scpiContextHits": 0,
+  "toolCalls": [],
+  "postCheck": {
+    "errors": [],
+    "warnings": [],
+    "autoRepairTriggered": false
+  },
+  "response": {
+    "text": "ACTIONS_JSON: {\"summary\":\"Built 0 command(s) into a new flow.\",\"findings\":[],\"suggestedFixes\":[],\"actions\":[{\"type\":\"replace_flow\",\"flow\":{\"name\":\"Built from: Create a compact TekAutomate flow for a TekscopePC scope on \",\"description\":\"Auto-built flow from router build action\",\"backend\":\"pyvisa\",\"deviceType\":\"SCOPE\",\"steps\":[{\"id\":\"1\",\"type\":\"connect\",\"label\":\"Connect\",\"params\":{\"instrumentIds\":[\"scope\"],\"printIdn\":true}},{\"id\":\"special_1\",\"type\":\"save_screenshot\",\"label\":\"Save Screenshot\",\"params\":{\"filename\":\"screenshot.png\",\"scopeType\":\"modern\",\"method\":\"pc_transfer\"}},{\"id\":\"99\",\"type\":\"disconnect\",\"label\":\"Disconnect\",\"params\":{\"instrumentIds\":[\"scope\"]}}]}}]}",
+    "actionsJson": {
+      "summary": "Built 0 command(s) into a new flow.",
+      "findings": [],
+      "suggestedFixes": [],
+      "actions": [
+        {
+          "type": "replace_flow",
+          "flow": {
+            "name": "Built from: Create a compact TekAutomate flow for a TekscopePC scope on ",
+            "description": "Auto-built flow from router build action",
+            "backend": "pyvisa",
+            "deviceType": "SCOPE",
+            "steps": [
+              {
+                "id": "1",
+                "type": "connect",
+                "label": "Connect",
+                "params": {
+                  "instrumentIds": [
+                    "scope"
+                  ],
+                  "printIdn": true
+                }
+              },
+              {
+                "id": "special_1",
+                "type": "save_screenshot",
+                "label": "Save Screenshot",
+                "params": {
+                  "filename": "screenshot.png",
+                  "scopeType": "modern",
+                  "method": "pc_transfer"
+                }
+              },
+              {
+                "id": "99",
+                "type": "disconnect",
+                "label": "Disconnect",
+                "params": {
+                  "instrumentIds": [
+                    "scope"
+                  ]
+                }
+              }
+            ]
+          }
+        }
+      ]
+    },
+    "stepCount": 1,
+    "stepTypes": [
+      "replace_flow"
+    ]
+  },
+  "durationMs": 9403,
+  "ok": true
+}

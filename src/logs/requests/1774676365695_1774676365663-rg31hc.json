@@ -1,0 +1,37 @@
+{
+  "timestamp": "2026-03-28T05:39:25.695Z",
+  "requestId": "1774676365663-rg31hc",
+  "provider": "openai",
+  "model": "gpt-5.4-mini",
+  "outputMode": "steps_json",
+  "deviceType": "SCOPE",
+  "modelFamily": "MSO2",
+  "backend": "pyvisa",
+  "userMessage": "explain TRIGger:A:EDGE:SOUrce",
+  "flowContext": {
+    "stepCount": 18,
+    "stepTypes": [
+      "connect",
+      "write",
+      "query",
+      "disconnect",
+      "set_and_query"
+    ],
+    "validationErrors": []
+  },
+  "scpiContextHits": 0,
+  "toolCalls": [],
+  "postCheck": {
+    "errors": [],
+    "warnings": [],
+    "autoRepairTriggered": false
+  },
+  "response": {
+    "text": "## TRIGger:A:EDGE:SOUrce\n\n**Description:** Sets or queries the source used for an edge trigger.\n\n**Set syntax:** `TRIGger:A:EDGE:SOUrce {CH<x>|LINE|AUXiliary}`\n\n**Query syntax:** `TRIGger:A:EDGE:SOUrce?`\n\n**Arguments:**\n- **param1** (enum, required): Select one of: CHx|LINE|AUXiliary\n\n**Examples:**\n- `TRIGger:A:EDGE:SOUrce CH<x>` — Set TRIGger:A:EDGE:SOUrce\n- `TRIGger:A:EDGE:SOUrce?` — Query TRIGger:A:EDGE:SOUrce\n\n**Group:** Trigger | **Families:** MSO7, MSO6, MSO5, MSO4, MSO2, MSO5000, DPO5000, DPO7000, DPO70000, MSO70000",
+    "actionsJson": null,
+    "stepCount": 0,
+    "stepTypes": []
+  },
+  "durationMs": 32,
+  "ok": true
+}

@@ -1,0 +1,31 @@
+{
+  "timestamp": "2026-03-25T06:17:19.066Z",
+  "requestId": "1774419439036-o2z3xj",
+  "provider": "openai",
+  "model": "gpt-4o-mini",
+  "outputMode": "steps_json",
+  "deviceType": "SCOPE",
+  "modelFamily": "mso_5_series",
+  "backend": "pyvisa",
+  "userMessage": "clear measurements",
+  "flowContext": {
+    "stepCount": 0,
+    "stepTypes": [],
+    "validationErrors": []
+  },
+  "scpiContextHits": 0,
+  "toolCalls": [],
+  "postCheck": {
+    "errors": [],
+    "warnings": [],
+    "autoRepairTriggered": false
+  },
+  "response": {
+    "text": "## 📋 8 measurement Commands Found\n\n---\n\n### **1. MEASUrement:DELete**\n\n**📋 Description:** The command deletes the specified measurement.\n\n\n\n**⚙️ Syntax:** `MEASUrement:DELete  <QString>`\n\n**🔧 Type:** both\n\n**🏭 Supported Families:** MSO2, MSO4, MSO5, MSO6, MSO7\n---\n\n### **2. CUSTOMTABle:DELete**\n\n**📋 Description:** This command deletes the custom result(s) table that was added.\n\n\n\n**⚙️ Syntax:** `CUSTOMTABle:DELete  <QString>`\n\n**🔧 Type:** both\n\n**🏭 Supported Families:** MSO2, MSO4, MSO5, MSO6, MSO7\n---\n\n### **3. MEASTABle:DELETE**\n\n**📋 Description:** This command removes the requested measurement results view table from the scope\n\n**📖 Details:** This command removes the requested measurement results view table from the scope application.\n\n**⚙️ Syntax:** `MEASTABle:DELETE  <QString>`\n\n**🔧 Type:** both\n\n**🏭 Supported Families:** MSO2, MSO4, MSO5, MSO6, MSO7\n---\n\n### **4. MEASUrement:DELETEALL**\n\n**📋 Description:** This command deletes all the active instances of measurements defined in the sco\n\n**📖 Details:** This command deletes all the active instances of measurements defined in the scope application.\n\n**⚙️ Syntax:** `MEASUrement:DELETEALL`\n\n**🔧 Type:** both\n\n**🏭 Supported Families:** MSO2, MSO4, MSO5, MSO6, MSO7\n---\n\n### **5. MEASUrement:MEAS<x>:EDGEQUALONE**\n\n**📋 Description:** This command set or queries the measurement 1 input edge qualifier one source fo\n\n**📖 Details:** This command set or queries the measurement 1 input edge qualifier one source for Efficiency measurement.\n\n**⚙️ Syntax:** `MEASUrement:MEAS<x>:EDGEQUALONE  <QString>`\n\n**🔧 Type:** both\n\n**🏭 Supported Families:** MSO2, MSO4, MSO5, MSO6, MSO7\n---\n\n### **6. MEASUrement:REFLevels:JITTERMODE**\n\n**📋 Description:** This command sets or queries how often reference levels are calculated on Jitter\n\n**📖 Details:** This command sets or queries how often reference levels are calculated on Jitter measurements. If the mode is set to Latch, ref levels are calculated only on the first acquisition after a statistics reset. If it is set to Continuous, reference levels are calculated on every acquisition.\n\n**⚙️ Syntax:** `MEASUrement:REFLevels:JITTERMODE  {CONTinuous|LATCh}`\n\n**🔧 Type:** both\n\n**🏭 Supported Families:** MSO2, MSO4, MSO5, MSO6, MSO7\n---\n\n### **7. MEASUrement:CLOCKRecovery:ADVanced:METHod**\n\n**📋 Description:** This command sets or queries the global advanced clock recovery method. This wil\n\n**📖 Details:** This command sets or queries the global advanced clock recovery method. This will affect measurements whose :MEASUrement:MEAS<x>:CLOCKRecovery:GLOBal flag is set to 1.\n\n**⚙️ Syntax:** `MEASUrement:CLOCKRecovery:ADVanced:METHod  {NONE|NOMinal|PATTern}`\n\n**🔧 Type:** both\n\n**🏭 Supported Families:** MSO2, MSO4, MSO5, MSO6, MSO7\n---\n\n### **8. MEASUrement:CLOCKRecovery:METHod**\n\n**📋 Description:** This command sets or queries the global clock recovery method for the measuremen\n\n**📖 Details:** This command sets or queries the global clock recovery method for the measurement. This will affect measurements whose :MEASUrement:MEAS<x>:CLOCKRecovery:GLOBal flag is set to 1.\n\n**⚙️ Syntax:** `MEASUrement:CLOCKRecovery:METHod  {PLL|CONSTANTCLOCK|EXPLICITCLOCK}`\n\n**🔧 Type:** both\n\n**🏭 Supported Families:** MSO2, MSO4, MSO5, MSO6, MSO7\n\n---\n\n## 🎯 **What would you like to do?**\n\n- **🔍 Explain command:** \"Explain command 3\" \n- **➕ Add command:** \"Add command 7 to my flow\"\n- **⚖️ Compare commands:** \"Compare command 1 and 5\"\n- **📖 Get details:** \"Tell me more about command 2\"\n\n**Which command interests you?**",
+    "actionsJson": null,
+    "stepCount": 0,
+    "stepTypes": []
+  },
+  "durationMs": 30,
+  "ok": true
+}

@@ -1,0 +1,74 @@
+{
+  "timestamp": "2026-03-27T16:37:25.863Z",
+  "requestId": "1774629445835-jw4y3m",
+  "provider": "openai",
+  "model": "gpt-5.4-mini",
+  "outputMode": "steps_json",
+  "deviceType": "SCOPE",
+  "modelFamily": "MSO2",
+  "backend": "pyvisa",
+  "userMessage": "clear status",
+  "flowContext": {
+    "stepCount": 14,
+    "stepTypes": [
+      "group",
+      "connect",
+      "query",
+      "disconnect",
+      "write"
+    ],
+    "validationErrors": []
+  },
+  "scpiContextHits": 0,
+  "toolCalls": [],
+  "postCheck": {
+    "errors": [],
+    "warnings": [],
+    "autoRepairTriggered": false
+  },
+  "response": {
+    "text": "ACTIONS_JSON: {\"summary\":\"Found 2 command(s) for status: *CLS, CONFIGuration:ANALOg:BANDWidth\",\"findings\":[\"*CLS — This command (no query form) clears the following:\\nEvent Queue\\nStandard Event St\",\"CONFIGuration:ANALOg:BANDWidth — This command (no query form) clears the following:\\nEvent Queue\\nStandard Event St\"],\"suggestedFixes\":[],\"actions\":[{\"type\":\"insert_step_after\",\"targetStepId\":null,\"newStep\":{\"id\":\"smart_scpi_1\",\"type\":\"write\",\"label\":\"Set *CLS\",\"params\":{\"command\":\"*CLS\"}}},{\"type\":\"insert_step_after\",\"targetStepId\":null,\"newStep\":{\"id\":\"smart_scpi_2\",\"type\":\"query\",\"label\":\"Query CONFIGuration:ANALOg:BANDWidth\",\"params\":{\"command\":\"CONFIGuration:ANALOg:BANDWidth?\",\"saveAs\":\"result_configuration_analog_bandwidth\"}}}]}",
+    "actionsJson": {
+      "summary": "Found 2 command(s) for status: *CLS, CONFIGuration:ANALOg:BANDWidth",
+      "findings": [
+        "*CLS — This command (no query form) clears the following:\nEvent Queue\nStandard Event St",
+        "CONFIGuration:ANALOg:BANDWidth — This command (no query form) clears the following:\nEvent Queue\nStandard Event St"
+      ],
+      "suggestedFixes": [],
+      "actions": [
+        {
+          "type": "insert_step_after",
+          "targetStepId": null,
+          "newStep": {
+            "id": "smart_scpi_1",
+            "type": "write",
+            "label": "Set *CLS",
+            "params": {
+              "command": "*CLS"
+            }
+          }
+        },
+        {
+          "type": "insert_step_after",
+          "targetStepId": null,
+          "newStep": {
+            "id": "smart_scpi_2",
+            "type": "query",
+            "label": "Query CONFIGuration:ANALOg:BANDWidth",
+            "params": {
+              "command": "CONFIGuration:ANALOg:BANDWidth?",
+              "saveAs": "result_configuration_analog_bandwidth"
+            }
+          }
+        }
+      ]
+    },
+    "stepCount": 2,
+    "stepTypes": [
+      "insert_step_after",
+      "insert_step_after"
+    ]
+  },
+  "durationMs": 28,
+  "ok": true
+}

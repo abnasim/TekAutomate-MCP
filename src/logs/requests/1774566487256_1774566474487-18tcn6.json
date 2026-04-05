@@ -1,0 +1,28 @@
+{
+  "timestamp": "2026-03-26T23:08:07.256Z",
+  "requestId": "1774566474487-18tcn6",
+  "modelFamily": "(unknown)",
+  "backend": "(unknown)",
+  "flowContext": {
+    "stepCount": 0,
+    "stepTypes": [],
+    "validationErrors": []
+  },
+  "scpiContextHits": 0,
+  "toolCalls": [],
+  "postCheck": {
+    "errors": [
+      "Anthropic error 429: {\"type\":\"error\",\"error\":{\"type\":\"rate_limit_error\",\"message\":\"This request would exceed your organization's rate limit of 30,000 input tokens per minute (org: e066fcdf-f37f-4bf3-b31e-96e8fd978ac9, model: claude-sonnet-4-6). For details, refer to: https://docs.claude.com/en/api/rate-limits. You can see the response headers for current usage. Please reduce the prompt length or the maximum tokens requested, or try again later. You may also contact sales at https://claude.com/contact-sales to discuss your options for a rate limit increase.\"},\"request_id\":\"req_011CZSXrWrN36MJ9632XcJvK\"}"
+    ],
+    "warnings": [],
+    "autoRepairTriggered": false
+  },
+  "response": {
+    "text": "Anthropic error 429: {\"type\":\"error\",\"error\":{\"type\":\"rate_limit_error\",\"message\":\"This request would exceed your organization's rate limit of 30,000 input tokens per minute (org: e066fcdf-f37f-4bf3-b31e-96e8fd978ac9, model: claude-sonnet-4-6). For details, refer to: https://docs.claude.com/en/api/rate-limits. You can see the response headers for current usage. Please reduce the prompt length or the maximum tokens requested, or try again later. You may also contact sales at https://claude.com/contact-sales to discuss your options for a rate limit increase.\"},\"request_id\":\"req_011CZSXrWrN36MJ9632XcJvK\"}",
+    "actionsJson": null,
+    "stepCount": 0,
+    "stepTypes": []
+  },
+  "durationMs": 12769,
+  "ok": false
+}

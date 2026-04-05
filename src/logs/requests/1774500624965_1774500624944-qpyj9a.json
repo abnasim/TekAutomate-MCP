@@ -1,0 +1,36 @@
+{
+  "timestamp": "2026-03-26T04:50:24.965Z",
+  "requestId": "1774500624944-qpyj9a",
+  "provider": "openai",
+  "model": "gpt-5.4-mini",
+  "outputMode": "steps_json",
+  "deviceType": "SCOPE",
+  "modelFamily": "TekscopePC",
+  "backend": "pyvisa",
+  "userMessage": "fastframe",
+  "flowContext": {
+    "stepCount": 1,
+    "stepTypes": [
+      "group",
+      "connect",
+      "save_screenshot",
+      "disconnect"
+    ],
+    "validationErrors": []
+  },
+  "scpiContextHits": 0,
+  "toolCalls": [],
+  "postCheck": {
+    "errors": [],
+    "warnings": [],
+    "autoRepairTriggered": false
+  },
+  "response": {
+    "text": "## 📋 acquisition Commands\n\n",
+    "actionsJson": null,
+    "stepCount": 0,
+    "stepTypes": []
+  },
+  "durationMs": 21,
+  "ok": true
+}

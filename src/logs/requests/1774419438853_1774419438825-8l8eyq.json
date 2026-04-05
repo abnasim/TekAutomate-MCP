@@ -1,0 +1,31 @@
+{
+  "timestamp": "2026-03-25T06:17:18.853Z",
+  "requestId": "1774419438825-8l8eyq",
+  "provider": "openai",
+  "model": "gpt-4o-mini",
+  "outputMode": "steps_json",
+  "deviceType": "SCOPE",
+  "modelFamily": "mso_5_series",
+  "backend": "pyvisa",
+  "userMessage": "setup ethernet trigger",
+  "flowContext": {
+    "stepCount": 0,
+    "stepTypes": [],
+    "validationErrors": []
+  },
+  "scpiContextHits": 0,
+  "toolCalls": [],
+  "postCheck": {
+    "errors": [],
+    "warnings": [],
+    "autoRepairTriggered": false
+  },
+  "response": {
+    "text": "## 📋 8 bus Commands Found\n\n---\n\n### **1. TRIGger:{A|B}:BUS:B<x>:ETHERnet:DATa:VALue**\n\n**📋 Description:** When the Ethernet trigger condition is set to DATa, and the qualifier is set to\n\n**📖 Details:** When the Ethernet trigger condition is set to DATa, and the qualifier is set to LESSthan, MOREthan, EQual, UNEQual, LESSEQual or MOREEQual, this command specifies the value to trigger on. When the Ethernet trigger condition is set to DATa, and the qualifier is set to INrange or OUTrange, this command specifies the lower limit of the range. (Use the command TRIGger:{A| B}:BUS:B<x>:ETHERnet:DATa:HIVALue to set the upper limit of the range.) The default is all X’s (don’t care). The bus number is specified by x.\n\n**⚙️ Syntax:** `TRIGger:{A|B}:BUS:B<x>:ETHERnet:DATa:VALue  <QString>`\n\n**🔧 Type:** both\n\n**🏭 Supported Families:** MSO2, MSO4, MSO5, MSO6, MSO7\n---\n\n### **2. TRIGger:{A|B}:BUS:B<x>:ETHERnet:DATa:HIVALue**\n\n**📋 Description:** When the Ethernet trigger condition is set to DATa, and the qualifier is set to\n\n**📖 Details:** When the Ethernet trigger condition is set to DATa, and the qualifier is set to either INrange or OUTrange, this command specifies the upper data value of the range. (Use the command TRIGger:{A|B}:BUS:B<x>:ETHERnet:DATa:VALue to specify the lower limit of the range.) The default is all X’s (don’t care). The bus number is specified by x.\n\n**⚙️ Syntax:** `TRIGger:{A|B}:BUS:B<x>:ETHERnet:DATa:HIVALue  <QString>`\n\n**🔧 Type:** both\n\n**🏭 Supported Families:** MSO2, MSO4, MSO5, MSO6, MSO7\n---\n\n### **3. TRIGger:{A|B}:BUS:B<x>:ETHERnet:MAC:LENgth:VALue**\n\n**📋 Description:** When the Ethernet trigger condition is set to MACLENgth, and the qualifier is se\n\n**📖 Details:** When the Ethernet trigger condition is set to MACLENgth, and the qualifier is set to LESSthan, MOREthan, EQual, UNEQual, LESSEQual or MOREEQual, this command specifies the 16–bit value to trigger on. When the qualifier is set to INrange or OUTrange, this command specifies the lower limit of the range. (Use the command TRIGger:{A|B}:BUS:B<x>:ETHERnet:MAC:LENgth:HIVALue to set the upper limit of the range.) The default is all X’s (don’t care). The bus number is specified by x.\n\n**⚙️ Syntax:** `TRIGger:{A|B}:BUS:B<x>:ETHERnet:MAC:LENgth:VALue  <QString>`\n\n**🔧 Type:** both\n\n**🏭 Supported Families:** MSO2, MSO4, MSO5, MSO6, MSO7\n---\n\n### **4. TRIGger:A:BUS:ETHERnet:QUALifier**\n\n**📋 Description:** This command specifies the qualifier to be used with the Ethernet trigger condition is set to MACLEN...\n\n**📖 Details:** This command specifies the qualifier to be used with the Ethernet trigger condition is set to MACLENgth or DATa. Normally, the Ethernet qualifier is set to “equal to”. (MSO/DPO5000/B series only.) Commands listed in alphabetical order\n\n**⚙️ Syntax:** `TRIGger:A:BUS:ETHERnet:QUALifier {LESSthan|MOREthan|EQual|UNEQual|LESSEQual|MOREEQual}`\n\n**🔧 Type:** both\n\n**🏭 Supported Families:** MSO5000, DPO5000, DPO7000, DPO70000\n---\n\n### **5. TRIGger:{A|B}:BUS:B<x>:ETHERnet:MAC:LENgth:HIVALue**\n\n**📋 Description:** When the Ethernet trigger condition is set to MACLENgth, and the qualifier is se\n\n**📖 Details:** When the Ethernet trigger condition is set to MACLENgth, and the qualifier is set to INrange or OUTrange, this command specifies the upper data value of the range. (Use the command TRIGger:{A|B}:BUS:B<x>:ETHERnet:MAC:LENgth:VALue to specify the lower limit of the range.) The default is all X’s (don’t care). The bus number is specified by x.\n\n**⚙️ Syntax:** `TRIGger:{A|B}:BUS:B<x>:ETHERnet:MAC:LENgth:HIVALue <NR1>`\n\n**🔧 Type:** both\n\n**🏭 Supported Families:** MSO2, MSO4, MSO5, MSO6, MSO7\n---\n\n### **6. TRIGger:{A|B}:BUS:B<x>:ETHERnet:DATa:SIZe**\n\n**📋 Description:** When the Ethernet trigger condition is set to DATa, this command specifies the n\n\n**📖 Details:** When the Ethernet trigger condition is set to DATa, this command specifies the number of contiguous TCP/IPv4/MAC client data bytes to trigger on. The bus number is specified by x.\n\n**⚙️ Syntax:** `TRIGger:{A|B}:BUS:B<x>:ETHERnet:DATa:SIZe <NR1>`\n\n**🔧 Type:** both\n\n**🏭 Supported Families:** MSO2, MSO4, MSO5, MSO6, MSO7\n---\n\n### **7. TRIGger:{A|B}:BUS:B<x>:ETHERnet:QTAG:VALue**\n\n**📋 Description:** When the Ethernet trigger condition is set to QTAG, this command specifies the 3\n\n**📖 Details:** When the Ethernet trigger condition is set to QTAG, this command specifies the 32-bit Q-Tag value to trigger on. The default is all X’s (don’t care). The bus number is specified by x.\n\n**⚙️ Syntax:** `TRIGger:{A|B}:BUS:B<x>:ETHERnet:QTAG:VALue  <QString>`\n\n**🔧 Type:** both\n\n**🏭 Supported Families:** MSO2, MSO4, MSO5, MSO6, MSO7\n---\n\n### **8. TRIGger:{A|B}:BUS:B<x>:ETHERnet:TCPHeader:DESTinationport:VALue**\n\n**📋 Description:** When the Ethernet trigger condition is set to TCPHeader, this command specifies\n\n**📖 Details:** When the Ethernet trigger condition is set to TCPHeader, this command specifies the 32-bit acknowledgement number that is to be used in the trigger (along with the destination and source port addresses and the sequence number). The default is all X’s (don’t care). The bus number is specified by x.\n\n**⚙️ Syntax:** `TRIGger:{A|B}:BUS:B<x>:ETHERnet:TCPHeader:DESTinationport:VALue  <QString>`\n\n**🔧 Type:** both\n\n**🏭 Supported Families:** MSO2, MSO4, MSO5, MSO6, MSO7\n\n---\n\n## 🎯 **What would you like to do?**\n\n- **🔍 Explain command:** \"Explain command 3\" \n- **➕ Add command:** \"Add command 7 to my flow\"\n- **⚖️ Compare commands:** \"Compare command 1 and 5\"\n- **📖 Get details:** \"Tell me more about command 2\"\n\n**Which command interests you?**",
+    "actionsJson": null,
+    "stepCount": 0,
+    "stepTypes": []
+  },
+  "durationMs": 28,
+  "ok": true
+}

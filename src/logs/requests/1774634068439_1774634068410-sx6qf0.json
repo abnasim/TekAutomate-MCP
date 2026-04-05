@@ -1,0 +1,58 @@
+{
+  "timestamp": "2026-03-27T17:54:28.439Z",
+  "requestId": "1774634068410-sx6qf0",
+  "provider": "openai",
+  "model": "gpt-5.4-mini",
+  "outputMode": "steps_json",
+  "deviceType": "SCOPE",
+  "modelFamily": "MSO2",
+  "backend": "pyvisa",
+  "userMessage": "set channel bandwidth to 200mhz",
+  "flowContext": {
+    "stepCount": 16,
+    "stepTypes": [
+      "connect",
+      "write",
+      "query",
+      "disconnect"
+    ],
+    "validationErrors": []
+  },
+  "scpiContextHits": 0,
+  "toolCalls": [],
+  "postCheck": {
+    "errors": [],
+    "warnings": [],
+    "autoRepairTriggered": false
+  },
+  "response": {
+    "text": "ACTIONS_JSON: {\"summary\":\"Found 1 command(s) for vertical: CH<x>:BANdwidth\",\"findings\":[\"CH<x>:BANdwidth — Set or query channel bandwidth limit\"],\"suggestedFixes\":[],\"actions\":[{\"type\":\"insert_step_after\",\"targetStepId\":null,\"newStep\":{\"id\":\"smart_scpi_1\",\"type\":\"write\",\"label\":\"Set CH<x>:BANdwidth\",\"params\":{\"command\":\"CH:BANdwidth\"}}}]}",
+    "actionsJson": {
+      "summary": "Found 1 command(s) for vertical: CH<x>:BANdwidth",
+      "findings": [
+        "CH<x>:BANdwidth — Set or query channel bandwidth limit"
+      ],
+      "suggestedFixes": [],
+      "actions": [
+        {
+          "type": "insert_step_after",
+          "targetStepId": null,
+          "newStep": {
+            "id": "smart_scpi_1",
+            "type": "write",
+            "label": "Set CH<x>:BANdwidth",
+            "params": {
+              "command": "CH:BANdwidth"
+            }
+          }
+        }
+      ]
+    },
+    "stepCount": 1,
+    "stepTypes": [
+      "insert_step_after"
+    ]
+  },
+  "durationMs": 29,
+  "ok": true
+}

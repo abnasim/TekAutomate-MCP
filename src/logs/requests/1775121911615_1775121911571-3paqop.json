@@ -1,0 +1,73 @@
+{
+  "timestamp": "2026-04-02T09:25:11.615Z",
+  "requestId": "1775121911571-3paqop",
+  "provider": "openai",
+  "model": "gpt-5.4-mini",
+  "outputMode": "steps_json",
+  "deviceType": "SCOPE",
+  "modelFamily": "MSO2",
+  "backend": "pyvisa",
+  "userMessage": "Autoset command",
+  "flowContext": {
+    "stepCount": 6,
+    "stepTypes": [
+      "connect",
+      "query",
+      "write",
+      "disconnect"
+    ],
+    "validationErrors": []
+  },
+  "scpiContextHits": 0,
+  "toolCalls": [],
+  "postCheck": {
+    "errors": [],
+    "warnings": [],
+    "autoRepairTriggered": false
+  },
+  "response": {
+    "text": "ACTIONS_JSON: {\"summary\":\"Found 2 command(s) for misc: AUTOSet, AUTOSet:ACQuisition:ENAble\",\"findings\":[\"AUTOSet — This command (no query format) sets the vertical, horizontal, and trigger contro\",\"AUTOSet:ACQuisition:ENAble — This command sets or queries the Autoset acquisition setting adjustment. Setting\"],\"suggestedFixes\":[],\"actions\":[{\"type\":\"insert_step_after\",\"targetStepId\":null,\"newStep\":{\"id\":\"smart_scpi_1\",\"type\":\"query\",\"label\":\"Query AUTOSet\",\"params\":{\"command\":\"AUTOSet?\",\"saveAs\":\"result_autoset\"}}},{\"type\":\"insert_step_after\",\"targetStepId\":null,\"newStep\":{\"id\":\"smart_scpi_2\",\"type\":\"write\",\"label\":\"Set AUTOSet:ACQuisition:ENAble\",\"params\":{\"command\":\"AUTOSet:ACQuisition:ENAble\"}}}]}\n\n---\n**Autoset** — Command: POWer:POWer<x>:AUTOSet Description: This command executes power autoset for the specified power measurement num\n**Autoset** — Command: AUTOSet Description: This command (no query format) sets the vertical, horizontal, and trigger controls of the ",
+    "actionsJson": {
+      "summary": "Found 2 command(s) for misc: AUTOSet, AUTOSet:ACQuisition:ENAble",
+      "findings": [
+        "AUTOSet — This command (no query format) sets the vertical, horizontal, and trigger contro",
+        "AUTOSet:ACQuisition:ENAble — This command sets or queries the Autoset acquisition setting adjustment. Setting"
+      ],
+      "suggestedFixes": [],
+      "actions": [
+        {
+          "type": "insert_step_after",
+          "targetStepId": null,
+          "newStep": {
+            "id": "smart_scpi_1",
+            "type": "query",
+            "label": "Query AUTOSet",
+            "params": {
+              "command": "AUTOSet?",
+              "saveAs": "result_autoset"
+            }
+          }
+        },
+        {
+          "type": "insert_step_after",
+          "targetStepId": null,
+          "newStep": {
+            "id": "smart_scpi_2",
+            "type": "write",
+            "label": "Set AUTOSet:ACQuisition:ENAble",
+            "params": {
+              "command": "AUTOSet:ACQuisition:ENAble"
+            }
+          }
+        }
+      ]
+    },
+    "stepCount": 2,
+    "stepTypes": [
+      "insert_step_after",
+      "insert_step_after"
+    ]
+  },
+  "durationMs": 44,
+  "ok": true
+}

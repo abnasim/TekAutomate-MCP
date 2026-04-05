@@ -1,0 +1,33 @@
+{
+  "timestamp": "2026-03-25T07:53:38.231Z",
+  "requestId": "1774425218169-vc8s4d",
+  "provider": "openai",
+  "model": "gpt-5.4-mini",
+  "outputMode": "steps_json",
+  "deviceType": "SCOPE",
+  "modelFamily": "DPO70000",
+  "backend": "pyvisa",
+  "userMessage": "configure i2c bus analysis",
+  "flowContext": {
+    "stepCount": 2,
+    "stepTypes": [
+      "write"
+    ],
+    "validationErrors": []
+  },
+  "scpiContextHits": 0,
+  "toolCalls": [],
+  "postCheck": {
+    "errors": [],
+    "warnings": [],
+    "autoRepairTriggered": false
+  },
+  "response": {
+    "text": "## 📋 6 bus Commands Found\n\n---\n\n### **1. TRIGger:A:I2C:ADDRess:RWINClude**\n\n**📋 Description:** Sets the I2C read/write bit to address type.\n\n\n\n**⚙️ Syntax:** **`TRIGger:A:I2C:ADDRess:RWINClude {OFF|ON}`**\n\n**🔧 Type:** both\n\n**🏭 Supported Families:** MSO5000, DPO5000, DPO7000, DPO70000\n---\n\n### **2. TRIGger:A:BUS:I2C:CONDition**\n\n**📋 Description:** This command sets or queries the trigger condition for the I2C bus.\n\n\n\n**⚙️ Syntax:** **`TRIGger:A:BUS:I2C:CONDition {ACKMISS|ADDress|ADDRANDDATA|DATa|REPEATstart|STARt|STOP}`**\n\n**🔧 Type:** both\n\n**🏭 Supported Families:** MSO5000, DPO5000, DPO7000, DPO70000\n---\n\n### **3. TRIGger:A:BUS:I2C:DATa:DIRection**\n\n**📋 Description:** This command sets or queries the data direction for the I2C bus.\n\n\n\n**⚙️ Syntax:** **`TRIGger:A:BUS:I2C:DATa:DIRection {DONTCare|READ|WRITE}`**\n\n**🔧 Type:** both\n\n**🏭 Supported Families:** MSO5000, DPO5000, DPO7000, DPO70000\n---\n\n### **4. TRIGger:A:BUS:I2C:ADDress:MODe**\n\n**📋 Description:** This command sets or queries the address mode for the I2C bus trigger.\n\n\n\n**⚙️ Syntax:** **`TRIGger:A:BUS:I2C:ADDress:MODe {ADDR7|ADDR10}`**\n\n**🔧 Type:** both\n\n**🏭 Supported Families:** MSO5000, DPO5000, DPO7000, DPO70000\n---\n\n### **5. TRIGger:A:BUS:I2C:ADDress:TYPe**\n\n**📋 Description:** This command sets or queries the address type for the I2C bus trigger.\n\n\n\n**⚙️ Syntax:** **`TRIGger:A:BUS:I2C:ADDress:TYPe {NONe|STARtbyte|HSMODe|GENeralcall|EEPROm|CBUS}`**\n\n**🔧 Type:** both\n\n**🏭 Supported Families:** MSO5000, DPO5000, DPO7000, DPO70000\n---\n\n### **6. TRIGger:A:BUS:I2C:DATa:FORMat**\n\n**📋 Description:** This command sets or queries the trigger data format for the I2C bus.\n\n\n\n**⚙️ Syntax:** **`TRIGger:A:BUS:I2C:DATa:FORMat {BINary|HEXadecimal}`**\n\n**🔧 Type:** both\n\n**🏭 Supported Families:** MSO5000, DPO5000, DPO7000, DPO70000",
+    "actionsJson": null,
+    "stepCount": 0,
+    "stepTypes": []
+  },
+  "durationMs": 62,
+  "ok": true
+}

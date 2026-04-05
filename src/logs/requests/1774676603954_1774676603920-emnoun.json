@@ -1,0 +1,50 @@
+{
+  "timestamp": "2026-03-28T05:43:23.954Z",
+  "requestId": "1774676603920-emnoun",
+  "provider": "openai",
+  "model": "gpt-5.4-mini",
+  "outputMode": "steps_json",
+  "deviceType": "SCOPE",
+  "modelFamily": "MSO2",
+  "backend": "pyvisa",
+  "userMessage": "validate flow",
+  "flowContext": {
+    "stepCount": 18,
+    "stepTypes": [
+      "connect",
+      "write",
+      "query",
+      "disconnect",
+      "set_and_query"
+    ],
+    "validationErrors": []
+  },
+  "scpiContextHits": 0,
+  "toolCalls": [],
+  "postCheck": {
+    "errors": [],
+    "warnings": [],
+    "autoRepairTriggered": false
+  },
+  "response": {
+    "text": "Found 5 flow command issue(s).\nACTIONS_JSON: {\"summary\":\"Flow has command verification issues.\",\"findings\":[\"[ai_step_a9sw359e] missing required argument for BUS:B1:I2C:CLOCk:SOUrce\",\"[smart_scpi_2] missing required argument for BUS:B1:I2C:CLOCk:THReshold\",\"[ai_step_rbzrub6a] missing required argument for CUSTOMTABle:ADDNew\",\"[ai_step_s8ghk0qa] missing required argument for MEASTABle:ADDNew\",\"[ai_step_55qfb5hg] missing required argument for MEASUrement:ADDMEAS\"],\"suggestedFixes\":[\"Fix unverified command headers and invalid argument values, then run Validate Flow again.\"],\"actions\":[]}",
+    "actionsJson": {
+      "summary": "Flow has command verification issues.",
+      "findings": [
+        "[ai_step_a9sw359e] missing required argument for BUS:B1:I2C:CLOCk:SOUrce",
+        "[smart_scpi_2] missing required argument for BUS:B1:I2C:CLOCk:THReshold",
+        "[ai_step_rbzrub6a] missing required argument for CUSTOMTABle:ADDNew",
+        "[ai_step_s8ghk0qa] missing required argument for MEASTABle:ADDNew",
+        "[ai_step_55qfb5hg] missing required argument for MEASUrement:ADDMEAS"
+      ],
+      "suggestedFixes": [
+        "Fix unverified command headers and invalid argument values, then run Validate Flow again."
+      ],
+      "actions": []
+    },
+    "stepCount": 0,
+    "stepTypes": []
+  },
+  "durationMs": 34,
+  "ok": true
+}

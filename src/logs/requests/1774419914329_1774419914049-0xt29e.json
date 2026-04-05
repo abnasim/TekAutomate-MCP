@@ -1,0 +1,31 @@
+{
+  "timestamp": "2026-03-25T06:25:14.329Z",
+  "requestId": "1774419914049-0xt29e",
+  "provider": "openai",
+  "model": "gpt-4o-mini",
+  "outputMode": "steps_json",
+  "deviceType": "SCOPE",
+  "modelFamily": "mso_5_series",
+  "backend": "pyvisa",
+  "userMessage": "save",
+  "flowContext": {
+    "stepCount": 0,
+    "stepTypes": [],
+    "validationErrors": []
+  },
+  "scpiContextHits": 0,
+  "toolCalls": [],
+  "postCheck": {
+    "errors": [],
+    "warnings": [],
+    "autoRepairTriggered": false
+  },
+  "response": {
+    "text": "I found 9 SCPI commands related to **save**. Here are the main categories:\n\n1. **Save and Recall** (9 commands)\n   Commands related to Save and Recall\n   Examples:\n   • SAVe:WAVEform:SOURCELIst\n   • SAVe:WAVEform\n\n**How to explore:**\n- Tell me the category number (e.g., \"1\" for Bus Trigger)\n- Or ask about a specific category (e.g., \"Tell me about Bus Trigger\")\n- Or ask for more details (e.g., \"Show me details about category 1\")\n- Or be more specific (e.g., \"I2C bus trigger commands\")\n\nWhich category would you like to explore?",
+    "actionsJson": null,
+    "stepCount": 0,
+    "stepTypes": []
+  },
+  "durationMs": 280,
+  "ok": true
+}

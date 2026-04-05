@@ -1,0 +1,33 @@
+{
+  "timestamp": "2026-03-25T07:45:13.737Z",
+  "requestId": "1774424713579-p9hc6r",
+  "provider": "openai",
+  "model": "gpt-5.4-mini",
+  "outputMode": "steps_json",
+  "deviceType": "SCOPE",
+  "modelFamily": "DPO70000",
+  "backend": "pyvisa",
+  "userMessage": "add math channel",
+  "flowContext": {
+    "stepCount": 2,
+    "stepTypes": [
+      "write"
+    ],
+    "validationErrors": []
+  },
+  "scpiContextHits": 0,
+  "toolCalls": [],
+  "postCheck": {
+    "errors": [],
+    "warnings": [],
+    "autoRepairTriggered": false
+  },
+  "response": {
+    "text": "## 📋 6 math Commands Found\n\n---\n\n### **1. MATH<x>:DEFine**\n\n**📋 Description:** Set or query math waveform expression\n\n**📖 Details:** Sets or queries the math expression for the specified math waveform.\n\n**⚙️ Syntax:** **`MATH<x>:DEFine <QString>`**\n\n**🔧 Type:** both\n\n**🏭 Supported Families:** MSO5000, DPO5000, DPO7000, DPO70000, MSO70000\n---\n\n### **2. MATH<x>:STATE**\n\n**📋 Description:** Set or query math waveform display state\n\n**📖 Details:** Sets or queries the display state of the specified math waveform.\n\n**⚙️ Syntax:** **`MATH<x>:STATE {ON|OFF}`**\n\n**🔧 Type:** both\n\n**🏭 Supported Families:** MSO5000, DPO5000, DPO7000, DPO70000, MSO70000\n---\n\n### **3. HORizontal:FASTframe:SINGLEFramemath**\n\n**📋 Description:** This command sets or queries FastFrame single frame math.\n\n\n\n**⚙️ Syntax:** **`HORizontal:FASTframe:SINGLEFramemath {<NR1>|OFF|ON}`**\n\n**🔧 Type:** both\n\n**🏭 Supported Families:** MSO5000, DPO5000, DPO7000, DPO70000\n---\n\n### **4. HORizontal:FASTframe:SELECTED:MATH**\n\n**📋 Description:** This command sets or queries the FastFrame selected frame number on the specified waveform.\n\n\n\n**⚙️ Syntax:** **`HORizontal:FASTframe:SELECTED:MATH<x> <NRF>`**\n\n**🔧 Type:** both\n\n**🏭 Supported Families:** MSO5000, DPO5000, DPO7000, DPO70000\n---\n\n### **5. BUS:MATH**\n\n**📋 Description:** This command sets or queries the low threshold value of the mathematical waveform for the bus (USB d...\n\n**📖 Details:** This command sets or queries the low threshold value of the mathematical waveform for the bus (USB differential).\n\n**⚙️ Syntax:** **`BUS:MATH<x>:LOWTHRESHold <NR3>`**\n\n**🔧 Type:** both\n\n**🏭 Supported Families:** MSO5000, DPO5000, DPO7000, DPO70000\n---\n\n### **6. HORizontal:FASTframe:TRACk**\n\n**📋 Description:** This command sets up or queries the state of FastFrame tracking feature. This command is equivalent ...\n\n**📖 Details:** This command sets up or queries the state of FastFrame tracking feature. This command is equivalent to selecting FastFrame Setup from the Horiz/Acq menu and then clicking the desired Frame Tracking state. When FastFrame Track is set to “live”, the channel and math waveforms are locked together. Adjusting a channel waveform also adjusts a related math waveform. All reference waveforms are also locked together but they are separate from channel and math waveforms. For example, when you set the Selected Frame Source Ch1 to Frame 3, then Selected Frame Ch2, Ch3, Ch4, Math1, Math2, Math3 and Math4 are also set to Frame 3. When you set the Selected Frame Source Ref1 to Frame 2, then Selected Frame Ref2, Ref3 and Ref4 are also set to Frame 2. If the Frame Tracking is set to Live, changing Selected Frame Ch1 will not affect the Selected Frame Ref1 frame of the Reference Frame setting. When FastFrame Track is set to “all”, the channel, math and reference waveforms are locked together. Adjusting a channel waveform also adjusts the related math and reference waveforms. For example, when you set the Selected Frame Source Ch1 to Frame 3, then Selected Frame Ch2, Ch3, Ch4, Math1, Math2, Math3, Math4, Ref1, Ref2, Ref3 and Ref4 are also set to Frame 3.\n\n**⚙️ Syntax:** **`HORizontal:FASTframe:TRACk {LIVE|ALL}`**\n\n**🔧 Type:** both\n\n**🏭 Supported Families:** MSO5000, DPO5000, DPO7000, DPO70000",
+    "actionsJson": null,
+    "stepCount": 0,
+    "stepTypes": []
+  },
+  "durationMs": 158,
+  "ok": true
+}

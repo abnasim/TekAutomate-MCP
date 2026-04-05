@@ -1,0 +1,58 @@
+{
+  "timestamp": "2026-03-27T16:36:22.835Z",
+  "requestId": "1774629382766-4cx65n",
+  "provider": "openai",
+  "model": "gpt-5.4-mini",
+  "outputMode": "steps_json",
+  "deviceType": "SCOPE",
+  "modelFamily": "MSO2",
+  "backend": "pyvisa",
+  "userMessage": "set channel 1 scale to 2v",
+  "flowContext": {
+    "stepCount": 2,
+    "stepTypes": [
+      "group",
+      "connect",
+      "query",
+      "disconnect"
+    ],
+    "validationErrors": []
+  },
+  "scpiContextHits": 0,
+  "toolCalls": [],
+  "postCheck": {
+    "errors": [],
+    "warnings": [],
+    "autoRepairTriggered": false
+  },
+  "response": {
+    "text": "ACTIONS_JSON: {\"summary\":\"Found 1 command(s) for vertical: CH<x>:SCAle\",\"findings\":[\"CH<x>:SCAle — Set or query channel vertical scale (volts per division)\"],\"suggestedFixes\":[],\"actions\":[{\"type\":\"insert_step_after\",\"targetStepId\":null,\"newStep\":{\"id\":\"smart_scpi_1\",\"type\":\"write\",\"label\":\"Set CH<x>:SCAle\",\"params\":{\"command\":\"CH:SCAle\"}}}]}",
+    "actionsJson": {
+      "summary": "Found 1 command(s) for vertical: CH<x>:SCAle",
+      "findings": [
+        "CH<x>:SCAle — Set or query channel vertical scale (volts per division)"
+      ],
+      "suggestedFixes": [],
+      "actions": [
+        {
+          "type": "insert_step_after",
+          "targetStepId": null,
+          "newStep": {
+            "id": "smart_scpi_1",
+            "type": "write",
+            "label": "Set CH<x>:SCAle",
+            "params": {
+              "command": "CH:SCAle"
+            }
+          }
+        }
+      ]
+    },
+    "stepCount": 1,
+    "stepTypes": [
+      "insert_step_after"
+    ]
+  },
+  "durationMs": 70,
+  "ok": true
+}

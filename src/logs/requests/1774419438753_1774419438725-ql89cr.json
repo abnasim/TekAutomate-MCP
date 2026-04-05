@@ -1,0 +1,31 @@
+{
+  "timestamp": "2026-03-25T06:17:18.753Z",
+  "requestId": "1774419438725-ql89cr",
+  "provider": "openai",
+  "model": "gpt-4o-mini",
+  "outputMode": "steps_json",
+  "deviceType": "SCOPE",
+  "modelFamily": "mso_5_series",
+  "backend": "pyvisa",
+  "userMessage": "add jitter measurement",
+  "flowContext": {
+    "stepCount": 0,
+    "stepTypes": [],
+    "validationErrors": []
+  },
+  "scpiContextHits": 0,
+  "toolCalls": [],
+  "postCheck": {
+    "errors": [],
+    "warnings": [],
+    "autoRepairTriggered": false
+  },
+  "response": {
+    "text": "## 📋 8 measurement Commands Found\n\n---\n\n### **1. MEASUrement:REFLevels:JITTERMODE**\n\n**📋 Description:** This command sets or queries how often reference levels are calculated on Jitter\n\n**📖 Details:** This command sets or queries how often reference levels are calculated on Jitter measurements. If the mode is set to Latch, ref levels are calculated only on the first acquisition after a statistics reset. If it is set to Continuous, reference levels are calculated on every acquisition.\n\n**⚙️ Syntax:** `MEASUrement:REFLevels:JITTERMODE  {CONTinuous|LATCh}`\n\n**🔧 Type:** both\n\n**🏭 Supported Families:** MSO2, MSO4, MSO5, MSO6, MSO7\n---\n\n### **2. MEASUrement:ENABLEPjitter**\n\n**📋 Description:** This command sets or queries the state of period jitter analysis mode.\n\n\n\n**⚙️ Syntax:** `MEASUrement:ENABLEPjitter  {OFF|ON|1|0}`\n\n**🔧 Type:** both\n\n**🏭 Supported Families:** MSO2, MSO4, MSO5, MSO6, MSO7\n---\n\n### **3. MEASUrement:JITTermodel**\n\n**📋 Description:** This command sets or queries the model used to separate random from deterministi\n\n**📖 Details:** This command sets or queries the model used to separate random from deterministic jitter for jitter measurements.\n\n**⚙️ Syntax:** `MEASUrement:JITTermodel  {SPECTRAL|SPECTRALBUJ}`\n\n**🔧 Type:** both\n\n**🏭 Supported Families:** MSO2, MSO4, MSO5, MSO6, MSO7\n---\n\n### **4. MEASUrement:MEAS<x>:JITTERSummary:DCD**\n\n**📋 Description:** This command sets or queries whether DCD is included in the jitter summary for t\n\n**📖 Details:** This command sets or queries whether DCD is included in the jitter summary for the measurement. Measurements are specified by x.\n\n**⚙️ Syntax:** `MEASUrement:MEAS<x>:JITTERSummary:DCD <NR1>`\n\n**🔧 Type:** both\n\n**🏭 Supported Families:** MSO2, MSO4, MSO5, MSO6, MSO7\n---\n\n### **5. MEASUrement:MEAS<x>:JITTERSummary:DDJ**\n\n**📋 Description:** This command sets or queries whether DDJ is included in the jitter summary for t\n\n**📖 Details:** This command sets or queries whether DDJ is included in the jitter summary for the measurement. Measurements are specified by x.\n\n**⚙️ Syntax:** `MEASUrement:MEAS<x>:JITTERSummary:DDJ <NR1>`\n\n**🔧 Type:** both\n\n**🏭 Supported Families:** MSO2, MSO4, MSO5, MSO6, MSO7\n---\n\n### **6. MEASUrement:MEAS<x>:JITTERSummary:ISI**\n\n**📋 Description:** This command Sets or queries whether ISI is included in the jitter summary for t\n\n**📖 Details:** This command Sets or queries whether ISI is included in the jitter summary for the measurement. Measurements are specified by x.\n\n**⚙️ Syntax:** `MEASUrement:MEAS<x>:JITTERSummary:ISI <NR1>`\n\n**🔧 Type:** both\n\n**🏭 Supported Families:** MSO2, MSO4, MSO5, MSO6, MSO7\n---\n\n### **7. MEASUrement:MEAS<x>:JITTERSummary:NPJ**\n\n**📋 Description:** This command sets or queries whether NPJ is included in the jitter summary for t\n\n**📖 Details:** This command sets or queries whether NPJ is included in the jitter summary for the measurement. Measurements are specified by x.\n\n**⚙️ Syntax:** `MEASUrement:MEAS<x>:JITTERSummary:NPJ <NR1>`\n\n**🔧 Type:** both\n\n**🏭 Supported Families:** MSO2, MSO4, MSO5, MSO6, MSO7\n---\n\n### **8. MEASUrement:MEAS<x>:JITTERSummary:TIE**\n\n**📋 Description:** This command sets or queries whether TIE is included in the jitter summary for t\n\n**📖 Details:** This command sets or queries whether TIE is included in the jitter summary for the measurement. Measurements are specified by x.\n\n**⚙️ Syntax:** `MEASUrement:MEAS<x>:JITTERSummary:TIE <NR1>`\n\n**🔧 Type:** both\n\n**🏭 Supported Families:** MSO2, MSO4, MSO5, MSO6, MSO7\n\n---\n\n## 🎯 **What would you like to do?**\n\n- **🔍 Explain command:** \"Explain command 3\" \n- **➕ Add command:** \"Add command 7 to my flow\"\n- **⚖️ Compare commands:** \"Compare command 1 and 5\"\n- **📖 Get details:** \"Tell me more about command 2\"\n\n**Which command interests you?**",
+    "actionsJson": null,
+    "stepCount": 0,
+    "stepTypes": []
+  },
+  "durationMs": 28,
+  "ok": true
+}

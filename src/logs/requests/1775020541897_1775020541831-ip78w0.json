@@ -1,0 +1,58 @@
+{
+  "timestamp": "2026-04-01T05:15:41.897Z",
+  "requestId": "1775020541831-ip78w0",
+  "provider": "openai",
+  "model": "gpt-5.4-mini",
+  "outputMode": "steps_json",
+  "deviceType": "SCOPE",
+  "modelFamily": "MSO2",
+  "backend": "pyvisa",
+  "userMessage": "jitter summary enable on meas 1",
+  "flowContext": {
+    "stepCount": 4,
+    "stepTypes": [
+      "connect",
+      "query",
+      "write",
+      "disconnect"
+    ],
+    "validationErrors": []
+  },
+  "scpiContextHits": 0,
+  "toolCalls": [],
+  "postCheck": {
+    "errors": [],
+    "warnings": [],
+    "autoRepairTriggered": false
+  },
+  "response": {
+    "text": "ACTIONS_JSON: {\"summary\":\"Found 1 command(s) for measurement: MEASUrement:ADDMEAS\",\"findings\":[\"MEASUrement:ADDMEAS — This command adds a measurement.\"],\"suggestedFixes\":[],\"actions\":[{\"type\":\"insert_step_after\",\"targetStepId\":null,\"newStep\":{\"id\":\"smart_scpi_1\",\"type\":\"write\",\"label\":\"Set MEASUrement:ADDMEAS\",\"params\":{\"command\":\"MEASUrement:ADDMEAS CCJITTER\"}}}]}",
+    "actionsJson": {
+      "summary": "Found 1 command(s) for measurement: MEASUrement:ADDMEAS",
+      "findings": [
+        "MEASUrement:ADDMEAS — This command adds a measurement."
+      ],
+      "suggestedFixes": [],
+      "actions": [
+        {
+          "type": "insert_step_after",
+          "targetStepId": null,
+          "newStep": {
+            "id": "smart_scpi_1",
+            "type": "write",
+            "label": "Set MEASUrement:ADDMEAS",
+            "params": {
+              "command": "MEASUrement:ADDMEAS CCJITTER"
+            }
+          }
+        }
+      ]
+    },
+    "stepCount": 1,
+    "stepTypes": [
+      "insert_step_after"
+    ]
+  },
+  "durationMs": 66,
+  "ok": true
+}

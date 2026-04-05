@@ -1,0 +1,31 @@
+{
+  "timestamp": "2026-03-25T17:34:32.195Z",
+  "requestId": "1774460071921-zwfx4v",
+  "provider": "openai",
+  "model": "gpt-5.4",
+  "outputMode": "steps_json",
+  "deviceType": "SCOPE",
+  "modelFamily": "MSO4/5/6 Series",
+  "backend": "pyvisa",
+  "userMessage": "scpi for frequency measurement",
+  "flowContext": {
+    "stepCount": 0,
+    "stepTypes": [],
+    "validationErrors": []
+  },
+  "scpiContextHits": 0,
+  "toolCalls": [],
+  "postCheck": {
+    "errors": [],
+    "warnings": [],
+    "autoRepairTriggered": false
+  },
+  "response": {
+    "text": "## 📋 6 measurement Commands Found\n\n## **1. MEASUrement:ADDMEAS**\n\n**Description:** This command adds a measurement.\n\n**Set:** `MEASUrement:ADDMEAS {ACCOMMONMODE|ACPR|ACRMS|AMPLITUDE|AREA|BASE|BITAMPLITUDE| BITHIGH|BITLOW|BURSTWIDTH|CCJITTER|COMMONMODE|CPOWER|DATARATE|DCD|DDJ|DDRAOS| DDRAOSPERTCK|DDRAOSPERUI|DDRAUS|DDRAUSPERTCK|DDRAUSPERUI|DDRHOLDDIFF|DDRSETUPDIFF| DDRTCHABS|DDRTCHAVERAGE|DDRTCKAVERAGE|DDRTCLABS|DDRTCLAVERAGE|DDRTERRMN|DDRTERRN| DDRTJITCC|DDRTJITDUTY|DDRTJITPER|DDRTPST|DDRTRPRE|DDRTWPRE|DDRVIXAC|DDRTDQSCK| DELAY|DJ|DJDIRAC|DPMPSIJ|EYEHIGH|EYELOW|FALLSLEWRATE|FALLTIME|FREQUENCY|F2|F4|F8| HEIGHT|HEIGHTBER|HIGH|HIGHTIME|HOLD|IMDAANGLE|IMDADIRECTION|IMDADQ0|IMDAEFFICIENCY| IMDAHARMONICS|IMDAMECHPWR|IMDAPOWERQUALITY|IMDASPEED|IMDASYSEFF|IMDATORQUE|ISI| JITTERSUMMARY|J2|J9|LOW|LOWTIME|MAXIMUM|MEAN|MINIMUM|NDUty|NOVERSHOOT|NPERIOD| NPJ|NWIDTH|OBW|PATTERNLENGTH|PDUTY|PERIOD|PHASE|PHASENOISE|PJ|PK2Pk|POVERSHOOT| PWIDTH|QFACTOR|RISESLEWRATE|RISETIME|RJ|RJDIRAC|RMS|SETUP|SKEW|SRJ|SSCFREQDEV| SSCMODRATE|SSCSLEWRATE|TIE|TIMEOUTSIDELEVEL|TIMETOMAX|TIMETOMIN|TJBER|TNTRATIO|TOP| UNITINTERVAL|VDIFFXOVR|WBGDDT|WBGDIODEDDT|WBGEOFF|WBGEON|WBGERR|WBGIPEAK|WBGIRRM| WBGQOSS|WBGQRR|WBGTDOFF|WBGTDON|WBGTF|WBGTON|WBGTOFF|WBGTR|WBGTRR|WBGTDT|WBGVPEAK| WIDTH|WIDTHBER}` | **Query:** `MEASUrement:ADDMEAS?`\n\n**Type:** both | **Families:** MSO2, MSO4, MSO5, MSO6, MSO7 | **Group:** Measurement\n\n---\n\n## **2. MEASUrement:MEAS<x>:SOURCE**\n\n**Description:** This command sets or queries local input source.\n\n**Set:** `MEASUrement:MEAS<x>:SOURCE  {CH<x>|MATH<x>|REF<x>}` | **Query:** `MEASUrement:MEAS<x>:SOURCE?`\n\n**Type:** both | **Families:** MSO2, MSO4, MSO5, MSO6, MSO7 | **Group:** Inverter Motors and Drive Analysis\n\n---\n\n## **3. SEARCH:SEARCH<x>:TRIGger:A:DDRREAD:STANdard**\n\n**Description:** This command sets or queries the DDR read search standard as DDR3 or LPDDR3.\n\n**Set:** `SEARCH:SEARCH<x>:TRIGger:A:DDRREAD:STANdard  {DDR3|LPDDR3}` | **Query:** `SEARCH:SEARCH<x>:TRIGger:A:DDRREAD:STANdard?`\n\n**Type:** both | **Families:** MSO2, MSO4, MSO5, MSO6, MSO7 | **Group:** Search and Mark\n\n---\n\n## **4. SEARCH:SEARCH<x>:TRIGger:A:DDRWRITE:STANdard**\n\n**Description:** This command sets or queries the DDR write search standard as DDR3 or LPDDR3.\n\n**Set:** `SEARCH:SEARCH<x>:TRIGger:A:DDRWRITE:STANdard  {DDR3|LPDDR3}` | **Query:** `SEARCH:SEARCH<x>:TRIGger:A:DDRWRITE:STANdard?`\n\n**Type:** both | **Families:** MSO2, MSO4, MSO5, MSO6, MSO7 | **Group:** Search and Mark\n\n---\n\n## **5. SEARCH:SEARCH<x>:TRIGger:A:DDRREADWRITE:STANdard**\n\n**Description:** This command sets or queries the DDR read/write search standard as DDR3 or LPDDR\n\n**Set:** `SEARCH:SEARCH<x>:TRIGger:A:DDRREADWRITE:STANdard  {DDR3|LPDDR3}` | **Query:** `SEARCH:SEARCH<x>:TRIGger:A:DDRREADWRITE:STANdard?`\n\n**Type:** both | **Families:** MSO2, MSO4, MSO5, MSO6, MSO7 | **Group:** Search and Mark\n\n---\n\n## **6. HISTogram:HISTogram<x>:MEASurement:STDDev**\n\n**Description:** This command sets or queries whether the Standard Deviation measurement is enabl\n\n**Set:** `HISTogram:HISTogram<x>:MEASurement:STDDev  {ON|OFF}` | **Query:** `HISTogram:HISTogram<x>:MEASurement:STDDev?`\n\n**Type:** both | **Families:** MSO2, MSO4, MSO5, MSO6, MSO7 | **Group:** Histogram",
+    "actionsJson": null,
+    "stepCount": 0,
+    "stepTypes": []
+  },
+  "durationMs": 274,
+  "ok": true
+}

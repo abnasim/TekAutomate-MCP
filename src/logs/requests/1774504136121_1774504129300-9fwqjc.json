@@ -1,0 +1,35 @@
+{
+  "timestamp": "2026-03-26T05:48:56.121Z",
+  "requestId": "1774504129300-9fwqjc",
+  "provider": "openai",
+  "model": "gpt-5.4",
+  "outputMode": "steps_json",
+  "modelFamily": "unknown",
+  "backend": "pyvisa",
+  "userMessage": "Reply with exactly: HOSTED_OK",
+  "flowContext": {
+    "stepCount": 0,
+    "stepTypes": [],
+    "validationErrors": []
+  },
+  "scpiContextHits": 0,
+  "toolCalls": [],
+  "postCheck": {
+    "errors": [],
+    "warnings": [],
+    "autoRepairTriggered": false
+  },
+  "response": {
+    "text": "HOSTED_OK\n\nACTIONS_JSON: {\"summary\":\"HOSTED_OK\",\"findings\":[],\"suggestedFixes\":[],\"actions\":[]}",
+    "actionsJson": {
+      "summary": "HOSTED_OK",
+      "findings": [],
+      "suggestedFixes": [],
+      "actions": []
+    },
+    "stepCount": 0,
+    "stepTypes": []
+  },
+  "durationMs": 6821,
+  "ok": true
+}

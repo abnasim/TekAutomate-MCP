@@ -1,0 +1,71 @@
+{
+  "timestamp": "2026-03-27T18:15:39.667Z",
+  "requestId": "1774635339636-gqq4wr",
+  "provider": "openai",
+  "model": "gpt-5.4-mini",
+  "outputMode": "steps_json",
+  "deviceType": "SCOPE",
+  "modelFamily": "MSO2",
+  "backend": "pyvisa",
+  "userMessage": "setup I2C bus",
+  "flowContext": {
+    "stepCount": 7,
+    "stepTypes": [
+      "connect",
+      "write",
+      "disconnect"
+    ],
+    "validationErrors": []
+  },
+  "scpiContextHits": 0,
+  "toolCalls": [],
+  "postCheck": {
+    "errors": [],
+    "warnings": [],
+    "autoRepairTriggered": false
+  },
+  "response": {
+    "text": "ACTIONS_JSON: {\"summary\":\"Found 2 command(s) for bus: BUS:B<x>:I2C:CLOCk:SOUrce, BUS:B<x>:I2C:CLOCk:THReshold\",\"findings\":[\"BUS:B<x>:I2C:CLOCk:SOUrce — This command sets or queries the I2C clock (SCLK) source for the specified bus.\",\"BUS:B<x>:I2C:CLOCk:THReshold — This command sets or queries the I2C Clock (SCLK) source threshold for the speci\"],\"suggestedFixes\":[],\"actions\":[{\"type\":\"insert_step_after\",\"targetStepId\":null,\"newStep\":{\"id\":\"smart_scpi_1\",\"type\":\"write\",\"label\":\"Set BUS:B<x>:I2C:CLOCk:SOUrce\",\"params\":{\"command\":\"BUS:B1:I2C:CLOCk:SOUrce\"}}},{\"type\":\"insert_step_after\",\"targetStepId\":null,\"newStep\":{\"id\":\"smart_scpi_2\",\"type\":\"write\",\"label\":\"Set BUS:B<x>:I2C:CLOCk:THReshold\",\"params\":{\"command\":\"BUS:B1:I2C:CLOCk:THReshold\"}}}]}",
+    "actionsJson": {
+      "summary": "Found 2 command(s) for bus: BUS:B<x>:I2C:CLOCk:SOUrce, BUS:B<x>:I2C:CLOCk:THReshold",
+      "findings": [
+        "BUS:B<x>:I2C:CLOCk:SOUrce — This command sets or queries the I2C clock (SCLK) source for the specified bus.",
+        "BUS:B<x>:I2C:CLOCk:THReshold — This command sets or queries the I2C Clock (SCLK) source threshold for the speci"
+      ],
+      "suggestedFixes": [],
+      "actions": [
+        {
+          "type": "insert_step_after",
+          "targetStepId": null,
+          "newStep": {
+            "id": "smart_scpi_1",
+            "type": "write",
+            "label": "Set BUS:B<x>:I2C:CLOCk:SOUrce",
+            "params": {
+              "command": "BUS:B1:I2C:CLOCk:SOUrce"
+            }
+          }
+        },
+        {
+          "type": "insert_step_after",
+          "targetStepId": null,
+          "newStep": {
+            "id": "smart_scpi_2",
+            "type": "write",
+            "label": "Set BUS:B<x>:I2C:CLOCk:THReshold",
+            "params": {
+              "command": "BUS:B1:I2C:CLOCk:THReshold"
+            }
+          }
+        }
+      ]
+    },
+    "stepCount": 2,
+    "stepTypes": [
+      "insert_step_after",
+      "insert_step_after"
+    ]
+  },
+  "durationMs": 31,
+  "ok": true
+}

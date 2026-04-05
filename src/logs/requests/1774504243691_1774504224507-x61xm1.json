@@ -1,0 +1,259 @@
+{
+  "timestamp": "2026-03-26T05:50:43.691Z",
+  "requestId": "1774504224507-x61xm1",
+  "provider": "openai",
+  "model": "gpt-5.4",
+  "outputMode": "steps_json",
+  "deviceType": "SCOPE",
+  "modelFamily": "MSO4/5/6 Series",
+  "backend": "pyvisa",
+  "userMessage": "Build a general_debug flow. Measurement goals: diagnostic measurement workflow.",
+  "flowContext": {
+    "stepCount": 0,
+    "stepTypes": [],
+    "validationErrors": []
+  },
+  "scpiContextHits": 0,
+  "toolCalls": [],
+  "postCheck": {
+    "errors": [],
+    "warnings": [
+      "Kept router baseline because AI refinement removed or weakened applyable output.",
+      "Dropped baseline commands: DISplay:GLObal:CH1:STATE ON"
+    ],
+    "autoRepairTriggered": false
+  },
+  "response": {
+    "text": "ACTIONS_JSON: {\"summary\":\"Built 16 command(s) into a new flow.\",\"findings\":[],\"suggestedFixes\":[],\"actions\":[{\"type\":\"replace_flow\",\"flow\":{\"name\":\"Built from: Build a general_debug flow. Measurement goals: diagnostic me\",\"description\":\"Auto-built flow from router build action\",\"backend\":\"pyvisa\",\"deviceType\":\"SCOPE\",\"steps\":[{\"id\":\"1\",\"type\":\"connect\",\"label\":\"Connect\",\"params\":{\"instrumentIds\":[\"scope1\"],\"printIdn\":true}},{\"id\":\"group_1\",\"type\":\"group\",\"label\":\"Channel Configuration\",\"params\":{},\"collapsed\":false,\"children\":[{\"id\":\"step_1\",\"type\":\"write\",\"label\":\"Set DISplay:GLObal:CH<x>:STATE\",\"params\":{\"command\":\"DISplay:GLObal:CH1:STATE ON\"}}]},{\"id\":\"group_2\",\"type\":\"group\",\"label\":\"Trigger Configuration\",\"params\":{},\"collapsed\":false,\"children\":[{\"id\":\"step_2\",\"type\":\"write\",\"label\":\"Set TRIGger:{A|B}:TYPe\",\"params\":{\"command\":\"TRIGger:A:TYPe EDGE\"}},{\"id\":\"step_3\",\"type\":\"write\",\"label\":\"Set TRIGger:{A|B}:EDGE:SOUrce\",\"params\":{\"command\":\"TRIGger:A:EDGE:SOUrce CH1\"}},{\"id\":\"step_4\",\"type\":\"write\",\"label\":\"Set TRIGger:{A|B}:EDGE:SLOpe\",\"params\":{\"command\":\"TRIGger:A:EDGE:SLOpe RISe\"}},{\"id\":\"step_5\",\"type\":\"write\",\"label\":\"Set TRIGger:{A|B}:LEVel:CH<x>\",\"params\":{\"command\":\"TRIGger:A:LEVel:CH1 0\"}},{\"id\":\"step_6\",\"type\":\"write\",\"label\":\"Set TRIGger:A:MODe\",\"params\":{\"command\":\"TRIGger:A:MODe NORMal\"}}]},{\"id\":\"group_3\",\"type\":\"group\",\"label\":\"Measurements\",\"params\":{},\"collapsed\":false,\"children\":[{\"id\":\"step_7\",\"type\":\"write\",\"label\":\"Set MEASUrement:ADDMEAS\",\"params\":{\"command\":\"MEASUrement:ADDMEAS FREQUENCY\"}},{\"id\":\"step_8\",\"type\":\"write\",\"label\":\"Set MEASUrement:MEAS<x>:SOUrce<x>\",\"params\":{\"command\":\"MEASUrement:MEAS1:SOUrce1 CH1\"}},{\"id\":\"step_10\",\"type\":\"write\",\"label\":\"Set MEASUrement:ADDMEAS\",\"params\":{\"command\":\"MEASUrement:ADDMEAS PK2PK\"}},{\"id\":\"step_11\",\"type\":\"write\",\"label\":\"Set MEASUrement:MEAS<x>:SOUrce<x>\",\"params\":{\"command\":\"MEASUrement:MEAS2:SOUrce1 CH1\"}}]},{\"id\":\"group_4\",\"type\":\"group\",\"label\":\"Acquisition\",\"params\":{},\"collapsed\":false,\"children\":[{\"id\":\"step_13\",\"type\":\"write\",\"label\":\"Set ACQuire:STOPAfter\",\"params\":{\"command\":\"ACQuire:STOPAfter SEQuence\"}},{\"id\":\"step_14\",\"type\":\"write\",\"label\":\"Set ACQuire:STATE\",\"params\":{\"command\":\"ACQuire:STATE RUN\"}},{\"id\":\"step_15\",\"type\":\"write\",\"label\":\"Set ACQuire:MODe\",\"params\":{\"command\":\"ACQuire:MODe SAMple\"}},{\"id\":\"step_16\",\"type\":\"write\",\"label\":\"Set HORizontal:MODe:SCAle\",\"params\":{\"command\":\"HORizontal:MODE:SCAle 1e-3\"}}]},{\"id\":\"group_5\",\"type\":\"group\",\"label\":\"Read Results\",\"params\":{},\"collapsed\":false,\"children\":[{\"id\":\"step_9\",\"type\":\"query\",\"label\":\"Read MEASUrement:MEAS<x>:RESUlts:CURRentacq:MEAN\",\"params\":{\"command\":\"MEASUrement:MEAS1:RESUlts:CURRentacq:MEAN?\",\"saveAs\":\"meas1_frequency\"}},{\"id\":\"step_12\",\"type\":\"query\",\"label\":\"Read MEASUrement:MEAS<x>:RESUlts:CURRentacq:MEAN\",\"params\":{\"command\":\"MEASUrement:MEAS2:RESUlts:CURRentacq:MEAN?\",\"saveAs\":\"meas2_pk2pk\"}}]},{\"id\":\"special_1\",\"type\":\"save_screenshot\",\"label\":\"Save Screenshot\",\"params\":{\"filename\":\"screenshot.png\",\"scopeType\":\"modern\",\"method\":\"pc_transfer\"}},{\"id\":\"99\",\"type\":\"disconnect\",\"label\":\"Disconnect\",\"params\":{\"instrumentIds\":[\"scope1\"]}}]}}]}",
+    "actionsJson": {
+      "summary": "Built 16 command(s) into a new flow.",
+      "findings": [],
+      "suggestedFixes": [],
+      "actions": [
+        {
+          "type": "replace_flow",
+          "flow": {
+            "name": "Built from: Build a general_debug flow. Measurement goals: diagnostic me",
+            "description": "Auto-built flow from router build action",
+            "backend": "pyvisa",
+            "deviceType": "SCOPE",
+            "steps": [
+              {
+                "id": "1",
+                "type": "connect",
+                "label": "Connect",
+                "params": {
+                  "instrumentIds": [
+                    "scope1"
+                  ],
+                  "printIdn": true
+                }
+              },
+              {
+                "id": "group_1",
+                "type": "group",
+                "label": "Channel Configuration",
+                "params": {},
+                "collapsed": false,
+                "children": [
+                  {
+                    "id": "step_1",
+                    "type": "write",
+                    "label": "Set DISplay:GLObal:CH<x>:STATE",
+                    "params": {
+                      "command": "DISplay:GLObal:CH1:STATE ON"
+                    }
+                  }
+                ]
+              },
+              {
+                "id": "group_2",
+                "type": "group",
+                "label": "Trigger Configuration",
+                "params": {},
+                "collapsed": false,
+                "children": [
+                  {
+                    "id": "step_2",
+                    "type": "write",
+                    "label": "Set TRIGger:{A|B}:TYPe",
+                    "params": {
+                      "command": "TRIGger:A:TYPe EDGE"
+                    }
+                  },
+                  {
+                    "id": "step_3",
+                    "type": "write",
+                    "label": "Set TRIGger:{A|B}:EDGE:SOUrce",
+                    "params": {
+                      "command": "TRIGger:A:EDGE:SOUrce CH1"
+                    }
+                  },
+                  {
+                    "id": "step_4",
+                    "type": "write",
+                    "label": "Set TRIGger:{A|B}:EDGE:SLOpe",
+                    "params": {
+                      "command": "TRIGger:A:EDGE:SLOpe RISe"
+                    }
+                  },
+                  {
+                    "id": "step_5",
+                    "type": "write",
+                    "label": "Set TRIGger:{A|B}:LEVel:CH<x>",
+                    "params": {
+                      "command": "TRIGger:A:LEVel:CH1 0"
+                    }
+                  },
+                  {
+                    "id": "step_6",
+                    "type": "write",
+                    "label": "Set TRIGger:A:MODe",
+                    "params": {
+                      "command": "TRIGger:A:MODe NORMal"
+                    }
+                  }
+                ]
+              },
+              {
+                "id": "group_3",
+                "type": "group",
+                "label": "Measurements",
+                "params": {},
+                "collapsed": false,
+                "children": [
+                  {
+                    "id": "step_7",
+                    "type": "write",
+                    "label": "Set MEASUrement:ADDMEAS",
+                    "params": {
+                      "command": "MEASUrement:ADDMEAS FREQUENCY"
+                    }
+                  },
+                  {
+                    "id": "step_8",
+                    "type": "write",
+                    "label": "Set MEASUrement:MEAS<x>:SOUrce<x>",
+                    "params": {
+                      "command": "MEASUrement:MEAS1:SOUrce1 CH1"
+                    }
+                  },
+                  {
+                    "id": "step_10",
+                    "type": "write",
+                    "label": "Set MEASUrement:ADDMEAS",
+                    "params": {
+                      "command": "MEASUrement:ADDMEAS PK2PK"
+                    }
+                  },
+                  {
+                    "id": "step_11",
+                    "type": "write",
+                    "label": "Set MEASUrement:MEAS<x>:SOUrce<x>",
+                    "params": {
+                      "command": "MEASUrement:MEAS2:SOUrce1 CH1"
+                    }
+                  }
+                ]
+              },
+              {
+                "id": "group_4",
+                "type": "group",
+                "label": "Acquisition",
+                "params": {},
+                "collapsed": false,
+                "children": [
+                  {
+                    "id": "step_13",
+                    "type": "write",
+                    "label": "Set ACQuire:STOPAfter",
+                    "params": {
+                      "command": "ACQuire:STOPAfter SEQuence"
+                    }
+                  },
+                  {
+                    "id": "step_14",
+                    "type": "write",
+                    "label": "Set ACQuire:STATE",
+                    "params": {
+                      "command": "ACQuire:STATE RUN"
+                    }
+                  },
+                  {
+                    "id": "step_15",
+                    "type": "write",
+                    "label": "Set ACQuire:MODe",
+                    "params": {
+                      "command": "ACQuire:MODe SAMple"
+                    }
+                  },
+                  {
+                    "id": "step_16",
+                    "type": "write",
+                    "label": "Set HORizontal:MODe:SCAle",
+                    "params": {
+                      "command": "HORizontal:MODE:SCAle 1e-3"
+                    }
+                  }
+                ]
+              },
+              {
+                "id": "group_5",
+                "type": "group",
+                "label": "Read Results",
+                "params": {},
+                "collapsed": false,
+                "children": [
+                  {
+                    "id": "step_9",
+                    "type": "query",
+                    "label": "Read MEASUrement:MEAS<x>:RESUlts:CURRentacq:MEAN",
+                    "params": {
+                      "command": "MEASUrement:MEAS1:RESUlts:CURRentacq:MEAN?",
+                      "saveAs": "meas1_frequency"
+                    }
+                  },
+                  {
+                    "id": "step_12",
+                    "type": "query",
+                    "label": "Read MEASUrement:MEAS<x>:RESUlts:CURRentacq:MEAN",
+                    "params": {
+                      "command": "MEASUrement:MEAS2:RESUlts:CURRentacq:MEAN?",
+                      "saveAs": "meas2_pk2pk"
+                    }
+                  }
+                ]
+              },
+              {
+                "id": "special_1",
+                "type": "save_screenshot",
+                "label": "Save Screenshot",
+                "params": {
+                  "filename": "screenshot.png",
+                  "scopeType": "modern",
+                  "method": "pc_transfer"
+                }
+              },
+              {
+                "id": "99",
+                "type": "disconnect",
+                "label": "Disconnect",
+                "params": {
+                  "instrumentIds": [
+                    "scope1"
+                  ]
+                }
+              }
+            ]
+          }
+        }
+      ]
+    },
+    "stepCount": 1,
+    "stepTypes": [
+      "replace_flow"
+    ]
+  },
+  "durationMs": 19184,
+  "ok": true
+}

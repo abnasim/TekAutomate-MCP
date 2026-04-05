@@ -1,0 +1,42 @@
+{
+  "timestamp": "2026-03-25T07:59:33.002Z",
+  "requestId": "1774425568202-4k4y9m",
+  "provider": "openai",
+  "model": "gpt-5.4-mini",
+  "outputMode": "steps_json",
+  "deviceType": "SCOPE",
+  "modelFamily": "DPO70000",
+  "backend": "pyvisa",
+  "userMessage": "how to change record length to 100000",
+  "flowContext": {
+    "stepCount": 2,
+    "stepTypes": [
+      "write"
+    ],
+    "validationErrors": []
+  },
+  "scpiContextHits": 0,
+  "toolCalls": [],
+  "postCheck": {
+    "errors": [],
+    "warnings": [],
+    "autoRepairTriggered": false
+  },
+  "response": {
+    "text": "ACTIONS_JSON: {\"summary\":\"Planner could not extract a confident instrument intent.\",\"findings\":[\"Planner could not extract a confident instrument intent.\"],\"suggestedFixes\":[\"Make the request more specific with channel, source, value, or protocol details.\"],\"actions\":[]}",
+    "actionsJson": {
+      "summary": "Planner could not extract a confident instrument intent.",
+      "findings": [
+        "Planner could not extract a confident instrument intent."
+      ],
+      "suggestedFixes": [
+        "Make the request more specific with channel, source, value, or protocol details."
+      ],
+      "actions": []
+    },
+    "stepCount": 0,
+    "stepTypes": []
+  },
+  "durationMs": 4800,
+  "ok": true
+}

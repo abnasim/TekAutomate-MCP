@@ -1,0 +1,37 @@
+{
+  "timestamp": "2026-03-28T05:37:58.286Z",
+  "requestId": "1774676278259-krzbje",
+  "provider": "openai",
+  "model": "gpt-5.4-mini",
+  "outputMode": "steps_json",
+  "deviceType": "SCOPE",
+  "modelFamily": "MSO2",
+  "backend": "pyvisa",
+  "userMessage": "browse Measurement",
+  "flowContext": {
+    "stepCount": 18,
+    "stepTypes": [
+      "connect",
+      "write",
+      "query",
+      "disconnect",
+      "set_and_query"
+    ],
+    "validationErrors": []
+  },
+  "scpiContextHits": 0,
+  "toolCalls": [],
+  "postCheck": {
+    "errors": [],
+    "warnings": [],
+    "autoRepairTriggered": false
+  },
+  "response": {
+    "text": "## Measurement (367 commands)\n\nUse the commands in the Measurement Command Group to control the automated measurement system. Measurement commands can set and query measurement parameters. You can assign parameters, such as waveform sources and reference levels, differently for each measurement.\n\n- `CUSTOMTABle:ADDNew` (both) — This command adds new custom results table.\n- `CUSTOMTABle:DELete` (both) — This command deletes the custom result(s) table that was add\n- `CUSTOMTABle:LIST?` (query) — This command queries the list of custom result tables has be\n- `MEASTABle:ADDNew` (both) — This command adds a new measurement results view table to th\n- `MEASTABle:DELETE` (both) — This command removes the requested measurement results view \n- `MEASUrement?` (query) — This query-only command returns all measurement parameters.\n- `MEASUrement:ADDMEAS` (both) — This command adds a measurement.\n- `MEASUrement:ADDNew` (both) — This command adds the specified measurement.\n- `MEASUrement:ANNOTate` (both) — This command sets or queries the annotation state for measur\n- `MEASUrement:AUTOset` (both) — This command performs a specified autoset.\n- `MEASUrement:CH<x>:REFLevels:ABSolute:FALLHigh` (both) — This command sets or queries the value used as the high refe\n- `MEASUrement:CH<x>:REFLevels:ABSolute:FALLLow` (both) — This command sets or queries the value used as the low refer\n- `MEASUrement:CH<x>:REFLevels:ABSolute:FALLMid` (both) — This command sets or queries the value used as the mid refer\n- `MEASUrement:CH<x>:REFLevels:ABSolute:HYSTeresis` (both) — This command sets or queries the value of the hysteresis of \n- `MEASUrement:CH<x>:REFLevels:ABSolute:RISEHigh` (both) — This command sets or queries the value used as the high refe\n- `MEASUrement:CH<x>:REFLevels:ABSolute:RISELow` (both) — This command sets or queries the value used as the low refer\n- `MEASUrement:CH<x>:REFLevels:ABSolute:RISEMid` (both) — This command sets or queries the value used as the mid refer\n- `MEASUrement:CH<x>:REFLevels:ABSolute:TYPE` (both) — This command sets or queries the reference level type for th\n- `MEASUrement:CH<x>:REFLevels:BASETop` (both) — This command sets or queries the method used to calculate th\n- `MEASUrement:CH<x>:REFLevels:METHod` (both) — This command sets or queries the method used to calculate re\n- `MEASUrement:CH<x>:REFLevels:PERCent:FALLHigh` (both) — This command sets or queries the percentage (where 99% is eq\n- `MEASUrement:CH<x>:REFLevels:PERCent:FALLLow` (both) — This command sets or queries the percentage (where 99% is eq\n- `MEASUrement:CH<x>:REFLevels:PERCent:FALLMid` (both) — This command sets or queries the percentage (where 99% is eq\n- `MEASUrement:CH<x>:REFLevels:PERCent:HYSTeresis` (both) — This command sets or queries the percentage (where 100% is e\n- `MEASUrement:CH<x>:REFLevels:PERCent:RISEHigh` (both) — This command sets or queries the percentage (where 99% is eq\n- `MEASUrement:CH<x>:REFLevels:PERCent:RISELow` (both) — This command sets or queries the percentage (where 99% is eq\n- `MEASUrement:CH<x>:REFLevels:PERCent:RISEMid` (both) — This command sets or queries the percentage (where 99% is eq\n- `MEASUrement:CH<x>:REFLevels:PERCent:TYPE` (both) — This command specifies or queries the reference level percen\n- `MEASUrement:CLOCKRecovery:ADVanced:METHod` (both) — This command sets or queries the global advanced clock recov\n- `MEASUrement:CLOCKRecovery:CLOCKFrequency` (both) — This command sets or queries the global clock frequency used\n\n*Showing 30 of 367. Add a filter: **\"browse Measurement <keyword>\"***\n\nType **\"what is <header>\"** to see full details for a command.",
+    "actionsJson": null,
+    "stepCount": 0,
+    "stepTypes": []
+  },
+  "durationMs": 28,
+  "ok": true
+}

@@ -1,0 +1,72 @@
+{
+  "timestamp": "2026-03-28T02:59:36.223Z",
+  "requestId": "1774666776200-aunltq",
+  "provider": "openai",
+  "model": "gpt-5.4-mini",
+  "outputMode": "steps_json",
+  "deviceType": "SCOPE",
+  "modelFamily": "MSO2",
+  "backend": "pyvisa",
+  "userMessage": "recall setup from USB",
+  "flowContext": {
+    "stepCount": 14,
+    "stepTypes": [
+      "connect",
+      "write",
+      "query",
+      "disconnect"
+    ],
+    "validationErrors": []
+  },
+  "scpiContextHits": 0,
+  "toolCalls": [],
+  "postCheck": {
+    "errors": [],
+    "warnings": [],
+    "autoRepairTriggered": false
+  },
+  "response": {
+    "text": "ACTIONS_JSON: {\"summary\":\"Found 2 command(s) for save: RECAll:SETUp, RECAll:SESsion\",\"findings\":[\"RECAll:SETUp — This command (no query form) returns stored or factory settings to the instrumen\",\"RECAll:SESsion — Restores the state of the instrument, including reference waveforms, from a save\"],\"suggestedFixes\":[],\"actions\":[{\"type\":\"insert_step_after\",\"targetStepId\":null,\"newStep\":{\"id\":\"smart_scpi_1\",\"type\":\"write\",\"label\":\"Set RECAll:SETUp\",\"params\":{\"command\":\"RECAll:SETUp\"}}},{\"type\":\"insert_step_after\",\"targetStepId\":null,\"newStep\":{\"id\":\"smart_scpi_2\",\"type\":\"write\",\"label\":\"Set RECAll:SESsion\",\"params\":{\"command\":\"RECAll:SESsion\"}}}]}",
+    "actionsJson": {
+      "summary": "Found 2 command(s) for save: RECAll:SETUp, RECAll:SESsion",
+      "findings": [
+        "RECAll:SETUp — This command (no query form) returns stored or factory settings to the instrumen",
+        "RECAll:SESsion — Restores the state of the instrument, including reference waveforms, from a save"
+      ],
+      "suggestedFixes": [],
+      "actions": [
+        {
+          "type": "insert_step_after",
+          "targetStepId": null,
+          "newStep": {
+            "id": "smart_scpi_1",
+            "type": "write",
+            "label": "Set RECAll:SETUp",
+            "params": {
+              "command": "RECAll:SETUp"
+            }
+          }
+        },
+        {
+          "type": "insert_step_after",
+          "targetStepId": null,
+          "newStep": {
+            "id": "smart_scpi_2",
+            "type": "write",
+            "label": "Set RECAll:SESsion",
+            "params": {
+              "command": "RECAll:SESsion"
+            }
+          }
+        }
+      ]
+    },
+    "stepCount": 2,
+    "stepTypes": [
+      "insert_step_after",
+      "insert_step_after"
+    ]
+  },
+  "durationMs": 23,
+  "ok": true
+}

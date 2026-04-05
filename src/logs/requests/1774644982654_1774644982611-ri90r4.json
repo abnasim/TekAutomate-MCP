@@ -1,0 +1,57 @@
+{
+  "timestamp": "2026-03-27T20:56:22.654Z",
+  "requestId": "1774644982611-ri90r4",
+  "provider": "openai",
+  "model": "gpt-5.4-mini",
+  "outputMode": "steps_json",
+  "deviceType": "SCOPE",
+  "modelFamily": "TekScopePC",
+  "backend": "pyvisa",
+  "userMessage": "set ch1 to 2v",
+  "flowContext": {
+    "stepCount": 9,
+    "stepTypes": [
+      "connect",
+      "write",
+      "disconnect"
+    ],
+    "validationErrors": []
+  },
+  "scpiContextHits": 0,
+  "toolCalls": [],
+  "postCheck": {
+    "errors": [],
+    "warnings": [],
+    "autoRepairTriggered": false
+  },
+  "response": {
+    "text": "ACTIONS_JSON: {\"summary\":\"Found 1 command(s) for vertical: CH<x>:OFFSet\",\"findings\":[\"CH<x>:OFFSet — Set or query channel vertical offset\"],\"suggestedFixes\":[],\"actions\":[{\"type\":\"insert_step_after\",\"targetStepId\":null,\"newStep\":{\"id\":\"smart_scpi_1\",\"type\":\"write\",\"label\":\"Set CH<x>:OFFSet\",\"params\":{\"command\":\"CH1:OFFSet 2\"}}}]}",
+    "actionsJson": {
+      "summary": "Found 1 command(s) for vertical: CH<x>:OFFSet",
+      "findings": [
+        "CH<x>:OFFSet — Set or query channel vertical offset"
+      ],
+      "suggestedFixes": [],
+      "actions": [
+        {
+          "type": "insert_step_after",
+          "targetStepId": null,
+          "newStep": {
+            "id": "smart_scpi_1",
+            "type": "write",
+            "label": "Set CH<x>:OFFSet",
+            "params": {
+              "command": "CH1:OFFSet 2"
+            }
+          }
+        }
+      ]
+    },
+    "stepCount": 1,
+    "stepTypes": [
+      "insert_step_after"
+    ]
+  },
+  "durationMs": 43,
+  "ok": true
+}

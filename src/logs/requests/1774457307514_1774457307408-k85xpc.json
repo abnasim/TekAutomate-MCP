@@ -1,0 +1,31 @@
+{
+  "timestamp": "2026-03-25T16:48:27.514Z",
+  "requestId": "1774457307408-k85xpc",
+  "provider": "openai",
+  "model": "gpt-5.4",
+  "outputMode": "steps_json",
+  "deviceType": "SCOPE",
+  "modelFamily": "MSO4/5/6 Series",
+  "backend": "pyvisa",
+  "userMessage": "scpi for frequency measurement",
+  "flowContext": {
+    "stepCount": 0,
+    "stepTypes": [],
+    "validationErrors": []
+  },
+  "scpiContextHits": 0,
+  "toolCalls": [],
+  "postCheck": {
+    "errors": [],
+    "warnings": [],
+    "autoRepairTriggered": false
+  },
+  "response": {
+    "text": "## 📋 6 measurement Commands Found\n\n## **1. MEASUrement:CLOCKRecovery:CLOCKFrequency**\n\n**Description:** This command sets or queries the global clock frequency used when fixed constant\n\n**Set:** `MEASUrement:CLOCKRecovery:CLOCKFrequency <NRf>` | **Query:** `MEASUrement:CLOCKRecovery:CLOCKFrequency?`\n\n**Type:** both | **Families:** MSO2, MSO4, MSO5, MSO6, MSO7 | **Group:** Measurement\n\n---\n\n## **2. MEASUrement:MEAS<x>:RFREquency**\n\n**Description:** This command sets or returns the center frequency value of PSIJ measurement.\n\n**Set:** `MEASUrement:MEAS<x>:RFREquency <NR1>` | **Query:** `MEASUrement:MEAS<x>:RFREquency?`\n\n**Type:** both | **Families:** MSO2, MSO4, MSO5, MSO6, MSO7 | **Group:** Measurement\n\n---\n\n## **3. MEASUrement:MEAS<x>:PFREquency**\n\n**Description:** This command sets or returns the PJ max frequency value of PSIJ measurement.\n\n**Set:** `MEASUrement:MEAS<x>:PFREquency <NR1>` | **Query:** `MEASUrement:MEAS<x>:PFREquency?`\n\n**Type:** both | **Families:** MSO2, MSO4, MSO5, MSO6, MSO7 | **Group:** Measurement\n\n---\n\n## **4. MEASUrement:MEAS<x>:SIGNALFREQUEncy**\n\n**Description:** This command sets or queries line frequency for Harmonics and Ripple line freque\n\n**Set:** `MEASUrement:MEAS<x>:SIGNALFREQUEncy  {AUTO|FIFTYHZ|SIXTYHZ|FOURHUNDREDHZ|CUSTOM}` | **Query:** `MEASUrement:MEAS<x>:SIGNALFREQUEncy?`\n\n**Type:** both | **Families:** MSO2, MSO4, MSO5, MSO6, MSO7 | **Group:** Measurement\n\n---\n\n## **5. MEASUrement:MEAS<x>:CLOCKRecovery:CLOCKFrequency**\n\n**Description:** This command sets or queries the clock frequency used when fixed constant clock\n\n**Set:** `MEASUrement:MEAS<x>:CLOCKRecovery:CLOCKFrequency <NR1>` | **Query:** `MEASUrement:MEAS<x>:CLOCKRecovery:CLOCKFrequency?`\n\n**Type:** both | **Families:** MSO2, MSO4, MSO5, MSO6, MSO7 | **Group:** Measurement\n\n---\n\n## **6. MEASUrement:MEAS<x>:EDGES:LOWERFREQuency**\n\n**Description:** This command sets or queries the lower frequency for the measurement when the me\n\n**Set:** `MEASUrement:MEAS<x>:EDGES:LOWERFREQuency <NR1>` | **Query:** `MEASUrement:MEAS<x>:EDGES:LOWERFREQuency?`\n\n**Type:** both | **Families:** MSO2, MSO4, MSO5, MSO6, MSO7 | **Group:** Measurement",
+    "actionsJson": null,
+    "stepCount": 0,
+    "stepTypes": []
+  },
+  "durationMs": 106,
+  "ok": true
+}

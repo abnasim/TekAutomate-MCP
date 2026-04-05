@@ -1,0 +1,75 @@
+{
+  "timestamp": "2026-03-29T07:27:19.861Z",
+  "requestId": "1774769239764-a268kc",
+  "provider": "openai",
+  "model": "gpt-5.4-mini",
+  "outputMode": "steps_json",
+  "deviceType": "SCOPE",
+  "modelFamily": "MSO2",
+  "backend": "pyvisa",
+  "userMessage": "fastframe command",
+  "flowContext": {
+    "stepCount": 5,
+    "stepTypes": [
+      "connect",
+      "group",
+      "write",
+      "query",
+      "save_screenshot",
+      "disconnect"
+    ],
+    "validationErrors": []
+  },
+  "scpiContextHits": 0,
+  "toolCalls": [],
+  "postCheck": {
+    "errors": [],
+    "warnings": [],
+    "autoRepairTriggered": false
+  },
+  "response": {
+    "text": "ACTIONS_JSON: {\"summary\":\"Found 2 command(s) for acquisition: HORizontal:FASTframe, HORizontal:FASTframe:COUNt\",\"findings\":[\"HORizontal:FASTframe — This query returns all information under horizontal:fastframe.\",\"HORizontal:FASTframe:COUNt — This command sets or returns the number of frames.\"],\"suggestedFixes\":[],\"actions\":[{\"type\":\"insert_step_after\",\"targetStepId\":null,\"newStep\":{\"id\":\"smart_scpi_1\",\"type\":\"query\",\"label\":\"Query HORizontal:FASTframe\",\"params\":{\"command\":\"HORizontal:FASTframe?\",\"saveAs\":\"result_horizontal_fastframe\"}}},{\"type\":\"insert_step_after\",\"targetStepId\":null,\"newStep\":{\"id\":\"smart_scpi_2\",\"type\":\"write\",\"label\":\"Set HORizontal:FASTframe:COUNt\",\"params\":{\"command\":\"HORizontal:FASTframe:COUNt <NR1>\"}}}]}\n\n---\n**FASTframe** — Command: HORizontal:FASTframe? Description: This query-only command returns all of the settings for the horizontal FastF",
+    "actionsJson": {
+      "summary": "Found 2 command(s) for acquisition: HORizontal:FASTframe, HORizontal:FASTframe:COUNt",
+      "findings": [
+        "HORizontal:FASTframe — This query returns all information under horizontal:fastframe.",
+        "HORizontal:FASTframe:COUNt — This command sets or returns the number of frames."
+      ],
+      "suggestedFixes": [],
+      "actions": [
+        {
+          "type": "insert_step_after",
+          "targetStepId": null,
+          "newStep": {
+            "id": "smart_scpi_1",
+            "type": "query",
+            "label": "Query HORizontal:FASTframe",
+            "params": {
+              "command": "HORizontal:FASTframe?",
+              "saveAs": "result_horizontal_fastframe"
+            }
+          }
+        },
+        {
+          "type": "insert_step_after",
+          "targetStepId": null,
+          "newStep": {
+            "id": "smart_scpi_2",
+            "type": "write",
+            "label": "Set HORizontal:FASTframe:COUNt",
+            "params": {
+              "command": "HORizontal:FASTframe:COUNt <NR1>"
+            }
+          }
+        }
+      ]
+    },
+    "stepCount": 2,
+    "stepTypes": [
+      "insert_step_after",
+      "insert_step_after"
+    ]
+  },
+  "durationMs": 97,
+  "ok": true
+}

@@ -1,0 +1,36 @@
+{
+  "timestamp": "2026-03-26T04:52:23.302Z",
+  "requestId": "1774500743278-9qeg5l",
+  "provider": "openai",
+  "model": "gpt-5.4-mini",
+  "outputMode": "steps_json",
+  "deviceType": "SCOPE",
+  "modelFamily": "MSO6B",
+  "backend": "pyvisa",
+  "userMessage": "fastframe",
+  "flowContext": {
+    "stepCount": 1,
+    "stepTypes": [
+      "group",
+      "connect",
+      "save_screenshot",
+      "disconnect"
+    ],
+    "validationErrors": []
+  },
+  "scpiContextHits": 0,
+  "toolCalls": [],
+  "postCheck": {
+    "errors": [],
+    "warnings": [],
+    "autoRepairTriggered": false
+  },
+  "response": {
+    "text": "## 📋 acquisition Commands\n\n## **1. POWer:ADDNew**\n\n**Description:** This command adds the specified power measurement number. The power measurement\n\n**Set:** `POWer:ADDNew  “POWER<x>”` | **Query:** `POWer:ADDNew?`\n\n**Type:** both | **Families:** MSO2, MSO4, MSO5, MSO6, MSO7 | **Group:** Power\n\n---\n\n## **2. POWer:POWer<x>:TYPe**\n\n**Description:** This command sets or queries the measurement type of the specified power measure\n\n**Set:** `POWer:POWer<x>:TYPe <NR1>` | **Query:** `PPOWer:POWer<x>:TYPe  <Measurement  Type> OWer:POWer<x>:TYPe?`\n\n**Type:** both | **Families:** MSO2, MSO4, MSO5, MSO6, MSO7 | **Group:** Power\n\n---\n\n## **3. POWer:POWer<x>:REFLevels:METHod**\n\n**Description:** This command sets or queries the method to configure reference level values for\n\n**Set:** `POWer:POWer<x>:REFLevels:METHod  {PERCent  |  ABSolute}` | **Query:** `POWer:POWer<x>:REFLevels:METHod?`\n\n**Type:** both | **Families:** MSO2, MSO4, MSO5, MSO6, MSO7 | **Group:** Power",
+    "actionsJson": null,
+    "stepCount": 0,
+    "stepTypes": []
+  },
+  "durationMs": 25,
+  "ok": true
+}

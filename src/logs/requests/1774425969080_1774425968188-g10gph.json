@@ -1,0 +1,28 @@
+{
+  "timestamp": "2026-03-25T08:06:09.080Z",
+  "requestId": "1774425968188-g10gph",
+  "modelFamily": "(unknown)",
+  "backend": "(unknown)",
+  "flowContext": {
+    "stepCount": 0,
+    "stepTypes": [],
+    "validationErrors": []
+  },
+  "scpiContextHits": 0,
+  "toolCalls": [],
+  "postCheck": {
+    "errors": [
+      "OpenAI Responses error 400: {\n  \"error\": {\n    \"message\": \"No tool output found for function call call_ro42XSP4ZsyS69Rpd6QKwbOr.\",\n    \"type\": \"invalid_request_error\",\n    \"param\": \"input\",\n    \"code\": null\n  }\n}"
+    ],
+    "warnings": [],
+    "autoRepairTriggered": false
+  },
+  "response": {
+    "text": "OpenAI Responses error 400: {\n  \"error\": {\n    \"message\": \"No tool output found for function call call_ro42XSP4ZsyS69Rpd6QKwbOr.\",\n    \"type\": \"invalid_request_error\",\n    \"param\": \"input\",\n    \"code\": null\n  }\n}",
+    "actionsJson": null,
+    "stepCount": 0,
+    "stepTypes": []
+  },
+  "durationMs": 892,
+  "ok": false
+}

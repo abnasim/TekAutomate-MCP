@@ -1,0 +1,33 @@
+{
+  "timestamp": "2026-03-25T06:27:09.103Z",
+  "requestId": "1774420029059-n6h8yp",
+  "provider": "openai",
+  "model": "gpt-4o-mini",
+  "outputMode": "steps_json",
+  "deviceType": "SCOPE",
+  "modelFamily": "mso_5_series",
+  "backend": "pyvisa",
+  "userMessage": "record length",
+  "flowContext": {
+    "stepCount": 0,
+    "stepTypes": [],
+    "validationErrors": []
+  },
+  "scpiContextHits": 0,
+  "toolCalls": [],
+  "postCheck": {
+    "errors": [
+      "No deterministic tool available"
+    ],
+    "warnings": [],
+    "autoRepairTriggered": false
+  },
+  "response": {
+    "text": "No deterministic tool available for this request in MCP-only mode.",
+    "actionsJson": null,
+    "stepCount": 0,
+    "stepTypes": []
+  },
+  "durationMs": 44,
+  "ok": true
+}

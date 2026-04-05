@@ -1,0 +1,72 @@
+{
+  "timestamp": "2026-03-27T17:53:50.654Z",
+  "requestId": "1774634030615-wuwhok",
+  "provider": "openai",
+  "model": "gpt-5.4-mini",
+  "outputMode": "steps_json",
+  "deviceType": "SCOPE",
+  "modelFamily": "MSO2",
+  "backend": "pyvisa",
+  "userMessage": "add frequency measurement",
+  "flowContext": {
+    "stepCount": 7,
+    "stepTypes": [
+      "connect",
+      "write",
+      "query",
+      "disconnect"
+    ],
+    "validationErrors": []
+  },
+  "scpiContextHits": 0,
+  "toolCalls": [],
+  "postCheck": {
+    "errors": [],
+    "warnings": [],
+    "autoRepairTriggered": false
+  },
+  "response": {
+    "text": "ACTIONS_JSON: {\"summary\":\"Found 2 command(s) for measurement: MEASUrement:ADDMEAS, MEASUrement:MEAS<x>:SOURCE\",\"findings\":[\"MEASUrement:ADDMEAS — This command adds a measurement.\",\"MEASUrement:MEAS<x>:SOURCE — This command sets or queries local input source.\"],\"suggestedFixes\":[],\"actions\":[{\"type\":\"insert_step_after\",\"targetStepId\":null,\"newStep\":{\"id\":\"smart_scpi_1\",\"type\":\"write\",\"label\":\"Set MEASUrement:ADDMEAS\",\"params\":{\"command\":\"MEASUrement:ADDMEAS \\\"FREQUENCY\\\"\"}}},{\"type\":\"insert_step_after\",\"targetStepId\":null,\"newStep\":{\"id\":\"smart_scpi_2\",\"type\":\"write\",\"label\":\"Set MEASUrement:MEAS<x>:SOURCE\",\"params\":{\"command\":\"MEASUrement:MEAS:SOURCE\"}}}]}",
+    "actionsJson": {
+      "summary": "Found 2 command(s) for measurement: MEASUrement:ADDMEAS, MEASUrement:MEAS<x>:SOURCE",
+      "findings": [
+        "MEASUrement:ADDMEAS — This command adds a measurement.",
+        "MEASUrement:MEAS<x>:SOURCE — This command sets or queries local input source."
+      ],
+      "suggestedFixes": [],
+      "actions": [
+        {
+          "type": "insert_step_after",
+          "targetStepId": null,
+          "newStep": {
+            "id": "smart_scpi_1",
+            "type": "write",
+            "label": "Set MEASUrement:ADDMEAS",
+            "params": {
+              "command": "MEASUrement:ADDMEAS \"FREQUENCY\""
+            }
+          }
+        },
+        {
+          "type": "insert_step_after",
+          "targetStepId": null,
+          "newStep": {
+            "id": "smart_scpi_2",
+            "type": "write",
+            "label": "Set MEASUrement:MEAS<x>:SOURCE",
+            "params": {
+              "command": "MEASUrement:MEAS:SOURCE"
+            }
+          }
+        }
+      ]
+    },
+    "stepCount": 2,
+    "stepTypes": [
+      "insert_step_after",
+      "insert_step_after"
+    ]
+  },
+  "durationMs": 39,
+  "ok": true
+}

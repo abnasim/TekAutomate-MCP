@@ -1,0 +1,37 @@
+{
+  "timestamp": "2026-03-28T05:36:29.503Z",
+  "requestId": "1774676189469-15pl1y",
+  "provider": "openai",
+  "model": "gpt-5.4-mini",
+  "outputMode": "steps_json",
+  "deviceType": "SCOPE",
+  "modelFamily": "MSO2",
+  "backend": "pyvisa",
+  "userMessage": "browse Spectrum view",
+  "flowContext": {
+    "stepCount": 18,
+    "stepTypes": [
+      "connect",
+      "write",
+      "query",
+      "disconnect",
+      "set_and_query"
+    ],
+    "validationErrors": []
+  },
+  "scpiContextHits": 0,
+  "toolCalls": [],
+  "postCheck": {
+    "errors": [],
+    "warnings": [],
+    "autoRepairTriggered": false
+  },
+  "response": {
+    "text": "## Spectrum view (52 commands, filtered by \"view\")\n\nThe Spectrum view commands control the selection and execution of spectrum analysis.\n\n\n*Showing 0 of 52. Add a filter: **\"browse Spectrum view <keyword>\"***\n\nType **\"what is <header>\"** to see full details for a command.",
+    "actionsJson": null,
+    "stepCount": 0,
+    "stepTypes": []
+  },
+  "durationMs": 34,
+  "ok": true
+}

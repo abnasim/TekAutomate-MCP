@@ -1,0 +1,72 @@
+{
+  "timestamp": "2026-03-27T17:53:39.244Z",
+  "requestId": "1774634019212-l64ubg",
+  "provider": "openai",
+  "model": "gpt-5.4-mini",
+  "outputMode": "steps_json",
+  "deviceType": "SCOPE",
+  "modelFamily": "MSO2",
+  "backend": "pyvisa",
+  "userMessage": "reset scope",
+  "flowContext": {
+    "stepCount": 4,
+    "stepTypes": [
+      "connect",
+      "write",
+      "disconnect"
+    ],
+    "validationErrors": []
+  },
+  "scpiContextHits": 0,
+  "toolCalls": [],
+  "postCheck": {
+    "errors": [],
+    "warnings": [],
+    "autoRepairTriggered": false
+  },
+  "response": {
+    "text": "ACTIONS_JSON: {\"summary\":\"Found 2 command(s) for misc: *RST, ALLEv\",\"findings\":[\"*RST — This command (no query form) resets the instrument to the factory default settin\",\"ALLEv — This query-only command prompts the instrument to return all events and their me\"],\"suggestedFixes\":[],\"actions\":[{\"type\":\"insert_step_after\",\"targetStepId\":null,\"newStep\":{\"id\":\"smart_scpi_1\",\"type\":\"write\",\"label\":\"Set *RST\",\"params\":{\"command\":\"*RST\"}}},{\"type\":\"insert_step_after\",\"targetStepId\":null,\"newStep\":{\"id\":\"smart_scpi_2\",\"type\":\"query\",\"label\":\"Query ALLEv\",\"params\":{\"command\":\"ALLEv?\",\"saveAs\":\"result_allev\"}}}]}",
+    "actionsJson": {
+      "summary": "Found 2 command(s) for misc: *RST, ALLEv",
+      "findings": [
+        "*RST — This command (no query form) resets the instrument to the factory default settin",
+        "ALLEv — This query-only command prompts the instrument to return all events and their me"
+      ],
+      "suggestedFixes": [],
+      "actions": [
+        {
+          "type": "insert_step_after",
+          "targetStepId": null,
+          "newStep": {
+            "id": "smart_scpi_1",
+            "type": "write",
+            "label": "Set *RST",
+            "params": {
+              "command": "*RST"
+            }
+          }
+        },
+        {
+          "type": "insert_step_after",
+          "targetStepId": null,
+          "newStep": {
+            "id": "smart_scpi_2",
+            "type": "query",
+            "label": "Query ALLEv",
+            "params": {
+              "command": "ALLEv?",
+              "saveAs": "result_allev"
+            }
+          }
+        }
+      ]
+    },
+    "stepCount": 2,
+    "stepTypes": [
+      "insert_step_after",
+      "insert_step_after"
+    ]
+  },
+  "durationMs": 32,
+  "ok": true
+}

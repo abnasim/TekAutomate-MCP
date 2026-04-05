@@ -1,0 +1,34 @@
+{
+  "timestamp": "2026-03-25T18:17:03.746Z",
+  "requestId": "1774462623589-zynf3p",
+  "provider": "openai",
+  "model": "gpt-5.4-mini",
+  "outputMode": "steps_json",
+  "deviceType": "SCOPE",
+  "modelFamily": "DPO70000",
+  "backend": "pyvisa",
+  "userMessage": "how to change record length to 100000",
+  "flowContext": {
+    "stepCount": 2,
+    "stepTypes": [
+      "connect",
+      "query"
+    ],
+    "validationErrors": []
+  },
+  "scpiContextHits": 0,
+  "toolCalls": [],
+  "postCheck": {
+    "errors": [],
+    "warnings": [],
+    "autoRepairTriggered": false
+  },
+  "response": {
+    "text": "## 📋 1 acquisition Command Found\n\n---\n\n### **HORizontal:MODE:RECOrdlength**\n\n**📋 Description:** This command sets or queries the record length.\n\n**⚙️ Set:** **`HORizontal:MODE:RECOrdlength 100000`**\n\n**🔧 Query:** **`HORizontal:MODE:RECOrdlength?`**\n\n**🏭 Supported Families:** MSO5000, DPO5000, DPO7000, DPO70000\n\n**📂 Group:** Horizontal",
+    "actionsJson": null,
+    "stepCount": 0,
+    "stepTypes": []
+  },
+  "durationMs": 157,
+  "ok": true
+}

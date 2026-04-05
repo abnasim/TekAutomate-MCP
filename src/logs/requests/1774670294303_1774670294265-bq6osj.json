@@ -1,0 +1,72 @@
+{
+  "timestamp": "2026-03-28T03:58:14.303Z",
+  "requestId": "1774670294265-bq6osj",
+  "provider": "openai",
+  "model": "gpt-5.4-mini",
+  "outputMode": "steps_json",
+  "deviceType": "SCOPE",
+  "modelFamily": "MSO2",
+  "backend": "pyvisa",
+  "userMessage": "browse_scpi_commands",
+  "flowContext": {
+    "stepCount": 16,
+    "stepTypes": [
+      "connect",
+      "write",
+      "query",
+      "disconnect"
+    ],
+    "validationErrors": []
+  },
+  "scpiContextHits": 0,
+  "toolCalls": [],
+  "postCheck": {
+    "errors": [],
+    "warnings": [],
+    "autoRepairTriggered": false
+  },
+  "response": {
+    "text": "ACTIONS_JSON: {\"summary\":\"Found 2 command(s) for general: ACQuire:STOPAfter, *OPC\",\"findings\":[\"ACQuire:STOPAfter — This command sets or queries whether the instrument continually acquires acquisi\",\"*OPC — This command generates the operation complete message in the Standard Event Stat\"],\"suggestedFixes\":[],\"actions\":[{\"type\":\"insert_step_after\",\"targetStepId\":null,\"newStep\":{\"id\":\"smart_scpi_1\",\"type\":\"write\",\"label\":\"Set ACQuire:STOPAfter\",\"params\":{\"command\":\"ACQuire:STOPAfter\"}}},{\"type\":\"insert_step_after\",\"targetStepId\":null,\"newStep\":{\"id\":\"smart_scpi_2\",\"type\":\"write\",\"label\":\"Set *OPC\",\"params\":{\"command\":\"*OPC\"}}}]}",
+    "actionsJson": {
+      "summary": "Found 2 command(s) for general: ACQuire:STOPAfter, *OPC",
+      "findings": [
+        "ACQuire:STOPAfter — This command sets or queries whether the instrument continually acquires acquisi",
+        "*OPC — This command generates the operation complete message in the Standard Event Stat"
+      ],
+      "suggestedFixes": [],
+      "actions": [
+        {
+          "type": "insert_step_after",
+          "targetStepId": null,
+          "newStep": {
+            "id": "smart_scpi_1",
+            "type": "write",
+            "label": "Set ACQuire:STOPAfter",
+            "params": {
+              "command": "ACQuire:STOPAfter"
+            }
+          }
+        },
+        {
+          "type": "insert_step_after",
+          "targetStepId": null,
+          "newStep": {
+            "id": "smart_scpi_2",
+            "type": "write",
+            "label": "Set *OPC",
+            "params": {
+              "command": "*OPC"
+            }
+          }
+        }
+      ]
+    },
+    "stepCount": 2,
+    "stepTypes": [
+      "insert_step_after",
+      "insert_step_after"
+    ]
+  },
+  "durationMs": 38,
+  "ok": true
+}

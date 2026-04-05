@@ -1,0 +1,37 @@
+{
+  "timestamp": "2026-03-28T05:37:37.483Z",
+  "requestId": "1774676257455-4qm6a1",
+  "provider": "openai",
+  "model": "gpt-5.4-mini",
+  "outputMode": "steps_json",
+  "deviceType": "SCOPE",
+  "modelFamily": "MSO2",
+  "backend": "pyvisa",
+  "userMessage": "browse Trigger EDGE",
+  "flowContext": {
+    "stepCount": 18,
+    "stepTypes": [
+      "connect",
+      "write",
+      "query",
+      "disconnect",
+      "set_and_query"
+    ],
+    "validationErrors": []
+  },
+  "scpiContextHits": 0,
+  "toolCalls": [],
+  "postCheck": {
+    "errors": [],
+    "warnings": [],
+    "autoRepairTriggered": false
+  },
+  "response": {
+    "text": "## Trigger (266 commands, filtered by \"edge\")\n\nUse the commands in the Trigger Command Group to control all aspects of triggering for the instrument. There are two triggers: A and B. Where appropriate, the command set has parallel constructions for each trigger. You can set the A or B triggers to edge mode. Edge triggering lets you display a waveform at or near the point where the signal passes through a voltage level of your choosing. You can also set A or B triggers to pulse or logic modes. With pulse triggering, the instrument triggers whenever it detects a pulse of a certain width or height. Logic triggering lets you logically combine the signals on one or more channels. The instrument then triggers when it detects a certain combination of signal levels. The trigger types of Pulse Width, Timeout, Runt, Window, and Rise/Fall Time can be further qualified by a logic pattern. This is referred to as logic qualification.\n\n- `TRIGger:{A|B}:EDGE:COUPling` (both) — This command sets or queries the type of coupling for the edge trigger. This com\n- `TRIGger:{A|B}:EDGE:SLOpe` (both) — This command sets or queries the slope for the edge trigger. This command is equ\n- `TRIGger:{A|B}:EDGE:SOUrce` (both) — This command sets or queries the source for the edge trigger. For instruments th\n- `TRIGger:{A|B}:LOGIc:USECLockedge` (both) — This command specifies whether or not Logic trigger type uses clock source.\n- `TRIGger:{A|B}:SETHold:CLOCk:EDGE` (both) — This command specifies the clock edge polarity for setup and hold triggering.\n- `TRIGger:B:RESET:EDGE:COUPling` (both) — Sets or queries the trigger coupling for a sequential edge trigger reset when th\n- `TRIGger:B:RESET:EDGE:LEVel` (both) — This command sets the voltage level to use for an Edge Reset trigger when trigge\n- `TRIGger:B:RESET:EDGE:SLOpe` (both) — This command sets or queries the trigger slope for a sequential edge trigger res\n- `TRIGger:B:RESET:EDGE:SOUrce` (both) — This command sets or queries the trigger source for the A→B sequential edge trig\n\n*Showing 9 of 266. Add a filter: **\"browse Trigger <keyword>\"***\n\nType **\"what is <header>\"** to see full details for a command.",
+    "actionsJson": null,
+    "stepCount": 0,
+    "stepTypes": []
+  },
+  "durationMs": 28,
+  "ok": true
+}

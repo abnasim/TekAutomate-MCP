@@ -1,0 +1,59 @@
+{
+  "timestamp": "2026-03-27T16:36:45.111Z",
+  "requestId": "1774629405083-cj922b",
+  "provider": "openai",
+  "model": "gpt-5.4-mini",
+  "outputMode": "steps_json",
+  "deviceType": "SCOPE",
+  "modelFamily": "MSO2",
+  "backend": "pyvisa",
+  "userMessage": "trigger edge source channel 1",
+  "flowContext": {
+    "stepCount": 6,
+    "stepTypes": [
+      "group",
+      "connect",
+      "query",
+      "disconnect",
+      "write"
+    ],
+    "validationErrors": []
+  },
+  "scpiContextHits": 0,
+  "toolCalls": [],
+  "postCheck": {
+    "errors": [],
+    "warnings": [],
+    "autoRepairTriggered": false
+  },
+  "response": {
+    "text": "ACTIONS_JSON: {\"summary\":\"Found 1 command(s) for trigger: TRIGger:{A|B}:EDGE:SOUrce\",\"findings\":[\"TRIGger:{A|B}:EDGE:SOUrce — This command sets or queries the source for the edge trigger. For instruments th\"],\"suggestedFixes\":[],\"actions\":[{\"type\":\"insert_step_after\",\"targetStepId\":null,\"newStep\":{\"id\":\"smart_scpi_1\",\"type\":\"write\",\"label\":\"Set TRIGger:{A|B}:EDGE:SOUrce\",\"params\":{\"command\":\"TRIGger::EDGE:SOUrce {CH|CH_D|LINE|AUXiliary}\"}}}]}",
+    "actionsJson": {
+      "summary": "Found 1 command(s) for trigger: TRIGger:{A|B}:EDGE:SOUrce",
+      "findings": [
+        "TRIGger:{A|B}:EDGE:SOUrce — This command sets or queries the source for the edge trigger. For instruments th"
+      ],
+      "suggestedFixes": [],
+      "actions": [
+        {
+          "type": "insert_step_after",
+          "targetStepId": null,
+          "newStep": {
+            "id": "smart_scpi_1",
+            "type": "write",
+            "label": "Set TRIGger:{A|B}:EDGE:SOUrce",
+            "params": {
+              "command": "TRIGger::EDGE:SOUrce {CH|CH_D|LINE|AUXiliary}"
+            }
+          }
+        }
+      ]
+    },
+    "stepCount": 1,
+    "stepTypes": [
+      "insert_step_after"
+    ]
+  },
+  "durationMs": 28,
+  "ok": true
+}

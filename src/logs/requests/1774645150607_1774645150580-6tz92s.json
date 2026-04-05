@@ -1,0 +1,71 @@
+{
+  "timestamp": "2026-03-27T20:59:10.607Z",
+  "requestId": "1774645150580-6tz92s",
+  "provider": "openai",
+  "model": "gpt-5.4-mini",
+  "outputMode": "steps_json",
+  "deviceType": "SCOPE",
+  "modelFamily": "TekScopePC",
+  "backend": "pyvisa",
+  "userMessage": "set trigger for SV to use magnitude vs time level on CH1",
+  "flowContext": {
+    "stepCount": 10,
+    "stepTypes": [
+      "connect",
+      "write",
+      "disconnect"
+    ],
+    "validationErrors": []
+  },
+  "scpiContextHits": 0,
+  "toolCalls": [],
+  "postCheck": {
+    "errors": [],
+    "warnings": [],
+    "autoRepairTriggered": false
+  },
+  "response": {
+    "text": "ACTIONS_JSON: {\"summary\":\"Found 2 command(s) for vertical: CH<x>:OFFSet, AUXIn:OFFSet\",\"findings\":[\"CH<x>:OFFSet — Set or query channel vertical offset\",\"AUXIn:OFFSet — This command sets or queries the vertical offset for the AUX In input. This command is equivalent to...\"],\"suggestedFixes\":[],\"actions\":[{\"type\":\"insert_step_after\",\"targetStepId\":null,\"newStep\":{\"id\":\"smart_scpi_1\",\"type\":\"write\",\"label\":\"Set CH<x>:OFFSet\",\"params\":{\"command\":\"CH1:OFFSet\"}}},{\"type\":\"insert_step_after\",\"targetStepId\":null,\"newStep\":{\"id\":\"smart_scpi_2\",\"type\":\"write\",\"label\":\"Set AUXIn:OFFSet\",\"params\":{\"command\":\"AUXIn:OFFSet\"}}}]}",
+    "actionsJson": {
+      "summary": "Found 2 command(s) for vertical: CH<x>:OFFSet, AUXIn:OFFSet",
+      "findings": [
+        "CH<x>:OFFSet — Set or query channel vertical offset",
+        "AUXIn:OFFSet — This command sets or queries the vertical offset for the AUX In input. This command is equivalent to..."
+      ],
+      "suggestedFixes": [],
+      "actions": [
+        {
+          "type": "insert_step_after",
+          "targetStepId": null,
+          "newStep": {
+            "id": "smart_scpi_1",
+            "type": "write",
+            "label": "Set CH<x>:OFFSet",
+            "params": {
+              "command": "CH1:OFFSet"
+            }
+          }
+        },
+        {
+          "type": "insert_step_after",
+          "targetStepId": null,
+          "newStep": {
+            "id": "smart_scpi_2",
+            "type": "write",
+            "label": "Set AUXIn:OFFSet",
+            "params": {
+              "command": "AUXIn:OFFSet"
+            }
+          }
+        }
+      ]
+    },
+    "stepCount": 2,
+    "stepTypes": [
+      "insert_step_after",
+      "insert_step_after"
+    ]
+  },
+  "durationMs": 27,
+  "ok": true
+}

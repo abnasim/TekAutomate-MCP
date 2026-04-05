@@ -1,0 +1,28 @@
+{
+  "timestamp": "2026-03-27T21:18:33.324Z",
+  "requestId": "1774646312992-ilxg0z",
+  "modelFamily": "(unknown)",
+  "backend": "(unknown)",
+  "flowContext": {
+    "stepCount": 0,
+    "stepTypes": [],
+    "validationErrors": []
+  },
+  "scpiContextHits": 0,
+  "toolCalls": [],
+  "postCheck": {
+    "errors": [
+      "fetch failed"
+    ],
+    "warnings": [],
+    "autoRepairTriggered": false
+  },
+  "response": {
+    "text": "fetch failed",
+    "actionsJson": null,
+    "stepCount": 0,
+    "stepTypes": []
+  },
+  "durationMs": 332,
+  "ok": false
+}

@@ -1,0 +1,31 @@
+{
+  "timestamp": "2026-03-25T06:17:18.787Z",
+  "requestId": "1774419438759-82kkyf",
+  "provider": "openai",
+  "model": "gpt-4o-mini",
+  "outputMode": "steps_json",
+  "deviceType": "SCOPE",
+  "modelFamily": "mso_5_series",
+  "backend": "pyvisa",
+  "userMessage": "show me detailed results",
+  "flowContext": {
+    "stepCount": 0,
+    "stepTypes": [],
+    "validationErrors": []
+  },
+  "scpiContextHits": 0,
+  "toolCalls": [],
+  "postCheck": {
+    "errors": [],
+    "warnings": [],
+    "autoRepairTriggered": false
+  },
+  "response": {
+    "text": "## 📋 8 measurement Commands Found\n\n---\n\n### **1. MEASUrement:MEAS<x>:RESUlts:ALLAcqs:POPUlation**\n\n**📋 Description:** This query-only command returns the population measurement value for measurement\n\n**📖 Details:** This query-only command returns the population measurement value for measurement <x>.\n\n**⚙️ Syntax:** `MEASUrement:MEAS<x>:RESUlts:ALLAcqs:POPUlation?`\n\n**🔧 Type:** query\n\n**🏭 Supported Families:** MSO2, MSO4, MSO5, MSO6, MSO7\n---\n\n### **2. MEASUrement:RESUlts:HISTory:STARt**\n\n**📋 Description:** This command sets or queries the starting acquisition number for transferring me\n\n**📖 Details:** This command sets or queries the starting acquisition number for transferring measurement history results.\n\n**⚙️ Syntax:** `MEASUrement:RESUlts:HISTory:STARt <NR1>`\n\n**🔧 Type:** both\n\n**🏭 Supported Families:** MSO2, MSO4, MSO5, MSO6, MSO7\n---\n\n### **3. MEASUrement:MEAS<x>:RESUlts:ALLAcqs:MEAN**\n\n**📋 Description:** This query-only command returns the mean value for all accumulated measurement a\n\n**📖 Details:** This query-only command returns the mean value for all accumulated measurement acquisitions for measurement <x>.\n\n**⚙️ Syntax:** `MEASUrement:MEAS<x>:RESUlts:ALLAcqs:MEAN?`\n\n**🔧 Type:** query\n\n**🏭 Supported Families:** MSO2, MSO4, MSO5, MSO6, MSO7\n---\n\n### **4. MEASUrement:MEAS<x>:RESUlts:ALLAcqs:MINimum**\n\n**📋 Description:** This query-only command returns the minimum value for all accumulated measuremen\n\n**📖 Details:** This query-only command returns the minimum value for all accumulated measurement acquisitions for measurement <x>.\n\n**⚙️ Syntax:** `MEASUrement:MEAS<x>:RESUlts:ALLAcqs:MINimum?`\n\n**🔧 Type:** query\n\n**🏭 Supported Families:** MSO2, MSO4, MSO5, MSO6, MSO7\n---\n\n### **5. MEASUrement:MEAS<x>:RESUlts:ALLAcqs:STDDev**\n\n**📋 Description:** This query-only command returns the standard deviation for all accumulated measu\n\n**📖 Details:** This query-only command returns the standard deviation for all accumulated measurement acquisitions for measurement <x>.\n\n**⚙️ Syntax:** `MEASUrement:MEAS<x>:RESUlts:ALLAcqs:STDDev?`\n\n**🔧 Type:** query\n\n**🏭 Supported Families:** MSO2, MSO4, MSO5, MSO6, MSO7\n---\n\n### **6. MEASUrement:RESUlts:HISTory:STOP**\n\n**📋 Description:** This command sets or queries the last acquisition number that will be transferre\n\n**📖 Details:** This command sets or queries the last acquisition number that will be transferred for measurement history results.\n\n**⚙️ Syntax:** `MEASUrement:RESUlts:HISTory:STOP <NR1>`\n\n**🔧 Type:** both\n\n**🏭 Supported Families:** MSO2, MSO4, MSO5, MSO6, MSO7\n---\n\n### **7. MEASUrement:MEAS<x>:RESUlts:CURRentacq:MEAN**\n\n**📋 Description:** This query-only command returns the mean value for the measurement for the curre\n\n**📖 Details:** This query-only command returns the mean value for the measurement for the current acquisition.\n\n**⚙️ Syntax:** `MEASUrement:MEAS<x>:RESUlts:CURRentacq:MEAN?`\n\n**🔧 Type:** query\n\n**🏭 Supported Families:** MSO2, MSO4, MSO5, MSO6, MSO7\n---\n\n### **8. MEASUrement:MEAS<x>:RESUlts:ALLAcqs:PK2PK**\n\n**📋 Description:** This query-only command returns the peak-to-peak value for all accumulated measu\n\n**📖 Details:** This query-only command returns the peak-to-peak value for all accumulated measurement acquisitions for measurement <x>.\n\n**⚙️ Syntax:** `MEASUrement:MEAS<x>:RESUlts:ALLAcqs:PK2PK?`\n\n**🔧 Type:** query\n\n**🏭 Supported Families:** MSO2, MSO4, MSO5, MSO6, MSO7\n\n---\n\n## 🎯 **What would you like to do?**\n\n- **🔍 Explain command:** \"Explain command 3\" \n- **➕ Add command:** \"Add command 7 to my flow\"\n- **⚖️ Compare commands:** \"Compare command 1 and 5\"\n- **📖 Get details:** \"Tell me more about command 2\"\n\n**Which command interests you?**",
+    "actionsJson": null,
+    "stepCount": 0,
+    "stepTypes": []
+  },
+  "durationMs": 28,
+  "ok": true
+}

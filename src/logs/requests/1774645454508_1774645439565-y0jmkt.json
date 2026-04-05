@@ -1,0 +1,35 @@
+{
+  "timestamp": "2026-03-27T21:04:14.508Z",
+  "requestId": "1774645439565-y0jmkt",
+  "provider": "openai",
+  "model": "gpt-5.4",
+  "outputMode": "chat",
+  "deviceType": "SCOPE",
+  "modelFamily": "TekScopePC",
+  "backend": "pyvisa",
+  "userMessage": "set the Ch1 SV trigger to magnitude vs time",
+  "flowContext": {
+    "stepCount": 10,
+    "stepTypes": [
+      "connect",
+      "write",
+      "disconnect"
+    ],
+    "validationErrors": []
+  },
+  "scpiContextHits": 0,
+  "toolCalls": [],
+  "postCheck": {
+    "errors": [],
+    "warnings": [],
+    "autoRepairTriggered": false
+  },
+  "response": {
+    "text": "I can build that as a compact TekAutomate flow.\n\nFlow outline:\n- set up the requested channels and vertical settings\n- configure the requested trigger behavior\n\nSay `build it` and I’ll turn that into an applyable Steps UI flow.",
+    "actionsJson": null,
+    "stepCount": 0,
+    "stepTypes": []
+  },
+  "durationMs": 14943,
+  "ok": true
+}

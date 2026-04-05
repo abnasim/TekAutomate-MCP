@@ -1,0 +1,31 @@
+{
+  "timestamp": "2026-03-25T06:17:18.819Z",
+  "requestId": "1774419438793-q5y9bq",
+  "provider": "openai",
+  "model": "gpt-4o-mini",
+  "outputMode": "steps_json",
+  "deviceType": "SCOPE",
+  "modelFamily": "mso_5_series",
+  "backend": "pyvisa",
+  "userMessage": "measure rise time",
+  "flowContext": {
+    "stepCount": 0,
+    "stepTypes": [],
+    "validationErrors": []
+  },
+  "scpiContextHits": 0,
+  "toolCalls": [],
+  "postCheck": {
+    "errors": [],
+    "warnings": [],
+    "autoRepairTriggered": false
+  },
+  "response": {
+    "text": "## 📋 8 measurement Commands Found\n\n---\n\n### **1. MEASUrement:ADDMEAS**\n\n**📋 Description:** This command adds a measurement.\n\n\n\n**⚙️ Syntax:** `MEASUrement:ADDMEAS {ACCOMMONMODE|ACPR|ACRMS|AMPLITUDE|AREA|BASE|BITAMPLITUDE| BITHIGH|BITLOW|BURSTWIDTH|CCJITTER|COMMONMODE|CPOWER|DATARATE|DCD|DDJ|DDRAOS| DDRAOSPERTCK|DDRAOSPERUI|DDRAUS|DDRAUSPERTCK|DDRAUSPERUI|DDRHOLDDIFF|DDRSETUPDIFF| DDRTCHABS|DDRTCHAVERAGE|DDRTCKAVERAGE|DDRTCLABS|DDRTCLAVERAGE|DDRTERRMN|DDRTERRN| DDRTJITCC|DDRTJITDUTY|DDRTJITPER|DDRTPST|DDRTRPRE|DDRTWPRE|DDRVIXAC|DDRTDQSCK| DELAY|DJ|DJDIRAC|DPMPSIJ|EYEHIGH|EYELOW|FALLSLEWRATE|FALLTIME|FREQUENCY|F2|F4|F8| HEIGHT|HEIGHTBER|HIGH|HIGHTIME|HOLD|IMDAANGLE|IMDADIRECTION|IMDADQ0|IMDAEFFICIENCY| IMDAHARMONICS|IMDAMECHPWR|IMDAPOWERQUALITY|IMDASPEED|IMDASYSEFF|IMDATORQUE|ISI| JITTERSUMMARY|J2|J9|LOW|LOWTIME|MAXIMUM|MEAN|MINIMUM|NDUty|NOVERSHOOT|NPERIOD| NPJ|NWIDTH|OBW|PATTERNLENGTH|PDUTY|PERIOD|PHASE|PHASENOISE|PJ|PK2Pk|POVERSHOOT| PWIDTH|QFACTOR|RISESLEWRATE|RISETIME|RJ|RJDIRAC|RMS|SETUP|SKEW|SRJ|SSCFREQDEV| SSCMODRATE|SSCSLEWRATE|TIE|TIMEOUTSIDELEVEL|TIMETOMAX|TIMETOMIN|TJBER|TNTRATIO|TOP| UNITINTERVAL|VDIFFXOVR|WBGDDT|WBGDIODEDDT|WBGEOFF|WBGEON|WBGERR|WBGIPEAK|WBGIRRM| WBGQOSS|WBGQRR|WBGTDOFF|WBGTDON|WBGTF|WBGTON|WBGTOFF|WBGTR|WBGTRR|WBGTDT|WBGVPEAK| WIDTH|WIDTHBER}`\n\n**🔧 Type:** both\n\n**🏭 Supported Families:** MSO2, MSO4, MSO5, MSO6, MSO7\n---\n\n### **2. MEASUrement:ADDNew**\n\n**📋 Description:** This command adds the specified measurement.\n\n\n\n**⚙️ Syntax:** `MEASUrement:ADDNew  <QString>`\n\n**🔧 Type:** both\n\n**🏭 Supported Families:** MSO2, MSO4, MSO5, MSO6, MSO7\n---\n\n### **3. CUSTOMTABle:ADDNew**\n\n**📋 Description:** This command adds new custom results table.\n\n\n\n**⚙️ Syntax:** `CUSTOMTABle:ADDNew  <QString>`\n\n**🔧 Type:** both\n\n**🏭 Supported Families:** MSO2, MSO4, MSO5, MSO6, MSO7\n---\n\n### **4. MEASTABle:ADDNew**\n\n**📋 Description:** This command adds a new measurement results view table to the scope application.\n\n**📖 Details:** This command adds a new measurement results view table to the scope application. The results view table can be named through the argument sent to the command.\n\n**⚙️ Syntax:** `MEASTABle:ADDNew  <QString>`\n\n**🔧 Type:** both\n\n**🏭 Supported Families:** MSO2, MSO4, MSO5, MSO6, MSO7\n---\n\n### **5. MEASUrement:MEAS<x>:EDGEQUALONE**\n\n**📋 Description:** This command set or queries the measurement 1 input edge qualifier one source fo\n\n**📖 Details:** This command set or queries the measurement 1 input edge qualifier one source for Efficiency measurement.\n\n**⚙️ Syntax:** `MEASUrement:MEAS<x>:EDGEQUALONE  <QString>`\n\n**🔧 Type:** both\n\n**🏭 Supported Families:** MSO2, MSO4, MSO5, MSO6, MSO7\n---\n\n### **6. MEASUrement:REFLevels:JITTERMODE**\n\n**📋 Description:** This command sets or queries how often reference levels are calculated on Jitter\n\n**📖 Details:** This command sets or queries how often reference levels are calculated on Jitter measurements. If the mode is set to Latch, ref levels are calculated only on the first acquisition after a statistics reset. If it is set to Continuous, reference levels are calculated on every acquisition.\n\n**⚙️ Syntax:** `MEASUrement:REFLevels:JITTERMODE  {CONTinuous|LATCh}`\n\n**🔧 Type:** both\n\n**🏭 Supported Families:** MSO2, MSO4, MSO5, MSO6, MSO7\n---\n\n### **7. MEASUrement:CLOCKRecovery:ADVanced:METHod**\n\n**📋 Description:** This command sets or queries the global advanced clock recovery method. This wil\n\n**📖 Details:** This command sets or queries the global advanced clock recovery method. This will affect measurements whose :MEASUrement:MEAS<x>:CLOCKRecovery:GLOBal flag is set to 1.\n\n**⚙️ Syntax:** `MEASUrement:CLOCKRecovery:ADVanced:METHod  {NONE|NOMinal|PATTern}`\n\n**🔧 Type:** both\n\n**🏭 Supported Families:** MSO2, MSO4, MSO5, MSO6, MSO7\n---\n\n### **8. MEASUrement:CLOCKRecovery:METHod**\n\n**📋 Description:** This command sets or queries the global clock recovery method for the measuremen\n\n**📖 Details:** This command sets or queries the global clock recovery method for the measurement. This will affect measurements whose :MEASUrement:MEAS<x>:CLOCKRecovery:GLOBal flag is set to 1.\n\n**⚙️ Syntax:** `MEASUrement:CLOCKRecovery:METHod  {PLL|CONSTANTCLOCK|EXPLICITCLOCK}`\n\n**🔧 Type:** both\n\n**🏭 Supported Families:** MSO2, MSO4, MSO5, MSO6, MSO7\n\n---\n\n## 🎯 **What would you like to do?**\n\n- **🔍 Explain command:** \"Explain command 3\" \n- **➕ Add command:** \"Add command 7 to my flow\"\n- **⚖️ Compare commands:** \"Compare command 1 and 5\"\n- **📖 Get details:** \"Tell me more about command 2\"\n\n**Which command interests you?**",
+    "actionsJson": null,
+    "stepCount": 0,
+    "stepTypes": []
+  },
+  "durationMs": 26,
+  "ok": true
+}

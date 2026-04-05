@@ -1,0 +1,31 @@
+{
+  "timestamp": "2026-03-25T06:17:19.131Z",
+  "requestId": "1774419439105-fdjvg6",
+  "provider": "openai",
+  "model": "gpt-4o-mini",
+  "outputMode": "steps_json",
+  "deviceType": "SCOPE",
+  "modelFamily": "mso_5_series",
+  "backend": "pyvisa",
+  "userMessage": "enable fastframe mode",
+  "flowContext": {
+    "stepCount": 0,
+    "stepTypes": [],
+    "validationErrors": []
+  },
+  "scpiContextHits": 0,
+  "toolCalls": [],
+  "postCheck": {
+    "errors": [],
+    "warnings": [],
+    "autoRepairTriggered": false
+  },
+  "response": {
+    "text": "## 📋 8 acquisition Commands Found\n\n---\n\n### **1. HORizontal:FASTframe:TRACk**\n\n**📋 Description:** This command sets up or queries the state of FastFrame tracking feature. This command is equivalent ...\n\n**📖 Details:** This command sets up or queries the state of FastFrame tracking feature. This command is equivalent to selecting FastFrame Setup from the Horiz/Acq menu and then clicking the desired Frame Tracking state. When FastFrame Track is set to “live”, the channel and math waveforms are locked together. Adjusting a channel waveform also adjusts a related math waveform. All reference waveforms are also locked together but they are separate from channel and math waveforms. For example, when you set the Selected Frame Source Ch1 to Frame 3, then Selected Frame Ch2, Ch3, Ch4, Math1, Math2, Math3 and Math4 are also set to Frame 3. When you set the Selected Frame Source Ref1 to Frame 2, then Selected Frame Ref2, Ref3 and Ref4 are also set to Frame 2. If the Frame Tracking is set to Live, changing Selected Frame Ch1 will not affect the Selected Frame Ref1 frame of the Reference Frame setting. When FastFrame Track is set to “all”, the channel, math and reference waveforms are locked together. Adjusting a channel waveform also adjusts the related math and reference waveforms. For example, when you set the Selected Frame Source Ch1 to Frame 3, then Selected Frame Ch2, Ch3, Ch4, Math1, Math2, Math3, Math4, Ref1, Ref2, Ref3 and Ref4 are also set to Frame 3.\n\n**⚙️ Syntax:** `HORizontal:FASTframe:TRACk {LIVE|ALL}`\n\n**🔧 Type:** both\n\n**🏭 Supported Families:** MSO5000, DPO5000, DPO7000, DPO70000\n---\n\n### **2. HORizontal:FASTframe:SUMFrame:STATE**\n\n**📋 Description:** This command sets or returns the state of FastFrame summary frame. Summary frame\n\n**📖 Details:** This command sets or returns the state of FastFrame summary frame. Summary frame mode is set automatically based on the acquisition mode. When in Sample mode, the summary frame type is set to Average. When in Peak Detect mode, the summary frame type is set to Envelope. When in High Res mode, the summary frame type is set to Average.\n\n**⚙️ Syntax:** `HORizontal:FASTframe:SUMFrame:STATE  {<NR1>|OFF|ON}`\n\n**🔧 Type:** both\n\n**🏭 Supported Families:** MSO2, MSO4, MSO5, MSO6, MSO7\n---\n\n### **3. HORizontal:FASTframe:STATE**\n\n**📋 Description:** This command sets or returns the state of FastFrame. Acquisition modes Envelope\n\n**📖 Details:** This command sets or returns the state of FastFrame. Acquisition modes Envelope and Average are not compatible with FastFrame. If FastFrame is on, an attempted set to those acquisition modes will fail and revert to Sample mode. If FastFrame is turned on while in one of those acquisition modes, the acquisition mode is changed to Sample.\n\n**⚙️ Syntax:** `HORizontal:FASTframe:STATE  {<NR1>|OFF|ON}`\n\n**🔧 Type:** both\n\n**🏭 Supported Families:** MSO2, MSO4, MSO5, MSO6, MSO7\n---\n\n### **4. HORizontal:FASTframe**\n\n**📋 Description:** This query returns all information under horizontal:fastframe.\n\n\n\n**⚙️ Syntax:** `HORizontal:FASTframe?`\n\n**🔧 Type:** query\n\n**🏭 Supported Families:** MSO2, MSO4, MSO5, MSO6, MSO7\n---\n\n### **5. HORizontal:FASTframe:MAXFRames**\n\n**📋 Description:** This query returns the maximum number of frames.\n\n\n\n**⚙️ Syntax:** `HORizontal:FASTframe:MAXFRames?`\n\n**🔧 Type:** query\n\n**🏭 Supported Families:** MSO2, MSO4, MSO5, MSO6, MSO7\n---\n\n### **6. HORizontal:FASTframe:SIXteenbit**\n\n**📋 Description:** This command sets or queries FastFrame sixteen bit.\n\n\n\n**⚙️ Syntax:** `HORizontal:FASTframe:SIXteenbit {<NR1>|OFF|ON}`\n\n**🔧 Type:** both\n\n**🏭 Supported Families:** MSO5000, DPO5000, DPO7000, DPO70000\n---\n\n### **7. HORizontal:FASTframe:COUNt**\n\n**📋 Description:** This command sets or returns the number of frames.\n\n\n\n**⚙️ Syntax:** `HORizontal:FASTframe:COUNt <NR1>`\n\n**🔧 Type:** both\n\n**🏭 Supported Families:** MSO2, MSO4, MSO5, MSO6, MSO7\n---\n\n### **8. HORizontal:FASTframe:SINGLEFramemath**\n\n**📋 Description:** This command sets or queries FastFrame single frame math.\n\n\n\n**⚙️ Syntax:** `HORizontal:FASTframe:SINGLEFramemath {<NR1>|OFF|ON}`\n\n**🔧 Type:** both\n\n**🏭 Supported Families:** MSO5000, DPO5000, DPO7000, DPO70000\n\n---\n\n## 🎯 **What would you like to do?**\n\n- **🔍 Explain command:** \"Explain command 3\" \n- **➕ Add command:** \"Add command 7 to my flow\"\n- **⚖️ Compare commands:** \"Compare command 1 and 5\"\n- **📖 Get details:** \"Tell me more about command 2\"\n\n**Which command interests you?**",
+    "actionsJson": null,
+    "stepCount": 0,
+    "stepTypes": []
+  },
+  "durationMs": 26,
+  "ok": true
+}
