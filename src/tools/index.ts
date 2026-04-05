@@ -965,6 +965,19 @@ const MCP_EXPOSED_TOOLS = new Set([
   'discover_scpi',
 ]);
 
+export const MCP_PROTECTED_TOOLS = new Set([
+  'get_current_workflow',
+  'get_instrument_info',
+  'get_run_log',
+  'get_instrument_state',
+  'probe_command',
+  'send_scpi',
+  'capture_screenshot',
+  'discover_scpi',
+  'get_visa_resources',
+  'get_environment',
+]);
+
 // Slim tek_router schema for MCP — only the params external AI needs.
 // Full schema (with CRUD params) stays available for TekAutomate's internal calls.
 const TEK_ROUTER_SLIM_PARAMS = {
@@ -1013,6 +1026,10 @@ export function getMcpExposedTools() {
       }
       return def;
     });
+}
+
+export function isProtectedMcpTool(name: string) {
+  return MCP_PROTECTED_TOOLS.has(name);
 }
 
 export async function runTool(name: string, args: Record<string, unknown>) {
