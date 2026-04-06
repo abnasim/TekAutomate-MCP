@@ -9,7 +9,7 @@ interface TempImageRecord {
 }
 
 const tempImages = new Map<string, TempImageRecord>();
-const DEFAULT_TTL_MS = 30_000;
+const DEFAULT_TTL_MS = 60_000;
 
 function cleanupExpiredTempImages() {
   const now = Date.now();
