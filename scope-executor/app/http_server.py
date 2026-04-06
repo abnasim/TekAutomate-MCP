@@ -292,7 +292,6 @@ class _Handler(BaseHTTPRequestHandler):
         srv = self.server_thread
         timeout_sec = min(int(data.get("timeout_sec", 30) or 30), 3600)
         ui_timeout = srv.get_timeout() if srv else 30
-        timeout_sec = min(timeout_sec, ui_timeout)
         scope_visa = data.get("scope_visa") if isinstance(data.get("scope_visa"), str) else None
         # scope_visa is required for send_scpi, capture_screenshot, disconnect
         # but NOT for run_python (which handles its own connection in generated code)
@@ -316,6 +315,9 @@ class _Handler(BaseHTTPRequestHandler):
             scope_type = data.get("scope_type") if isinstance(data.get("scope_type"), str) else "modern"
             if scope_type not in {"modern", "legacy", "export"}:
                 scope_type = "modern"
+            min_needed = 95
+            effective_ui_timeout = max(ui_timeout, min_needed)
+            timeout_sec = min(max(timeout_sec, min_needed), effective_ui_timeout)
         elif action == "send_scpi":
             commands = data.get("commands")
             timeout_ms = int(data.get("timeout_ms", 3000) or 3000)
@@ -338,6 +340,8 @@ class _Handler(BaseHTTPRequestHandler):
                     cmd_preview += f" ... (+{len(commands) - 5} more)"
                 self._emit("POST", "/run", 0, f"\033[34m[REQ]\033[0m send_scpi visa={scope_visa} cmds={len(commands)} timeout={timeout_ms}ms [{cmd_preview}]")
         # disconnect/device_clear: no commands needed, just scope_visa (already validated above)
+        if action in {"run_python", "disconnect", "device_clear"}:
+            timeout_sec = min(timeout_sec, ui_timeout)
 
         self._emit_status("busy")
         _sse_broadcast("status", json.dumps({"status": "running"}))

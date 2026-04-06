@@ -484,24 +484,33 @@ def _handle_capture_screenshot(job: dict) -> dict:
                         sock.set_timeout(capture_timeout_ms / 1000.0)
                         data = sock.fetch_screen("temp_screenshot.png")
                     else:
-                        scpi = _open_fresh_scope_session(visa)
+                        try:
+                            scpi = _get_scope_session(visa)
+                        except Exception:
+                            _reset_scope_session(visa)
+                            _reset_resource_manager()
+                            scpi = _get_scope_session(visa)
+                        old_timeout = getattr(scpi, "timeout", capture_timeout_ms)
+                        old_write_term = getattr(scpi, "write_termination", None)
+                        old_read_term = getattr(scpi, "read_termination", None)
                         try:
                             scpi.timeout = capture_timeout_ms
                             scpi.write_termination = "\n"
                             scpi.read_termination = None
 
                             if scope_type == "legacy":
-                                # DPO 5k/7k series — HARDCOPY method
+                                # DPO 5k/7k series - HARDCOPY method
+                                temp_path = 'C:/Temp/screenshot.png'
                                 scpi.write('HARDCOPY:PORT FILE')
-                                scpi.write('HARDCOPY:FILENAME "C:/Temp/screenshot.png"')
+                                scpi.write(f'HARDCOPY:FILENAME "{temp_path}"')
                                 scpi.write('HARDCOPY START')
                                 scpi.write('*WAI')
-                                scpi.write('FILESYSTEM:READFILE "C:/Temp/screenshot.png"')
-                                data = scpi.read_raw()
-                                scpi.write('FILESYSTEM:DELETE "C:/Temp/screenshot.png"')
+                                scpi.write(f'FILESYSTEM:READFILE "{temp_path}"')
+                                data = _readfile_payload_via_visa_stream(scpi)
+                                scpi.write(f'FILESYSTEM:DELETE "{temp_path}"')
                                 scpi.write('*WAI')
                             elif scope_type == "export":
-                                # MSO/DPO 70000 series — EXPort method
+                                # MSO/DPO 70000 series - EXPort method
                                 import time as _time
                                 remote_path = 'C:/TekScope/screenshot.png'
                                 scpi.write(f'EXPort:FILEName "{remote_path}"')
@@ -511,27 +520,27 @@ def _handle_capture_screenshot(job: dict) -> dict:
                                 scpi.write('EXPort START')
                                 if str(scpi.query('*OPC?')).strip() != '1':
                                     raise RuntimeError("EXPort START did not complete")
-                                _time.sleep(1.0)  # 70000 series needs brief settle time
-                                old_timeout = scpi.timeout
+                                _time.sleep(1.0)
+                                old_read_timeout = scpi.timeout
                                 scpi.timeout = 30000
                                 scpi.write(f'FILESYSTEM:READFILE "{remote_path}"')
-                                data = scpi.read_raw()
-                                scpi.timeout = old_timeout
+                                data = _readfile_payload_via_visa_stream(scpi)
+                                scpi.timeout = old_read_timeout
                                 scpi.write(f'FILESYSTEM:DELETE "{remote_path}"')
                             else:
-                                # MSO 2/4/5/6 series — SAVE:IMAGE method (modern)
+                                # MSO 2/4/5/6 series - SAVE:IMAGE method (modern)
                                 temp_path = 'C:/Temp_Screen.png'
                                 scpi.write(f'SAVE:IMAGE "{temp_path}"')
                                 if str(scpi.query('*OPC?')).strip() != '1':
                                     raise RuntimeError("SAVE:IMAGE did not complete")
                                 scpi.write(f'FILESYSTEM:READFILE "{temp_path}"')
-                                data = scpi.read_raw()
+                                data = _readfile_payload_via_visa_stream(scpi)
                                 scpi.write(f'FILESYSTEM:DELETE "{temp_path}"')
+                                scpi.query('*OPC?')
                         finally:
-                            try:
-                                scpi.close()
-                            except Exception:
-                                pass
+                            scpi.timeout = old_timeout
+                            scpi.write_termination = old_write_term
+                            scpi.read_termination = old_read_term
                     break
                 except Exception as exc:
                     last_error = exc
