@@ -65,7 +65,7 @@ interface ScreenshotPayload {
   analysisSizeBytes?: number;
 }
 
-type ScreenshotAnalysisTransport = 'auto' | 'file_id' | 'base64';
+type ScreenshotAnalysisTransport = 'auto' | 'file_id' | 'base64' | 'openai_image' | 'claude_image';
 
 function guessImageExtension(mimeType: string): string {
   const lower = String(mimeType || '').toLowerCase();
@@ -896,7 +896,9 @@ async function runOpenAiLoop(params: LiveToolLoopParams): Promise<LiveToolLoopRe
           if (screenshotPayload && toolArgs.analyze === true) {
             const visionBase64 = screenshotPayload.analysisBase64 || screenshotPayload.base64;
             const visionMimeType = screenshotPayload.analysisMimeType || screenshotPayload.mimeType;
-            const analysisTransport = String(toolArgs.analysisTransport || 'auto').toLowerCase() as ScreenshotAnalysisTransport;
+            const analysisTransportRaw = String(toolArgs.analysisTransport || 'auto').toLowerCase() as ScreenshotAnalysisTransport;
+            const analysisTransport = analysisTransportRaw === 'claude_image' ? 'base64' : analysisTransportRaw;
+            const wantsOpenAiImage = analysisTransport === 'openai_image';
             const visionFileId = analysisTransport === 'base64'
               ? null
               : await uploadVisionImageToOpenAiFile(
@@ -905,11 +907,11 @@ async function runOpenAiLoop(params: LiveToolLoopParams): Promise<LiveToolLoopRe
                   visionMimeType,
                   screenshotPayload.capturedAt,
                 );
-            if (analysisTransport === 'file_id' && !visionFileId) {
+            if ((analysisTransport === 'file_id' || wantsOpenAiImage) && !visionFileId) {
               toolResultsInput.push({
                 type: 'function_call_output',
                 call_id: callId,
-                output: 'Error: capture_screenshot requested analysisTransport=file_id, but uploading the screenshot to OpenAI Files failed.',
+                output: `Error: capture_screenshot requested analysisTransport=${analysisTransport}, but uploading the screenshot to OpenAI Files failed.`,
               });
               continue;
             }
