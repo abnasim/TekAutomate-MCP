@@ -488,12 +488,21 @@ function ExecutePageContent({
     () => proposalHistory.find((proposal) => proposal.id === pendingReapplyProposalId) || null,
     [pendingReapplyProposalId, proposalHistory]
   );
+  const keepCopilotMountedUnderLiveView = executionSource === 'live' && !assistantPanelOpen;
 
   return (
     <div className="h-full flex flex-col bg-slate-100 text-slate-900 dark:bg-slate-950 dark:text-white">
-      <div className="flex-1 min-h-0 flex">
-        {assistantPanelOpen ? (
-          <AiChatPanel
+      <div className="relative flex-1 min-h-0 flex">
+        {(assistantPanelOpen || keepCopilotMountedUnderLiveView) && (
+          <div
+            className={
+              keepCopilotMountedUnderLiveView
+                ? 'pointer-events-none absolute inset-y-0 left-0 z-0 opacity-0'
+                : 'relative z-10 flex-shrink-0'
+            }
+            aria-hidden={keepCopilotMountedUnderLiveView ? 'true' : undefined}
+          >
+            <AiChatPanel
             steps={steps}
             workspaceRevision={workspaceRevision}
             runLog={runLog}
@@ -509,8 +518,10 @@ function ExecutePageContent({
             onWorkflowProposal={handleProposalDetected}
             onLiveScreenshot={onLiveScreenshot}
             onRun={onRun}
-          />
-        ) : (
+            />
+          </div>
+        )}
+        {!assistantPanelOpen && executionSource !== 'live' && (
           <button
             type="button"
             onClick={() => setAssistantPanelOpen(true)}
