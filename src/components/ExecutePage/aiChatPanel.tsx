@@ -419,8 +419,7 @@ export function AiChatPanel({
   }, [state.history, state.isLoading]);
 
   useEffect(() => {
-    // Sync runtime context for all live modes — ensures MCP tools know
-    // the session key, executor URL, and instrument details.
+    if (!(state.provider === 'anthropic' && claudeChatSurface === 'desktop-mcp')) return;
     if (executionSource !== 'live') return;
     const mcpHost = resolveMcpHost();
     if (!mcpHost) return;
@@ -446,9 +445,11 @@ export function AiChatPanel({
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(payload),
     }).catch((error) => {
-      console.warn('[Native Chat] Failed to sync runtime context:', error);
+      console.warn('[Claude Desktop MCP] Failed to sync runtime context:', error);
     });
   }, [
+    state.provider,
+    claudeChatSurface,
     executionSource,
     steps,
     flowContext,
@@ -457,8 +458,99 @@ export function AiChatPanel({
     workspaceRevision,
   ]);
 
-  // SSE live action stream is handled by ExecutePage (parent) — always alive.
+  useEffect(() => {
+    if (!(state.provider === 'anthropic' && claudeChatSurface === 'desktop-mcp')) return;
+    if (executionSource !== 'live') return;
+    const mcpHost = resolveMcpHost();
+    if (!mcpHost) return;
+    if (!instrumentEndpoint?.executorUrl) return;
 
+    let cancelled = false;
+    const sessionKey = claudeDesktopLiveSessionKeyRef.current;
+
+    const loop = async () => {
+      while (!cancelled) {
+        let currentAction: { id: string; toolName: string; args?: Record<string, unknown> } | null = null;
+        try {
+          const nextRes = await fetch(
+            `${mcpHost.replace(/\/$/, '')}/live-actions/next?sessionKey=${encodeURIComponent(sessionKey)}&timeoutMs=20000`,
+          );
+          if (!nextRes.ok) {
+            await new Promise((resolve) => window.setTimeout(resolve, 1500));
+            continue;
+          }
+
+          const nextJson = (await nextRes.json()) as {
+            ok?: boolean;
+            action?: { id: string; toolName: string; args?: Record<string, unknown> } | null;
+          };
+          currentAction = nextJson.action || null;
+          if (!currentAction?.id || !currentAction.toolName) {
+            continue;
+          }
+
+          const result = await executeMcpTool(
+            currentAction.toolName,
+            currentAction.args || {},
+            instrumentEndpoint || undefined,
+            {
+              modelFamily: flowContext?.modelFamily,
+              deviceDriver: flowContext?.deviceDriver,
+            },
+          );
+
+          if (currentAction.toolName === 'capture_screenshot') {
+            const screenshot = extractScreenshotPayload(result);
+            if (screenshot) {
+              onLiveScreenshot?.(screenshot);
+            }
+          }
+
+          await fetch(`${mcpHost.replace(/\/$/, '')}/live-actions/result`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              id: currentAction.id,
+              sessionKey,
+              ok: true,
+              result,
+            }),
+          });
+        } catch (error) {
+          if (currentAction?.id) {
+            try {
+              await fetch(`${mcpHost.replace(/\/$/, '')}/live-actions/result`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                  id: currentAction.id,
+                  sessionKey,
+                  ok: false,
+                  error: error instanceof Error ? error.message : 'Live action execution failed.',
+                }),
+              });
+            } catch {
+              // Ignore secondary reporting failures.
+            }
+          }
+          await new Promise((resolve) => window.setTimeout(resolve, 1200));
+        }
+      }
+    };
+
+    void loop();
+    return () => {
+      cancelled = true;
+    };
+  }, [
+    state.provider,
+    claudeChatSurface,
+    executionSource,
+    instrumentEndpoint,
+    flowContext?.modelFamily,
+    flowContext?.deviceDriver,
+    onLiveScreenshot,
+  ]);
 
   useEffect(() => {
     let active = true;
