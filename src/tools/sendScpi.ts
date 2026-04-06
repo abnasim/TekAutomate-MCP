@@ -12,43 +12,67 @@ interface Input extends Record<string, unknown> {
   outputMode?: 'clean' | 'verbose';
   timeoutMs?: number;
   modelFamily?: string;
+  /** Set by discover_scpi to bypass the verify gate. */
   _bypassVerifyGate?: boolean;
 }
 
 function splitScpiCommandString(command: string): string[] {
   const text = String(command || '');
   if (!text.includes(';')) return [text];
+
   const parts: string[] = [];
   let current = '';
   let inQuotes = false;
+
   for (let i = 0; i < text.length; i += 1) {
     const ch = text[i];
-    if (ch === '"') { inQuotes = !inQuotes; current += ch; continue; }
-    if (ch === ';' && !inQuotes) { const t = current.trim(); if (t) parts.push(t); current = ''; continue; }
+    if (ch === '"') {
+      inQuotes = !inQuotes;
+      current += ch;
+      continue;
+    }
+    if (ch === ';' && !inQuotes) {
+      const trimmed = current.trim();
+      if (trimmed) parts.push(trimmed);
+      current = '';
+      continue;
+    }
     current += ch;
   }
-  const t = current.trim();
-  if (t) parts.push(t);
+
+  const trimmed = current.trim();
+  if (trimmed) parts.push(trimmed);
   return parts.length ? parts : [text];
 }
 
+/**
+ * Server-side SCPI verify gate.
+ * Uses getByHeader() for fast local lookup (~1ms per command).
+ * Star commands (*IDN?, *RST, etc.) are universal and always pass.
+ */
 async function verifyCommandsLocally(
   commands: string[],
   modelFamily?: string
 ): Promise<Array<{ command: string; reason: string }>> {
   const failures: Array<{ command: string; reason: string }> = [];
   let index: Awaited<ReturnType<typeof getCommandIndex>>;
-  try { index = await getCommandIndex(); } catch { return []; }
+  try {
+    index = await getCommandIndex();
+  } catch {
+    return []; // Index unavailable — allow through
+  }
 
   for (const cmd of commands) {
     const trimmed = String(cmd).trim();
     if (trimmed.startsWith('*')) continue;
     const headerPart = trimmed.split(/\s/)[0].replace(/\?$/, '');
     if (!headerPart) continue;
+
     const entry =
       index.getByHeader(headerPart, modelFamily) ||
       index.getByHeader(headerPart.toUpperCase(), modelFamily) ||
       index.getByHeaderPrefix(headerPart, modelFamily);
+
     if (!entry) {
       failures.push({
         command: trimmed,
@@ -66,7 +90,7 @@ function fail(error: string, hint: string): ToolResult<Record<string, unknown>> 
 export async function sendScpi(input: Input): Promise<ToolResult<Record<string, unknown>>> {
   input = withRuntimeInstrumentDefaults(input);
 
-  // ── Fast validation ──
+  // ── Fast validation — tell the AI exactly what's wrong ──
   if (!input.commands?.length) {
     return fail('NO_COMMANDS', 'Pass commands:["*IDN?"] — an array of SCPI command strings.');
   }
@@ -84,10 +108,10 @@ export async function sendScpi(input: Input): Promise<ToolResult<Record<string, 
     return fail('NOT_LIVE', 'No live instrument session. Make sure TekAutomate is open with an instrument connected in Live mode.');
   }
 
-  // ── Normalize commands ──
+  // ── Normalize commands — split semicolon-concatenated strings ──
   input.commands = input.commands.flatMap(cmd => splitScpiCommandString(String(cmd)));
 
-  // ── SCPI Verify Gate ──
+  // ── SCPI Verify Gate (server-side) ──
   if (!input._bypassVerifyGate) {
     const failures = await verifyCommandsLocally(input.commands, input.modelFamily);
     if (failures.length > 0) {
@@ -97,7 +121,9 @@ export async function sendScpi(input: Input): Promise<ToolResult<Record<string, 
         data: {
           error: 'VERIFY_GATE_BLOCKED',
           unverifiedCommands: failures.map(f => f.command),
-          message: `SCPI verify gate blocked ${failures.length} command(s):\n${failList}\nUse tek_router to find the correct command.`,
+          message:
+            `SCPI verify gate blocked ${failures.length} of ${input.commands.length} command(s):\n${failList}\n` +
+            'Use tek_router to find the correct command: {action:"search_exec", query:"search scpi commands", args:{query:"..."}}',
         },
         sourceMeta: [],
         warnings: [`${failures.length} command(s) failed verification`],
@@ -105,24 +131,27 @@ export async function sendScpi(input: Input): Promise<ToolResult<Record<string, 
     }
   }
 
-  // ── Bridge through TekAutomate browser (SSE push — instant delivery) ──
-  if (shouldBridgeToTekAutomate(input)) {
-    try {
-      const bridged = await dispatchLiveActionThroughTekAutomate('send_scpi', input, Math.max((input.timeoutMs ?? 10_000) + 5_000, 15_000));
-      if (!bridged.ok) {
-        return fail('BRIDGE_FAILED', bridged.error || 'TekAutomate browser did not complete send_scpi. Is TekAutomate open?');
+  // ── Direct executor call (preferred — no polling gap) ──
+  try {
+    const result = await sendScpiProxy(input, input.commands, input.timeoutMs);
+    return result;
+  } catch (directErr) {
+    // Direct call failed — try bridge as fallback
+    if (shouldBridgeToTekAutomate(input)) {
+      try {
+        const bridged = await dispatchLiveActionThroughTekAutomate('send_scpi', input, Math.max((input.timeoutMs ?? 10_000) + 5_000, 15_000));
+        if (bridged.ok) {
+          return {
+            ok: true,
+            data: (bridged.result && typeof bridged.result === 'object' ? bridged.result : { result: bridged.result }) as Record<string, unknown>,
+            sourceMeta: [], warnings: [],
+          };
+        }
+      } catch {
+        // Bridge also failed — return the direct error
       }
-      return {
-        ok: true,
-        data: (bridged.result && typeof bridged.result === 'object' ? bridged.result : { result: bridged.result }) as Record<string, unknown>,
-        sourceMeta: [], warnings: [],
-      };
-    } catch (err) {
-      const msg = err instanceof Error ? err.message : String(err);
-      return fail('BRIDGE_TIMEOUT', msg);
     }
+    const msg = directErr instanceof Error ? directErr.message : String(directErr);
+    return fail('EXECUTOR_UNREACHABLE', `Could not reach executor: ${msg}. Is the executor running?`);
   }
-
-  // ── Direct executor call (local MCP only) ──
-  return sendScpiProxy(input, input.commands, input.timeoutMs);
 }

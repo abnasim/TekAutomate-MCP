@@ -5,7 +5,7 @@ import { getToolDefinitions, getMcpExposedTools, runTool } from './tools/index';
 import type { McpChatRequest } from './core/schemas';
 import { getLastWorkflowProposal } from './tools/stageWorkflowProposal';
 import { getRuntimeContextState, updateRuntimeContext, runInSession, clearSessionContext } from './tools/runtimeContextStore';
-import { completeLiveAction, getPendingLiveActionCount, waitForNextLiveAction, addSseStream, removeSseStream, getSseStreamCount } from './tools/liveActionBridge';
+import { completeLiveAction, getPendingLiveActionCount, waitForNextLiveAction } from './tools/liveActionBridge';
 import { bootRouter, createReloadProvidersHandler, createRouterHandler, getRouterHealth } from './core/routerIntegration';
 import { getCommandIndex } from './core/commandIndex';
 import { getRagIndexes } from './core/ragIndex';
@@ -838,39 +838,6 @@ function filterTools(q) {
       return;
     }
 
-    // ── SSE stream for live actions — instant push, no polling gap ──
-    if (req.method === 'GET' && req.url?.startsWith('/live-actions/stream')) {
-      const requestUrl = new URL(req.url, `http://${req.headers.host || 'localhost'}`);
-      const sessionKey = requestUrl.searchParams.get('sessionKey') || '';
-      if (!sessionKey) {
-        sendJson(res, 400, { ok: false, error: 'Missing sessionKey query parameter.' });
-        return;
-      }
-      res.writeHead(200, {
-        'Content-Type': 'text/event-stream',
-        'Cache-Control': 'no-cache',
-        'Connection': 'keep-alive',
-        'Access-Control-Allow-Origin': '*',
-      });
-      res.write(`event: connected\ndata: ${JSON.stringify({ sessionKey, streams: getSseStreamCount(sessionKey) + 1 })}\n\n`);
-
-      addSseStream(sessionKey, res);
-      console.log(`[SSE] stream opened for session ${sessionKey} (${getSseStreamCount(sessionKey)} active)`);
-
-      // Heartbeat every 25s to keep connection alive
-      const heartbeat = setInterval(() => {
-        try { res.write(': heartbeat\n\n'); } catch { clearInterval(heartbeat); }
-      }, 25_000);
-
-      req.on('close', () => {
-        clearInterval(heartbeat);
-        removeSseStream(sessionKey, res);
-        console.log(`[SSE] stream closed for session ${sessionKey} (${getSseStreamCount(sessionKey)} remaining)`);
-      });
-      return;
-    }
-
-    // ── Legacy poll endpoint (fallback) ──
     if (req.method === 'GET' && req.url?.startsWith('/live-actions/next')) {
       try {
         const requestUrl = new URL(req.url, `http://${req.headers.host || 'localhost'}`);
