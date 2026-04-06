@@ -65,6 +65,53 @@ interface ScreenshotPayload {
   analysisSizeBytes?: number;
 }
 
+type ScreenshotAnalysisTransport = 'auto' | 'file_id' | 'base64';
+
+function guessImageExtension(mimeType: string): string {
+  const lower = String(mimeType || '').toLowerCase();
+  if (lower.includes('jpeg') || lower.includes('jpg')) return 'jpg';
+  if (lower.includes('webp')) return 'webp';
+  if (lower.includes('gif')) return 'gif';
+  return 'png';
+}
+
+async function uploadVisionImageToOpenAiFile(
+  apiKey: string,
+  base64: string,
+  mimeType: string,
+  capturedAt?: string,
+): Promise<string | null> {
+  if (!apiKey || !base64 || !String(mimeType || '').startsWith('image/')) return null;
+
+  try {
+    const binary = atob(base64);
+    const bytes = new Uint8Array(binary.length);
+    for (let i = 0; i < binary.length; i += 1) bytes[i] = binary.charCodeAt(i);
+
+    const blob = new Blob([bytes], { type: mimeType });
+    const ext = guessImageExtension(mimeType);
+    const safeStamp = String(capturedAt || new Date().toISOString()).replace(/[:.]/g, '-');
+    const file = new File([blob], `scope-${safeStamp}.${ext}`, { type: mimeType });
+    const form = new FormData();
+    form.append('purpose', 'vision');
+    form.append('file', file);
+
+    const res = await fetch('https://api.openai.com/v1/files', {
+      method: 'POST',
+      headers: {
+        Authorization: `Bearer ${apiKey}`,
+      },
+      body: form,
+    });
+    if (!res.ok) return null;
+
+    const json = await res.json() as { id?: string };
+    return typeof json.id === 'string' && json.id.trim() ? json.id : null;
+  } catch {
+    return null;
+  }
+}
+
 function getImageAttachments(attachments?: McpChatAttachment[]): McpChatAttachment[] {
   return Array.isArray(attachments)
     ? attachments
@@ -849,20 +896,43 @@ async function runOpenAiLoop(params: LiveToolLoopParams): Promise<LiveToolLoopRe
           if (screenshotPayload && toolArgs.analyze === true) {
             const visionBase64 = screenshotPayload.analysisBase64 || screenshotPayload.base64;
             const visionMimeType = screenshotPayload.analysisMimeType || screenshotPayload.mimeType;
+            const analysisTransport = String(toolArgs.analysisTransport || 'auto').toLowerCase() as ScreenshotAnalysisTransport;
+            const visionFileId = analysisTransport === 'base64'
+              ? null
+              : await uploadVisionImageToOpenAiFile(
+                  apiKey,
+                  visionBase64,
+                  visionMimeType,
+                  screenshotPayload.capturedAt,
+                );
+            if (analysisTransport === 'file_id' && !visionFileId) {
+              toolResultsInput.push({
+                type: 'function_call_output',
+                call_id: callId,
+                output: 'Error: capture_screenshot requested analysisTransport=file_id, but uploading the screenshot to OpenAI Files failed.',
+              });
+              continue;
+            }
             // Send screenshot for AI analysis
             toolResultsInput.push({
               type: 'function_call_output',
               call_id: callId,
-              output: 'Screenshot captured. Analyze the image below.',
+              output: `Screenshot captured. Analyze the image below. Vision transport: ${visionFileId ? 'file_id' : 'base64'}.`,
             });
             toolResultsInput.push({
               role: 'user',
               content: [
-                {
-                  type: 'input_image',
-                  image_url: `data:${visionMimeType};base64,${visionBase64}`,
-                  detail: 'auto',
-                },
+                ...(visionFileId
+                  ? [{
+                      type: 'input_image',
+                      file_id: visionFileId,
+                      detail: 'auto',
+                    } satisfies Record<string, unknown>]
+                  : [{
+                      type: 'input_image',
+                      image_url: `data:${visionMimeType};base64,${visionBase64}`,
+                      detail: 'auto',
+                    } satisfies Record<string, unknown>]),
                 { type: 'input_text', text: 'Only mention what CHANGED or is relevant to the user\'s last request. Do NOT re-describe the entire display.' },
               ],
             });

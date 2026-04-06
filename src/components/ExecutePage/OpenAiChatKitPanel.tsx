@@ -1275,6 +1275,10 @@ function OpenAiChatKitPanelInner({
     }
   }, [chatkit, isSendingPrompt]);
 
+  const handleShowHistory = useCallback(() => {
+    chatkit.showHistory?.();
+  }, [chatkit]);
+
   // ── Widget action handler — replaces MutationObserver for ACTIONS_JSON ──
   // ChatKit emits widget actions as DOM CustomEvents on the <openai-chatkit> element.
   // When user clicks "Apply to Flow" on the widget, we receive actions directly.
@@ -1568,6 +1572,30 @@ function OpenAiChatKitPanelInner({
         </div>
       ) : null}
       <div style={{ position: 'relative', zIndex: 1, flex: 1, minHeight: 0, display: 'flex', flexDirection: 'column' }}>
+        {historyEnabled ? (
+          <button
+            type="button"
+            onClick={handleShowHistory}
+            style={{
+              position: 'absolute',
+              top: 10,
+              right: 10,
+              zIndex: 3,
+              padding: '4px 10px',
+              fontSize: 12,
+              fontWeight: 600,
+              borderRadius: 999,
+              border: `1px solid ${chatKitTheme === 'dark' ? 'rgba(255,255,255,0.14)' : 'rgba(0,0,0,0.12)'}`,
+              background: chatKitTheme === 'dark' ? 'rgba(15,23,42,0.88)' : 'rgba(255,255,255,0.92)',
+              color: chatKitTheme === 'dark' ? '#cbd5e1' : '#334155',
+              cursor: 'pointer',
+            }}
+            aria-label="Open chat history"
+            title="Open chat history"
+          >
+            History
+          </button>
+        ) : null}
         <ChatKit control={chatkit.control} style={{ width: '100%', height: '100%' }} />
         {quickActions.length > 0 && (
           <div style={{
