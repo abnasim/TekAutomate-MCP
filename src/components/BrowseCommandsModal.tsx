@@ -111,20 +111,6 @@ function buildCommandSearchBlob(cmd: CommandLibraryItem): string[] {
     .filter((x) => x && x !== '[object object]');
 }
 
-function normalizeIndexedQueryToTemplate(value: string): string {
-  return String(value || '')
-    .replace(/\bCH\d+\b/gi, 'CH<x>')
-    .replace(/\bMEAS\d+\b/gi, 'MEAS<x>')
-    .replace(/\bREF\d+\b/gi, 'REF<x>')
-    .replace(/\bMATH\d+\b/gi, 'MATH<x>')
-    .replace(/\bBUS\d+\b/gi, 'BUS<x>')
-    .replace(/\bCURSOR\d+\b/gi, 'CURSOR<x>')
-    .replace(/\bPLOT\d+\b/gi, 'PLOT<x>')
-    .replace(/\bSEARCH\d+\b/gi, 'SEARCH<x>')
-    .replace(/\bDIGGRP\d+\b/gi, 'DIGGRP<x>')
-    .replace(/\bSOUrce\d+\b/gi, 'SOUrce<x>');
-}
-
 export interface BrowseCommandsModalProps {
   isOpen: boolean;
   onClose: () => void;
@@ -329,7 +315,7 @@ export const BrowseCommandsModal: React.FC<BrowseCommandsModalProps> = ({
 
     observer.observe(sentinel);
     return () => observer.disconnect();
-  }, [hasMore]);
+  }, [filtered.length, hasMore]);
   
   // Trigger search animation when browser opens
   useEffect(() => {

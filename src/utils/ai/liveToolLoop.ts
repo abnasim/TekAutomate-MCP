@@ -305,6 +305,7 @@ async function compressScreenshotForAnalysis(result: unknown, analyze?: boolean)
  * Verify SCPI commands against the command index before sending to the instrument.
  * Bypasses verification for star commands (*IDN?, *RST, etc.) which are universal.
  */
+// eslint-disable-next-line @typescript-eslint/no-unused-vars
 async function verifyScpiCommands(
   commands: string[],
   flowContext?: LiveToolLoopParams['flowContext']
@@ -959,8 +960,6 @@ export function buildLiveSystemPrompt(instrument?: {
   const mode = options?.mode || 'live';
   const isLive = mode === 'live';
   const modelFamily = instrument?.modelFamily || 'scope';
-  const backend = instrument?.backend || 'pyvisa';
-
   if (isLive) {
     const instrumentLines: string[] = [];
     if (instrument?.executorUrl) instrumentLines.push(`- Executor: ${instrument.executorUrl}`);

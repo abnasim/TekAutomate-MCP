@@ -1,4 +1,4 @@
-import { useMemo, useState, useEffect, useRef } from 'react';
+import { useMemo, useState, useEffect } from 'react';
 import type { AiAction, AiActionParseResult } from '../../utils/aiActions';
 import { canMaterializeAiAction, normalizeAiActions, parseAiActionResponse } from '../../utils/aiActions';
 import { streamMcpChat, disconnectLiveSession, resolveMcpHost, type McpChatAttachment } from '../../utils/ai/mcpClient';
@@ -66,11 +66,6 @@ function extractScreenshotResult(value: unknown): {
   };
 }
 
-const API_KEY_STORAGE = 'tekautomate.ai.byok.api_key';
-const API_KEY_STORAGE_BY_PROVIDER = {
-  openai: 'tekautomate.ai.byok.api_key.openai',
-  anthropic: 'tekautomate.ai.byok.api_key.anthropic',
-} as const;
 const SERVER_DEFAULT_ASSISTANT_TOKEN = '__SERVER_DEFAULT_ASSISTANT__';
 const SURPRISE_PROMPTS = [
   'Build a practical oscilloscope validation flow for the current model using only valid TekAutomate step types, and explain why you chose that sequence.',
@@ -594,6 +589,7 @@ function extractStructuredBuildBrief(history: Array<{ role: string; content?: st
   return brief;
 }
 
+// eslint-disable-next-line @typescript-eslint/no-unused-vars
 function inferConversationBuildFocus(history: Array<{ role: string; content?: string }>): string[] {
   const joined = history
     .map((turn) => String(turn.content || ''))
@@ -687,7 +683,6 @@ export function useAiChat(params: {
   onApplyAiActions?: (actions: AiAction[]) => Promise<{ applied: number; rerunStarted: boolean; changed: boolean }>;
 }) {
   const { state, dispatch } = useAiChatContext();
-  const hydratedRef = useRef(false);
   const [lastDiagnostics, setLastDiagnostics] = useState<{
     corpora: string[];
     retrievedChunkIds: string[];

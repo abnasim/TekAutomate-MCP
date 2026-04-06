@@ -40,7 +40,7 @@ import { LiveModePanel, LiveModeToolbar, type LiveModeCapture } from './componen
 import { resolveCommandSelection } from './utils/commandMaterializer';
 import type { AiAction } from './utils/aiActions';
 import { applyAiActionsToSteps } from './utils/aiActions';
-import { streamMcpChat, type McpChatAttachment } from './utils/ai/mcpClient';
+import { streamMcpChat } from './utils/ai/mcpClient';
 import { generateExecutionAudit, type ExecutionAuditReport } from './utils/executionAudit';
 import { decodeStatusFromText } from './utils/statusDecoder';
 import { getDocstring, ensureDocstringsLoaded, areDocstringsLoaded } from './components/docstrings';
@@ -74,7 +74,7 @@ const parseAskAiContent = (content: string): AskAiParsedResult => {
     .filter(Boolean);
 
   const tipMatch = text.match(/(?:important note|tip|gotcha)s?:?\s*(.+)/i);
-  const argMatch = text.match(/valid argument values for [`']?([^`' ]+)[`']?\s*(?:are|:)\s*([^\.]+)/i);
+  const argMatch = text.match(/valid argument values for [`']?([^`' ]+)[`']?\s*(?:are|:)\s*([^.]+)/i);
 
   const summary = sentences[0] || text || 'No details provided.';
   const syntax = codeMatches[0] || '';
@@ -1441,42 +1441,6 @@ function AppInner() {
   const [selectedCategory, setSelectedCategory] = useState<string | null>(null);
   const [showPopularOnly, setShowPopularOnly] = useState(false);
   
-  // Popular commands - most commonly used SCPI commands
-  const popularCommands = useMemo(() => new Set([
-    // Acquisition
-    'ACQuire:MODe', 'ACQuire:NUMAVg', 'ACQuire:STOPAfter', 'ACQuire:STATE',
-    // Channels
-    'CH<x>:BANdwidth', 'CH<x>:COUPling', 'CH<x>:DISplay', 'CH<x>:LABel', 
-    'CH<x>:OFFSet', 'CH<x>:POSition', 'CH<x>:PRObe', 'CH<x>:SCAle', 'CH<x>:TERmination',
-    // Cursor
-    'CURSor:FUNCtion', 'CURSor:MODe', 'CURSor:SOUrce',
-    // Display
-    'DISplay:GLObal:CH<x>:STATE', 'DISplay:INTENSITy:BACKLight', 'DISplay:PERSistence',
-    'DISplay:WAVEView<x>:CURSor:CURSOR<x>:STATE',
-    // Front Panel
-    'FPAnel:PRESS', 'FPAnel:TURN',
-    // Horizontal
-    'HORizontal:DELay:MODe', 'HORizontal:DELay:TIMe', 'HORizontal:MODE', 
-    'HORizontal:POSition', 'HORizontal:RECOrdlength', 'HORizontal:SCAle',
-    // Math
-    'MATH<x>:DEFine', 'MATH<x>:DISplay', 'MATH<x>:LABel',
-    // Measurement
-    'MEASUrement:MEAS<x>:SOUrce', 'MEASUrement:MEAS<x>:TYPe', 'MEASUrement:MEAS<x>:VALue?',
-    'MEASUrement:IMMed:SOUrce1', 'MEASUrement:IMMed:TYPe', 'MEASUrement:IMMed:VALue?',
-    // Reference
-    'REF<x>:DISplay', 'REF<x>:LABel',
-    // Save/Recall
-    'SAVe:IMAGe', 'SAVe:SETUp', 'SAVe:WAVEform', 'RECAll:SETUp',
-    // Trigger
-    'TRIGger:A:EDGE:COUPling', 'TRIGger:A:EDGE:SLOpe', 'TRIGger:A:EDGE:SOUrce',
-    'TRIGger:A:LEVel:CH<x>', 'TRIGger:A:MODe', 'TRIGger:A:TYPe',
-    // Waveform Transfer
-    'DATa:SOUrce', 'DATa:STARt', 'DATa:STOP', 'DATa:ENCdg', 'DATa:WIDth',
-    'CURVe?', 'WFMOutpre?',
-    // System
-    '*IDN?', '*RST', '*CLS', '*OPC?', '*WAI',
-    'AUTOSet', 'FACtory', 'LOCk', 'UNLock',
-  ]), []);
   const [selectedBackends, setSelectedBackends] = useState<string[]>([]);
   // Command Library infinite scroll state
   const [libraryVisibleCount, setLibraryVisibleCount] = useState(50);
@@ -1694,6 +1658,7 @@ function AppInner() {
     };
   }, [config, parseScannedInstrumentHost, parseScannedInstrumentPort]);
 
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
   const liveModeTargetOptions = useMemo<LiveModeTargetOption[]>(() => {
     const formatConfiguredLiveLabel = (device: DeviceEntry) => {
       const alias = String(device.alias || '').trim();
@@ -1730,7 +1695,7 @@ function AppInner() {
         };
       });
     return [...configured, ...scanned];
-  }, [buildScannedInstrumentConfig, config, enabledDevices, executorScannedInstruments, getVisaResourceString]);
+  }, [buildScannedInstrumentConfig, config, enabledDevices, executorScannedInstruments]);
 
   const [runWindowResult, setRunWindowResult] = useState<{ ok: boolean; stdout: string; stderr: string; error: string | null; exit_code?: number } | null>(null);
   const [lastExecutionAudit, setLastExecutionAudit] = useState<ExecutionAuditReport | null>(null);
@@ -1755,7 +1720,6 @@ function AppInner() {
   });
 
   const fileInputRef = useRef<HTMLInputElement>(null);
-  const [showFlowDropdown, setShowFlowDropdown] = useState(false);
   const [showHelpDropdown, setShowHelpDropdown] = useState(false);
   const [showBuilderMoreMenu, setShowBuilderMoreMenu] = useState(false);
   const moreMenuBtnRef = useRef<HTMLButtonElement>(null);
@@ -4254,7 +4218,7 @@ function AppInner() {
     return true;
   }, [selectedDeviceFamily]);
 
-  const getLiveInstrumentVisaResourceString = (
+  const getLiveInstrumentVisaResourceString = useCallback((
       source: Pick<InstrumentConfig, 'connectionType' | 'host' | 'port' | 'usbVendorId' | 'usbProductId' | 'usbSerial' | 'gpibBoard' | 'gpibAddress' | 'deviceType' | 'deviceDriver' | 'modelFamily' | 'alias'> = config
     ): string => {
       const isTekScopePc =
@@ -4280,7 +4244,7 @@ function AppInner() {
         default:
           return `TCPIP::${source.host}::INSTR`;
       }
-    };
+    }, [config]);
 
   const activeInstrumentConfig = useMemo<InstrumentConfig>(() => {
     const enabledDevice = devices.find((device) => device.enabled !== false);
@@ -4304,17 +4268,6 @@ function AppInner() {
   const liveModeVisaResource = useMemo(
     () => getLiveInstrumentVisaResourceString(liveModeInstrumentConfig),
     [getLiveInstrumentVisaResourceString, liveModeInstrumentConfig]
-  );
-
-  const liveModeDeviceOptions = useMemo(
-    () =>
-      liveModeTargetOptions.map((device) => ({
-        id: device.id,
-        label: device.label,
-        targetHost: device.targetHost,
-        targetPort: device.targetPort,
-      })),
-    [liveModeTargetOptions]
   );
 
   const liveModeVncTarget = useMemo(() => {
@@ -7558,7 +7511,7 @@ if __name__ == "__main__":
       .filter((x) => x.score >= 0)
       .sort((a, b) => b.score - a.score || a.cmd.scpi.localeCompare(b.cmd.scpi))
       .map((x) => x.cmd);
-  }, [commandLibrary, librarySearchDebounced, selectedCategory, showPopularOnly, popularCommands, isCommandCompatible, commandSearchMode]);
+  }, [commandLibrary, librarySearchDebounced, selectedCategory, showPopularOnly, isCommandCompatible]);
 
   const filteredCommandsSync = useMemo(() => computeFilteredCommands(), [computeFilteredCommands]);
 
@@ -7692,7 +7645,7 @@ if __name__ == "__main__":
     }
   };
 
-  const formatAskAiModalText = (raw: string): string => {
+  const formatAskAiModalText = useCallback((raw: string): string => {
     const cleaned = cleanAskAiText(raw);
     if (cleaned) return cleaned;
     const parsed = extractActionsJsonForAskAi(raw);
@@ -7719,7 +7672,7 @@ if __name__ == "__main__":
     return lines.length
       ? lines.join('\n')
       : 'AI returned structured action data without narrative text for this command.';
-  };
+  }, []);
 
   const askAiAboutStep = useCallback(async (step: Step) => {
     setAskAiModalOpen(true);
@@ -7774,24 +7727,11 @@ if __name__ == "__main__":
 
     const prompt = (() => {
       const scpi = libraryCmd?.scpi || commandText || '(unknown)';
-      const description =
-        libraryCmd?.description || 'N/A';
       const syntaxSet = libraryCmd?.manualEntry?.syntax?.set || 'N/A';
-      const syntaxQuery = libraryCmd?.manualEntry?.syntax?.query || 'N/A';
-      const args =
-        JSON.stringify(
-          libraryCmd?.params ||
-            libraryCmd?.manualEntry?.arguments ||
-            [],
-          null,
-          2
-        ) || '[]';
       const example =
         libraryCmd?.manualEntry?.examples?.[0]?.codeExamples?.scpi?.code ||
         libraryCmd?.example ||
         'N/A';
-      const notes = libraryCmd?.manualEntry?.notes?.join('. ') || 'None';
-      const conditions = (libraryCmd as any)?.conditions || 'None';
 
       setAskAiModalFallbackSyntax(syntaxSet);
       setAskAiModalFallbackExample(example);
@@ -7878,7 +7818,7 @@ Keep under 120 words. No headings. Bullets only. Stay on this command. Do not de
     } finally {
       setAskAiModalLoading(false);
     }
-  }, [config, devices, executionSource, lastExecutionAudit, runWindowLog, runWindowStatus, steps]);
+  }, [commandLibrary, config, devices, executionSource, formatAskAiModalText, lastExecutionAudit, runWindowLog, runWindowStatus, steps]);
 
   const replaceStepWithSteps = (items: Step[], targetId: string, replacement: Step[]): Step[] => {
     return items.flatMap((item) => {

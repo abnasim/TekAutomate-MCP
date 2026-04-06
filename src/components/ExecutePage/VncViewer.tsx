@@ -136,6 +136,7 @@ export function VncViewer({ wsUrl, title = 'Scope VNC Viewer' }: VncViewerProps)
     };
 
     void start();
+    const screenEl = screenRef.current;
 
     return () => {
       disposed = true;
@@ -144,8 +145,8 @@ export function VncViewer({ wsUrl, title = 'Scope VNC Viewer' }: VncViewerProps)
         rfbRef.current?.disconnect?.();
       } catch (_) {}
       rfbRef.current = null;
-      if (screenRef.current) {
-        screenRef.current.innerHTML = '';
+      if (screenEl) {
+        screenEl.innerHTML = '';
       }
     };
   }, [wsUrl]);

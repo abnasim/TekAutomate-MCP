@@ -942,7 +942,7 @@ function OpenAiChatKitPanelInner({
     if (action.type === 'flow.dismiss') {
       console.log('[ChatKit] User dismissed flow actions');
     }
-  }, [isLiveMode]);
+  }, []);
 
   // ── Session creation ──
   // Calls OpenAI ChatKit Sessions API directly from the browser.
