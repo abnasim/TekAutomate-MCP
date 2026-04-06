@@ -118,9 +118,9 @@ function getStartScreenGreeting(isLiveMode: boolean): string {
 function getStartScreenPrompts(isLiveMode: boolean): Array<{ label: string; prompt: string }> {
   return isLiveMode
     ? [
-        { label: 'Check Instrument', prompt: 'Quick instrument check. Send *IDN? via send_scpi to identify the scope, then *ESR? and ALLEV? to check for errors. Report identity, status, and any errors. Do NOT send *LRN? — use existing session context.' },
-        { label: 'Discover SCPI', prompt: 'Start SCPI discovery mode. Send *LRN? via send_scpi and keep the response as your baseline. Then tell me to go make any changes on the scope. When I say done, send *LRN? again via send_scpi and diff the two responses to show me the exact SCPI commands that changed.' },
-        { label: 'Reset Instrument', prompt: 'Full instrument reset and reconnection. Send *RST via send_scpi, poll *OPC? until 1, then *CLS to clear status. Then send device_clear to clear the I/O buffer. Then disconnect to close the connection. Then send *IDN? to reconnect and verify. Finally send *LRN? to capture the fresh reset state as your new session context. Report when complete.' },
+        { label: 'Check Instrument', prompt: 'Quick instrument check. Use instrument_live with { action:"context" } to identify the scope, then instrument_live with { action:"send", commands:["*IDN?", "*ESR?", "ALLEV?"] } to check identity and errors. Report identity, status, and any errors. Do NOT refresh *LRN? unless needed.' },
+        { label: 'Discover SCPI', prompt: 'Start SCPI discovery mode. Use the existing *LRN? session context as baseline, or call instrument_live with { action:"snapshot" } if needed. Then tell me to go make any changes on the scope. When I say done, call instrument_live with { action:"diff" } and show me the exact SCPI commands that changed.' },
+        { label: 'Reset Instrument', prompt: 'Full instrument reset and reconnection. Use instrument_live with { action:"send", commands:["*RST"] }, poll *OPC? until 1, then clear status with *CLS. Reconnect and verify with instrument_live using { action:"context" } and { action:"send", commands:["*IDN?", "*ESR?", "ALLEV?", "*LRN?"] }. Report when complete.' },
         { label: 'What can you do?', prompt: 'What can you do in Live mode? Brief overview.' },
       ]
     : [
@@ -146,9 +146,9 @@ interface QuickAction {
 function getQuickActions(isLiveMode: boolean): QuickAction[] {
   return isLiveMode
     ? [
-        { id: 'check_instrument', label: 'Check Instrument', icon: '🔗', type: 'button', prompt: 'Quick instrument check. Send *IDN? via send_scpi to identify, *ESR? and ALLEV? for errors. Report identity and any errors. Do NOT send *LRN? — use existing session context.' },
-        { id: 'discover_scpi', label: 'Discover SCPI', icon: '🔍', type: 'button', prompt: 'Send *LRN? via send_scpi and keep as baseline. Then tell me to make changes on the scope. When I say done, send *LRN? again and diff to show exact SCPI commands that changed.' },
-        { id: 'reset_instrument', label: 'Reset Instrument', icon: '🔄', type: 'button', prompt: 'Full instrument reset. Send *RST via send_scpi, poll *OPC? until 1, *CLS to clear status, device_clear for I/O buffer, disconnect to close connection, *IDN? to reconnect, *LRN? for fresh state. Report when complete.' },
+        { id: 'check_instrument', label: 'Check Instrument', icon: '[I]', type: 'button', prompt: 'Quick instrument check. Use instrument_live with { action:"context" } to identify the scope, then instrument_live with { action:"send", commands:["*IDN?", "*ESR?", "ALLEV?"] } to check identity and errors. Report identity and any errors. Do NOT refresh *LRN? unless needed.' },
+        { id: 'discover_scpi', label: 'Discover SCPI', icon: '[?]', type: 'button', prompt: 'Use the existing *LRN? session context as baseline, or call instrument_live with { action:"snapshot" } if needed. Then tell me to make changes on the scope. When I say done, call instrument_live with { action:"diff" } and show exact SCPI commands that changed.' },
+        { id: 'reset_instrument', label: 'Reset Instrument', icon: '[R]', type: 'button', prompt: 'Full instrument reset. Use instrument_live with { action:"send", commands:["*RST"] }, poll *OPC? until 1, clear status with *CLS, then verify with instrument_live using { action:"context" } and { action:"send", commands:["*IDN?", "*ESR?", "ALLEV?", "*LRN?"] }. Report when complete.' },
       ]
     : [];
 }
