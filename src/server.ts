@@ -310,6 +310,15 @@ function getRequestBaseUrl(req: http.IncomingMessage): string {
   return `${proto}://${host}`;
 }
 
+function extensionForMimeType(mimeType: string): string {
+  const normalized = String(mimeType || '').toLowerCase();
+  if (normalized === 'image/png') return 'png';
+  if (normalized === 'image/jpeg' || normalized === 'image/jpg') return 'jpg';
+  if (normalized === 'image/webp') return 'webp';
+  if (normalized === 'image/gif') return 'gif';
+  return 'img';
+}
+
 function getConfiguredPublicBaseUrl(): string {
   return String(process.env.MCP_PUBLIC_URL || 'https://tekautomatemcpv2-production.up.railway.app').trim();
 }
@@ -722,16 +731,19 @@ function filterTools(q) {
     }
 
     if (req.method === 'GET' && req.url?.startsWith('/temp/vision/')) {
-      const id = decodeURIComponent(req.url.slice('/temp/vision/'.length));
+      const requestedId = decodeURIComponent(req.url.slice('/temp/vision/'.length));
+      const id = requestedId.split('.')[0];
       const image = getTempVisionImage(id);
       if (!image) {
         res.statusCode = 404;
         res.end('Not found');
         return;
       }
+      const ext = extensionForMimeType(image.mimeType);
       res.statusCode = 200;
       res.setHeader('Content-Type', image.mimeType);
-      res.setHeader('Cache-Control', 'private, max-age=30');
+      res.setHeader('Content-Disposition', `inline; filename="scope-screenshot.${ext}"`);
+      res.setHeader('Cache-Control', 'private, max-age=60');
       res.setHeader('Access-Control-Allow-Origin', '*');
       res.end(image.buffer);
       return;

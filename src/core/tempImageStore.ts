@@ -11,6 +11,15 @@ interface TempImageRecord {
 const tempImages = new Map<string, TempImageRecord>();
 const DEFAULT_TTL_MS = 60_000;
 
+function extensionForMimeType(mimeType: string): string {
+  const normalized = String(mimeType || '').toLowerCase();
+  if (normalized === 'image/png') return 'png';
+  if (normalized === 'image/jpeg' || normalized === 'image/jpg') return 'jpg';
+  if (normalized === 'image/webp') return 'webp';
+  if (normalized === 'image/gif') return 'gif';
+  return 'img';
+}
+
 function cleanupExpiredTempImages() {
   const now = Date.now();
   for (const [id, record] of tempImages.entries()) {
@@ -39,7 +48,7 @@ export function storeTempVisionImage(input: {
   });
   return {
     id,
-    path: `/temp/vision/${encodeURIComponent(id)}`,
+    path: `/temp/vision/${encodeURIComponent(id)}.${extensionForMimeType(input.mimeType)}`,
     expiresAt: new Date(expiresAt).toISOString(),
   };
 }
