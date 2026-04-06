@@ -1,7 +1,6 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { Code, Terminal, Copy, Pencil, Sparkles, Play, RotateCcw, RotateCw, Trash2, Mail, SkipForward, Square, MessageSquare, ChevronLeft, ChevronRight } from 'lucide-react';
-import { streamMcpChat, resolveMcpHost } from '../../utils/ai/mcpClient';
-import { executeMcpTool } from '../../utils/ai/liveToolLoop';
+import { streamMcpChat } from '../../utils/ai/mcpClient';
 import { StepsListPreview } from './StepsListPreview';
 import type { StepPreview } from './StepsListPreview';
 import { PythonCodeEditor } from '../PythonCodeEditor';
@@ -262,106 +261,6 @@ function ExecutePageContent({
   }, [steps]);
 
   const securedInstrumentEndpoint = instrumentEndpoint;
-
-  // ── SSE live action stream — always active in live mode ──────────
-  // Lives here (not in AiChatPanel) so it survives panel hide/show.
-  // When MCP enqueues a live action, SSE pushes it instantly to the
-  // browser which executes it and posts the result back.
-  // Stable session key — persists for the lifetime of this component
-  const [sseSessionKey] = useState(() => `live-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`);
-  const instrumentEndpointRef = React.useRef(instrumentEndpoint);
-  instrumentEndpointRef.current = instrumentEndpoint;
-  const flowContextRef = React.useRef(flowContext);
-  flowContextRef.current = flowContext;
-  const onLiveScreenshotRef = React.useRef(onLiveScreenshot);
-  onLiveScreenshotRef.current = onLiveScreenshot;
-
-  useEffect(() => {
-    if (executionSource !== 'live') return;
-    const mcpHost = resolveMcpHost();
-    if (!mcpHost) return;
-    if (!instrumentEndpoint?.executorUrl) return;
-
-    const sessionKey = sseSessionKey;
-    const baseUrl = mcpHost.replace(/\/$/, '');
-
-    // Sync runtime context so MCP server knows our session key
-    void fetch(`${baseUrl}/runtime-context`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        instrument: {
-          connected: true,
-          executorUrl: instrumentEndpoint.executorUrl,
-          visaResource: instrumentEndpoint.visaResource,
-          backend: instrumentEndpoint.backend || 'pyvisa',
-          modelFamily: flowContext?.modelFamily || 'unknown',
-          deviceDriver: flowContext?.deviceDriver || null,
-          liveMode: true,
-        },
-        liveSession: { sessionKey, threadId: null, workflowId: null, userId: 'tekautomate' },
-      }),
-    }).catch(() => {});
-
-    // Open SSE stream
-    const streamUrl = `${baseUrl}/live-actions/stream?sessionKey=${encodeURIComponent(sessionKey)}`;
-    const eventSource = new EventSource(streamUrl);
-    let cancelled = false;
-
-    eventSource.addEventListener('action', async (event) => {
-      if (cancelled) return;
-      let action: { id: string; toolName: string; args?: Record<string, unknown> } | null = null;
-      try {
-        action = JSON.parse(event.data);
-        if (!action?.id || !action.toolName) return;
-
-        const result = await executeMcpTool(
-          action.toolName,
-          action.args || {},
-          instrumentEndpointRef.current || undefined,
-          {
-            modelFamily: flowContextRef.current?.modelFamily,
-            deviceDriver: flowContextRef.current?.deviceDriver,
-          },
-        );
-
-        // Update screenshot in UI if applicable
-        if (action.toolName === 'capture_screenshot' && result && typeof result === 'object') {
-          const r = result as Record<string, unknown>;
-          if (r.base64 && r.mimeType) {
-            onLiveScreenshotRef.current?.({
-              dataUrl: `data:${r.mimeType};base64,${r.base64}`,
-              mimeType: String(r.mimeType),
-              sizeBytes: typeof r.sizeBytes === 'number' ? r.sizeBytes : 0,
-              capturedAt: typeof r.capturedAt === 'string' ? r.capturedAt : new Date().toISOString(),
-            });
-          }
-        }
-
-        await fetch(`${baseUrl}/live-actions/result`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ id: action.id, sessionKey, ok: true, result }),
-        });
-      } catch (error) {
-        if (action?.id) {
-          await fetch(`${baseUrl}/live-actions/result`, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-              id: action.id, sessionKey, ok: false,
-              error: error instanceof Error ? error.message : 'Action failed',
-            }),
-          }).catch(() => {});
-        }
-      }
-    });
-
-    return () => {
-      cancelled = true;
-      eventSource.close();
-    };
-  }, [executionSource, instrumentEndpoint?.executorUrl, instrumentEndpoint?.visaResource]);
 
   const appendStepLog = useCallback((line: string) => {
     setStepLog(prev => prev + line + '\n');

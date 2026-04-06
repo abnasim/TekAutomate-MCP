@@ -32,49 +32,10 @@ export interface LiveActionResultEnvelope {
   completedAt: string;
 }
 
-const LIVE_ACTION_TIMEOUT_MS = 30_000;
+const LIVE_ACTION_TIMEOUT_MS = 45_000;
+const SCREENSHOT_DEBOUNCE_MS = 1_500;
 const liveActionQueue: PendingActionRecord[] = [];
-
-// ── SSE streams — one per session key ──────────────────────────────
-// When the browser opens GET /live-actions/stream?sessionKey=X, we store
-// the response object here. When a new action is enqueued, we push it
-// immediately via SSE — zero polling gap.
-const sseStreams = new Map<string, Set<import('http').ServerResponse>>();
-
-export function addSseStream(sessionKey: string, res: import('http').ServerResponse): void {
-  let set = sseStreams.get(sessionKey);
-  if (!set) {
-    set = new Set();
-    sseStreams.set(sessionKey, set);
-  }
-  set.add(res);
-}
-
-export function removeSseStream(sessionKey: string, res: import('http').ServerResponse): void {
-  const set = sseStreams.get(sessionKey);
-  if (set) {
-    set.delete(res);
-    if (set.size === 0) sseStreams.delete(sessionKey);
-  }
-}
-
-export function getSseStreamCount(sessionKey?: string): number {
-  if (sessionKey) return sseStreams.get(sessionKey)?.size ?? 0;
-  let total = 0;
-  for (const set of sseStreams.values()) total += set.size;
-  return total;
-}
-
-function pushActionToSseStreams(sessionKey: string, action: LiveActionRequest): boolean {
-  const set = sseStreams.get(sessionKey);
-  if (!set?.size) return false;
-  const data = JSON.stringify(action);
-  const msg = `event: action\ndata: ${data}\n\n`;
-  for (const res of set) {
-    try { res.write(msg); } catch { /* stream dead, will be cleaned up */ }
-  }
-  return true;
-}
+const liveActionWaiters = new Map<string, Array<(action: LiveActionRequest | null) => void>>();
 
 function createActionId(): string {
   return `live_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
@@ -87,19 +48,47 @@ function isScreenshotAction(record: LiveActionRequest | PendingActionRecord): bo
 function getNextQueuedRecord(sessionKey: string): PendingActionRecord | null {
   const queued = liveActionQueue.filter((item) => item.sessionKey === sessionKey && item.status === 'queued');
   if (!queued.length) return null;
+
   const commandLike = queued.find((item) => !isScreenshotAction(item));
   if (commandLike) return commandLike;
-  return queued[queued.length - 1]; // latest screenshot
+
+  const screenshots = queued
+    .filter((item) => isScreenshotAction(item))
+    .sort((a, b) => Date.parse(b.createdAt) - Date.parse(a.createdAt));
+  const latestScreenshot = screenshots[0];
+  if (!latestScreenshot) return null;
+
+  const ageMs = Date.now() - Date.parse(latestScreenshot.createdAt);
+  if (ageMs < SCREENSHOT_DEBOUNCE_MS) {
+    return null;
+  }
+  return latestScreenshot;
+}
+
+function notifySession(sessionKey: string) {
+  const waiters = liveActionWaiters.get(sessionKey);
+  if (!waiters?.length) return;
+  const action = getNextQueuedRecord(sessionKey);
+  if (!action) return;
+  liveActionWaiters.delete(sessionKey);
+  waiters.forEach((resolve) => resolve(stripRecord(action)));
 }
 
 function stripRecord(record: PendingActionRecord): LiveActionRequest {
-  const { resolveHandlers: _, rejectHandlers: __, timeoutHandle: ___, ...action } = record;
+  const {
+    resolveHandlers: _resolveHandlers,
+    rejectHandlers: _rejectHandlers,
+    timeoutHandle: _timeoutHandle,
+    ...action
+  } = record;
   return action;
 }
 
 function cleanupRecord(id: string) {
   const index = liveActionQueue.findIndex((item) => item.id === id);
-  if (index >= 0) liveActionQueue.splice(index, 1);
+  if (index >= 0) {
+    liveActionQueue.splice(index, 1);
+  }
 }
 
 function getDefaultLiveSessionKey(): string | null {
@@ -125,27 +114,24 @@ export async function enqueueLiveAction(params: {
 }): Promise<LiveActionResultEnvelope> {
   const sessionKey = String(params.sessionKey || getDefaultLiveSessionKey() || '').trim();
   if (!sessionKey) {
-    throw new Error('No active live TekAutomate session. Open TekAutomate in the browser with an instrument connected.');
-  }
-
-  // Check if any browser is listening
-  const hasStream = getSseStreamCount(sessionKey) > 0;
-  if (!hasStream) {
-    throw new Error('No TekAutomate browser session is listening. Open TekAutomate in the browser and switch to Live mode.');
+    throw new Error('No active live TekAutomate session is registered with MCP.');
   }
 
   const timeoutMs = Math.max(5_000, Math.min(params.timeoutMs ?? LIVE_ACTION_TIMEOUT_MS, 120_000));
   return new Promise<LiveActionResultEnvelope>((resolve, reject) => {
-    // Deduplicate screenshots — replace queued one instead of adding another
     if (params.toolName === 'capture_screenshot') {
-      const existing = liveActionQueue.find(
-        (item) => item.sessionKey === sessionKey && item.status === 'queued' && item.toolName === 'capture_screenshot',
+      const existingQueuedScreenshot = liveActionQueue.find(
+        (item) =>
+          item.sessionKey === sessionKey
+          && item.status === 'queued'
+          && item.toolName === 'capture_screenshot',
       );
-      if (existing) {
-        existing.args = params.args;
-        existing.createdAt = new Date().toISOString();
-        existing.resolveHandlers.push(resolve);
-        existing.rejectHandlers.push(reject);
+      if (existingQueuedScreenshot) {
+        existingQueuedScreenshot.args = params.args;
+        existingQueuedScreenshot.createdAt = new Date().toISOString();
+        existingQueuedScreenshot.resolveHandlers.push(resolve);
+        existingQueuedScreenshot.rejectHandlers.push(reject);
+        notifySession(sessionKey);
         return;
       }
     }
@@ -154,12 +140,12 @@ export async function enqueueLiveAction(params: {
     const timeoutHandle = setTimeout(() => {
       const record = liveActionQueue.find((item) => item.id === id);
       cleanupRecord(id);
-      const error = new Error(`Tool ${params.toolName} timed out after ${Math.round(timeoutMs / 1000)}s. TekAutomate browser may not be responding.`);
+      const error = new Error(`Timed out waiting for TekAutomate live action result for ${params.toolName}.`);
       if (record) {
         record.rejectHandlers.forEach((handler) => handler(error));
-      } else {
-        reject(error);
+        return;
       }
+      reject(error);
     }, timeoutMs);
 
     const record: PendingActionRecord = {
@@ -175,18 +161,10 @@ export async function enqueueLiveAction(params: {
     };
 
     liveActionQueue.push(record);
-
-    // Push to SSE stream immediately — no polling gap
-    const action = stripRecord(record);
-    const pushed = pushActionToSseStreams(sessionKey, action);
-    if (pushed) {
-      record.status = 'claimed';
-      record.claimedAt = new Date().toISOString();
-    }
+    notifySession(sessionKey);
   });
 }
 
-// Keep the old poll endpoint working as fallback
 export async function waitForNextLiveAction(sessionKey: string, timeoutMs = 25_000): Promise<LiveActionRequest | null> {
   const normalized = String(sessionKey || '').trim();
   if (!normalized) return null;
@@ -199,8 +177,34 @@ export async function waitForNextLiveAction(sessionKey: string, timeoutMs = 25_0
   }
 
   return new Promise<LiveActionRequest | null>((resolve) => {
-    // Just wait briefly — SSE should handle delivery
-    setTimeout(() => resolve(null), Math.min(timeoutMs, 5_000));
+    const timeoutHandle = setTimeout(() => {
+      const waiters = liveActionWaiters.get(normalized) || [];
+      liveActionWaiters.set(
+        normalized,
+        waiters.filter((waiter) => waiter !== wrappedResolve),
+      );
+      resolve(null);
+    }, Math.max(1_000, Math.min(timeoutMs, 30_000)));
+
+    const wrappedResolve = (action: LiveActionRequest | null) => {
+      clearTimeout(timeoutHandle);
+      if (!action) {
+        resolve(null);
+        return;
+      }
+      const queuedRecord = liveActionQueue.find((item) => item.id === action.id);
+      if (queuedRecord && queuedRecord.status === 'queued') {
+        queuedRecord.status = 'claimed';
+        queuedRecord.claimedAt = new Date().toISOString();
+        resolve(stripRecord(queuedRecord));
+        return;
+      }
+      resolve(action);
+    };
+
+    const waiters = liveActionWaiters.get(normalized) || [];
+    waiters.push(wrappedResolve);
+    liveActionWaiters.set(normalized, waiters);
   });
 }
 
@@ -225,5 +229,6 @@ export function completeLiveAction(input: {
   };
   record.resolveHandlers.forEach((handler) => handler(payload));
   cleanupRecord(record.id);
+  notifySession(record.sessionKey);
   return true;
 }
