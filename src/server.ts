@@ -5,7 +5,7 @@ import { initTmDevicesIndex } from './core/tmDevicesIndex';
 import { initRagIndexes } from './core/ragIndex';
 import { initTemplateIndex } from './core/templateIndex';
 import { runToolLoop } from './core/toolLoop';
-import { getToolDefinitions, getMcpExposedTools, runTool } from './tools/index';
+import { getSlimToolDefinitions, getToolDefinitions, runTool } from './tools/index';
 import type { McpChatRequest } from './core/schemas';
 import { getLastWorkflowProposal } from './tools/stageWorkflowProposal';
 import { getRuntimeContextState, updateRuntimeContext } from './tools/runtimeContextStore';
@@ -371,7 +371,7 @@ export async function createServer(port = 8787): Promise<http.Server> {
         try { await startupInitPromise; } catch { /* degrade gracefully */ }
       }
       // Slim MCP surface — only gateway + live tools exposed
-      const toolDefs = getMcpExposedTools();
+        const toolDefs = getSlimToolDefinitions();
       const mcpTools = toolDefs.map((def: any) => ({
         name: def.name,
         description: def.description ?? def.name,
@@ -717,7 +717,7 @@ function filterTools(q) {
             res.statusCode = 204;
             res.end();
           } else if (method === 'tools/list') {
-            const toolDefs = getMcpExposedTools();
+            const toolDefs = getSlimToolDefinitions();
             const tools = toolDefs.map((def: any) => ({
               name: def.name,
               description: def.description ?? def.name,
@@ -882,7 +882,7 @@ function filterTools(q) {
     // ── Tool endpoints: browser calls these directly, AI proxy not needed ──
 
     if (req.method === 'GET' && req.url === '/tools/list') {
-      const tools = getToolDefinitions();
+      const tools = getSlimToolDefinitions();
       sendJson(res, 200, { ok: true, tools });
       return;
     }

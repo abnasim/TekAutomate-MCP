@@ -32,14 +32,23 @@ import { stageWorkflowProposal } from './stageWorkflowProposal';
 import { getCurrentWorkflow } from './getCurrentWorkflow';
 import { getInstrumentInfo } from './getInstrumentInfo';
 import { getRunLog } from './getRunLog';
+import { instrumentLive } from './instrumentLive';
+import { knowledge } from './knowledge';
+import { tekRouterPublic } from './tekRouterPublic';
+import { workflowUi } from './workflowUi';
 import { GROUP_NAMES, COMMAND_GROUPS } from '../core/commandGroups';
 import { TEK_ROUTER_TOOL_DEFINITION } from '../core/toolRouter';
 
 export const TOOL_HANDLERS = {
   tek_router: async (args: Record<string, unknown>) => {
+    const directResult = await tekRouterPublic(args as any);
+    if (directResult) return directResult;
     const { tekRouter } = await import('../core/toolRouter');
     return tekRouter(args as any);
   },
+  instrument_live: instrumentLive,
+  workflow_ui: workflowUi,
+  knowledge,
   smart_scpi_lookup: smartScpiLookup,
   search_scpi: searchScpi,
   save_learned_workflow: async (input: {
@@ -120,6 +129,117 @@ export type ToolName = keyof typeof TOOL_HANDLERS;
 export function getToolDefinitions() {
   return [
     TEK_ROUTER_TOOL_DEFINITION,
+    {
+      name: 'instrument_live',
+      description:
+        'Live instrument gateway for TekAutomate. Use `context` for connection info, `send` for SCPI commands, `screenshot` for capture, `snapshot`/`diff`/`inspect` for *LRN?-based state discovery, and `resources` for VISA discovery when needed.',
+      parameters: {
+        type: 'object',
+        properties: {
+          action: {
+            type: 'string',
+            enum: ['context', 'send', 'screenshot', 'snapshot', 'diff', 'inspect', 'resources'],
+            description: 'Live instrument operation to run.',
+          },
+          args: {
+            type: 'object',
+            description: 'Optional nested arguments for the selected action. You may also pass action arguments at the top level.',
+          },
+          commands: {
+            type: 'array',
+            items: { type: 'string' },
+            description: 'For action:"send" — SCPI commands to send in order.',
+          },
+          analyze: {
+            type: 'boolean',
+            description: 'For action:"screenshot" — set true only when the model needs the image returned for analysis.',
+          },
+          timeoutMs: {
+            type: 'number',
+            description: 'Optional timeout in milliseconds for send, screenshot, or discovery actions.',
+          },
+        },
+        required: ['action'],
+        additionalProperties: true,
+      },
+    },
+    {
+      name: 'workflow_ui',
+      description:
+        'Workflow/UI state gateway for TekAutomate. Use `current` to inspect the current workflow, `stage` to hand a proposal back to the UI, and `logs` to read the latest execution log tail.',
+      parameters: {
+        type: 'object',
+        properties: {
+          action: {
+            type: 'string',
+            enum: ['current', 'stage', 'logs'],
+            description: 'Workflow/UI operation to run.',
+          },
+          args: {
+            type: 'object',
+            description: 'Optional nested arguments for the selected action. You may also pass action arguments at the top level.',
+          },
+          summary: {
+            type: 'string',
+            description: 'For action:"stage" — short human-readable proposal summary.',
+          },
+          findings: {
+            type: 'array',
+            items: { type: 'string' },
+            description: 'For action:"stage" — optional findings list.',
+          },
+          suggestedFixes: {
+            type: 'array',
+            items: { type: 'string' },
+            description: 'For action:"stage" — optional suggested fixes list.',
+          },
+          actions: {
+            type: 'array',
+            items: { type: 'object' },
+            description: 'For action:"stage" — non-empty TekAutomate workflow actions array.',
+          },
+        },
+        required: ['action'],
+        additionalProperties: true,
+      },
+    },
+    {
+      name: 'knowledge',
+      description:
+        'Knowledge gateway for TekAutomate support material. Use `retrieve` for targeted RAG chunks, `examples` for matching workflow templates, and `failures` for known runtime failures and fixes.',
+      parameters: {
+        type: 'object',
+        properties: {
+          action: {
+            type: 'string',
+            enum: ['retrieve', 'examples', 'failures'],
+            description: 'Knowledge operation to run.',
+          },
+          args: {
+            type: 'object',
+            description: 'Optional nested arguments for the selected action. You may also pass action arguments at the top level.',
+          },
+          corpus: {
+            type: 'string',
+            description: 'For action:"retrieve" — knowledge corpus such as scpi, tmdevices, templates, app_logic, errors, scope_logic, or pyvisa_tekhsi.',
+          },
+          query: {
+            type: 'string',
+            description: 'Targeted search phrase for retrieve, examples, or failures.',
+          },
+          topK: {
+            type: 'number',
+            description: 'For action:"retrieve" — max chunks to return.',
+          },
+          limit: {
+            type: 'number',
+            description: 'For action:"examples" or "failures" — max results to return.',
+          },
+        },
+        required: ['action'],
+        additionalProperties: true,
+      },
+    },
     {
       name: 'smart_scpi_lookup',
       description:
@@ -1022,4 +1142,68 @@ export async function runTool(name: string, args: Record<string, unknown>) {
     return { ok: false, data: null, sourceMeta: [], warnings: [`Unknown tool: ${name}`] };
   }
   return fn(args);
+}
+
+const PUBLIC_MCP_EXPOSED_TOOLS = new Set([
+  'tek_router',
+  'instrument_live',
+  'workflow_ui',
+  'knowledge',
+]);
+
+const PUBLIC_TEK_ROUTER_PARAMS = {
+  type: 'object',
+  properties: {
+    action: {
+      type: 'string',
+      enum: ['search', 'lookup', 'browse', 'verify', 'build'],
+      description: 'SCPI/build operation to run.',
+    },
+    query: {
+      type: 'string',
+      description: 'For action:"search" or action:"build" - targeted search phrase or build request.',
+    },
+    args: {
+      type: 'object',
+      description: 'Optional nested arguments for the selected action. You may also pass action arguments at the top level.',
+    },
+    header: {
+      type: 'string',
+      description: 'For action:"lookup" - exact SCPI header such as TRIGger:A:EDGE:SOUrce.',
+    },
+    group: {
+      type: 'string',
+      description: 'For action:"browse" - command group such as Trigger, Measurement, or Bus.',
+    },
+    filter: {
+      type: 'string',
+      description: 'For action:"browse" - optional keyword filter within the chosen group.',
+    },
+    commands: {
+      type: 'array',
+      items: { type: 'string' },
+      description: 'For action:"verify" - fully formed SCPI commands to validate.',
+    },
+    limit: {
+      type: 'number',
+      description: 'Optional max results for search or browse.',
+    },
+    modelFamily: {
+      type: 'string',
+      description: 'Optional instrument family filter.',
+    },
+  },
+  required: ['action'],
+  additionalProperties: true,
+};
+
+export function getSlimToolDefinitions() {
+  return getToolDefinitions()
+    .filter((def) => PUBLIC_MCP_EXPOSED_TOOLS.has(def.name))
+    .map((def) => {
+      if (def.name === 'tek_router') {
+        return { ...def, parameters: PUBLIC_TEK_ROUTER_PARAMS };
+      }
+      return def;
+    });
 }

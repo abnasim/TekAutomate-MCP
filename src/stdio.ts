@@ -29,7 +29,7 @@ import { initRagIndexes } from './core/ragIndex.js';
 import { initTemplateIndex } from './core/templateIndex.js';
 import { initProviderCatalog, providerSupplementsEnabled } from './core/providerCatalog.js';
 import { bootRouter } from './core/routerIntegration.js';
-import { getMcpExposedTools, runTool } from './tools/index.js';
+import { getSlimToolDefinitions, runTool } from './tools/index.js';
 
 function sanitizeToolResultForExternalMcp(toolName: string, result: unknown): unknown {
   if (toolName !== 'capture_screenshot' || !result || typeof result !== 'object') return result;
@@ -94,7 +94,7 @@ async function main() {
 
   // Only expose the slim MCP surface (gateway + live tools)
   // All other tools are routed internally via tek_router
-  const toolDefs = getMcpExposedTools();
+  const toolDefs = getSlimToolDefinitions();
   const mcpTools = toolDefs.map((def) => ({
     name: def.name,
     description: def.description ?? def.name,
