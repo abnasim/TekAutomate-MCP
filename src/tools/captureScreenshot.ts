@@ -13,7 +13,7 @@ interface Input extends Record<string, unknown> {
   modelFamily?: string;
   deviceDriver?: string;
   analyze?: boolean;
-  analysisTransport?: 'auto' | 'url' | 'file_id' | 'base64' | 'mcp_image';
+  analysisTransport?: 'auto' | 'url' | 'file_id' | 'base64' | 'mcp_image' | 'openai_image' | 'claude_image';
   __mcpBaseUrl?: string;
 }
 
@@ -206,7 +206,10 @@ function buildVisionUrlDebug(
 }
 
 export async function captureScreenshot(input: Input): Promise<ToolResult<Record<string, unknown>>> {
-  const analysisTransport = String(input.analysisTransport || 'auto').toLowerCase() as Input['analysisTransport'];
+  const analysisTransportRaw = String(input.analysisTransport || 'auto').toLowerCase() as Input['analysisTransport'];
+  const analysisTransport = analysisTransportRaw === 'claude_image'
+    ? 'mcp_image'
+    : analysisTransportRaw;
   if (shouldBridgeToTekAutomate(input)) {
     const bridged = await dispatchLiveActionThroughTekAutomate(
       'capture_screenshot',

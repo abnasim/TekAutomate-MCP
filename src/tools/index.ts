@@ -156,8 +156,8 @@ export function getToolDefinitions() {
           },
           analysisTransport: {
             type: 'string',
-            enum: ['auto', 'url', 'file_id', 'base64', 'mcp_image'],
-            description: 'For action:"screenshot" — optional analysis transport hint. Default auto prefers a short-lived MCP URL. Use mcp_image to return a native MCP image content block, base64 for legacy JSON payloads, or file_id for explicit OpenAI Files upload.',
+            enum: ['auto', 'url', 'file_id', 'base64', 'mcp_image', 'openai_image', 'claude_image'],
+            description: 'For action:"screenshot" — optional analysis transport hint. Default auto prefers a short-lived MCP URL. Use claude_image to return a native MCP image content block, openai_image for OpenAI-hosted vision handling, base64 for legacy JSON payloads, or file_id for explicit OpenAI Files upload.',
           },
           timeoutMs: {
             type: 'number',
@@ -981,7 +981,7 @@ export function getToolDefinitions() {
           modelFamily: { type: 'string' },
           deviceDriver: { type: 'string' },
           analyze: { type: 'boolean', description: 'Set true to return the screenshot for AI vision analysis. Default false (capture only, updates UI).' },
-          analysisTransport: { type: 'string', enum: ['auto', 'url', 'file_id', 'base64', 'mcp_image'], description: 'Optional analysis transport hint when analyze:true. Default auto prefers a short-lived MCP URL. Use mcp_image to return a native MCP image content block, base64 for legacy JSON payloads, or file_id for explicit OpenAI Files upload.' },
+          analysisTransport: { type: 'string', enum: ['auto', 'url', 'file_id', 'base64', 'mcp_image', 'openai_image', 'claude_image'], description: 'Optional analysis transport hint when analyze:true. Default auto prefers a short-lived MCP URL. Use claude_image to return a native MCP image content block, openai_image for OpenAI-hosted vision handling, base64 for legacy JSON payloads, or file_id for explicit OpenAI Files upload.' },
         },
         required: [],
         additionalProperties: false,

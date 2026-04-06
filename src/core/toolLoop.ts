@@ -7688,8 +7688,13 @@ async function runOpenAiToolLoop(
             }
             if (wantsAnalysis) {
               const analysisImageData = extractImageFromToolResult(result, 'analysis') || imageData;
-              const analysisTransport = String((toolArgs as Record<string, unknown>).analysisTransport || 'auto').toLowerCase() as ScreenshotAnalysisTransport;
-              const analysisImageUrl = imageUrl || ((analysisTransport === 'auto' || analysisTransport === 'url') && analysisImageData
+              const analysisTransportRaw = String((toolArgs as Record<string, unknown>).analysisTransport || 'auto').toLowerCase() as ScreenshotAnalysisTransport;
+              const analysisTransport = analysisTransportRaw === 'claude_image'
+                ? 'mcp_image'
+                : analysisTransportRaw;
+              const wantsUrlTransport = analysisTransport === 'auto' || analysisTransport === 'url';
+              const wantsOpenAiImage = analysisTransport === 'openai_image';
+              const analysisImageUrl = imageUrl || (wantsUrlTransport && analysisImageData
                 ? buildVisionImageUrlForHostedLoop(
                     req,
                     analysisImageData.base64,
@@ -7697,7 +7702,7 @@ async function runOpenAiToolLoop(
                     new Date().toISOString(),
                   )
                 : null);
-              const analysisFileId = analysisTransport === 'file_id' && analysisImageData
+              const analysisFileId = (analysisTransport === 'file_id' || wantsOpenAiImage) && analysisImageData
                 ? await uploadVisionImageToOpenAiFileHosted(
                     req.apiKey,
                     analysisImageData.base64,
@@ -7719,6 +7724,14 @@ async function runOpenAiToolLoop(
                   role: 'tool',
                   tool_call_id: toolId,
                   content: 'Error: capture_screenshot requested analysisTransport=url, but MCP could not create a temporary image URL.',
+                });
+                continue;
+              }
+              if (analysisTransport === 'openai_image' && !analysisFileId && !analysisImageData) {
+                liveMessages.push({
+                  role: 'tool',
+                  tool_call_id: toolId,
+                  content: 'Error: capture_screenshot requested analysisTransport=openai_image, but no screenshot image payload was available.',
                 });
                 continue;
               }
@@ -7995,7 +8008,7 @@ async function uploadVisionImageToOpenAiFileHosted(
   }
 }
 
-type ScreenshotAnalysisTransport = 'auto' | 'url' | 'file_id' | 'base64';
+type ScreenshotAnalysisTransport = 'auto' | 'url' | 'file_id' | 'base64' | 'mcp_image' | 'openai_image' | 'claude_image';
 
 function buildVisionImageUrlForHostedLoop(
   req: McpChatRequest,
