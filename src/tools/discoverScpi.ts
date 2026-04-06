@@ -1,6 +1,5 @@
 import { sendScpiProxy } from '../core/instrumentProxy';
 import type { ToolResult } from '../core/schemas';
-import { dispatchLiveActionThroughTekAutomate, shouldBridgeToTekAutomate, withRuntimeInstrumentDefaults } from './liveToolSupport';
 
 interface Input {
   action: 'snapshot' | 'diff' | 'inspect';
@@ -212,19 +211,6 @@ async function queryLrn(input: Input): Promise<{ ok: boolean; response: string; 
 
 // ── Main discover function ──────────────────────────────────────────
 export async function discoverScpi(input: Input): Promise<ToolResult<Record<string, unknown>>> {
-  if (!input._lrnResponse && shouldBridgeToTekAutomate(input)) {
-    const bridged = await dispatchLiveActionThroughTekAutomate('discover_scpi', input as unknown as Record<string, unknown>, 60_000);
-    return {
-      ok: bridged.ok,
-      data: bridged.ok
-        ? ((bridged.result && typeof bridged.result === 'object' ? bridged.result : { result: bridged.result }) as Record<string, unknown>)
-        : { error: 'LIVE_ACTION_FAILED', message: bridged.error || 'TekAutomate failed to discover SCPI.' },
-      sourceMeta: [],
-      warnings: bridged.ok ? [] : [bridged.error || 'TekAutomate live action failed.'],
-    };
-  }
-
-  input = withRuntimeInstrumentDefaults(input);
   if (!input.executorUrl) {
     return { ok: false, data: { error: 'NO_INSTRUMENT', message: 'No instrument connected.' }, sourceMeta: [], warnings: ['No executorUrl.'] };
   }

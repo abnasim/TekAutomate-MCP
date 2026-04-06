@@ -83,35 +83,36 @@ async function verifyCommandsLocally(
   return failures;
 }
 
-function fail(error: string, hint: string): ToolResult<Record<string, unknown>> {
-  return { ok: false, data: { error, hint }, sourceMeta: [], warnings: [hint] };
-}
-
 export async function sendScpi(input: Input): Promise<ToolResult<Record<string, unknown>>> {
-  input = withRuntimeInstrumentDefaults(input);
-
-  // ── Fast validation — tell the AI exactly what's wrong ──
-  if (!input.commands?.length) {
-    return fail('NO_COMMANDS', 'Pass commands:["*IDN?"] — an array of SCPI command strings.');
+  if (shouldBridgeToTekAutomate(input)) {
+    const bridged = await dispatchLiveActionThroughTekAutomate('send_scpi', input, Math.max((input.timeoutMs ?? 10_000) + 10_000, 30_000));
+    return {
+      ok: bridged.ok,
+      data: bridged.ok
+        ? ((bridged.result && typeof bridged.result === 'object' ? bridged.result : { result: bridged.result }) as Record<string, unknown>)
+        : { error: 'LIVE_ACTION_FAILED', message: bridged.error || 'TekAutomate failed to execute send_scpi.' },
+      sourceMeta: [],
+      warnings: bridged.ok ? [] : [bridged.error || 'TekAutomate live action failed.'],
+    };
   }
-  if (!input.executorUrl && !input.visaResource) {
-    return fail('MISSING_CONTEXT',
-      'No instrument context. Call get_instrument_info first, then pass executorUrl, visaResource, backend, and liveMode from its response.');
+
+  input = withRuntimeInstrumentDefaults(input);
+  if (!input.commands?.length) {
+    return { ok: false, data: { error: 'NO_COMMANDS' }, sourceMeta: [], warnings: ['No commands provided. Pass commands:["CH1:SCAle?"] array.'] };
   }
   if (!input.executorUrl) {
-    return fail('MISSING_EXECUTOR_URL', 'executorUrl is required. Call get_instrument_info to get it.');
-  }
-  if (!input.visaResource) {
-    return fail('MISSING_VISA_RESOURCE', 'visaResource is required. Call get_instrument_info or get_visa_resources to get it.');
+    return { ok: false, data: { error: 'NO_INSTRUMENT', message: 'No instrument connected. Connect to a scope via the Execute page first.' }, sourceMeta: [], warnings: ['No executorUrl — instrument not connected.'] };
   }
   if (!input.liveMode) {
-    return fail('NOT_LIVE', 'No live instrument session. Make sure TekAutomate is open with an instrument connected in Live mode.');
+    return { ok: false, data: { error: 'NOT_LIVE', message: 'liveMode must be true to send SCPI commands.' }, sourceMeta: [], warnings: ['liveMode is not enabled.'] };
   }
 
   // ── Normalize commands — split semicolon-concatenated strings ──
+  // OpenAI sometimes sends "*IDN?; CH1:SCAle?" as one string instead of separate array items.
   input.commands = input.commands.flatMap(cmd => splitScpiCommandString(String(cmd)));
 
   // ── SCPI Verify Gate (server-side) ──
+  // Bypass for discover_scpi (probing mode) or when explicitly bypassed.
   if (!input._bypassVerifyGate) {
     const failures = await verifyCommandsLocally(input.commands, input.modelFamily);
     if (failures.length > 0) {
@@ -131,27 +132,5 @@ export async function sendScpi(input: Input): Promise<ToolResult<Record<string, 
     }
   }
 
-  // ── Direct executor call (preferred — no polling gap) ──
-  try {
-    const result = await sendScpiProxy(input, input.commands, input.timeoutMs);
-    return result;
-  } catch (directErr) {
-    // Direct call failed — try bridge as fallback
-    if (shouldBridgeToTekAutomate(input)) {
-      try {
-        const bridged = await dispatchLiveActionThroughTekAutomate('send_scpi', input, Math.max((input.timeoutMs ?? 10_000) + 5_000, 15_000));
-        if (bridged.ok) {
-          return {
-            ok: true,
-            data: (bridged.result && typeof bridged.result === 'object' ? bridged.result : { result: bridged.result }) as Record<string, unknown>,
-            sourceMeta: [], warnings: [],
-          };
-        }
-      } catch {
-        // Bridge also failed — return the direct error
-      }
-    }
-    const msg = directErr instanceof Error ? directErr.message : String(directErr);
-    return fail('EXECUTOR_UNREACHABLE', `Could not reach executor: ${msg}. Is the executor running?`);
-  }
+  return sendScpiProxy(input, input.commands, input.timeoutMs);
 }

@@ -71,7 +71,7 @@ const DEFAULT_COMMAND_FILES = [
   'smu.json',
   'dpojet.json',
   'tekexpress.json',
-  // 'rsa.json',  // 8.3 MB — disabled to speed up startup; re-enable when RSA support is needed
+  'rsa.json',
   'pi_only.json',
 ];
 

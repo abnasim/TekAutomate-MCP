@@ -4,10 +4,7 @@ export type LiveActionToolName =
   | 'send_scpi'
   | 'capture_screenshot'
   | 'get_instrument_state'
-  | 'probe_command'
-  | 'get_visa_resources'
-  | 'get_environment'
-  | 'discover_scpi';
+  | 'probe_command';
 
 export interface LiveActionRequest {
   id: string;
