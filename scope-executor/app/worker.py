@@ -58,7 +58,7 @@ _visa_locks: dict[str, threading.Lock] = {}  # Per-VISA resource lock — preven
 _recent_capture_results: dict[str, tuple[float, dict]] = {}
 _recent_capture_errors: dict[str, tuple[float, str]] = {}
 _recent_scpi_activity: dict[str, tuple[float, dict]] = {}
-_DEFAULT_CAPTURE_TIMEOUT_MS = 45000
+_DEFAULT_CAPTURE_TIMEOUT_MS = 15000
 _BUSY_CAPTURE_CACHE_MAX_AGE_SEC = 10.0
 _SCPI_CHUNK_SIZE_SOCKET = 8
 _SCPI_CHUNK_SIZE_VISA = 12
@@ -188,13 +188,13 @@ def _capture_timeout_ms(job: dict) -> int:
     timeout_ms = job.get("timeout_ms")
     if timeout_ms is not None:
         try:
-            return max(15000, min(int(timeout_ms), 120000))
+            return max(5000, min(int(timeout_ms), 15000))
         except Exception:
             pass
     timeout_sec = job.get("timeout_sec")
     if timeout_sec is not None:
         try:
-            return max(15000, min(int(timeout_sec) * 1000, 120000))
+            return max(5000, min(int(timeout_sec) * 1000, 15000))
         except Exception:
             pass
     return _DEFAULT_CAPTURE_TIMEOUT_MS
@@ -546,6 +546,9 @@ def _handle_capture_screenshot(job: dict) -> dict:
                     last_error = exc
                     if _is_socket_resource(visa):
                         _reset_socket_session(visa)
+                    else:
+                        _reset_scope_session(visa)
+                        _reset_resource_manager()
                     if attempt >= _CAPTURE_RETRY_COUNT - 1:
                         raise
             if last_error and 'data' not in locals():

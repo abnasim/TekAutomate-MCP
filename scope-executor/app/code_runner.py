@@ -226,6 +226,11 @@ class _WorkerProcess:
         del self._pending[job_id]
 
         if not fired:
+            if action == "capture_screenshot":
+                # Screenshot hangs tend to poison the persistent VISA/socket state.
+                # Force a fresh worker for the next request instead of making the
+                # app limp along until a manual restart.
+                self.stop()
             transcript = _transcript_payload(entry["lines"])
             stdout = "\n".join(item["line"] for item in transcript if item["stream"] == "stdout")
             stderr_lines = [item["line"] for item in transcript if item["stream"] == "stderr"]

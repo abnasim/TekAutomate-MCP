@@ -315,7 +315,9 @@ class _Handler(BaseHTTPRequestHandler):
             scope_type = data.get("scope_type") if isinstance(data.get("scope_type"), str) else "modern"
             if scope_type not in {"modern", "legacy", "export"}:
                 scope_type = "modern"
-            min_needed = 95
+            # Screenshot calls should fail fast; a wedged capture should not hold
+            # the app hostage for 90+ seconds.
+            min_needed = 20
             effective_ui_timeout = max(ui_timeout, min_needed)
             timeout_sec = min(max(timeout_sec, min_needed), effective_ui_timeout)
         elif action == "send_scpi":
