@@ -1356,7 +1356,8 @@ function OpenAiChatKitPanelInner({
       workflow: buildRuntimeWorkflowPayload(stepsRef.current || [], flowContextRef.current),
       instrument: buildRuntimeInstrumentPayload(instrumentEndpointRef.current, flowContextRef.current, isLiveMode),
       runLog: String(runLog || ''),
-      liveSession: isLiveMode ? buildLiveSessionPayload(activeThreadId, workflowId, userId) : null,
+      // ExecutePage owns the live session key/transport. Do not overwrite it here.
+      liveSession: null,
     };
 
     void fetch(`${mcpHost.replace(/\/$/, '')}/runtime-context`, {
@@ -1366,91 +1367,9 @@ function OpenAiChatKitPanelInner({
     }).catch((error) => {
       console.warn('[ChatKit] Failed to sync runtime context:', error);
     });
-  }, [steps, flowContext, instrumentEndpoint, runLog, activeThreadId, workspaceRevision, workflowId, userId, isLiveMode]);
+  }, [steps, flowContext, instrumentEndpoint, runLog, workspaceRevision, isLiveMode]);
 
-  useEffect(() => {
-    const mcpHost = resolveMcpHost();
-    if (!isLiveMode) return;
-    const liveSession = buildLiveSessionPayload(activeThreadId, workflowId, userId);
-    if (!mcpHost || !liveSession) return;
-    if (!instrumentEndpoint?.executorUrl) return;
-
-    let cancelled = false;
-
-    const loop = async () => {
-      while (!cancelled) {
-        let currentAction: { id: string; toolName: string; args?: Record<string, unknown> } | null = null;
-        try {
-          const nextRes = await fetch(
-            `${mcpHost.replace(/\/$/, '')}/live-actions/next?sessionKey=${encodeURIComponent(liveSession.sessionKey)}&timeoutMs=20000`,
-          );
-          if (!nextRes.ok) {
-            await new Promise((resolve) => window.setTimeout(resolve, 1500));
-            continue;
-          }
-          const nextJson = (await nextRes.json()) as {
-            ok?: boolean;
-            action?: { id: string; toolName: string; args?: Record<string, unknown> } | null;
-          };
-          currentAction = nextJson.action || null;
-          if (!currentAction?.id || !currentAction.toolName) {
-            continue;
-          }
-
-          const result = await executeMcpTool(
-            currentAction.toolName,
-            currentAction.args || {},
-            instrumentEndpointRef.current || undefined,
-            {
-              modelFamily: flowContextRef.current?.modelFamily,
-              deviceDriver: flowContextRef.current?.deviceDriver,
-            },
-          );
-
-          if (currentAction.toolName === 'capture_screenshot') {
-            const screenshot = extractScreenshotPayload(result);
-            if (screenshot) {
-              onLiveScreenshotRef.current?.(screenshot);
-            }
-          }
-
-          await fetch(`${mcpHost.replace(/\/$/, '')}/live-actions/result`, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-              id: currentAction.id,
-              sessionKey: liveSession.sessionKey,
-              ok: true,
-              result,
-            }),
-          });
-        } catch (error) {
-          if (currentAction?.id) {
-            try {
-              await fetch(`${mcpHost.replace(/\/$/, '')}/live-actions/result`, {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({
-                  id: currentAction.id,
-                  sessionKey: liveSession.sessionKey,
-                  ok: false,
-                  error: error instanceof Error ? error.message : 'Live action execution failed.',
-                }),
-              });
-            } catch {
-              // Ignore secondary reporting failures.
-            }
-          }
-          await new Promise((resolve) => window.setTimeout(resolve, 1200));
-        }
-      }
-    };
-
-    void loop();
-    return () => {
-      cancelled = true;
-    };
-  }, [activeThreadId, instrumentEndpoint?.executorUrl, userId, workflowId, flowContext?.deviceDriver, flowContext?.modelFamily, isLiveMode]);
+  // ExecutePage owns the live action session/stream for all live mode providers.
 
   // ── Inject workflow context when steps change ──
   useEffect(() => {
