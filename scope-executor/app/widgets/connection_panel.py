@@ -222,7 +222,7 @@ class ConnectionPanel(ttk.Frame):
         try: return int(self._port_var.get().strip())
         except ValueError: return 8765
     def get_timeout(self) -> int:
-        return 30
+        return 120
 
     def get_selected_token_duration_minutes(self) -> int:
         label = self._token_duration_var.get().strip().lower()
