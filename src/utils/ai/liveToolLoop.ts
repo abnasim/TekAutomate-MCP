@@ -363,18 +363,6 @@ export async function executeMcpTool(
     // Map tool name to executor action + payload
     let action = toolName;
     let payload: Record<string, unknown> = { ...args };
-
-    // get_visa_resources: use the /scan endpoint directly instead of /run
-    if (toolName === 'get_visa_resources') {
-      const scanRes = await fetch(`${execUrl}/scan`, {
-        method: 'GET',
-        headers: buildExecutorHeaders(instrumentEndpoint),
-        signal: AbortSignal.timeout(35000),
-      });
-      if (!scanRes.ok) throw new Error(`Executor scan error ${scanRes.status}`);
-      return scanRes.json();
-    }
-
     if (toolName === 'get_instrument_state') {
       action = 'send_scpi';
       payload = { commands: ['*IDN?', '*ESR?', 'ALLEV?'], timeout_ms: 5000 };

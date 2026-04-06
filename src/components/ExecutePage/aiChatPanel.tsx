@@ -14,7 +14,6 @@ import {
   setStoredMcpHost,
   type McpChatAttachment,
 } from '../../utils/ai/mcpClient';
-import { buildWorkflowContext, executeMcpTool } from '../../utils/ai/liveToolLoop';
 import { OpenAiChatKitPanel, type ParsedActionsPreview } from './OpenAiChatKitPanel';
 
 interface AiChatPanelProps {
@@ -61,8 +60,6 @@ const MAX_ATTACHMENT_COUNT = 6;
 const MAX_ATTACHMENT_BYTES = 8 * 1024 * 1024;
 const MAX_TEXT_EXCERPT = 12000;
 const INSTRUMENT_OUTPUT_MODE_STORAGE = 'tekautomate.ai.instrument_output_mode';
-const CLAUDE_CHAT_SURFACE_STORAGE = 'tekautomate.ai.claude.surface';
-const CLAUDE_DESKTOP_LIVE_SESSION_KEY = 'tekautomate.claude.desktop.live_session_key';
 
 const TEXT_MIME_PREFIXES = ['text/'];
 const TEXT_EXTENSIONS = new Set([
@@ -200,55 +197,6 @@ function stripOpenAIFileCitations(text: string): string {
     .trim();
 }
 
-function getOrCreateClaudeDesktopLiveSessionKey(): string {
-  try {
-    const existing = window.localStorage.getItem(CLAUDE_DESKTOP_LIVE_SESSION_KEY);
-    if (existing && existing.trim()) return existing.trim();
-    const created = `claude-desktop:live-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
-    window.localStorage.setItem(CLAUDE_DESKTOP_LIVE_SESSION_KEY, created);
-    return created;
-  } catch {
-    return 'claude-desktop:live-fallback';
-  }
-}
-
-function buildRuntimeInstrumentPayload(
-  instrumentEndpoint?: AiChatPanelProps['instrumentEndpoint'] | null,
-  flowContext?: AiChatPanelProps['flowContext'],
-  isLiveMode?: boolean,
-) {
-  return {
-    connected: !!instrumentEndpoint?.executorUrl,
-    executorUrl: instrumentEndpoint?.executorUrl || null,
-    visaResource: instrumentEndpoint?.visaResource || null,
-    backend: instrumentEndpoint?.backend || flowContext?.backend || 'pyvisa',
-    modelFamily: flowContext?.modelFamily || 'unknown',
-    deviceDriver: flowContext?.deviceDriver || null,
-    liveMode: Boolean(isLiveMode || instrumentEndpoint?.liveMode),
-  };
-}
-
-function extractScreenshotPayload(value: unknown): { dataUrl: string; mimeType: string; sizeBytes: number; capturedAt: string } | null {
-  if (!value || typeof value !== 'object') return null;
-  const record = value as Record<string, unknown>;
-  const nested = record.data && typeof record.data === 'object'
-    ? (record.data as Record<string, unknown>)
-    : null;
-  const source = typeof record.base64 === 'string' ? record : nested;
-  if (!source || typeof source.base64 !== 'string' || !source.base64) return null;
-  const mimeType = typeof source.mimeType === 'string' ? source.mimeType : 'image/png';
-  const capturedAt = typeof source.capturedAt === 'string' ? source.capturedAt : new Date().toISOString();
-  const sizeBytes = typeof source.sizeBytes === 'number'
-    ? source.sizeBytes
-    : Math.floor((source.base64.length * 3) / 4);
-  return {
-    dataUrl: `data:${mimeType};base64,${source.base64}`,
-    mimeType,
-    sizeBytes,
-    capturedAt,
-  };
-}
-
 export function AiChatPanel({
   steps,
   runLog,
@@ -295,14 +243,6 @@ export function AiChatPanel({
     }
   });
   const [openAiChatSurface, setOpenAiChatSurface] = useState<'chatkit' | 'native'>('chatkit');
-  const [claudeChatSurface, setClaudeChatSurface] = useState<'native' | 'desktop-mcp'>(() => {
-    if (typeof window === 'undefined') return 'native';
-    try {
-      return window.localStorage.getItem(CLAUDE_CHAT_SURFACE_STORAGE) === 'desktop-mcp' ? 'desktop-mcp' : 'native';
-    } catch {
-      return 'native';
-    }
-  });
   const [transientUiNow, setTransientUiNow] = useState(() => Date.now());
   const CHATKIT_WORKFLOW_ID_KEY = 'tekautomate.chatkit.workflow_id';
   const CHATKIT_LIVE_WORKFLOW_ID = 'wf_69ccc162bc34819089705162201bc4b80128ecc0657c5932';
@@ -417,140 +357,6 @@ export function AiChatPanel({
     if (!messagesContainerRef.current) return;
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth', block: 'end' });
   }, [state.history, state.isLoading]);
-
-  useEffect(() => {
-    if (!(state.provider === 'anthropic' && claudeChatSurface === 'desktop-mcp')) return;
-    if (executionSource !== 'live') return;
-    const mcpHost = resolveMcpHost();
-    if (!mcpHost) return;
-
-    const payload = {
-      workflow: buildWorkflowContext(
-        steps as any[],
-        flowContext?.validationErrors as string[] | undefined,
-        flowContext?.selectedStep?.id,
-      ),
-      instrument: buildRuntimeInstrumentPayload(instrumentEndpoint, flowContext, true),
-      runLog: String(runLog || ''),
-      liveSession: {
-        sessionKey: claudeDesktopLiveSessionKeyRef.current,
-        threadId: null,
-        workflowId: null,
-        userId: 'claude-desktop',
-      },
-    };
-
-    void fetch(`${mcpHost.replace(/\/$/, '')}/runtime-context`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(payload),
-    }).catch((error) => {
-      console.warn('[Claude Desktop MCP] Failed to sync runtime context:', error);
-    });
-  }, [
-    state.provider,
-    claudeChatSurface,
-    executionSource,
-    steps,
-    flowContext,
-    instrumentEndpoint,
-    runLog,
-    workspaceRevision,
-  ]);
-
-  useEffect(() => {
-    if (!(state.provider === 'anthropic' && claudeChatSurface === 'desktop-mcp')) return;
-    if (executionSource !== 'live') return;
-    const mcpHost = resolveMcpHost();
-    if (!mcpHost) return;
-    if (!instrumentEndpoint?.executorUrl) return;
-
-    let cancelled = false;
-    const sessionKey = claudeDesktopLiveSessionKeyRef.current;
-
-    const loop = async () => {
-      while (!cancelled) {
-        let currentAction: { id: string; toolName: string; args?: Record<string, unknown> } | null = null;
-        try {
-          const nextRes = await fetch(
-            `${mcpHost.replace(/\/$/, '')}/live-actions/next?sessionKey=${encodeURIComponent(sessionKey)}&timeoutMs=20000`,
-          );
-          if (!nextRes.ok) {
-            await new Promise((resolve) => window.setTimeout(resolve, 1500));
-            continue;
-          }
-
-          const nextJson = (await nextRes.json()) as {
-            ok?: boolean;
-            action?: { id: string; toolName: string; args?: Record<string, unknown> } | null;
-          };
-          currentAction = nextJson.action || null;
-          if (!currentAction?.id || !currentAction.toolName) {
-            continue;
-          }
-
-          const result = await executeMcpTool(
-            currentAction.toolName,
-            currentAction.args || {},
-            instrumentEndpoint || undefined,
-            {
-              modelFamily: flowContext?.modelFamily,
-              deviceDriver: flowContext?.deviceDriver,
-            },
-          );
-
-          if (currentAction.toolName === 'capture_screenshot') {
-            const screenshot = extractScreenshotPayload(result);
-            if (screenshot) {
-              onLiveScreenshot?.(screenshot);
-            }
-          }
-
-          await fetch(`${mcpHost.replace(/\/$/, '')}/live-actions/result`, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-              id: currentAction.id,
-              sessionKey,
-              ok: true,
-              result,
-            }),
-          });
-        } catch (error) {
-          if (currentAction?.id) {
-            try {
-              await fetch(`${mcpHost.replace(/\/$/, '')}/live-actions/result`, {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({
-                  id: currentAction.id,
-                  sessionKey,
-                  ok: false,
-                  error: error instanceof Error ? error.message : 'Live action execution failed.',
-                }),
-              });
-            } catch {
-              // Ignore secondary reporting failures.
-            }
-          }
-          await new Promise((resolve) => window.setTimeout(resolve, 1200));
-        }
-      }
-    };
-
-    void loop();
-    return () => {
-      cancelled = true;
-    };
-  }, [
-    state.provider,
-    claudeChatSurface,
-    executionSource,
-    instrumentEndpoint,
-    flowContext?.modelFamily,
-    flowContext?.deviceDriver,
-    onLiveScreenshot,
-  ]);
 
   useEffect(() => {
     let active = true;
@@ -716,9 +522,6 @@ export function AiChatPanel({
     && openAiChatSurface === 'chatkit'
     && (state.tekMode === 'ai' || state.tekMode === 'live')
     && activeChatKitWorkflowId.length > 0;
-  const useClaudeDesktopMcpSurface =
-    state.provider === 'anthropic' && claudeChatSurface === 'desktop-mcp';
-  const claudeDesktopLiveSessionKeyRef = useRef<string>(getOrCreateClaudeDesktopLiveSessionKey());
 
   const interactionSummary = state.tekMode === 'mcp'
     ? 'Search commands, build flows, validate SCPI. No AI calls.'
@@ -1886,42 +1689,6 @@ export function AiChatPanel({
                         </div>
                       </div>
                     )}
-                    {pid === 'anthropic' && (
-                      <div className="space-y-1">
-                        <div className="text-[10px] text-slate-500 dark:text-white/50">Chat surface</div>
-                        <div className="inline-flex rounded-full border border-slate-200 dark:border-white/10 bg-slate-100 dark:bg-white/5 p-0.5">
-                          {[
-                            { id: 'native', label: 'Native Chat' },
-                            { id: 'desktop-mcp', label: 'Claude Desktop MCP' },
-                          ].map((surface) => {
-                            const selected = claudeChatSurface === surface.id;
-                            return (
-                              <button
-                                key={surface.id}
-                                type="button"
-                                onClick={() => {
-                                  const next = surface.id as 'native' | 'desktop-mcp';
-                                  setClaudeChatSurface(next);
-                                  try { localStorage.setItem(CLAUDE_CHAT_SURFACE_STORAGE, next); } catch {}
-                                }}
-                                className={`px-2.5 py-1 rounded-full text-[10px] font-semibold transition-colors ${
-                                  selected
-                                    ? 'bg-violet-500/15 text-violet-700 dark:text-violet-200'
-                                    : 'text-slate-500 dark:text-white/55 hover:text-slate-800 dark:hover:text-white/85'
-                                }`}
-                              >
-                                {surface.label}
-                              </button>
-                            );
-                          })}
-                        </div>
-                        {claudeChatSurface === 'desktop-mcp' && (
-                          <div className="rounded-lg border border-cyan-500/30 bg-slate-950/90 px-2.5 py-2 text-[10px] leading-relaxed text-cyan-100 shadow-inner shadow-cyan-950/40">
-                            Use Claude Desktop with the TekAutomate MCP connector for live instrument work. Claude Desktop talks to MCP over HTTP, MCP mirrors runtime context from TekAutomate, and live actions relay back through the local app/executor.
-                          </div>
-                        )}
-                      </div>
-                    )}
                     <select
                       value={state.model}
                       onChange={(e) => setModel(e.target.value)}
@@ -2075,26 +1842,6 @@ export function AiChatPanel({
             onLiveScreenshot={onLiveScreenshot}
             className="flex-1 min-h-0"
           />
-      ) : useClaudeDesktopMcpSurface ? (
-        <div className="flex-1 min-h-0 overflow-auto px-4 py-4">
-          <div className="rounded-2xl border border-cyan-500/25 bg-slate-950/80 p-4 text-sm text-slate-200 shadow-[inset_0_1px_0_rgba(255,255,255,0.04)]">
-            <div className="flex items-center gap-2">
-              <div className="h-2 w-2 rounded-full bg-cyan-400" />
-              <div className="text-sm font-semibold text-white">Claude Desktop Mode</div>
-            </div>
-            <p className="mt-3 text-sm leading-relaxed text-slate-300">
-              This panel is in Claude Desktop MCP mode. Use Claude Desktop to chat with TekAutomate through the MCP connector.
-            </p>
-            <div className="mt-4 rounded-xl border border-slate-800 bg-slate-900/90 p-3 text-xs leading-6 text-slate-300">
-              <div><span className="font-semibold text-slate-100">Flow:</span> Claude Desktop → TekAutomate MCP → TekAutomate app → local executor</div>
-              <div><span className="font-semibold text-slate-100">Transport:</span> Claude Desktop uses MCP over HTTP, not the in-app native chat surface</div>
-              <div><span className="font-semibold text-slate-100">Live context:</span> mirrored automatically from your active TekAutomate session</div>
-            </div>
-            <div className="mt-4 rounded-xl border border-slate-800 bg-slate-900/70 p-3 text-xs text-slate-400">
-              Native Claude chat is hidden here on purpose so you don’t end up talking to the wrong surface.
-            </div>
-          </div>
-        </div>
       ) : (
       <>
       <div ref={messagesContainerRef} className="flex-1 min-h-0 overflow-auto py-2 space-y-0.5">
