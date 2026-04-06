@@ -32,7 +32,7 @@ export interface LiveActionResultEnvelope {
   completedAt: string;
 }
 
-const LIVE_ACTION_TIMEOUT_MS = 20_000;
+const LIVE_ACTION_TIMEOUT_MS = 30_000;
 const liveActionQueue: PendingActionRecord[] = [];
 
 // ── SSE streams — one per session key ──────────────────────────────
@@ -134,7 +134,7 @@ export async function enqueueLiveAction(params: {
     throw new Error('No TekAutomate browser session is listening. Open TekAutomate in the browser and switch to Live mode.');
   }
 
-  const timeoutMs = Math.max(5_000, Math.min(params.timeoutMs ?? LIVE_ACTION_TIMEOUT_MS, 60_000));
+  const timeoutMs = Math.max(5_000, Math.min(params.timeoutMs ?? LIVE_ACTION_TIMEOUT_MS, 120_000));
   return new Promise<LiveActionResultEnvelope>((resolve, reject) => {
     // Deduplicate screenshots — replace queued one instead of adding another
     if (params.toolName === 'capture_screenshot') {

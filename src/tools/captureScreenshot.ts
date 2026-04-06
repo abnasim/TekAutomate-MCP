@@ -43,7 +43,7 @@ export async function captureScreenshot(input: Input): Promise<ToolResult<Record
   // ── Bridge through TekAutomate browser (SSE push — instant delivery) ──
   if (shouldBridgeToTekAutomate(input)) {
     try {
-      const bridged = await dispatchLiveActionThroughTekAutomate('capture_screenshot', input, 20_000);
+      const bridged = await dispatchLiveActionThroughTekAutomate('capture_screenshot', input, 95_000);
       if (!bridged.ok) {
         return fail('BRIDGE_FAILED', bridged.error || 'TekAutomate browser did not complete the screenshot. Is TekAutomate open in the browser?');
       }
@@ -70,7 +70,7 @@ export async function captureScreenshot(input: Input): Promise<ToolResult<Record
         timeout_sec: 15,
         liveMode: true,
       }),
-      signal: AbortSignal.timeout(20_000),
+      signal: AbortSignal.timeout(95_000),
     });
     if (!res.ok) {
       const body = await res.text().catch(() => '');
@@ -85,7 +85,7 @@ export async function captureScreenshot(input: Input): Promise<ToolResult<Record
   } catch (err) {
     const msg = err instanceof Error ? err.message : String(err);
     if (msg.includes('timed out') || msg.includes('abort')) {
-      return fail('EXECUTOR_TIMEOUT', 'Executor did not respond in 20s. VISA session may be locked — try *RST or restart executor.');
+      return fail('EXECUTOR_TIMEOUT', 'Executor did not respond in 95s. VISA session may be locked — try *RST or restart executor.');
     }
     return fail('EXECUTOR_UNREACHABLE', `Could not reach executor at ${input.executorUrl}. Is the executor running?`);
   }
