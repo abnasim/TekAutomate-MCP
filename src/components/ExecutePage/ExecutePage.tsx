@@ -493,16 +493,8 @@ function ExecutePageContent({
   return (
     <div className="h-full flex flex-col bg-slate-100 text-slate-900 dark:bg-slate-950 dark:text-white">
       <div className="relative flex-1 min-h-0 flex">
-        {(assistantPanelOpen || keepCopilotMountedUnderLiveView) && (
-          <div
-            className={
-              keepCopilotMountedUnderLiveView
-                ? 'pointer-events-none absolute inset-y-0 left-0 z-0 opacity-0'
-                : 'relative z-10 flex-shrink-0'
-            }
-            aria-hidden={keepCopilotMountedUnderLiveView ? 'true' : undefined}
-          >
-            <AiChatPanel
+        {assistantPanelOpen ? (
+          <AiChatPanel
             steps={steps}
             workspaceRevision={workspaceRevision}
             runLog={runLog}
@@ -518,6 +510,29 @@ function ExecutePageContent({
             onWorkflowProposal={handleProposalDetected}
             onLiveScreenshot={onLiveScreenshot}
             onRun={onRun}
+          />
+        ) : null}
+        {keepCopilotMountedUnderLiveView && (
+          <div
+            className="pointer-events-none absolute inset-y-0 left-0 z-0 opacity-0"
+            aria-hidden="true"
+          >
+            <AiChatPanel
+              steps={steps}
+              workspaceRevision={workspaceRevision}
+              runLog={runLog}
+              code={code}
+              executionSource={executionSource}
+              runStatus={runStatus}
+              flowContext={flowContext}
+              executorEndpoint={executorEndpoint}
+              instrumentEndpoint={securedInstrumentEndpoint}
+              latestLiveScreenshot={latestLiveScreenshot}
+              contextAttachments={chatContextAttachments}
+              onApplyAiActions={onApplyAiActions}
+              onWorkflowProposal={handleProposalDetected}
+              onLiveScreenshot={onLiveScreenshot}
+              onRun={onRun}
             />
           </div>
         )}
