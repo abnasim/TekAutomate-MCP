@@ -6278,6 +6278,7 @@ async function executeHostedToolCall(
       outputMode: req.instrumentEndpoint.outputMode || 'verbose',
       modelFamily: req.flowContext.modelFamily,
       deviceDriver: req.flowContext.deviceDriver,
+      __mcpBaseUrl: (req as unknown as Record<string, unknown>).__mcpBaseUrl,
       ...args,
     };
   }
@@ -7677,23 +7678,26 @@ async function runOpenAiToolLoop(
 
           // Handle screenshot results: extract image for UI, only send to AI if analyze=true
           const imageData = extractImageFromToolResult(result, 'ui');
-          if (imageData) {
+          const imageUrl = extractImageUrlFromToolResult(result);
+          if (imageData || imageUrl) {
             const wantsAnalysis = toolArgs.analyze === true;
-            console.log(`[MCP] OpenAI live screenshot: ${imageData.base64.length} b64 chars, analyze=${wantsAnalysis}`);
+            console.log(`[MCP] OpenAI live screenshot: ${imageData ? imageData.base64.length : 0} b64 chars, imageUrl=${imageUrl ? 'yes' : 'no'}, analyze=${wantsAnalysis}`);
             // Always collect for UI update
-            liveScreenshots.push({ base64: imageData.base64, mimeType: imageData.mimeType, capturedAt: new Date().toISOString() });
+            if (imageData) {
+              liveScreenshots.push({ base64: imageData.base64, mimeType: imageData.mimeType, capturedAt: new Date().toISOString() });
+            }
             if (wantsAnalysis) {
               const analysisImageData = extractImageFromToolResult(result, 'analysis') || imageData;
               const analysisTransport = String((toolArgs as Record<string, unknown>).analysisTransport || 'auto').toLowerCase() as ScreenshotAnalysisTransport;
-              const analysisImageUrl = (analysisTransport === 'auto' || analysisTransport === 'url')
+              const analysisImageUrl = imageUrl || ((analysisTransport === 'auto' || analysisTransport === 'url') && analysisImageData
                 ? buildVisionImageUrlForHostedLoop(
                     req,
                     analysisImageData.base64,
                     analysisImageData.mimeType,
                     new Date().toISOString(),
                   )
-                : null;
-              const analysisFileId = analysisTransport === 'file_id'
+                : null);
+              const analysisFileId = analysisTransport === 'file_id' && analysisImageData
                 ? await uploadVisionImageToOpenAiFileHosted(
                     req.apiKey,
                     analysisImageData.base64,
@@ -7930,6 +7934,19 @@ function extractImageFromToolResult(
   }
 
   return null;
+}
+
+function extractImageUrlFromToolResult(result: unknown): string | null {
+  if (!result || typeof result !== 'object') return null;
+  const r = result as Record<string, unknown>;
+  const data = r.data && typeof r.data === 'object' ? (r.data as Record<string, unknown>) : null;
+  const candidate = typeof data?.imageUrl === 'string'
+    ? data.imageUrl
+    : typeof r.imageUrl === 'string'
+      ? r.imageUrl
+      : '';
+  const trimmed = candidate.trim();
+  return trimmed || null;
 }
 
 function guessImageExtensionFromMimeType(mimeType: string): string {

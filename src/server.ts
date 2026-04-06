@@ -24,8 +24,47 @@ const __dirname = path.dirname(__filename);
 
 let lastAiDebug: Record<string, unknown> | null = null;
 
-function sanitizeToolResultForExternalMcp(toolName: string, result: unknown): unknown {
-  return result;
+function sanitizeToolResultForExternalMcp(
+  toolName: string,
+  result: unknown,
+): unknown {
+  const isScreenshotLike = (name: string, record: Record<string, unknown>): boolean => {
+    if (name === 'capture_screenshot') return true;
+    if (name !== 'instrument_live') return false;
+    const source = record.data && typeof record.data === 'object'
+      ? (record.data as Record<string, unknown>)
+      : record;
+    return typeof source.imageUrl === 'string'
+      || typeof source.base64 === 'string'
+      || typeof source.analysisBase64 === 'string';
+  };
+
+  if (!result || typeof result !== 'object') return result;
+  const record = result as Record<string, unknown>;
+  if (!isScreenshotLike(toolName, record)) return result;
+
+  const data = record.data && typeof record.data === 'object'
+    ? (record.data as Record<string, unknown>)
+    : record;
+  const sanitized: Record<string, unknown> = {
+    ok: data.ok === false ? false : true,
+    captured: true,
+  };
+  if (typeof data.capturedAt === 'string') sanitized.capturedAt = data.capturedAt;
+  if (typeof data.scopeType === 'string') sanitized.scopeType = data.scopeType;
+  if (typeof data.mimeType === 'string') sanitized.mimeType = data.mimeType;
+  if (typeof data.sizeBytes === 'number') sanitized.sizeBytes = data.sizeBytes;
+  if (typeof data.originalMimeType === 'string') sanitized.originalMimeType = data.originalMimeType;
+  if (typeof data.originalSizeBytes === 'number') sanitized.originalSizeBytes = data.originalSizeBytes;
+  if (typeof data.imageUrl === 'string') sanitized.imageUrl = data.imageUrl;
+  if (typeof data.expiresAt === 'string') sanitized.expiresAt = data.expiresAt;
+
+  return {
+    ...(record.ok === false ? { ok: false } : { ok: true }),
+    data: sanitized,
+    sourceMeta: Array.isArray(record.sourceMeta) ? record.sourceMeta : [],
+    warnings: Array.isArray(record.warnings) ? record.warnings : [],
+  };
 }
 const REQUEST_LOG_DIR = path.join(__dirname, 'logs', 'requests');
 const MAX_LOG_FILES = 500;
@@ -755,7 +794,10 @@ function filterTools(q) {
             sendJson(res, 200, { jsonrpc: '2.0', id: rpcId, result: { tools } });
           } else if (method === 'tools/call') {
             const toolName = rpc.params?.name as string;
-            const toolArgs = (rpc.params?.arguments as Record<string, unknown>) ?? {};
+            const toolArgs = {
+              ...((rpc.params?.arguments as Record<string, unknown>) ?? {}),
+              __mcpBaseUrl: getRequestBaseUrl(req),
+            };
             console.log(`[MCP:json] call_tool name=${toolName} args=${JSON.stringify(toolArgs).slice(0, 200)}`);
             try {
               const result = await runTool(toolName, toolArgs);
@@ -966,6 +1008,10 @@ function filterTools(q) {
         }
         // Inject instrument endpoint for live tools
         let args = body.args || {};
+        args = {
+          ...args,
+          __mcpBaseUrl: getRequestBaseUrl(req),
+        };
         const liveTools = ['get_instrument_state', 'probe_command', 'send_scpi', 'capture_screenshot', 'get_visa_resources', 'get_environment', 'discover_scpi'];
         if (liveTools.includes(toolName) && body.instrumentEndpoint) {
           args = {

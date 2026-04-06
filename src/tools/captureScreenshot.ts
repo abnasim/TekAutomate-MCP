@@ -1,5 +1,6 @@
 import { captureScreenshotProxy } from '../core/instrumentProxy';
 import type { ToolResult } from '../core/schemas';
+import { storeTempVisionImage } from '../core/tempImageStore';
 import { dispatchLiveActionThroughTekAutomate, shouldBridgeToTekAutomate, withRuntimeInstrumentDefaults } from './liveToolSupport';
 
 interface Input extends Record<string, unknown> {
@@ -13,6 +14,7 @@ interface Input extends Record<string, unknown> {
   deviceDriver?: string;
   analyze?: boolean;
   analysisTransport?: 'auto' | 'url' | 'file_id' | 'base64';
+  __mcpBaseUrl?: string;
 }
 
 async function compressAnalyzedScreenshotPayload(
@@ -91,7 +93,51 @@ function stripScreenshotPayloadForNonAnalysis(
   };
 }
 
+function buildUrlOnlyScreenshotPayload(
+  payload: Record<string, unknown>,
+  input: Input,
+): Record<string, unknown> | null {
+  const baseUrl = String(input.__mcpBaseUrl || '').trim();
+  if (!baseUrl) return null;
+
+  const imageBase64 = typeof payload.analysisBase64 === 'string'
+    ? payload.analysisBase64
+    : typeof payload.base64 === 'string'
+      ? payload.base64
+      : '';
+  const imageMimeType = typeof payload.analysisMimeType === 'string'
+    ? payload.analysisMimeType
+    : typeof payload.mimeType === 'string'
+      ? payload.mimeType
+      : '';
+  if (!imageBase64 || !imageMimeType) return null;
+
+  const stored = storeTempVisionImage({
+    buffer: Buffer.from(imageBase64, 'base64'),
+    mimeType: imageMimeType,
+    createdAt: typeof payload.capturedAt === 'string' ? payload.capturedAt : undefined,
+  });
+
+  return {
+    ok: payload.ok === false ? false : true,
+    captured: true,
+    capturedAt: typeof payload.capturedAt === 'string' ? payload.capturedAt : new Date().toISOString(),
+    scopeType: typeof payload.scopeType === 'string' ? payload.scopeType : undefined,
+    mimeType: imageMimeType,
+    imageUrl: `${baseUrl}${stored.path}`,
+    expiresAt: stored.expiresAt,
+    ...(typeof payload.analysisSizeBytes === 'number'
+      ? { sizeBytes: payload.analysisSizeBytes }
+      : typeof payload.sizeBytes === 'number'
+        ? { sizeBytes: payload.sizeBytes }
+        : {}),
+    ...(typeof payload.originalMimeType === 'string' ? { originalMimeType: payload.originalMimeType } : {}),
+    ...(typeof payload.originalSizeBytes === 'number' ? { originalSizeBytes: payload.originalSizeBytes } : {}),
+  };
+}
+
 export async function captureScreenshot(input: Input): Promise<ToolResult<Record<string, unknown>>> {
+  const analysisTransport = String(input.analysisTransport || 'auto').toLowerCase() as Input['analysisTransport'];
   if (shouldBridgeToTekAutomate(input)) {
     const bridged = await dispatchLiveActionThroughTekAutomate(
       'capture_screenshot',
@@ -106,6 +152,26 @@ export async function captureScreenshot(input: Input): Promise<ToolResult<Record
     const maybeCompressed = bridged.ok
       ? await compressAnalyzedScreenshotPayload(data, input.analyze)
       : data;
+    if (bridged.ok && input.analyze === true && (analysisTransport === 'auto' || analysisTransport === 'url')) {
+      const urlPayload = buildUrlOnlyScreenshotPayload(maybeCompressed, input);
+      if (!urlPayload) {
+        return {
+          ok: false,
+          data: {
+            error: 'VISION_URL_UNAVAILABLE',
+            message: 'capture_screenshot requested URL analysis transport, but MCP could not create a temporary image URL.',
+          },
+          sourceMeta: [],
+          warnings: ['Temporary screenshot URL could not be created.'],
+        };
+      }
+      return {
+        ok: true,
+        data: urlPayload,
+        sourceMeta: [],
+        warnings: [],
+      };
+    }
     const finalData = bridged.ok
       ? stripScreenshotPayloadForNonAnalysis(maybeCompressed, input.analyze)
       : maybeCompressed;
@@ -128,11 +194,29 @@ export async function captureScreenshot(input: Input): Promise<ToolResult<Record
   if (!result.ok || !result.data || typeof result.data !== 'object') {
     return result;
   }
+  const maybeCompressed = await compressAnalyzedScreenshotPayload(result.data as Record<string, unknown>, input.analyze);
+  if (input.analyze === true && (analysisTransport === 'auto' || analysisTransport === 'url')) {
+    const urlPayload = buildUrlOnlyScreenshotPayload(maybeCompressed, input);
+    if (!urlPayload) {
+      return {
+        ok: false,
+        data: {
+          error: 'VISION_URL_UNAVAILABLE',
+          message: 'capture_screenshot requested URL analysis transport, but MCP could not create a temporary image URL.',
+        },
+        sourceMeta: [],
+        warnings: ['Temporary screenshot URL could not be created.'],
+      };
+    }
+    return {
+      ...result,
+      ok: true,
+      data: urlPayload,
+      warnings: [],
+    };
+  }
   return {
     ...result,
-    data: stripScreenshotPayloadForNonAnalysis(
-      await compressAnalyzedScreenshotPayload(result.data as Record<string, unknown>, input.analyze),
-      input.analyze,
-    ),
+    data: stripScreenshotPayloadForNonAnalysis(maybeCompressed, input.analyze),
   };
 }
