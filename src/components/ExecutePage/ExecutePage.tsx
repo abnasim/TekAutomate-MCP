@@ -267,6 +267,8 @@ function ExecutePageContent({
   // Lives here (not in AiChatPanel) so it survives panel hide/show.
   // When MCP enqueues a live action, SSE pushes it instantly to the
   // browser which executes it and posts the result back.
+  // Stable session key — persists for the lifetime of this component
+  const [sseSessionKey] = useState(() => `live-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`);
   const instrumentEndpointRef = React.useRef(instrumentEndpoint);
   instrumentEndpointRef.current = instrumentEndpoint;
   const flowContextRef = React.useRef(flowContext);
@@ -280,8 +282,7 @@ function ExecutePageContent({
     if (!mcpHost) return;
     if (!instrumentEndpoint?.executorUrl) return;
 
-    // Build a session key for this browser session
-    const sessionKey = `live-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+    const sessionKey = sseSessionKey;
     const baseUrl = mcpHost.replace(/\/$/, '');
 
     // Sync runtime context so MCP server knows our session key

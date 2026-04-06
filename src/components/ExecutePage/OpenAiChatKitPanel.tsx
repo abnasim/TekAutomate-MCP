@@ -1368,83 +1368,8 @@ function OpenAiChatKitPanelInner({
     });
   }, [steps, flowContext, instrumentEndpoint, runLog, activeThreadId, workspaceRevision, workflowId, userId, isLiveMode]);
 
-  useEffect(() => {
-    const mcpHost = resolveMcpHost();
-    if (!isLiveMode) return;
-    const liveSession = buildLiveSessionPayload(activeThreadId, workflowId, userId);
-    if (!mcpHost || !liveSession) return;
-    if (!instrumentEndpoint?.executorUrl) return;
-
-    let cancelled = false;
-    const baseUrl = mcpHost.replace(/\/$/, '');
-
-    // ── SSE stream — instant action delivery, no polling gap ──
-    const streamUrl = `${baseUrl}/live-actions/stream?sessionKey=${encodeURIComponent(liveSession.sessionKey)}`;
-    const eventSource = new EventSource(streamUrl);
-
-    eventSource.addEventListener('action', async (event) => {
-      if (cancelled) return;
-      let currentAction: { id: string; toolName: string; args?: Record<string, unknown> } | null = null;
-      try {
-        currentAction = JSON.parse(event.data) as { id: string; toolName: string; args?: Record<string, unknown> };
-        if (!currentAction?.id || !currentAction.toolName) return;
-
-        const result = await executeMcpTool(
-          currentAction.toolName,
-          currentAction.args || {},
-          instrumentEndpointRef.current || undefined,
-          {
-            modelFamily: flowContextRef.current?.modelFamily,
-            deviceDriver: flowContextRef.current?.deviceDriver,
-          },
-        );
-
-        if (currentAction.toolName === 'capture_screenshot') {
-          const screenshot = extractScreenshotPayload(result);
-          if (screenshot) {
-            onLiveScreenshotRef.current?.(screenshot);
-          }
-        }
-
-        await fetch(`${baseUrl}/live-actions/result`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            id: currentAction.id,
-            sessionKey: liveSession.sessionKey,
-            ok: true,
-            result,
-          }),
-        });
-      } catch (error) {
-        if (currentAction?.id) {
-          try {
-            await fetch(`${baseUrl}/live-actions/result`, {
-              method: 'POST',
-              headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify({
-                id: currentAction.id,
-                sessionKey: liveSession.sessionKey,
-                ok: false,
-                error: error instanceof Error ? error.message : 'Live action execution failed.',
-              }),
-            });
-          } catch {
-            // Ignore secondary reporting failures.
-          }
-        }
-      }
-    });
-
-    eventSource.onerror = () => {
-      // EventSource auto-reconnects — no manual retry needed
-    };
-
-    return () => {
-      cancelled = true;
-      eventSource.close();
-    };
-  }, [activeThreadId, instrumentEndpoint?.executorUrl, userId, workflowId, flowContext?.deviceDriver, flowContext?.modelFamily, isLiveMode]);
+  // SSE live action stream is handled by ExecutePage (parent) — always alive.
+  // This panel only syncs runtime context for ChatKit's workflow/thread info.
 
   // ── Inject workflow context when steps change ──
   useEffect(() => {
