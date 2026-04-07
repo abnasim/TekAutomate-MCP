@@ -253,7 +253,7 @@ export function LiveModeToolbar({
   };
 
   return (
-    <div className="flex items-center gap-2">
+    <div className="relative z-30 flex items-center gap-2">
       {instrumentOptions && instrumentOptions.length > 0 && (
         <div className="relative flex items-center gap-1" ref={mcpPillRef}>
           <select

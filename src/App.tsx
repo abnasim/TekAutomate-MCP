@@ -10050,6 +10050,10 @@ Keep under 120 words. No headings. Bullets only. Stay on this command. Do not de
                   const idx = enabledDevices.findIndex((d, i) => (d.id || `device-${i}`) === id);
                   if (idx >= 0) {
                     setCurrentDeviceIndex(idx);
+                    const selected = enabledDevices[idx];
+                    if (selected) {
+                      setConfig((prev) => ({ ...prev, ...selected }));
+                    }
                   }
                 }}
                 onRefresh={() => {
