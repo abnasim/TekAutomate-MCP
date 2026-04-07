@@ -66,7 +66,7 @@ interface ScreenshotPayload {
   imageUrl?: string;
 }
 
-type ScreenshotAnalysisTransport = 'auto' | 'file_id' | 'base64' | 'openai_image' | 'claude_image';
+type ScreenshotAnalysisTransport = 'auto' | 'url' | 'file_id' | 'base64' | 'openai_image' | 'claude_image';
 
 function guessImageExtension(mimeType: string): string {
   const lower = String(mimeType || '').toLowerCase();
@@ -906,7 +906,7 @@ async function runOpenAiLoop(params: LiveToolLoopParams): Promise<LiveToolLoopRe
             const analysisTransportRaw = String(toolArgs.analysisTransport || 'auto').toLowerCase() as ScreenshotAnalysisTransport;
             const analysisTransport = analysisTransportRaw === 'claude_image' ? 'base64' : analysisTransportRaw;
             const wantsOpenAiImage = analysisTransport === 'openai_image';
-            const visionFileId = (analysisTransport === 'file_id' || wantsOpenAiImage)
+            const visionFileId = analysisTransport === 'file_id'
               ? (visionBase64 ? await uploadVisionImageToOpenAiFile(
                   apiKey,
                   visionBase64,
@@ -914,7 +914,7 @@ async function runOpenAiLoop(params: LiveToolLoopParams): Promise<LiveToolLoopRe
                   screenshotPayload.capturedAt,
                 ) : null)
               : null;
-            if ((analysisTransport === 'file_id' || wantsOpenAiImage) && !visionFileId) {
+            if (analysisTransport === 'file_id' && !visionFileId) {
               toolResultsInput.push({
                 type: 'function_call_output',
                 call_id: callId,
@@ -934,12 +934,18 @@ async function runOpenAiLoop(params: LiveToolLoopParams): Promise<LiveToolLoopRe
             toolResultsInput.push({
               type: 'function_call_output',
               call_id: callId,
-              output: `Screenshot captured. Analyze the image below. Vision transport: ${visionFileId ? 'file_id' : 'base64'}.`,
+              output: `Screenshot captured. Analyze the image below. Vision transport: ${wantsOpenAiImage && visionUrl ? 'url' : visionFileId ? 'file_id' : 'base64'}.`,
             });
             toolResultsInput.push({
               role: 'user',
               content: [
-                ...(wantsOpenAiImage && visionFileId
+                ...(wantsOpenAiImage && visionUrl
+                  ? [{
+                      type: 'input_image',
+                      image_url: visionUrl,
+                      detail: 'auto',
+                    } satisfies Record<string, unknown>]
+                  : wantsOpenAiImage && visionFileId
                   ? [{
                       type: 'input_image',
                       file_id: visionFileId,
