@@ -906,7 +906,7 @@ async function runOpenAiLoop(params: LiveToolLoopParams): Promise<LiveToolLoopRe
             const analysisTransportRaw = String(toolArgs.analysisTransport || 'auto').toLowerCase() as ScreenshotAnalysisTransport;
             const analysisTransport = analysisTransportRaw === 'claude_image' ? 'base64' : analysisTransportRaw;
             const wantsOpenAiImage = analysisTransport === 'openai_image';
-            const visionFileId = analysisTransport === 'file_id'
+            const visionFileId = (analysisTransport === 'file_id' || wantsOpenAiImage)
               ? (visionBase64 ? await uploadVisionImageToOpenAiFile(
                   apiKey,
                   visionBase64,
@@ -914,7 +914,7 @@ async function runOpenAiLoop(params: LiveToolLoopParams): Promise<LiveToolLoopRe
                   screenshotPayload.capturedAt,
                 ) : null)
               : null;
-            if (analysisTransport === 'file_id' && !visionFileId) {
+            if ((analysisTransport === 'file_id' || wantsOpenAiImage) && !visionFileId) {
               toolResultsInput.push({
                 type: 'function_call_output',
                 call_id: callId,
@@ -934,12 +934,18 @@ async function runOpenAiLoop(params: LiveToolLoopParams): Promise<LiveToolLoopRe
             toolResultsInput.push({
               type: 'function_call_output',
               call_id: callId,
-              output: `Screenshot captured. Analyze the image below. Vision transport: ${wantsOpenAiImage ? 'base64' : visionFileId ? 'file_id' : 'base64'}.`,
+              output: `Screenshot captured. Analyze the image below. Vision transport: ${visionFileId ? 'file_id' : 'base64'}.`,
             });
             toolResultsInput.push({
               role: 'user',
               content: [
-                ...(wantsOpenAiImage && visionBase64
+                ...(wantsOpenAiImage && visionFileId
+                  ? [{
+                      type: 'input_image',
+                      file_id: visionFileId,
+                      detail: 'auto',
+                    } satisfies Record<string, unknown>]
+                  : wantsOpenAiImage && visionBase64
                   ? [{
                       type: 'input_image',
                       image_url: `data:${visionMimeType};base64,${visionBase64}`,
