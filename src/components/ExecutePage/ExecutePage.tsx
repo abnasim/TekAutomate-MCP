@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useMemo, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Code, Terminal, Copy, Pencil, Sparkles, Play, RotateCcw, RotateCw, Trash2, Mail, SkipForward, Square, MessageSquare, ChevronLeft, ChevronRight } from 'lucide-react';
 import { resolveMcpHost, streamMcpChat } from '../../utils/ai/mcpClient';
 import { StepsListPreview } from './StepsListPreview';
@@ -433,6 +433,11 @@ function ExecutePageContent({
     [runLog, stepLog, stepping]
   );
 
+  const logEndRef = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    logEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+  }, [runLogLines]);
+
   const copyCode = () => {
     if (!code) return;
     navigator.clipboard.writeText(code);
@@ -582,7 +587,7 @@ function ExecutePageContent({
             />
           </div>
         )}
-        {!assistantPanelOpen && executionSource !== 'live' && (
+        {!assistantPanelOpen && centerTab !== 'live' && (
           <button
             type="button"
             onClick={() => setAssistantPanelOpen(true)}
@@ -745,34 +750,15 @@ function ExecutePageContent({
                   {liveModeToolbar}
                 </>
               )}
-              {centerTab === 'live' && (
-                <button
-                  type="button"
-                  onClick={() => setAssistantPanelOpen((value) => !value)}
-                  className="inline-flex min-w-0 max-w-full items-center gap-2 rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm font-medium text-slate-700 hover:bg-slate-100 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-200 dark:hover:bg-slate-800"
-                  title={assistantPanelOpen ? 'Hide AI Assistant' : 'Show AI Assistant'}
-                >
-                  <MessageSquare size={16} className="shrink-0" />
-                  {assistantPanelOpen ? (
-                    <>
-                      <ChevronLeft size={14} className="shrink-0" />
-                      <span className="truncate">Hide Copilot</span>
-                    </>
-                  ) : (
-                    <span className="flex min-w-0 flex-col items-start leading-tight">
-                      <span className="inline-flex min-w-0 items-center gap-2">
-                        <ChevronRight size={14} className="shrink-0" />
-                        <span className="truncate">Show Copilot</span>
-                      </span>
-                      {centerTab === 'live' ? (
-                        <span className="hidden pl-6 text-[11px] font-normal text-slate-500 dark:text-slate-400 xl:block">
-                          Experimental
-                        </span>
-                      ) : null}
-                    </span>
-                  )}
-                </button>
-              )}
+              <button
+                type="button"
+                onClick={() => setAssistantPanelOpen((value) => !value)}
+                className="inline-flex items-center gap-1 rounded-lg border border-slate-200 bg-white px-2 py-1.5 text-xs font-medium text-slate-700 hover:bg-slate-100 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-200 dark:hover:bg-slate-800"
+                title={assistantPanelOpen ? 'Hide Chat' : 'Show Chat'}
+              >
+                <MessageSquare size={14} className="shrink-0" />
+                {assistantPanelOpen ? <ChevronLeft size={12} className="shrink-0" /> : <ChevronRight size={12} className="shrink-0" />}
+              </button>
             </div>
           </div>
           <div className="flex-1 min-h-0 overflow-hidden">
@@ -987,17 +973,18 @@ function ExecutePageContent({
                 </div>
               </div>
             ) : (
-              <div className="text-xs font-mono whitespace-pre-wrap break-words rounded-lg bg-slate-100 dark:bg-slate-900/95 border border-slate-300 dark:border-slate-700/70 p-4 overflow-x-auto h-full leading-5">
+              <div className="text-xs font-mono whitespace-pre-wrap break-words rounded-lg bg-slate-100 dark:bg-slate-900/95 border border-slate-300 dark:border-slate-700/70 p-4 overflow-y-auto h-full leading-5">
                 {runLogLines.map((line, idx) => (
                   <div key={`execute-log-line-${idx}`} className={`${getRunLogLineClass(line)} whitespace-pre-wrap break-words`}>
                     {line || ' '}
                   </div>
                 ))}
+                <div ref={logEndRef} />
               </div>
             )}
           </div>
 
-          {(lastAuditReport || onClearRunLog || runLog.trim().length > 0) && (
+          {(lastAuditReport || onClearRunLog || runLog.trim().length > 0 || stepLog.trim().length > 0) && (
             <div className="border-t border-slate-200 px-4 py-2 dark:border-slate-800/50">
               {lastAuditReport && (
                 <p className="text-[11px] text-slate-600 dark:text-slate-400">
@@ -1014,8 +1001,8 @@ function ExecutePageContent({
                 </button>
                 <button
                   type="button"
-                  onClick={() => onClearRunLog?.()}
-                  disabled={!onClearRunLog}
+                  onClick={() => { onClearRunLog?.(); setStepLog(''); }}
+                  disabled={!onClearRunLog && !stepLog}
                   className="text-[11px] px-2 py-1 rounded border border-slate-300 bg-slate-100 text-slate-700 hover:bg-slate-200 disabled:opacity-40 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-200 dark:hover:bg-slate-700"
                 >
                   Clear log
