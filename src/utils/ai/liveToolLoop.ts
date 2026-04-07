@@ -56,13 +56,14 @@ export interface LiveToolLoopResult {
 }
 
 interface ScreenshotPayload {
-  base64: string;
-  mimeType: string;
+  base64?: string;
+  mimeType?: string;
   capturedAt?: string;
   sizeBytes?: number;
   analysisBase64?: string;
   analysisMimeType?: string;
   analysisSizeBytes?: number;
+  imageUrl?: string;
 }
 
 type ScreenshotAnalysisTransport = 'auto' | 'file_id' | 'base64' | 'openai_image' | 'claude_image';
@@ -236,16 +237,20 @@ function extractScreenshotPayload(result: unknown): ScreenshotPayload | null {
   const nested = record.data && typeof record.data === 'object'
     ? (record.data as Record<string, unknown>)
     : null;
-  const candidate = typeof record.base64 === 'string' ? record : nested;
-  if (!candidate || typeof candidate.base64 !== 'string' || !candidate.base64) return null;
+  const candidate = typeof record.base64 === 'string' || typeof record.imageUrl === 'string' ? record : nested;
+  if (!candidate) return null;
+  const hasBase64 = typeof candidate.base64 === 'string' && candidate.base64;
+  const hasImageUrl = typeof candidate.imageUrl === 'string' && candidate.imageUrl;
+  if (!hasBase64 && !hasImageUrl) return null;
   return {
-    base64: candidate.base64,
-    mimeType: typeof candidate.mimeType === 'string' ? candidate.mimeType : 'image/png',
+    base64: typeof candidate.base64 === 'string' ? candidate.base64 : undefined,
+    mimeType: typeof candidate.mimeType === 'string' ? candidate.mimeType : undefined,
     capturedAt: typeof candidate.capturedAt === 'string' ? candidate.capturedAt : undefined,
     sizeBytes: typeof candidate.sizeBytes === 'number' ? candidate.sizeBytes : undefined,
     analysisBase64: typeof candidate.analysisBase64 === 'string' ? candidate.analysisBase64 : undefined,
     analysisMimeType: typeof candidate.analysisMimeType === 'string' ? candidate.analysisMimeType : undefined,
     analysisSizeBytes: typeof candidate.analysisSizeBytes === 'number' ? candidate.analysisSizeBytes : undefined,
+    imageUrl: typeof candidate.imageUrl === 'string' ? candidate.imageUrl : undefined,
   };
 }
 
@@ -253,6 +258,7 @@ async function compressScreenshotForAnalysis(result: unknown, analyze?: boolean)
   if (analyze !== true) return result;
   const screenshot = extractScreenshotPayload(result);
   if (!screenshot) return result;
+  if (!screenshot.base64 || !screenshot.mimeType) return result;
   if (typeof window === 'undefined' || typeof document === 'undefined') return result;
 
   const variants = [
@@ -895,19 +901,20 @@ async function runOpenAiLoop(params: LiveToolLoopParams): Promise<LiveToolLoopRe
 
           if (screenshotPayload && toolArgs.analyze === true) {
             const visionBase64 = screenshotPayload.analysisBase64 || screenshotPayload.base64;
-            const visionMimeType = screenshotPayload.analysisMimeType || screenshotPayload.mimeType;
+            const visionMimeType = screenshotPayload.analysisMimeType || screenshotPayload.mimeType || 'image/png';
+            const visionUrl = screenshotPayload.imageUrl;
             const analysisTransportRaw = String(toolArgs.analysisTransport || 'auto').toLowerCase() as ScreenshotAnalysisTransport;
             const analysisTransport = analysisTransportRaw === 'claude_image' ? 'base64' : analysisTransportRaw;
             const wantsOpenAiImage = analysisTransport === 'openai_image';
-            const visionFileId = analysisTransport === 'base64'
-              ? null
-              : await uploadVisionImageToOpenAiFile(
+            const visionFileId = analysisTransport === 'file_id'
+              ? (visionBase64 ? await uploadVisionImageToOpenAiFile(
                   apiKey,
                   visionBase64,
                   visionMimeType,
                   screenshotPayload.capturedAt,
-                );
-            if ((analysisTransport === 'file_id' || wantsOpenAiImage) && !visionFileId) {
+                ) : null)
+              : null;
+            if (analysisTransport === 'file_id' && !visionFileId) {
               toolResultsInput.push({
                 type: 'function_call_output',
                 call_id: callId,
@@ -915,16 +922,30 @@ async function runOpenAiLoop(params: LiveToolLoopParams): Promise<LiveToolLoopRe
               });
               continue;
             }
+            if (analysisTransport === 'openai_image' && !visionUrl && !visionBase64) {
+              toolResultsInput.push({
+                type: 'function_call_output',
+                call_id: callId,
+                output: 'Error: capture_screenshot requested analysisTransport=openai_image, but no screenshot image URL or payload was available.',
+              });
+              continue;
+            }
             // Send screenshot for AI analysis
             toolResultsInput.push({
               type: 'function_call_output',
               call_id: callId,
-              output: `Screenshot captured. Analyze the image below. Vision transport: ${visionFileId ? 'file_id' : 'base64'}.`,
+              output: `Screenshot captured. Analyze the image below. Vision transport: ${wantsOpenAiImage ? (visionUrl ? 'url' : 'base64') : visionFileId ? 'file_id' : 'base64'}.`,
             });
             toolResultsInput.push({
               role: 'user',
               content: [
-                ...(visionFileId
+                ...(wantsOpenAiImage && visionUrl
+                  ? [{
+                      type: 'input_image',
+                      image_url: visionUrl,
+                      detail: 'auto',
+                    } satisfies Record<string, unknown>]
+                  : visionFileId
                   ? [{
                       type: 'input_image',
                       file_id: visionFileId,
