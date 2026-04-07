@@ -76,7 +76,7 @@ function guessImageExtension(mimeType: string): string {
   return 'png';
 }
 
-export async function uploadVisionImageToOpenAiFile(
+async function uploadVisionImageToOpenAiFile(
   apiKey: string,
   base64: string,
   mimeType: string,
