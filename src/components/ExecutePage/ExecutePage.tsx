@@ -596,7 +596,7 @@ function ExecutePageContent({
         )}
 
         <main className="flex-1 flex flex-col min-w-0 bg-slate-100 dark:bg-slate-950">
-          <div className="flex items-center justify-between gap-4 border-b border-slate-200 dark:border-slate-800/50 px-2">
+          <div className="relative z-40 flex items-center justify-between gap-4 border-b border-slate-200 dark:border-slate-800/50 px-2">
             <div className="flex min-w-0">
               <button
                 onClick={() => {
@@ -641,7 +641,7 @@ function ExecutePageContent({
                 </span>
               </button>
             </div>
-            <div className="flex items-center gap-2 py-2 overflow-x-auto flex-nowrap min-w-0 nav-tabs-scroll">
+            <div className="relative z-40 flex items-center gap-2 py-2 overflow-x-auto overflow-y-visible flex-nowrap min-w-0 nav-tabs-scroll">
               {centerTab !== 'live' && (
                 <>
                   <button
