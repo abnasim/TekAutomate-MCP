@@ -922,11 +922,11 @@ async function runOpenAiLoop(params: LiveToolLoopParams): Promise<LiveToolLoopRe
               });
               continue;
             }
-            if (analysisTransport === 'openai_image' && !visionUrl && !visionBase64) {
+            if (analysisTransport === 'openai_image' && !visionUrl) {
               toolResultsInput.push({
                 type: 'function_call_output',
                 call_id: callId,
-                output: 'Error: capture_screenshot requested analysisTransport=openai_image, but no screenshot image URL or payload was available.',
+                output: 'Error: capture_screenshot requested analysisTransport=openai_image, but no screenshot image URL was available.',
               });
               continue;
             }
@@ -940,24 +940,6 @@ async function runOpenAiLoop(params: LiveToolLoopParams): Promise<LiveToolLoopRe
               role: 'user',
               content: [
                 ...(wantsOpenAiImage && visionUrl
-                  ? [{
-                      type: 'input_image',
-                      image_url: visionUrl,
-                      detail: 'auto',
-                    } satisfies Record<string, unknown>]
-                  : wantsOpenAiImage && visionFileId
-                  ? [{
-                      type: 'input_image',
-                      file_id: visionFileId,
-                      detail: 'auto',
-                    } satisfies Record<string, unknown>]
-                  : wantsOpenAiImage && visionBase64
-                  ? [{
-                      type: 'input_image',
-                      image_url: `data:${visionMimeType};base64,${visionBase64}`,
-                      detail: 'auto',
-                    } satisfies Record<string, unknown>]
-                  : wantsOpenAiImage && visionUrl
                   ? [{
                       type: 'input_image',
                       image_url: visionUrl,
