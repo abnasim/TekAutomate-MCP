@@ -25,6 +25,7 @@ export interface RuntimeInstrumentInfo {
   modelFamily: string;
   deviceDriver: string | null;
   liveMode: boolean;
+  devices?: Array<Record<string, unknown>>;
 }
 
 export interface RuntimeRunLogInfo {
@@ -69,6 +70,7 @@ const DEFAULT_INSTRUMENT: RuntimeInstrumentInfo = {
   modelFamily: 'unknown',
   deviceDriver: null,
   liveMode: false,
+  devices: [],
 };
 
 const DEFAULT_RUN_LOG: RuntimeRunLogInfo = {
@@ -178,6 +180,28 @@ export function updateRuntimeContext(input: {
       typeof instrument.liveMode === 'boolean'
         ? instrument.liveMode
         : previous.liveMode;
+
+    const rawInstrumentMap = Array.isArray((instrument as any).instrumentMap) ? (instrument as any).instrumentMap : [];
+    const normalizedDevices = rawInstrumentMap
+      .map((item) => (item && typeof item === 'object' ? (item as Record<string, unknown>) : null))
+      .filter((item): item is Record<string, unknown> => item !== null)
+      .map((item, idx) => ({
+        deviceId:
+          typeof item.alias === 'string' && item.alias
+            ? item.alias
+            : typeof item.deviceId === 'string' && item.deviceId
+              ? item.deviceId
+              : `device-${idx}`,
+        visaResource: typeof item.visaResource === 'string' ? item.visaResource : null,
+        backend: typeof item.backend === 'string' ? item.backend : undefined,
+        modelFamily: typeof item.modelFamily === 'string' ? item.modelFamily : undefined,
+        deviceDriver: typeof item.deviceDriver === 'string' ? item.deviceDriver : undefined,
+        alias: typeof item.alias === 'string' ? item.alias : undefined,
+        host: typeof item.host === 'string' ? item.host : undefined,
+        connectionType: typeof item.connectionType === 'string' ? item.connectionType : undefined,
+        visaBackend: typeof item.visaBackend === 'string' ? item.visaBackend : undefined,
+      }));
+
     runtimeContextState.instrument = {
       connected:
         explicitConnected === true
@@ -191,6 +215,7 @@ export function updateRuntimeContext(input: {
       modelFamily: nextModelFamily,
       deviceDriver: nextDeviceDriver,
       liveMode: nextLiveMode,
+      devices: normalizedDevices.length > 0 ? normalizedDevices : previous.devices || [],
     };
   }
 
