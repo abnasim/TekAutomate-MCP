@@ -26,6 +26,7 @@ import { verifyScpiCommands } from './verifyScpiCommands';
 import { browseScpiCommands } from './browseScpiCommands';
 import { discoverScpi } from './discoverScpi';
 import { buildOrEditWorkflow } from './buildOrEditWorkflow';
+import { analyzeScopeScreenshot } from './analyzeScopeScreenshot';
 import { prepareFlowActions } from './prepareFlowActions';
 import { reviewRunLog } from './reviewRunLog';
 import { stageWorkflowProposal } from './stageWorkflowProposal';
@@ -47,6 +48,7 @@ export const TOOL_HANDLERS = {
     return tekRouter(args as any);
   },
   instrument_live: instrumentLive,
+  analyze_scope_screenshot: analyzeScopeScreenshot,
   workflow_ui: workflowUi,
   knowledge,
   smart_scpi_lookup: smartScpiLookup,
@@ -166,6 +168,32 @@ export function getToolDefinitions() {
         },
         required: ['action'],
         additionalProperties: true,
+      },
+    },
+    {
+      name: 'analyze_scope_screenshot',
+      description:
+        'Capture a fresh live scope screenshot and analyze it server-side with OpenAI vision. Use this when the host/client does not re-attach screenshot images automatically. Returns compact analysis text plus capture metadata.',
+      parameters: {
+        type: 'object',
+        properties: {
+          executorUrl: { type: 'string' },
+          visaResource: { type: 'string' },
+          backend: { type: 'string' },
+          liveMode: { type: 'boolean' },
+          outputMode: { type: 'string', enum: ['clean', 'verbose'] },
+          scopeType: { type: 'string', enum: ['modern', 'legacy'] },
+          modelFamily: { type: 'string' },
+          deviceDriver: { type: 'string' },
+          timeoutMs: { type: 'number', description: 'Optional screenshot timeout in milliseconds.' },
+          prompt: { type: 'string', description: 'Optional visual-analysis instruction for the screenshot.' },
+          question: { type: 'string', description: 'Alias for prompt.' },
+          model: { type: 'string', description: 'Optional OpenAI model override. Defaults to OPENAI_SCREENSHOT_MODEL or gpt-4.1-mini.' },
+          detail: { type: 'string', enum: ['low', 'high', 'auto', 'original'], description: 'Optional OpenAI image detail level. Defaults to original.' },
+          apiKey: { type: 'string', description: 'Optional OpenAI API key override. Defaults to OPENAI_API_KEY.' },
+        },
+        required: [],
+        additionalProperties: false,
       },
     },
     {
