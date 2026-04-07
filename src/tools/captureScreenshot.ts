@@ -209,7 +209,9 @@ export async function captureScreenshot(input: Input): Promise<ToolResult<Record
   const analysisTransportRaw = String(input.analysisTransport || 'auto').toLowerCase() as Input['analysisTransport'];
   const analysisTransport = analysisTransportRaw === 'claude_image'
     ? 'mcp_image'
-    : analysisTransportRaw;
+    : analysisTransportRaw === 'openai_image'
+      ? 'url'
+      : analysisTransportRaw;
   if (shouldBridgeToTekAutomate(input)) {
     const bridged = await dispatchLiveActionThroughTekAutomate(
       'capture_screenshot',
