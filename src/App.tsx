@@ -10040,6 +10040,18 @@ Keep under 120 words. No headings. Bullets only. Stay on this command. Do not de
                 vncActive={Boolean(liveModeVncSession)}
                 vncConnecting={liveModeVncConnecting}
                 vncSessionInfo={liveModeVncSession}
+                instrumentOptions={enabledDevices.map((device, idx) => ({
+                  id: device.id || `device-${idx}`,
+                  label: device.alias || device.deviceType || device.host || `Instrument ${idx + 1}`,
+                  detail: device.host || device.deviceType || undefined,
+                }))}
+                selectedInstrumentId={enabledDevices[currentDeviceIndex]?.id || (enabledDevices.length ? `device-${currentDeviceIndex}` : null)}
+                onSelectInstrument={(id) => {
+                  const idx = enabledDevices.findIndex((d, i) => (d.id || `device-${i}`) === id);
+                  if (idx >= 0) {
+                    setCurrentDeviceIndex(idx);
+                  }
+                }}
                 onRefresh={() => {
                   void captureLiveScopeScreenshot('manual');
                 }}

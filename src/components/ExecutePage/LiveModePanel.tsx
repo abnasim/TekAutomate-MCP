@@ -1,5 +1,6 @@
-import React, { useState } from 'react';
-import { Camera, ChevronDown, ChevronRight, Image as ImageIcon, Loader2, MonitorSmartphone, RefreshCw, Terminal } from 'lucide-react';
+import React, { useEffect, useRef, useState } from 'react';
+import { Camera, ChevronDown, ChevronRight, Image as ImageIcon, Loader2, MonitorSmartphone, RefreshCw, Settings, Terminal } from 'lucide-react';
+import { clearStoredMcpHost, resolveMcpHost, resolveMcpHostCandidates, setStoredMcpHost } from '../../utils/ai/mcpClient';
 import { VncViewer } from './VncViewer';
 
 export interface LiveModeCapture {
@@ -43,6 +44,9 @@ export interface LiveModeToolbarProps {
   onToggleAutoRefresh: () => void;
   onChangeRefreshInterval: (seconds: number) => void;
   onToggleVnc?: () => void;
+  instrumentOptions?: Array<{ id: string; label: string; detail?: string }>;
+  selectedInstrumentId?: string | null;
+  onSelectInstrument?: (id: string) => void;
 }
 
 function formatBytes(size: number): string {
@@ -185,11 +189,129 @@ export function LiveModeToolbar({
   onToggleAutoRefresh,
   onChangeRefreshInterval,
   onToggleVnc,
+  instrumentOptions,
+  selectedInstrumentId,
+  onSelectInstrument,
 }: LiveModeToolbarProps) {
   const canShowVncTab = Boolean(vncActive || vncAvailable);
+  const [showMcpPill, setShowMcpPill] = useState(false);
+  const [mcpHostInput, setMcpHostInput] = useState(() => resolveMcpHost());
+  const [mcpHostStatus, setMcpHostStatus] = useState<string | null>(null);
+  const mcpPillRef = useRef<HTMLDivElement | null>(null);
+
+  useEffect(() => {
+    const handler = (event: MouseEvent) => {
+      if (!showMcpPill) return;
+      if (mcpPillRef.current && mcpPillRef.current.contains(event.target as Node)) return;
+      setShowMcpPill(false);
+    };
+    document.addEventListener('mousedown', handler);
+    return () => document.removeEventListener('mousedown', handler);
+  }, [showMcpPill]);
+
+  const normalizeMcpHost = (value: string): string => {
+    const trimmed = String(value || '').trim();
+    if (!trimmed) return '';
+    const withScheme = /^https?:\/\//i.test(trimmed) ? trimmed : `https://${trimmed}`;
+    return withScheme.replace(/\/+$/, '');
+  };
+
+  const saveMcpHost = () => {
+    const normalized = normalizeMcpHost(mcpHostInput);
+    setMcpHostStatus(null);
+    if (!normalized) {
+      clearStoredMcpHost();
+      setMcpHostStatus('Cleared MCP URL.');
+      return;
+    }
+    setStoredMcpHost(normalized);
+    setMcpHostStatus(`Saved MCP URL: ${normalized}`);
+  };
+
+  const testMcpHost = async () => {
+    const normalized = normalizeMcpHost(mcpHostInput);
+    const hosts = normalized ? [normalized] : resolveMcpHostCandidates();
+    if (!hosts.length) {
+      setMcpHostStatus('Enter an MCP URL first.');
+      return;
+    }
+    setMcpHostStatus('Testing MCP...');
+    try {
+      let lastStatus = 'Failed to reach MCP host.';
+      for (const host of hosts) {
+        const res = await fetch(`${host.replace(/\/$/, '')}/health`);
+        if (res.ok) {
+          setMcpHostStatus(`MCP reachable at ${host}`);
+          return;
+        }
+        lastStatus = `MCP responded with ${res.status} at ${host}.`;
+      }
+      setMcpHostStatus(lastStatus);
+    } catch (err) {
+      setMcpHostStatus(err instanceof Error ? err.message : 'Failed to reach MCP host.');
+    }
+  };
 
   return (
     <div className="flex items-center gap-2">
+      {instrumentOptions && instrumentOptions.length > 0 && (
+        <div className="relative flex items-center gap-1" ref={mcpPillRef}>
+          <select
+            value={selectedInstrumentId || instrumentOptions[0]?.id}
+            onChange={(e) => onSelectInstrument?.(e.target.value)}
+            className="px-2 py-1 text-[11px] border border-slate-300 dark:border-slate-700 rounded-md bg-white dark:bg-slate-900 text-slate-800 dark:text-slate-100"
+            title="Choose which connected instrument to drive in Live Mode"
+          >
+            {instrumentOptions.map((opt) => (
+              <option key={opt.id} value={opt.id}>
+                {opt.label}{opt.detail ? ` · ${opt.detail}` : ''}
+              </option>
+            ))}
+          </select>
+          <button
+            type="button"
+            onClick={() => setShowMcpPill((v) => !v)}
+            className="inline-flex items-center justify-center rounded-full border border-slate-300 bg-white px-2 py-1 text-[11px] text-slate-600 shadow-sm hover:bg-slate-50 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100 dark:hover:bg-slate-800"
+            title="Configure MCP server"
+          >
+            <Settings size={12} />
+          </button>
+          <div
+            className={`absolute top-full left-0 mt-2 flex items-center gap-2 rounded-full border border-slate-200 bg-white px-3 py-2 shadow-lg transition-all duration-200 dark:border-slate-700 dark:bg-slate-900 ${
+              showMcpPill ? 'opacity-100 translate-x-0 pointer-events-auto' : 'opacity-0 translate-x-3 pointer-events-none'
+            }`}
+          >
+            <input
+              type="url"
+              value={mcpHostInput}
+              onChange={(e) => setMcpHostInput(e.target.value)}
+              placeholder="https://..."
+              className="w-60 rounded-md border border-slate-200 px-2 py-1 text-[11px] text-slate-700 focus:outline-none focus:border-violet-500/60 dark:border-white/10 dark:bg-slate-800 dark:text-white"
+            />
+            <div className="flex items-center gap-1">
+              <button
+                type="button"
+                onClick={saveMcpHost}
+                className="rounded-md border border-slate-200 px-2 py-1 text-[11px] font-semibold text-slate-600 hover:bg-slate-100 dark:border-white/10 dark:text-white/80 dark:hover:bg-white/10"
+              >
+                Save
+              </button>
+              <button
+                type="button"
+                onClick={() => void testMcpHost()}
+                className="rounded-md border border-slate-200 px-2 py-1 text-[11px] font-semibold text-slate-600 hover:bg-slate-100 dark:border-white/10 dark:text-white/80 dark:hover:bg-white/10"
+              >
+                Test
+              </button>
+            </div>
+            {mcpHostStatus && (
+              <span className="text-[10px] text-cyan-600 dark:text-cyan-300 whitespace-nowrap">
+                {mcpHostStatus}
+              </span>
+            )}
+          </div>
+        </div>
+      )}
       {canShowVncTab ? (
         <div className="inline-flex rounded-lg border border-slate-300 bg-white p-1 shadow-sm dark:border-slate-700 dark:bg-slate-900">
           <button
