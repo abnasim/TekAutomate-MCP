@@ -695,6 +695,7 @@ function OpenAiChatKitPanelInner({
   onLiveScreenshotRef.current = onLiveScreenshot;
   const autoApplyRef = useRef(autoApply);
   autoApplyRef.current = autoApply;
+  const sendUserMessageRef = useRef<((msg: { text: string }) => Promise<void>) | null>(null);
   const lastContextSentRef = useRef('');
   const lastParsedJsonRef = useRef('');
   const responseScanTimersRef = useRef<number[]>([]);
@@ -1229,6 +1230,27 @@ function OpenAiChatKitPanelInner({
           const screenshot = extractScreenshotPayload(result);
           if (screenshot) {
             onLiveScreenshotRef.current?.(screenshot);
+            // Auto-send the screenshot as a user message so OpenAI can see it.
+            // ChatKit's onClientTool return value is serialised as plain text —
+            // it cannot carry multimodal image content.  Sending a follow-up
+            // user message with the data-URL lets gpt-4.1 vision actually
+            // analyse the image.
+            const send = sendUserMessageRef.current;
+            if (send) {
+              send({
+                text: `[Scope screenshot attached for analysis]\n\n![Scope Screenshot](${screenshot.dataUrl})`,
+              }).catch((err) =>
+                console.warn('[ChatKit] failed to auto-attach screenshot:', err),
+              );
+            }
+            // Return a slim result so we don't waste tokens on the raw base64
+            return {
+              ok: true,
+              message: 'Screenshot captured and sent for analysis.',
+              capturedAt: screenshot.capturedAt,
+              sizeBytes: screenshot.sizeBytes,
+              mimeType: screenshot.mimeType,
+            };
           }
         }
         return result as Record<string, unknown>;
@@ -1256,6 +1278,9 @@ function OpenAiChatKitPanelInner({
       },
     },
   });
+
+  // Keep ref in sync so onClientTool can send images as user messages
+  sendUserMessageRef.current = chatkit.sendUserMessage ? (msg: { text: string }) => chatkit.sendUserMessage(msg) : null;
 
   const startScreenGreeting = getStartScreenGreeting(isLiveMode);
   const startScreenPrompts = getStartScreenPrompts(isLiveMode);

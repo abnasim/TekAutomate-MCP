@@ -94,7 +94,7 @@ async function uploadVisionImageToOpenAiFile(
     const safeStamp = String(capturedAt || new Date().toISOString()).replace(/[:.]/g, '-');
     const file = new File([blob], `scope-${safeStamp}.${ext}`, { type: mimeType });
     const form = new FormData();
-    form.append('purpose', 'vision');
+    form.append('purpose', 'user_data');
     form.append('file', file);
 
     const res = await fetch('https://api.openai.com/v1/files', {
