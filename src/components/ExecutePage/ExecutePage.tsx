@@ -395,6 +395,7 @@ function ExecutePageContent({
         modelFamily: currentFlowContext.modelFamily || 'unknown',
         deviceDriver: currentFlowContext.deviceDriver || null,
         liveMode: true,
+        instrumentMap: currentFlowContext.instrumentMap || [],
       },
       workflow: {
         stepCount: steps.length,
