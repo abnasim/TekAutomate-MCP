@@ -1,6 +1,6 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { Code, Terminal, Copy, Pencil, Sparkles, Play, RotateCcw, RotateCw, Trash2, Mail, SkipForward, Square, MessageSquare, ChevronLeft, ChevronRight } from 'lucide-react';
-import { streamMcpChat } from '../../utils/ai/mcpClient';
+import { resolveMcpHost, streamMcpChat } from '../../utils/ai/mcpClient';
 import { StepsListPreview } from './StepsListPreview';
 import type { StepPreview } from './StepsListPreview';
 import { PythonCodeEditor } from '../PythonCodeEditor';
@@ -379,6 +379,51 @@ function ExecutePageContent({
     }
   }, [autoApplyProposals]);
 
+  useEffect(() => {
+    if (executionSource !== 'live') return;
+    const mcpHost = resolveMcpHost();
+    if (!mcpHost) return;
+    const currentFlowContext = flowContext || {};
+    const validationErrors = Array.isArray(currentFlowContext.validationErrors) ? [...currentFlowContext.validationErrors] : [];
+
+    const payload = {
+      instrument: {
+        connected: !!securedInstrumentEndpoint?.executorUrl,
+        executorUrl: securedInstrumentEndpoint?.executorUrl || null,
+        visaResource: securedInstrumentEndpoint?.visaResource || null,
+        backend: securedInstrumentEndpoint?.backend || currentFlowContext.backend || 'pyvisa',
+        modelFamily: currentFlowContext.modelFamily || 'unknown',
+        deviceDriver: currentFlowContext.deviceDriver || null,
+        liveMode: true,
+      },
+      workflow: {
+        stepCount: steps.length,
+        steps: steps.map((step, index) => ({
+          id: step.id,
+          index: index + 1,
+          type: step.type,
+          label: step.label,
+          command: typeof step.params?.command === 'string' ? step.params.command : undefined,
+        })),
+        selectedStep: typeof currentFlowContext.selectedStep?.id === 'string' ? currentFlowContext.selectedStep.id : null,
+        validationErrors,
+        backend: currentFlowContext.backend || securedInstrumentEndpoint?.backend || 'pyvisa',
+        modelFamily: currentFlowContext.modelFamily || 'unknown',
+        deviceDriver: currentFlowContext.deviceDriver || null,
+        isEmpty: steps.length === 0,
+      },
+      runLog: String(runLog || ''),
+    };
+
+    void fetch(`${mcpHost.replace(/\/$/, '')}/runtime-context`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload),
+    }).catch((error) => {
+      console.warn('[ExecutePage] Failed to sync live runtime context:', error);
+    });
+  }, [executionSource, securedInstrumentEndpoint, flowContext, steps, runLog]);
+
   const runLogLines = useMemo(
     () => {
       const logText = stepping || stepLog ? stepLog : (runLog || 'Logs will appear here when you run the flow.');
@@ -703,24 +748,24 @@ function ExecutePageContent({
                 <button
                   type="button"
                   onClick={() => setAssistantPanelOpen((value) => !value)}
-                  className="inline-flex items-center gap-2 rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm font-medium text-slate-700 hover:bg-slate-100 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-200 dark:hover:bg-slate-800"
+                  className="inline-flex min-w-0 max-w-full items-center gap-2 rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm font-medium text-slate-700 hover:bg-slate-100 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-200 dark:hover:bg-slate-800"
                   title={assistantPanelOpen ? 'Hide AI Assistant' : 'Show AI Assistant'}
                 >
-                  <MessageSquare size={16} />
+                  <MessageSquare size={16} className="shrink-0" />
                   {assistantPanelOpen ? (
                     <>
-                      <ChevronLeft size={14} />
-                      Hide Copilot
+                      <ChevronLeft size={14} className="shrink-0" />
+                      <span className="truncate">Hide Copilot</span>
                     </>
                   ) : (
-                    <span className="flex flex-col items-start leading-tight">
-                      <span className="inline-flex items-center gap-2">
-                        <ChevronRight size={14} />
-                        Show Copilot
+                    <span className="flex min-w-0 flex-col items-start leading-tight">
+                      <span className="inline-flex min-w-0 items-center gap-2">
+                        <ChevronRight size={14} className="shrink-0" />
+                        <span className="truncate">Show Copilot</span>
                       </span>
                       {centerTab === 'live' ? (
-                        <span className="pl-6 text-[11px] font-normal text-slate-500 dark:text-slate-400">
-                          Experimental in live mode. External tools like Codex or Claude Desktop work well too.
+                        <span className="hidden pl-6 text-[11px] font-normal text-slate-500 dark:text-slate-400 xl:block">
+                          Experimental
                         </span>
                       ) : null}
                     </span>
