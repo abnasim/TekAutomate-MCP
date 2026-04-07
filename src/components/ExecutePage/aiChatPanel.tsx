@@ -1816,7 +1816,7 @@ export function AiChatPanel({
             isLiveMode={state.tekMode === 'live'}
             threadStorageKey={activeChatKitThreadKey}
             userId={activeChatKitUserId}
-            historyEnabled={state.tekMode !== 'live'}
+            historyEnabled={false}
             workspaceRevision={workspaceRevision}
             runLog={runLog}
             autoApply={false}
