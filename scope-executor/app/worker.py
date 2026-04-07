@@ -251,10 +251,11 @@ def _command_timeout_ms(cmd: str, default_timeout_ms: int) -> int:
         or "SAVE:" in upper
         or "RECALL:" in upper
         or "RECALL:" in upper
-        or "FILESYSTEM:" in upper
         or "*RST" in upper
     ):
         timeout_ms = max(timeout_ms, 12000)
+    if "FILESYSTEM:" in upper:
+        timeout_ms = max(timeout_ms, 20000)
     return timeout_ms
 
 
