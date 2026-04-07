@@ -236,7 +236,7 @@ function ExecutePageContent({
   const [workspaceRevision, setWorkspaceRevision] = useState(0);
   const [pendingReapplyProposalId, setPendingReapplyProposalId] = useState<string | null>(null);
   const [autoApplyProposals, setAutoApplyProposals] = useState<boolean>(() => loadStoredAutoApply());
-  const [assistantPanelOpen, setAssistantPanelOpen] = useState(true);
+  const [assistantPanelOpen, setAssistantPanelOpen] = useState(executionSource !== 'live');
 
   // ── Step-through debugger ──
   const [stepping, setStepping] = useState(false);
@@ -713,10 +713,17 @@ function ExecutePageContent({
                       Hide Copilot
                     </>
                   ) : (
-                    <>
-                      <ChevronRight size={14} />
-                      Show Copilot
-                    </>
+                    <span className="flex flex-col items-start leading-tight">
+                      <span className="inline-flex items-center gap-2">
+                        <ChevronRight size={14} />
+                        Show Copilot
+                      </span>
+                      {centerTab === 'live' ? (
+                        <span className="pl-6 text-[11px] font-normal text-slate-500 dark:text-slate-400">
+                          Experimental in live mode. External tools like Codex or Claude Desktop work well too.
+                        </span>
+                      ) : null}
+                    </span>
                   )}
                 </button>
               )}
