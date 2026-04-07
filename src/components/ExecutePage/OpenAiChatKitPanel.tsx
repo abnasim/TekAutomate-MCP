@@ -16,7 +16,7 @@ import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { ChatKit, useChatKit, type ThemeOption } from '@openai/chatkit-react';
 import { parseAiActionResponse, type AiAction } from '../../utils/aiActions';
 import { resolveMcpHost, resolveMcpHostCandidates } from '../../utils/ai/mcpClient';
-import { buildWorkflowContext, executeMcpTool } from '../../utils/ai/liveToolLoop';
+import { buildWorkflowContext, executeMcpTool, uploadVisionImageToOpenAiFile } from '../../utils/ai/liveToolLoop';
 import type { StepPreview } from './StepsListPreview';
 
 // ── Storage keys ──
@@ -695,7 +695,10 @@ function OpenAiChatKitPanelInner({
   onLiveScreenshotRef.current = onLiveScreenshot;
   const autoApplyRef = useRef(autoApply);
   autoApplyRef.current = autoApply;
-  const sendUserMessageRef = useRef<((msg: { text: string }) => Promise<void>) | null>(null);
+  const sendUserMessageRef = useRef<((msg: {
+    text?: string;
+    attachments?: Array<{ type: 'image'; id: string; preview_url: string; name: string; mime_type: string }>;
+  }) => Promise<void>) | null>(null);
   const lastContextSentRef = useRef('');
   const lastParsedJsonRef = useRef('');
   const responseScanTimersRef = useRef<number[]>([]);
@@ -1230,18 +1233,41 @@ function OpenAiChatKitPanelInner({
           const screenshot = extractScreenshotPayload(result);
           if (screenshot) {
             onLiveScreenshotRef.current?.(screenshot);
-            // Auto-send the screenshot as a user message so OpenAI can see it.
-            // ChatKit's onClientTool return value is serialised as plain text —
-            // it cannot carry multimodal image content.  Sending a follow-up
-            // user message with the data-URL lets gpt-4.1 vision actually
-            // analyse the image.
+            // ChatKit's onClientTool return is plain JSON — no multimodal support.
+            // Upload the image to OpenAI Files, then send it as a ChatKit image
+            // attachment so the vision model can actually see it.
             const send = sendUserMessageRef.current;
             if (send) {
-              send({
-                text: `[Scope screenshot attached for analysis]\n\n![Scope Screenshot](${screenshot.dataUrl})`,
-              }).catch((err) =>
-                console.warn('[ChatKit] failed to auto-attach screenshot:', err),
-              );
+              // Extract raw base64 from result for upload
+              const resultObj = result as Record<string, unknown>;
+              const source = typeof resultObj.base64 === 'string'
+                ? resultObj
+                : (resultObj.data as Record<string, unknown> | undefined);
+              const rawBase64 = typeof source?.base64 === 'string' ? source.base64 as string : null;
+              if (rawBase64) {
+                uploadVisionImageToOpenAiFile(apiKey, rawBase64, screenshot.mimeType, screenshot.capturedAt)
+                  .then((fileId) => {
+                    if (fileId) {
+                      return send({
+                        text: 'Scope screenshot captured. Analyze what you see — only mention what CHANGED or is relevant.',
+                        attachments: [{
+                          type: 'image' as const,
+                          id: fileId,
+                          preview_url: screenshot.dataUrl,
+                          name: `scope-${screenshot.capturedAt}.png`,
+                          mime_type: screenshot.mimeType,
+                        }],
+                      });
+                    }
+                    // File upload failed — fall back to data-URL in text
+                    return send({
+                      text: `Scope screenshot captured. Analyze the image.\n\n![Scope Screenshot](${screenshot.dataUrl})`,
+                    });
+                  })
+                  .catch((err: unknown) =>
+                    console.warn('[ChatKit] failed to auto-attach screenshot:', err),
+                  );
+              }
             }
             // Return a slim result so we don't waste tokens on the raw base64
             return {
@@ -1280,7 +1306,9 @@ function OpenAiChatKitPanelInner({
   });
 
   // Keep ref in sync so onClientTool can send images as user messages
-  sendUserMessageRef.current = chatkit.sendUserMessage ? (msg: { text: string }) => chatkit.sendUserMessage(msg) : null;
+  sendUserMessageRef.current = chatkit.sendUserMessage
+    ? (msg) => chatkit.sendUserMessage(msg as Parameters<typeof chatkit.sendUserMessage>[0])
+    : null;
 
   const startScreenGreeting = getStartScreenGreeting(isLiveMode);
   const startScreenPrompts = getStartScreenPrompts(isLiveMode);
