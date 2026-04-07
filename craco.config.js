@@ -19,6 +19,9 @@ module.exports = {
   },
   webpack: {
     configure: (webpackConfig) => {
+      const path = require('path');
+      const vendorNoVncPath = path.resolve(__dirname, 'src/vendor/novnc');
+
       // Suppress source map warnings by ignoring errors from source-map-loader
       const originalIgnoreWarnings = webpackConfig.ignoreWarnings || [];
       
@@ -70,6 +73,21 @@ module.exports = {
       // Process all rules
       if (webpackConfig.module && webpackConfig.module.rules) {
         modifySourceMapLoader(webpackConfig.module.rules);
+      }
+
+      if (Array.isArray(webpackConfig.plugins)) {
+        webpackConfig.plugins.forEach((plugin) => {
+          if (plugin && plugin.constructor && plugin.constructor.name === 'ESLintWebpackPlugin') {
+            const existingExclude = plugin.options.exclude;
+            if (!existingExclude) {
+              plugin.options.exclude = [vendorNoVncPath];
+            } else if (Array.isArray(existingExclude)) {
+              plugin.options.exclude = [...existingExclude, vendorNoVncPath];
+            } else {
+              plugin.options.exclude = [existingExclude, vendorNoVncPath];
+            }
+          }
+        });
       }
       
       return webpackConfig;

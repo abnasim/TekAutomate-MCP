@@ -56,13 +56,61 @@ export interface LiveToolLoopResult {
 }
 
 interface ScreenshotPayload {
-  base64: string;
-  mimeType: string;
+  base64?: string;
+  mimeType?: string;
   capturedAt?: string;
   sizeBytes?: number;
   analysisBase64?: string;
   analysisMimeType?: string;
   analysisSizeBytes?: number;
+  imageUrl?: string;
+}
+
+type ScreenshotAnalysisTransport = 'auto' | 'file_id' | 'base64' | 'openai_image' | 'claude_image';
+
+function guessImageExtension(mimeType: string): string {
+  const lower = String(mimeType || '').toLowerCase();
+  if (lower.includes('jpeg') || lower.includes('jpg')) return 'jpg';
+  if (lower.includes('webp')) return 'webp';
+  if (lower.includes('gif')) return 'gif';
+  return 'png';
+}
+
+async function uploadVisionImageToOpenAiFile(
+  apiKey: string,
+  base64: string,
+  mimeType: string,
+  capturedAt?: string,
+): Promise<string | null> {
+  if (!apiKey || !base64 || !String(mimeType || '').startsWith('image/')) return null;
+
+  try {
+    const binary = atob(base64);
+    const bytes = new Uint8Array(binary.length);
+    for (let i = 0; i < binary.length; i += 1) bytes[i] = binary.charCodeAt(i);
+
+    const blob = new Blob([bytes], { type: mimeType });
+    const ext = guessImageExtension(mimeType);
+    const safeStamp = String(capturedAt || new Date().toISOString()).replace(/[:.]/g, '-');
+    const file = new File([blob], `scope-${safeStamp}.${ext}`, { type: mimeType });
+    const form = new FormData();
+    form.append('purpose', 'vision');
+    form.append('file', file);
+
+    const res = await fetch('https://api.openai.com/v1/files', {
+      method: 'POST',
+      headers: {
+        Authorization: `Bearer ${apiKey}`,
+      },
+      body: form,
+    });
+    if (!res.ok) return null;
+
+    const json = await res.json() as { id?: string };
+    return typeof json.id === 'string' && json.id.trim() ? json.id : null;
+  } catch {
+    return null;
+  }
 }
 
 function getImageAttachments(attachments?: McpChatAttachment[]): McpChatAttachment[] {
@@ -189,16 +237,20 @@ function extractScreenshotPayload(result: unknown): ScreenshotPayload | null {
   const nested = record.data && typeof record.data === 'object'
     ? (record.data as Record<string, unknown>)
     : null;
-  const candidate = typeof record.base64 === 'string' ? record : nested;
-  if (!candidate || typeof candidate.base64 !== 'string' || !candidate.base64) return null;
+  const candidate = typeof record.base64 === 'string' || typeof record.imageUrl === 'string' ? record : nested;
+  if (!candidate) return null;
+  const hasBase64 = typeof candidate.base64 === 'string' && candidate.base64;
+  const hasImageUrl = typeof candidate.imageUrl === 'string' && candidate.imageUrl;
+  if (!hasBase64 && !hasImageUrl) return null;
   return {
-    base64: candidate.base64,
-    mimeType: typeof candidate.mimeType === 'string' ? candidate.mimeType : 'image/png',
+    base64: typeof candidate.base64 === 'string' ? candidate.base64 : undefined,
+    mimeType: typeof candidate.mimeType === 'string' ? candidate.mimeType : undefined,
     capturedAt: typeof candidate.capturedAt === 'string' ? candidate.capturedAt : undefined,
     sizeBytes: typeof candidate.sizeBytes === 'number' ? candidate.sizeBytes : undefined,
     analysisBase64: typeof candidate.analysisBase64 === 'string' ? candidate.analysisBase64 : undefined,
     analysisMimeType: typeof candidate.analysisMimeType === 'string' ? candidate.analysisMimeType : undefined,
     analysisSizeBytes: typeof candidate.analysisSizeBytes === 'number' ? candidate.analysisSizeBytes : undefined,
+    imageUrl: typeof candidate.imageUrl === 'string' ? candidate.imageUrl : undefined,
   };
 }
 
@@ -206,6 +258,7 @@ async function compressScreenshotForAnalysis(result: unknown, analyze?: boolean)
   if (analyze !== true) return result;
   const screenshot = extractScreenshotPayload(result);
   if (!screenshot) return result;
+  if (!screenshot.base64 || !screenshot.mimeType) return result;
   if (typeof window === 'undefined' || typeof document === 'undefined') return result;
 
   const variants = [
@@ -305,6 +358,7 @@ async function compressScreenshotForAnalysis(result: unknown, analyze?: boolean)
  * Verify SCPI commands against the command index before sending to the instrument.
  * Bypasses verification for star commands (*IDN?, *RST, etc.) which are universal.
  */
+// eslint-disable-next-line @typescript-eslint/no-unused-vars
 async function verifyScpiCommands(
   commands: string[],
   flowContext?: LiveToolLoopParams['flowContext']
@@ -847,21 +901,73 @@ async function runOpenAiLoop(params: LiveToolLoopParams): Promise<LiveToolLoopRe
 
           if (screenshotPayload && toolArgs.analyze === true) {
             const visionBase64 = screenshotPayload.analysisBase64 || screenshotPayload.base64;
-            const visionMimeType = screenshotPayload.analysisMimeType || screenshotPayload.mimeType;
+            const visionMimeType = screenshotPayload.analysisMimeType || screenshotPayload.mimeType || 'image/png';
+            const visionUrl = screenshotPayload.imageUrl;
+            const analysisTransportRaw = String(toolArgs.analysisTransport || 'auto').toLowerCase() as ScreenshotAnalysisTransport;
+            const analysisTransport = analysisTransportRaw === 'claude_image' ? 'base64' : analysisTransportRaw;
+            const wantsOpenAiImage = analysisTransport === 'openai_image';
+            const visionFileId = (analysisTransport === 'file_id' || wantsOpenAiImage)
+              ? (visionBase64 ? await uploadVisionImageToOpenAiFile(
+                  apiKey,
+                  visionBase64,
+                  visionMimeType,
+                  screenshotPayload.capturedAt,
+                ) : null)
+              : null;
+            if ((analysisTransport === 'file_id' || wantsOpenAiImage) && !visionFileId) {
+              toolResultsInput.push({
+                type: 'function_call_output',
+                call_id: callId,
+                output: `Error: capture_screenshot requested analysisTransport=${analysisTransport}, but uploading the screenshot to OpenAI Files failed.`,
+              });
+              continue;
+            }
+            if (analysisTransport === 'openai_image' && !visionUrl && !visionBase64) {
+              toolResultsInput.push({
+                type: 'function_call_output',
+                call_id: callId,
+                output: 'Error: capture_screenshot requested analysisTransport=openai_image, but no screenshot image URL or payload was available.',
+              });
+              continue;
+            }
             // Send screenshot for AI analysis
             toolResultsInput.push({
               type: 'function_call_output',
               call_id: callId,
-              output: 'Screenshot captured. Analyze the image below.',
+              output: `Screenshot captured. Analyze the image below. Vision transport: ${visionFileId ? 'file_id' : 'base64'}.`,
             });
             toolResultsInput.push({
               role: 'user',
               content: [
-                {
-                  type: 'input_image',
-                  image_url: `data:${visionMimeType};base64,${visionBase64}`,
-                  detail: 'auto',
-                },
+                ...(wantsOpenAiImage && visionFileId
+                  ? [{
+                      type: 'input_image',
+                      file_id: visionFileId,
+                      detail: 'auto',
+                    } satisfies Record<string, unknown>]
+                  : wantsOpenAiImage && visionBase64
+                  ? [{
+                      type: 'input_image',
+                      image_url: `data:${visionMimeType};base64,${visionBase64}`,
+                      detail: 'auto',
+                    } satisfies Record<string, unknown>]
+                  : wantsOpenAiImage && visionUrl
+                  ? [{
+                      type: 'input_image',
+                      image_url: visionUrl,
+                      detail: 'auto',
+                    } satisfies Record<string, unknown>]
+                  : visionFileId
+                  ? [{
+                      type: 'input_image',
+                      file_id: visionFileId,
+                      detail: 'auto',
+                    } satisfies Record<string, unknown>]
+                  : [{
+                      type: 'input_image',
+                      image_url: `data:${visionMimeType};base64,${visionBase64}`,
+                      detail: 'auto',
+                    } satisfies Record<string, unknown>]),
                 { type: 'input_text', text: 'Only mention what CHANGED or is relevant to the user\'s last request. Do NOT re-describe the entire display.' },
               ],
             });
@@ -959,8 +1065,6 @@ export function buildLiveSystemPrompt(instrument?: {
   const mode = options?.mode || 'live';
   const isLive = mode === 'live';
   const modelFamily = instrument?.modelFamily || 'scope';
-  const backend = instrument?.backend || 'pyvisa';
-
   if (isLive) {
     const instrumentLines: string[] = [];
     if (instrument?.executorUrl) instrumentLines.push(`- Executor: ${instrument.executorUrl}`);

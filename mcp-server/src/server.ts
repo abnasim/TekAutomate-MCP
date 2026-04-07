@@ -8,7 +8,7 @@ import { runToolLoop } from './core/toolLoop';
 import { getToolDefinitions, getMcpExposedTools, runTool } from './tools/index';
 import type { McpChatRequest } from './core/schemas';
 import { getLastWorkflowProposal } from './tools/stageWorkflowProposal';
-import { getRuntimeContextState, updateRuntimeContext, runInSession, clearSessionContext } from './tools/runtimeContextStore';
+import { getRuntimeContextState, updateRuntimeContext } from './tools/runtimeContextStore';
 import { completeLiveAction, getPendingLiveActionCount, waitForNextLiveAction } from './tools/liveActionBridge';
 import { bootRouter, createReloadProvidersHandler, createRouterHandler, getRouterHealth } from './core/routerIntegration';
 import { getCommandIndex } from './core/commandIndex';
@@ -207,19 +207,6 @@ async function readJsonBody(req: http.IncomingMessage): Promise<Record<string, u
   return JSON.parse(raw || '{}') as Record<string, unknown>;
 }
 
-function extractRequestToken(req: http.IncomingMessage): string {
-  const raw = String(req.headers.authorization || '').trim();
-  if (raw.toLowerCase().startsWith('bearer ')) {
-    return raw.slice(7).trim();
-  }
-  try {
-    const requestUrl = new URL(req.url || '/', `http://${req.headers.host || 'localhost'}`);
-    return String(requestUrl.searchParams.get('token') || '').trim();
-  } catch {
-    return '';
-  }
-}
-
 function sendJson(res: http.ServerResponse, status: number, payload: unknown) {
   res.statusCode = status;
   res.setHeader('Content-Type', 'application/json');
@@ -372,7 +359,7 @@ export async function createServer(port = 8787): Promise<http.Server> {
     }
   }
 
-  async function createMcpProtocolServer(sessionId?: string) {
+  async function createMcpProtocolServer() {
     const sdk = await getMcpSdk();
     if (!sdk) throw new Error('MCP SDK not installed. Run: npm install @modelcontextprotocol/sdk');
     const mcp = new sdk.Server(
@@ -404,23 +391,14 @@ export async function createServer(port = 8787): Promise<http.Server> {
         try { await startupInitPromise; } catch { /* degrade gracefully */ }
       }
       const { name, arguments: args } = request.params;
-      const sid = sessionId || 'global';
-      console.log(`[MCP:${sid}] call_tool name=${name} args=${JSON.stringify(args).slice(0, 200)}`);
-
-      // Run inside session scope so tools see this session's context, not another user's
-      const exec = async () => {
-        try {
-          const result = await runTool(name, (args as Record<string, unknown>) ?? {});
-          const safeResult = sanitizeToolResultForExternalMcp(name, result);
-          const text = typeof safeResult === 'string' ? safeResult : JSON.stringify(safeResult, null, 2);
-          return { content: [{ type: 'text' as const, text }] };
-        } catch (err) {
-          const msg = err instanceof Error ? err.message : String(err);
-          console.error(`[MCP:${sid}] call_tool error name=${name}: ${msg}`);
-          return { content: [{ type: 'text' as const, text: `Error: ${msg}` }], isError: true };
-        }
-      };
-      return sessionId ? runInSession(sessionId, exec) : exec();
+      try {
+        const result = await runTool(name, (args as Record<string, unknown>) ?? {});
+        const text = typeof result === 'string' ? result : JSON.stringify(result, null, 2);
+        return { content: [{ type: 'text' as const, text }] };
+      } catch (err) {
+        const msg = err instanceof Error ? err.message : String(err);
+        return { content: [{ type: 'text' as const, text: `Error: ${msg}` }], isError: true };
+      }
     });
     return mcp;
   }
@@ -651,81 +629,147 @@ function filterTools(q) {
     }
 
     // ── /mcp — MCP Streamable HTTP transport ──────────────────────
-    if (req.url === '/mcp' || req.url?.startsWith('/mcp?')) {
+    if (req.url === '/mcp' || req.url?.startsWith('/mcp?') || (req.method === 'POST' && req.url === '/')) {
       res.setHeader('Access-Control-Allow-Origin', '*');
       res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Accept, Mcp-Session-Id');
       res.setHeader('Access-Control-Expose-Headers', 'Mcp-Session-Id');
 
-      // Debug logging — capture what different MCP clients send
+      const accept = req.headers['accept'] || '';
       const sessionId = req.headers['mcp-session-id'] as string | undefined;
-      console.log(`[MCP] transport method=${req.method} session=${sessionId || 'none'} accept=${req.headers['accept'] || 'none'} content-type=${req.headers['content-type'] || 'none'}`);
+      const clientSupportsSSE = String(accept).includes('text/event-stream');
+      console.log(`[MCP] method=${req.method} session=${sessionId || 'none'} accept=${accept || 'none'} sse=${clientSupportsSSE}`);
 
-      // Workaround: some MCP clients (e.g. Claude) don't send the required
-      // Accept header.  Inject it so StreamableHTTPServerTransport doesn't reject.
-      if (!req.headers['accept'] || !req.headers['accept'].includes('text/event-stream')) {
-        req.headers['accept'] = 'application/json, text/event-stream';
+      let body: string | undefined;
+      if (req.method === 'POST') {
+        body = await new Promise<string>((resolve, reject) => {
+          const chunks: Buffer[] = [];
+          req.on('data', (chunk) => chunks.push(chunk));
+          req.on('end', () => resolve(Buffer.concat(chunks).toString()));
+          req.on('error', reject);
+        });
       }
 
-      if (req.method === 'POST' || req.method === 'GET' || req.method === 'DELETE') {
+      if (clientSupportsSSE && (req.method === 'POST' || req.method === 'GET' || req.method === 'DELETE')) {
         try {
           const sdk = await getMcpSdk();
           if (!sdk) {
-            sendJson(res, 501, { error: 'MCP protocol not available. Install @modelcontextprotocol/sdk to enable /mcp endpoint.' });
+            sendJson(res, 501, { error: 'MCP SDK not installed.' });
             return;
           }
 
-          // Read body for POST
-          let body: string | undefined;
-          if (req.method === 'POST') {
-            body = await new Promise<string>((resolve, reject) => {
-              const chunks: Buffer[] = [];
-              req.on('data', (chunk) => chunks.push(chunk));
-              req.on('end', () => resolve(Buffer.concat(chunks).toString()));
-              req.on('error', reject);
-            });
-          }
-
-          const sessionId = req.headers['mcp-session-id'] as string | undefined;
-
           if (sessionId && mcpTransports.has(sessionId)) {
-            // Existing session
             const transport = mcpTransports.get(sessionId)!;
             await transport.handleRequest(req, res, body ? JSON.parse(body) : undefined);
           } else if (req.method === 'POST') {
-            // New session — create transport and MCP server
             const newSessionId = `tek-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
             const transport = new sdk.StreamableHTTPServerTransport({
               sessionIdGenerator: () => newSessionId,
             });
-            const mcpServer = await createMcpProtocolServer(newSessionId);
+            const mcpServer = await createMcpProtocolServer();
             await mcpServer.connect(transport);
-
-            // Clean up session context when transport closes
             transport.onclose = () => {
               if (transport.sessionId) {
                 mcpTransports.delete(transport.sessionId);
-                clearSessionContext(transport.sessionId);
                 console.log(`[MCP] session closed: ${transport.sessionId}`);
               }
             };
-
             await transport.handleRequest(req, res, body ? JSON.parse(body) : undefined);
-
             if (transport.sessionId) {
               mcpTransports.set(transport.sessionId, transport);
               console.log(`[MCP] new session: ${transport.sessionId}`);
             }
+          } else if (req.method === 'DELETE') {
+            sendJson(res, 200, { ok: true });
           } else {
-            sendJson(res, 400, { error: 'No valid session. Send a POST to /mcp to initialize.' });
+            sendJson(res, 400, { error: 'No valid session. POST to /mcp to initialize.' });
           }
         } catch (err) {
-          console.error('[MCP transport] Error:', err);
-          if (!res.headersSent) {
-            sendJson(res, 500, { error: 'MCP transport error' });
-          }
+          const msg = err instanceof Error ? err.message : String(err);
+          console.error(`[MCP:sse] Error: ${msg}`);
+          if (!res.headersSent) sendJson(res, 500, { error: `MCP transport error: ${msg}` });
         }
         return;
       }
+
+      if (req.method === 'POST' && body) {
+        try {
+          const rpc = JSON.parse(body) as { jsonrpc?: string; id?: unknown; method?: string; params?: Record<string, unknown> };
+          const rpcId = rpc.id ?? null;
+          const method = rpc.method || '';
+          console.log(`[MCP:json] method=${method} id=${rpcId}`);
+
+          if (startupInitPromise) {
+            try { await startupInitPromise; } catch { }
+          }
+
+          if (method === 'initialize') {
+            const jsonRes = {
+              jsonrpc: '2.0',
+              id: rpcId,
+              result: {
+                protocolVersion: '2024-11-05',
+                capabilities: { tools: {} },
+                serverInfo: { name: 'tekautomate', version: '3.2.0' },
+              },
+            };
+            sendJson(res, 200, jsonRes);
+          } else if (method === 'notifications/initialized') {
+            res.statusCode = 204;
+            res.end();
+          } else if (method === 'tools/list') {
+            const toolDefs = getMcpExposedTools();
+            const tools = toolDefs.map((def: any) => ({
+              name: def.name,
+              description: def.description ?? def.name,
+              inputSchema: {
+                type: 'object' as const,
+                properties: (def.parameters as any)?.properties ?? {},
+                ...((def.parameters as any)?.required?.length ? { required: (def.parameters as any).required } : {}),
+              },
+            }));
+            sendJson(res, 200, { jsonrpc: '2.0', id: rpcId, result: { tools } });
+          } else if (method === 'tools/call') {
+            const toolName = rpc.params?.name as string;
+            const toolArgs = (rpc.params?.arguments as Record<string, unknown>) ?? {};
+            console.log(`[MCP:json] call_tool name=${toolName} args=${JSON.stringify(toolArgs).slice(0, 200)}`);
+            try {
+              const result = await runTool(toolName, toolArgs);
+              const safeResult = sanitizeToolResultForExternalMcp(toolName, result);
+              const text = typeof safeResult === 'string' ? safeResult : JSON.stringify(safeResult, null, 2);
+              sendJson(res, 200, {
+                jsonrpc: '2.0',
+                id: rpcId,
+                result: { content: [{ type: 'text', text }] },
+              });
+            } catch (err) {
+              const msg = err instanceof Error ? err.message : String(err);
+              console.error(`[MCP:json] tool error: ${msg}`);
+              sendJson(res, 200, {
+                jsonrpc: '2.0',
+                id: rpcId,
+                result: { content: [{ type: 'text', text: `Error: ${msg}` }], isError: true },
+              });
+            }
+          } else {
+            sendJson(res, 200, {
+              jsonrpc: '2.0',
+              id: rpcId,
+              error: { code: -32601, message: `Method not found: ${method}` },
+            });
+          }
+        } catch (err) {
+          console.error(`[MCP:json] parse error: ${err instanceof Error ? err.message : String(err)}`);
+          sendJson(res, 200, {
+            jsonrpc: '2.0',
+            id: null,
+            error: { code: -32700, message: 'Parse error' },
+          });
+        }
+        return;
+      }
+
+      sendJson(res, 405, { error: 'POST to /mcp with JSON-RPC body.' });
+      return;
     }
 
     if (req.method === 'GET' && req.url === '/health') {
@@ -847,19 +891,17 @@ function filterTools(q) {
     if (req.method === 'POST' && req.url === '/tools/disconnect') {
       try {
         const body = (await readJsonBody(req)) as {
-          instrumentEndpoint?: { executorUrl: string; visaResource: string; liveToken?: string };
+          instrumentEndpoint?: { executorUrl: string; visaResource: string };
         };
         const ep = body?.instrumentEndpoint;
         if (!ep?.executorUrl || !ep?.visaResource) {
           sendJson(res, 400, { ok: false, error: 'Missing instrumentEndpoint (executorUrl, visaResource)' });
           return;
         }
-        const forwardedToken = String(ep.liveToken || extractRequestToken(req) || '').trim();
         const execRes = await fetch(`${ep.executorUrl.replace(/\/$/, '')}/run`, {
           method: 'POST',
           headers: {
             'Content-Type': 'application/json',
-            ...(forwardedToken ? { 'X-Live-Token': forwardedToken } : {}),
           },
           body: JSON.stringify({
             protocol_version: 1,
@@ -886,7 +928,6 @@ function filterTools(q) {
             backend: string;
             liveMode?: boolean;
             outputMode?: 'clean' | 'verbose';
-            liveToken?: string;
           };
           flowContext?: {
             modelFamily?: string;
@@ -898,7 +939,6 @@ function filterTools(q) {
           sendJson(res, 400, { ok: false, error: 'Missing tool name' });
           return;
         }
-        const forwardedToken = extractRequestToken(req);
         // Inject instrument endpoint for live tools
         let args = body.args || {};
         const liveTools = ['get_instrument_state', 'probe_command', 'send_scpi', 'capture_screenshot', 'get_visa_resources', 'get_environment', 'discover_scpi'];
@@ -909,7 +949,6 @@ function filterTools(q) {
             backend: body.instrumentEndpoint.backend,
             liveMode: body.instrumentEndpoint.liveMode === true,
             outputMode: body.instrumentEndpoint.outputMode || 'verbose',
-            liveToken: body.instrumentEndpoint.liveToken || forwardedToken,
             modelFamily: body.flowContext?.modelFamily,
             deviceDriver: body.flowContext?.deviceDriver,
             ...args,
@@ -1046,7 +1085,6 @@ function filterTools(q) {
               ? {
                   ...body.instrumentEndpoint,
                   visaResource: '[redacted]',
-                  liveToken: body.instrumentEndpoint.liveToken ? '[redacted]' : undefined,
                 }
               : undefined,
           },

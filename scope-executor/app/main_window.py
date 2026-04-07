@@ -32,6 +32,7 @@ class MainWindow:
         self._server_ready = False
         self._startup_probe_attempts = 0
         self._last_vnc_summary: dict = {}
+        self._selected_vnc_target_label: str | None = None
 
         self._build()
         self._init_tray()
@@ -55,6 +56,7 @@ class MainWindow:
         self.conn_panel.live_token_generate_requested.connect(self._generate_live_token)
         self.conn_panel.live_token_revoke_requested.connect(self._revoke_live_token)
         self.conn_panel.vnc_test_requested.connect(self._test_vnc_target)
+        self.conn_panel.vnc_target_changed.connect(self._on_vnc_target_changed)
 
         # Centre: Instruments
         self.instr_panel = InstrumentPanel(main)
@@ -173,9 +175,11 @@ class MainWindow:
         self.log_panel.log("Scanning for VISA instruments...", "dim")
         self._scan_thread = InstrumentScanThread(query_idn=True, timeout_ms=3000)
         self._scan_thread.instrument_found.connect(self.instr_panel.add_instrument)
+        self._scan_thread.instrument_found.connect(lambda _info: self._refresh_vnc_targets())
         self._scan_thread.scan_finished.connect(self.instr_panel.on_scan_finished)
         self._scan_thread.scan_finished.connect(
             lambda n: self.log_panel.log(f"Scan complete: {n} instrument(s) found", "success"))
+        self._scan_thread.scan_finished.connect(lambda _n: self._refresh_vnc_targets())
         self._scan_thread.scan_error.connect(self.instr_panel.on_scan_error)
         self._scan_thread.scan_error.connect(
             lambda m: self.log_panel.log(f"Scan error: {m}", "error"))
@@ -258,6 +262,10 @@ class MainWindow:
         self.log_panel.log("Revoked live token.", "warning")
 
     def _infer_vnc_target(self) -> tuple[str | None, int]:
+        selected_host, selected_port = self.conn_panel.get_selected_vnc_target()
+        if selected_host:
+            return selected_host, selected_port
+
         summary = self._last_vnc_summary or {}
         sessions = summary.get("sessions") or []
         if sessions:
@@ -280,6 +288,25 @@ class MainWindow:
             if match:
                 return match.group(1).strip(), 5900
         return None, 5900
+
+    def _refresh_vnc_targets(self):
+        targets: list[tuple[str, str, int]] = []
+        seen: set[str] = set()
+        for info in getattr(self.instr_panel, "_instruments", []) or []:
+            resource = str(getattr(info, "resource", "") or "")
+            match = re.search(r"TCPIP\d*::([^:]+)::", resource, re.IGNORECASE)
+            if not match:
+                continue
+            host = match.group(1).strip()
+            if not host or host in seen:
+                continue
+            seen.add(host)
+            label = f"{getattr(info, 'display_name', '') or resource} ({host})"
+            targets.append((label, host, 5900))
+        self.conn_panel.set_vnc_targets(targets, self._selected_vnc_target_label)
+
+    def _on_vnc_target_changed(self, label: str):
+        self._selected_vnc_target_label = str(label or "").strip() or None
 
     def _test_vnc_target(self):
         host, port = self._infer_vnc_target()

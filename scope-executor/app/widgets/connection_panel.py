@@ -40,11 +40,13 @@ class ConnectionPanel(ttk.Frame):
         self.live_token_generate_requested = TkSignal()
         self.live_token_revoke_requested = TkSignal()
         self.vnc_test_requested = TkSignal()
+        self.vnc_target_changed = TkSignal()
         self._clients: dict[str, tuple[ttk.Frame, datetime]] = {}
         self._qr_photo = None  # prevent GC
         self._qr_visible = False
         self._active_token = ""
         self._active_mcp_link = ""
+        self._vnc_targets: dict[str, tuple[str, int]] = {}
         self._build()
 
     def _build(self):
@@ -81,7 +83,6 @@ class ConnectionPanel(ttk.Frame):
         self._status_lbl.pack(side=tk.LEFT)
 
         token_frame = ttk.LabelFrame(self, text="LIVE TOKEN")
-        token_frame.pack(fill=tk.X, pady=(0, 8))
 
         token_controls = ttk.Frame(token_frame)
         token_controls.pack(fill=tk.X, padx=8, pady=(4, 2))
@@ -136,6 +137,20 @@ class ConnectionPanel(ttk.Frame):
             anchor=tk.W,
             justify=tk.LEFT,
         ).pack(fill=tk.X, padx=8, pady=(0, 6))
+
+        target_row = ttk.Frame(vnc_frame)
+        target_row.pack(fill=tk.X, padx=8, pady=(0, 4))
+        ttk.Label(target_row, text="Target").pack(side=tk.LEFT)
+        self._vnc_target_var = tk.StringVar(value="")
+        self._vnc_target_combo = ttk.Combobox(
+            target_row,
+            textvariable=self._vnc_target_var,
+            state="readonly",
+            values=[],
+            width=22,
+        )
+        self._vnc_target_combo.pack(side=tk.LEFT, fill=tk.X, expand=True, padx=(6, 0))
+        self._vnc_target_combo.bind("<<ComboboxSelected>>", lambda _e: self.vnc_target_changed.emit(self._vnc_target_var.get()))
 
         vnc_actions = ttk.Frame(vnc_frame)
         vnc_actions.pack(fill=tk.X, padx=8, pady=(0, 4))
@@ -315,6 +330,23 @@ class ConnectionPanel(ttk.Frame):
 
     def set_vnc_test_result(self, message: str):
         self._vnc_test_var.set(str(message or ""))
+
+    def set_vnc_targets(self, targets: list[tuple[str, str, int]], selected_label: str | None = None):
+        self._vnc_targets = {label: (host, port) for label, host, port in targets}
+        labels = list(self._vnc_targets.keys())
+        self._vnc_target_combo.configure(values=labels)
+        if selected_label and selected_label in self._vnc_targets:
+            self._vnc_target_var.set(selected_label)
+        elif labels and self._vnc_target_var.get() not in self._vnc_targets:
+            self._vnc_target_var.set(labels[0])
+        elif not labels:
+            self._vnc_target_var.set("")
+
+    def get_selected_vnc_target(self) -> tuple[str | None, int]:
+        label = self._vnc_target_var.get().strip()
+        if label and label in self._vnc_targets:
+            return self._vnc_targets[label]
+        return None, 5900
 
     def on_client_seen(self, ip: str):
         now = datetime.now()

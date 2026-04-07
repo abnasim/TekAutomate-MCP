@@ -23,6 +23,10 @@ import string
 
 _real_stdout = sys.stdout
 
+_HERE = os.path.dirname(os.path.abspath(__file__))
+if _HERE not in sys.path:
+    sys.path.insert(0, _HERE)
+
 warnings.filterwarnings("ignore")
 
 _null = open(os.devnull, "w")
@@ -54,7 +58,7 @@ _visa_locks: dict[str, threading.Lock] = {}  # Per-VISA resource lock — preven
 _recent_capture_results: dict[str, tuple[float, dict]] = {}
 _recent_capture_errors: dict[str, tuple[float, str]] = {}
 _recent_scpi_activity: dict[str, tuple[float, dict]] = {}
-_DEFAULT_CAPTURE_TIMEOUT_MS = 45000
+_DEFAULT_CAPTURE_TIMEOUT_MS = 15000
 _BUSY_CAPTURE_CACHE_MAX_AGE_SEC = 10.0
 _SCPI_CHUNK_SIZE_SOCKET = 8
 _SCPI_CHUNK_SIZE_VISA = 12
@@ -91,7 +95,13 @@ def _parse_socket_address(visa: str) -> tuple[str, int]:
 
 def _get_socket_session(visa: str):
     """Get or create a raw SocketInstr session for SOCKET resources."""
-    from app.socket_instr import SocketInstr
+    try:
+        from app.socket_instr import SocketInstr
+    except ModuleNotFoundError:
+        try:
+            from socket_instr import SocketInstr
+        except ModuleNotFoundError as exc:
+            raise RuntimeError(f"Could not import SocketInstr: {exc}") from exc
     with _session_lock:
         session = _socket_sessions.get(visa)
         if session is not None:
@@ -178,13 +188,13 @@ def _capture_timeout_ms(job: dict) -> int:
     timeout_ms = job.get("timeout_ms")
     if timeout_ms is not None:
         try:
-            return max(15000, min(int(timeout_ms), 120000))
+            return max(5000, min(int(timeout_ms), 15000))
         except Exception:
             pass
     timeout_sec = job.get("timeout_sec")
     if timeout_sec is not None:
         try:
-            return max(15000, min(int(timeout_sec) * 1000, 120000))
+            return max(5000, min(int(timeout_sec) * 1000, 15000))
         except Exception:
             pass
     return _DEFAULT_CAPTURE_TIMEOUT_MS
@@ -474,24 +484,33 @@ def _handle_capture_screenshot(job: dict) -> dict:
                         sock.set_timeout(capture_timeout_ms / 1000.0)
                         data = sock.fetch_screen("temp_screenshot.png")
                     else:
-                        scpi = _open_fresh_scope_session(visa)
+                        try:
+                            scpi = _get_scope_session(visa)
+                        except Exception:
+                            _reset_scope_session(visa)
+                            _reset_resource_manager()
+                            scpi = _get_scope_session(visa)
+                        old_timeout = getattr(scpi, "timeout", capture_timeout_ms)
+                        old_write_term = getattr(scpi, "write_termination", None)
+                        old_read_term = getattr(scpi, "read_termination", None)
                         try:
                             scpi.timeout = capture_timeout_ms
                             scpi.write_termination = "\n"
                             scpi.read_termination = None
 
                             if scope_type == "legacy":
-                                # DPO 5k/7k series — HARDCOPY method
+                                # DPO 5k/7k series - HARDCOPY method
+                                temp_path = 'C:/Temp/screenshot.png'
                                 scpi.write('HARDCOPY:PORT FILE')
-                                scpi.write('HARDCOPY:FILENAME "C:/Temp/screenshot.png"')
+                                scpi.write(f'HARDCOPY:FILENAME "{temp_path}"')
                                 scpi.write('HARDCOPY START')
                                 scpi.write('*WAI')
-                                scpi.write('FILESYSTEM:READFILE "C:/Temp/screenshot.png"')
-                                data = scpi.read_raw()
-                                scpi.write('FILESYSTEM:DELETE "C:/Temp/screenshot.png"')
+                                scpi.write(f'FILESYSTEM:READFILE "{temp_path}"')
+                                data = _readfile_payload_via_visa_stream(scpi)
+                                scpi.write(f'FILESYSTEM:DELETE "{temp_path}"')
                                 scpi.write('*WAI')
                             elif scope_type == "export":
-                                # MSO/DPO 70000 series — EXPort method
+                                # MSO/DPO 70000 series - EXPort method
                                 import time as _time
                                 remote_path = 'C:/TekScope/screenshot.png'
                                 scpi.write(f'EXPort:FILEName "{remote_path}"')
@@ -501,32 +520,35 @@ def _handle_capture_screenshot(job: dict) -> dict:
                                 scpi.write('EXPort START')
                                 if str(scpi.query('*OPC?')).strip() != '1':
                                     raise RuntimeError("EXPort START did not complete")
-                                _time.sleep(1.0)  # 70000 series needs brief settle time
-                                old_timeout = scpi.timeout
+                                _time.sleep(1.0)
+                                old_read_timeout = scpi.timeout
                                 scpi.timeout = 30000
                                 scpi.write(f'FILESYSTEM:READFILE "{remote_path}"')
-                                data = scpi.read_raw()
-                                scpi.timeout = old_timeout
+                                data = _readfile_payload_via_visa_stream(scpi)
+                                scpi.timeout = old_read_timeout
                                 scpi.write(f'FILESYSTEM:DELETE "{remote_path}"')
                             else:
-                                # MSO 2/4/5/6 series — SAVE:IMAGE method (modern)
+                                # MSO 2/4/5/6 series - SAVE:IMAGE method (modern)
                                 temp_path = 'C:/Temp_Screen.png'
                                 scpi.write(f'SAVE:IMAGE "{temp_path}"')
                                 if str(scpi.query('*OPC?')).strip() != '1':
                                     raise RuntimeError("SAVE:IMAGE did not complete")
                                 scpi.write(f'FILESYSTEM:READFILE "{temp_path}"')
-                                data = scpi.read_raw()
+                                data = _readfile_payload_via_visa_stream(scpi)
                                 scpi.write(f'FILESYSTEM:DELETE "{temp_path}"')
+                                scpi.query('*OPC?')
                         finally:
-                            try:
-                                scpi.close()
-                            except Exception:
-                                pass
+                            scpi.timeout = old_timeout
+                            scpi.write_termination = old_write_term
+                            scpi.read_termination = old_read_term
                     break
                 except Exception as exc:
                     last_error = exc
                     if _is_socket_resource(visa):
                         _reset_socket_session(visa)
+                    else:
+                        _reset_scope_session(visa)
+                        _reset_resource_manager()
                     if attempt >= _CAPTURE_RETRY_COUNT - 1:
                         raise
             if last_error and 'data' not in locals():

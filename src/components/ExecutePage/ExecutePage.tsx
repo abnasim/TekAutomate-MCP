@@ -1,5 +1,5 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
-import { Code, Terminal, Copy, Pencil, Sparkles, Play, RotateCcw, RotateCw, Trash2, Mail, SkipForward, Square } from 'lucide-react';
+import { Code, Terminal, Copy, Pencil, Sparkles, Play, RotateCcw, RotateCw, Trash2, Mail, SkipForward, Square, MessageSquare, ChevronLeft, ChevronRight } from 'lucide-react';
 import { streamMcpChat } from '../../utils/ai/mcpClient';
 import { StepsListPreview } from './StepsListPreview';
 import type { StepPreview } from './StepsListPreview';
@@ -56,6 +56,8 @@ export interface ExecutePageProps {
   onLiveScreenshot?: (screenshot: { dataUrl: string; mimeType: string; sizeBytes: number; capturedAt: string }) => void;
   blocklyContent: React.ReactNode;
   liveModeContent: React.ReactNode;
+  liveModeToolbar?: React.ReactNode;
+  liveVncActive?: boolean;
 }
 
 interface WorkflowProposalState extends ParsedActionsPreview {
@@ -68,7 +70,6 @@ interface WorkflowProposalState extends ParsedActionsPreview {
 const EXECUTE_PAGE_PROPOSAL_STORAGE = 'tekautomate.execute.proposal.history';
 const EXECUTE_PAGE_TAB_STORAGE = 'tekautomate.execute.center_tab';
 const EXECUTE_PAGE_AUTO_APPLY_STORAGE = 'tekautomate.execute.proposals.auto_apply';
-const EXECUTE_PAGE_LIVE_TOKEN_STORAGE = 'tekautomate.execute.live_token';
 
 function loadStoredWorkflowProposals(): WorkflowProposalState[] {
   if (typeof window === 'undefined') return [];
@@ -114,15 +115,6 @@ function loadStoredAutoApply(): boolean {
     return window.localStorage.getItem(EXECUTE_PAGE_AUTO_APPLY_STORAGE) === 'true';
   } catch {
     return false;
-  }
-}
-
-function loadStoredLiveToken(): string {
-  if (typeof window === 'undefined') return '';
-  try {
-    return window.localStorage.getItem(EXECUTE_PAGE_LIVE_TOKEN_STORAGE) || '';
-  } catch {
-    return '';
   }
 }
 
@@ -225,6 +217,8 @@ function ExecutePageContent({
   onLiveScreenshot,
   blocklyContent,
   liveModeContent,
+  liveModeToolbar,
+  liveVncActive = false,
 }: ExecutePageProps) {
   const [centerTab, setCenterTab] = useState<ExecutionSource | 'proposals'>(() => loadStoredCenterTab(executionSource));
   const [rightTab, setRightTab] = useState<'code' | 'logs'>('logs');
@@ -242,11 +236,7 @@ function ExecutePageContent({
   const [workspaceRevision, setWorkspaceRevision] = useState(0);
   const [pendingReapplyProposalId, setPendingReapplyProposalId] = useState<string | null>(null);
   const [autoApplyProposals, setAutoApplyProposals] = useState<boolean>(() => loadStoredAutoApply());
-  const [liveToken, setLiveToken] = useState<string>(() => loadStoredLiveToken());
-  const [showLiveTokenEditor, setShowLiveTokenEditor] = useState<boolean>(() => !loadStoredLiveToken().trim());
-  const [liveTokenState, setLiveTokenState] = useState<'none' | 'saved' | 'active' | 'error'>(() =>
-    loadStoredLiveToken().trim() ? 'saved' : 'none'
-  );
+  const [assistantPanelOpen, setAssistantPanelOpen] = useState(true);
 
   // ── Step-through debugger ──
   const [stepping, setStepping] = useState(false);
@@ -270,58 +260,7 @@ function ExecutePageContent({
     return flat;
   }, [steps]);
 
-  const securedInstrumentEndpoint = useMemo(() => {
-    if (!instrumentEndpoint) return instrumentEndpoint;
-    const token = liveToken.trim();
-    return token ? { ...instrumentEndpoint, liveToken: token } : instrumentEndpoint;
-  }, [instrumentEndpoint, liveToken]);
-
-  useEffect(() => {
-    if (typeof window === 'undefined') return;
-    try {
-      if (liveToken.trim()) {
-        window.localStorage.setItem(EXECUTE_PAGE_LIVE_TOKEN_STORAGE, liveToken.trim());
-      } else {
-        window.localStorage.removeItem(EXECUTE_PAGE_LIVE_TOKEN_STORAGE);
-      }
-    } catch {
-      // Ignore storage errors.
-    }
-  }, [liveToken]);
-
-  useEffect(() => {
-    const token = liveToken.trim();
-    if (!token) {
-      setShowLiveTokenEditor(true);
-      setLiveTokenState('none');
-      return;
-    }
-    setLiveTokenState((current) => (current === 'active' ? current : 'saved'));
-  }, [liveToken]);
-
-  useEffect(() => {
-    if (!liveToken.trim() || !latestLiveScreenshot?.capturedAt) return;
-    setLiveTokenState('active');
-    setShowLiveTokenEditor(false);
-  }, [latestLiveScreenshot?.capturedAt, liveToken]);
-
-  useEffect(() => {
-    const authFailurePattern = /missing live token|invalid live token|expired live token|requireslivetoken|unauthorized/i;
-    if (!authFailurePattern.test(runLog || '')) return;
-    setLiveTokenState('error');
-    setShowLiveTokenEditor(true);
-  }, [runLog]);
-
-  useEffect(() => {
-    if (typeof window === 'undefined') return;
-    const handler = () => {
-      setShowLiveTokenEditor((prev) => (liveToken.trim() ? !prev : true));
-    };
-    window.addEventListener('tekautomate:toggle-live-token-editor', handler as EventListener);
-    return () => {
-      window.removeEventListener('tekautomate:toggle-live-token-editor', handler as EventListener);
-    };
-  }, [liveToken]);
+  const securedInstrumentEndpoint = instrumentEndpoint;
 
   const appendStepLog = useCallback((line: string) => {
     setStepLog(prev => prev + line + '\n');
@@ -342,13 +281,9 @@ function ExecutePageContent({
     try {
       const url = `http://${executorEndpoint.host}:${executorEndpoint.port}/run`;
       const visaResource = securedInstrumentEndpoint?.visaResource || '';
-      const token = String(securedInstrumentEndpoint?.liveToken || '').trim();
       const res = await fetch(url, {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          ...(token ? { 'X-Live-Token': token } : {}),
-        },
+        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           protocol_version: 1,
           action: 'send_scpi',
@@ -553,27 +488,66 @@ function ExecutePageContent({
     () => proposalHistory.find((proposal) => proposal.id === pendingReapplyProposalId) || null,
     [pendingReapplyProposalId, proposalHistory]
   );
+  const keepCopilotMountedUnderLiveView = executionSource === 'live' && !assistantPanelOpen;
 
   return (
     <div className="h-full flex flex-col bg-slate-100 text-slate-900 dark:bg-slate-950 dark:text-white">
-      <div className="flex-1 min-h-0 flex">
-        <AiChatPanel
-          steps={steps}
-          workspaceRevision={workspaceRevision}
-          runLog={runLog}
-          code={code}
-          executionSource={executionSource}
-          runStatus={runStatus}
-          flowContext={flowContext}
-          executorEndpoint={executorEndpoint}
-          instrumentEndpoint={securedInstrumentEndpoint}
-          latestLiveScreenshot={latestLiveScreenshot}
-          contextAttachments={chatContextAttachments}
-          onApplyAiActions={onApplyAiActions}
-          onWorkflowProposal={handleProposalDetected}
-          onLiveScreenshot={onLiveScreenshot}
-          onRun={onRun}
-        />
+      <div className="relative flex-1 min-h-0 flex">
+        {assistantPanelOpen ? (
+          <AiChatPanel
+            steps={steps}
+            workspaceRevision={workspaceRevision}
+            runLog={runLog}
+            code={code}
+            executionSource={executionSource}
+            runStatus={runStatus}
+            flowContext={flowContext}
+            executorEndpoint={executorEndpoint}
+            instrumentEndpoint={securedInstrumentEndpoint}
+            latestLiveScreenshot={latestLiveScreenshot}
+            contextAttachments={chatContextAttachments}
+            onApplyAiActions={onApplyAiActions}
+            onWorkflowProposal={handleProposalDetected}
+            onLiveScreenshot={onLiveScreenshot}
+            onRun={onRun}
+          />
+        ) : null}
+        {keepCopilotMountedUnderLiveView && (
+          <div
+            className="pointer-events-none absolute inset-y-0 left-0 z-0 opacity-0"
+            aria-hidden="true"
+          >
+            <AiChatPanel
+              steps={steps}
+              workspaceRevision={workspaceRevision}
+              runLog={runLog}
+              code={code}
+              executionSource={executionSource}
+              runStatus={runStatus}
+              flowContext={flowContext}
+              executorEndpoint={executorEndpoint}
+              instrumentEndpoint={securedInstrumentEndpoint}
+              latestLiveScreenshot={latestLiveScreenshot}
+              contextAttachments={chatContextAttachments}
+              onApplyAiActions={onApplyAiActions}
+              onWorkflowProposal={handleProposalDetected}
+              onLiveScreenshot={onLiveScreenshot}
+              onRun={onRun}
+            />
+          </div>
+        )}
+        {!assistantPanelOpen && executionSource !== 'live' && (
+          <button
+            type="button"
+            onClick={() => setAssistantPanelOpen(true)}
+            className="flex-shrink-0 w-5 flex items-center justify-center border-r border-slate-200 bg-slate-100 hover:bg-slate-200 dark:border-slate-800/50 dark:bg-slate-900/50 dark:hover:bg-slate-800/80 cursor-col-resize transition-colors group"
+            title="Show AI Assistant"
+          >
+            <span className="text-slate-400 dark:text-slate-500 group-hover:text-slate-600 dark:group-hover:text-slate-300 text-xs select-none">
+              ‹
+            </span>
+          </button>
+        )}
 
         <main className="flex-1 flex flex-col min-w-0 bg-slate-100 dark:bg-slate-950">
           <div className="flex items-center justify-between gap-4 border-b border-slate-200 dark:border-slate-800/50 px-2">
@@ -622,134 +596,132 @@ function ExecutePageContent({
               </button>
             </div>
             <div className="flex items-center gap-2 py-2 overflow-x-auto flex-nowrap min-w-0 nav-tabs-scroll">
-              <button
-                type="button"
-                onClick={() => setAutoApplyProposals((value) => !value)}
-                className={`inline-flex h-9 w-9 items-center justify-center rounded-lg border transition ${
-                  autoApplyProposals
-                    ? 'border-cyan-400/50 bg-cyan-500/15 text-cyan-700 dark:border-cyan-500/50 dark:text-cyan-300'
-                    : 'border-slate-200 bg-white text-slate-600 hover:bg-slate-100 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-300 dark:hover:bg-slate-800'
-                }`}
-                title={autoApplyProposals ? 'Auto-apply on (click to disable)' : 'Auto-apply off (click to enable)'}
-              >
-                <Sparkles size={16} />
-              </button>
-              <button
-                type="button"
-                onClick={clearProposalHistory}
-                disabled={!proposalHistory.length}
-                className="inline-flex h-9 w-9 items-center justify-center rounded-lg border border-slate-200 bg-white text-slate-600 hover:bg-slate-100 disabled:cursor-not-allowed disabled:opacity-40 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-200 dark:hover:bg-slate-800"
-                title="Clear proposal history"
-              >
-                <Trash2 size={16} />
-              </button>
-              <button
-                type="button"
-                onClick={onUndo}
-                disabled={!canUndo}
-                className="inline-flex h-9 w-9 items-center justify-center rounded-lg border border-slate-200 bg-white text-slate-600 hover:bg-slate-100 disabled:cursor-not-allowed disabled:opacity-40 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-200 dark:hover:bg-slate-800"
-                title="Undo"
-              >
-                <RotateCcw size={16} />
-              </button>
-              <button
-                type="button"
-                onClick={onRedo}
-                disabled={!canRedo}
-                className="inline-flex h-9 w-9 items-center justify-center rounded-lg border border-slate-200 bg-white text-slate-600 hover:bg-slate-100 disabled:cursor-not-allowed disabled:opacity-40 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-200 dark:hover:bg-slate-800"
-                title="Redo"
-              >
-                <RotateCw size={16} />
-              </button>
-              <button
-                type="button"
-                onClick={() => { void handleApplyProposal(); }}
-                disabled={!workflowProposal?.actions?.length || applyingProposal || !onApplyAiActions}
-                className="inline-flex items-center gap-2 rounded-lg border border-emerald-400/40 bg-emerald-500/15 px-3 py-2 text-sm font-semibold text-emerald-700 hover:bg-emerald-500/20 disabled:cursor-not-allowed disabled:opacity-40 dark:border-emerald-500/40 dark:text-emerald-300"
-                title="Apply the latest workflow proposal"
-              >
-                <Sparkles size={16} />
-                {applyingProposal ? 'Applying...' : 'Apply'}
-              </button>
-              {executorEndpoint && (
-                stepping ? (
-                  <>
-                    <button
-                      type="button"
-                      onClick={nextStep}
-                      disabled={stepRunning || stepIndex >= flatSteps.length}
-                      className="inline-flex h-9 w-9 items-center justify-center rounded-lg bg-amber-500 text-white hover:bg-amber-600 disabled:cursor-not-allowed disabled:opacity-40"
-                      title={stepIndex >= flatSteps.length ? 'Done' : `Step ${stepIndex + 1}/${flatSteps.length}`}
-                    >
-                      <SkipForward size={16} />
-                    </button>
-                    <button
-                      type="button"
-                      onClick={stopStepping}
-                      className="inline-flex h-9 w-9 items-center justify-center rounded-lg border border-red-300 text-red-600 hover:bg-red-50 dark:border-red-700 dark:text-red-400 dark:hover:bg-red-900/20"
-                      title="Stop stepping"
-                    >
-                      <Square size={14} />
-                    </button>
-                  </>
-                ) : (
+              {centerTab !== 'live' && (
+                <>
                   <button
                     type="button"
-                    onClick={startStepping}
-                    disabled={runStatus === 'running' || flatSteps.length === 0}
-                    className="inline-flex h-9 w-9 items-center justify-center rounded-lg border border-amber-300 text-amber-600 hover:bg-amber-50 dark:border-amber-600 dark:text-amber-400 dark:hover:bg-amber-900/20 disabled:cursor-not-allowed disabled:opacity-40"
-                    title="Step through workflow"
+                    onClick={() => setAutoApplyProposals((value) => !value)}
+                    className={`inline-flex h-9 w-9 items-center justify-center rounded-lg border transition ${
+                      autoApplyProposals
+                        ? 'border-cyan-400/50 bg-cyan-500/15 text-cyan-700 dark:border-cyan-500/50 dark:text-cyan-300'
+                        : 'border-slate-200 bg-white text-slate-600 hover:bg-slate-100 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-300 dark:hover:bg-slate-800'
+                    }`}
+                    title={autoApplyProposals ? 'Auto-apply on (click to disable)' : 'Auto-apply off (click to enable)'}
                   >
-                    <SkipForward size={16} />
+                    <Sparkles size={16} />
                   </button>
-                )
+                  <button
+                    type="button"
+                    onClick={clearProposalHistory}
+                    disabled={!proposalHistory.length}
+                    className="inline-flex h-9 w-9 items-center justify-center rounded-lg border border-slate-200 bg-white text-slate-600 hover:bg-slate-100 disabled:cursor-not-allowed disabled:opacity-40 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-200 dark:hover:bg-slate-800"
+                    title="Clear proposal history"
+                  >
+                    <Trash2 size={16} />
+                  </button>
+                  <button
+                    type="button"
+                    onClick={onUndo}
+                    disabled={!canUndo}
+                    className="inline-flex h-9 w-9 items-center justify-center rounded-lg border border-slate-200 bg-white text-slate-600 hover:bg-slate-100 disabled:cursor-not-allowed disabled:opacity-40 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-200 dark:hover:bg-slate-800"
+                    title="Undo"
+                  >
+                    <RotateCcw size={16} />
+                  </button>
+                  <button
+                    type="button"
+                    onClick={onRedo}
+                    disabled={!canRedo}
+                    className="inline-flex h-9 w-9 items-center justify-center rounded-lg border border-slate-200 bg-white text-slate-600 hover:bg-slate-100 disabled:cursor-not-allowed disabled:opacity-40 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-200 dark:hover:bg-slate-800"
+                    title="Redo"
+                  >
+                    <RotateCw size={16} />
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => { void handleApplyProposal(); }}
+                    disabled={!workflowProposal?.actions?.length || applyingProposal || !onApplyAiActions}
+                    className="inline-flex items-center gap-2 rounded-lg border border-emerald-400/40 bg-emerald-500/15 px-3 py-2 text-sm font-semibold text-emerald-700 hover:bg-emerald-500/20 disabled:cursor-not-allowed disabled:opacity-40 dark:border-emerald-500/40 dark:text-emerald-300"
+                    title="Apply the latest workflow proposal"
+                  >
+                    <Sparkles size={16} />
+                    {applyingProposal ? 'Applying...' : 'Apply'}
+                  </button>
+                  {executorEndpoint && (
+                    stepping ? (
+                      <>
+                        <button
+                          type="button"
+                          onClick={nextStep}
+                          disabled={stepRunning || stepIndex >= flatSteps.length}
+                          className="inline-flex h-9 w-9 items-center justify-center rounded-lg bg-amber-500 text-white hover:bg-amber-600 disabled:cursor-not-allowed disabled:opacity-40"
+                          title={stepIndex >= flatSteps.length ? 'Done' : `Step ${stepIndex + 1}/${flatSteps.length}`}
+                        >
+                          <SkipForward size={16} />
+                        </button>
+                        <button
+                          type="button"
+                          onClick={stopStepping}
+                          className="inline-flex h-9 w-9 items-center justify-center rounded-lg border border-red-300 text-red-600 hover:bg-red-50 dark:border-red-700 dark:text-red-400 dark:hover:bg-red-900/20"
+                          title="Stop stepping"
+                        >
+                          <Square size={14} />
+                        </button>
+                      </>
+                    ) : (
+                      <button
+                        type="button"
+                        onClick={startStepping}
+                        disabled={runStatus === 'running' || flatSteps.length === 0}
+                        className="inline-flex h-9 w-9 items-center justify-center rounded-lg border border-amber-300 text-amber-600 hover:bg-amber-50 dark:border-amber-600 dark:text-amber-400 dark:hover:bg-amber-900/20 disabled:cursor-not-allowed disabled:opacity-40"
+                        title="Step through workflow"
+                      >
+                        <SkipForward size={16} />
+                      </button>
+                    )
+                  )}
+                  <button
+                    type="button"
+                    onClick={onRun}
+                    disabled={runStatus === 'running' || runStatus === 'connecting' || !executorEndpoint}
+                    className={`inline-flex items-center gap-2 rounded-lg px-3 py-2 text-sm font-semibold text-white disabled:cursor-not-allowed disabled:opacity-40 ${
+                      executorEndpoint ? 'bg-green-600 hover:bg-green-700' : 'bg-gray-500'
+                    }`}
+                    title={executorEndpoint ? 'Run all on scope' : 'Connect to executor first'}
+                  >
+                    <Play size={16} />
+                    {runStatus === 'running' || runStatus === 'connecting' ? 'Running...' : executorEndpoint ? 'Run' : 'Not Connected'}
+                  </button>
+                </>
               )}
-              <button
-                type="button"
-                onClick={onRun}
-                disabled={runStatus === 'running' || runStatus === 'connecting' || !executorEndpoint}
-                className={`inline-flex items-center gap-2 rounded-lg px-3 py-2 text-sm font-semibold text-white disabled:cursor-not-allowed disabled:opacity-40 ${
-                  executorEndpoint ? 'bg-green-600 hover:bg-green-700' : 'bg-gray-500'
-                }`}
-                title={executorEndpoint ? 'Run all on scope' : 'Connect to executor first'}
-              >
-                <Play size={16} />
-                {runStatus === 'running' || runStatus === 'connecting' ? 'Running...' : executorEndpoint ? 'Run' : 'Not Connected'}
-              </button>
+              {centerTab === 'live' && (
+                <>
+                  {liveModeToolbar}
+                </>
+              )}
+              {centerTab === 'live' && (
+                <button
+                  type="button"
+                  onClick={() => setAssistantPanelOpen((value) => !value)}
+                  className="inline-flex items-center gap-2 rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm font-medium text-slate-700 hover:bg-slate-100 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-200 dark:hover:bg-slate-800"
+                  title={assistantPanelOpen ? 'Hide AI Assistant' : 'Show AI Assistant'}
+                >
+                  <MessageSquare size={16} />
+                  {assistantPanelOpen ? (
+                    <>
+                      <ChevronLeft size={14} />
+                      Hide Copilot
+                    </>
+                  ) : (
+                    <>
+                      <ChevronRight size={14} />
+                      Show Copilot
+                    </>
+                  )}
+                </button>
+              )}
             </div>
           </div>
-          {securedInstrumentEndpoint?.executorUrl && showLiveTokenEditor ? (
-            <div className="flex items-center gap-3 border-b border-slate-200 bg-white/70 px-3 py-2 text-xs text-slate-600 dark:border-slate-800/50 dark:bg-slate-900/40 dark:text-slate-300">
-              <span className="font-semibold text-slate-700 dark:text-slate-200">Live Token</span>
-              <input
-                type="password"
-                value={liveToken}
-                onChange={(event) => setLiveToken(event.target.value)}
-                onBlur={() => {
-                  if (liveToken.trim()) {
-                    setShowLiveTokenEditor(false);
-                  }
-                }}
-                onKeyDown={(event) => {
-                  if (event.key === 'Enter' && liveToken.trim()) {
-                    setShowLiveTokenEditor(false);
-                  }
-                }}
-                placeholder="Paste token from executor"
-                className="min-w-0 flex-1 rounded-md border border-slate-300 bg-white px-3 py-1.5 text-sm text-slate-900 outline-none focus:border-cyan-500 dark:border-slate-700 dark:bg-slate-950 dark:text-white"
-              />
-              <button
-                type="button"
-                onClick={() => {
-                  setLiveToken('');
-                  setShowLiveTokenEditor(true);
-                }}
-                className="rounded-md border border-slate-300 px-2 py-1 text-xs font-medium text-slate-600 hover:bg-slate-100 dark:border-slate-700 dark:text-slate-300 dark:hover:bg-slate-800"
-              >
-                Clear
-              </button>
-            </div>
-          ) : null}
           <div className="flex-1 min-h-0 overflow-hidden">
             {centerTab === 'proposals' ? (
               <div className="h-full overflow-auto bg-slate-100/70 p-4 dark:bg-slate-950/60">

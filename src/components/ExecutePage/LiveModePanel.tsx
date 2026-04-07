@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Camera, ChevronDown, ChevronRight, Image as ImageIcon, KeyRound, Loader2, MonitorSmartphone, RefreshCw, Terminal } from 'lucide-react';
+import { Camera, ChevronDown, ChevronRight, Image as ImageIcon, Loader2, MonitorSmartphone, RefreshCw, Terminal } from 'lucide-react';
 import { VncViewer } from './VncViewer';
 
 export interface LiveModeCapture {
@@ -10,6 +10,8 @@ export interface LiveModeCapture {
 }
 
 interface LiveModePanelProps {
+  viewMode: 'screenshot' | 'vnc';
+  onChangeViewMode: (mode: 'screenshot' | 'vnc') => void;
   capture: LiveModeCapture | null;
   isCapturing: boolean;
   error: string | null;
@@ -19,14 +21,27 @@ interface LiveModePanelProps {
   onRefresh: () => void;
   onToggleAutoRefresh: () => void;
   onChangeRefreshInterval: (seconds: number) => void;
-  onToggleLiveTokenEditor?: () => void;
   vncAvailable?: boolean | null;
-  vncChecking?: boolean;
   vncActive?: boolean;
   vncConnecting?: boolean;
   vncError?: string | null;
   vncSessionInfo?: { wsUrl: string; targetHost: string; targetPort: number; sessionId: string } | null;
-  onCheckVnc?: () => void;
+  onToggleVnc?: () => void;
+}
+
+export interface LiveModeToolbarProps {
+  viewMode: 'screenshot' | 'vnc';
+  onChangeViewMode: (mode: 'screenshot' | 'vnc') => void;
+  isCapturing: boolean;
+  autoRefresh: boolean;
+  refreshInterval: number;
+  vncAvailable?: boolean | null;
+  vncActive?: boolean;
+  vncConnecting?: boolean;
+  vncSessionInfo?: { wsUrl: string; targetHost: string; targetPort: number; sessionId: string } | null;
+  onRefresh: () => void;
+  onToggleAutoRefresh: () => void;
+  onChangeRefreshInterval: (seconds: number) => void;
   onToggleVnc?: () => void;
 }
 
@@ -48,6 +63,8 @@ function getRunLogLineClass(line: string): string {
 }
 
 export function LiveModePanel({
+  viewMode,
+  onChangeViewMode,
   capture,
   isCapturing,
   error,
@@ -57,138 +74,22 @@ export function LiveModePanel({
   onRefresh,
   onToggleAutoRefresh,
   onChangeRefreshInterval,
-  onToggleLiveTokenEditor,
   vncAvailable = null,
-  vncChecking = false,
   vncActive = false,
   vncConnecting = false,
   vncError = null,
   vncSessionInfo = null,
-  onCheckVnc,
   onToggleVnc,
 }: LiveModePanelProps) {
   const [showLogs, setShowLogs] = useState(false);
-  const [viewMode, setViewMode] = useState<'screenshot' | 'vnc'>('screenshot');
   const logLines = (runLog || '').split(/\r?\n/).filter(Boolean);
   const hasLogs = logLines.length > 0;
-  const canShowVncTab = Boolean(vncActive || vncAvailable);
+  const isVncViewActive = viewMode === 'vnc' && vncActive && vncSessionInfo;
 
   return (
     <div className="h-full flex flex-col bg-slate-100 dark:bg-slate-950">
-      {/* Header */}
-      <div className="flex items-center justify-between gap-3 border-b border-slate-200 px-4 py-2.5 dark:border-slate-800/50">
-        <div className="text-sm font-semibold text-slate-900 dark:text-white">Live Mode</div>
-        <div className="flex items-center gap-2">
-          <div className="flex items-center gap-1">
-            <button
-              type="button"
-              onClick={onToggleAutoRefresh}
-              className={`rounded-lg border px-2.5 py-1 text-[11px] font-medium transition-colors ${
-                autoRefresh
-                  ? 'border-emerald-300 bg-emerald-50 text-emerald-700 dark:border-emerald-800 dark:bg-emerald-950/40 dark:text-emerald-300'
-                  : 'border-slate-300 bg-white text-slate-700 hover:bg-slate-50 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-200 dark:hover:bg-slate-800'
-              }`}
-            >
-              Auto {autoRefresh ? 'on' : 'off'}
-            </button>
-            <select
-              value={refreshInterval}
-              onChange={(e) => onChangeRefreshInterval(Number(e.target.value))}
-              className="rounded-lg border border-slate-300 bg-white px-1.5 py-1 text-[11px] font-medium text-slate-700 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-200"
-            >
-              <option value={3}>3s</option>
-              <option value={5}>5s</option>
-              <option value={10}>10s</option>
-            </select>
-            {onToggleLiveTokenEditor ? (
-              <button
-                type="button"
-                onClick={onToggleLiveTokenEditor}
-                className="inline-flex items-center justify-center rounded-lg border border-slate-300 bg-white p-1.5 text-slate-700 transition-colors hover:bg-slate-50 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-200 dark:hover:bg-slate-800"
-                title="Show live token"
-                aria-label="Show live token"
-              >
-                <KeyRound size={12} />
-              </button>
-            ) : null}
-            {onToggleVnc ? (
-              <>
-                {onCheckVnc ? (
-                  <button
-                    type="button"
-                    onClick={onCheckVnc}
-                    disabled={vncChecking || vncConnecting}
-                    className="inline-flex items-center gap-1.5 rounded-lg border border-slate-300 bg-white px-2.5 py-1 text-[11px] font-medium text-slate-700 transition-colors hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-50 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-200 dark:hover:bg-slate-800"
-                    title="Check whether VNC is reachable on this scope"
-                    aria-label="Check VNC availability"
-                  >
-                    {vncChecking ? <Loader2 size={12} className="animate-spin" /> : <MonitorSmartphone size={12} />}
-                    Check
-                  </button>
-                ) : null}
-              <button
-                type="button"
-                onClick={onToggleVnc}
-                disabled={vncChecking || vncConnecting}
-                className={`inline-flex items-center gap-1.5 rounded-lg border px-2.5 py-1 text-[11px] font-medium transition-colors disabled:cursor-not-allowed disabled:opacity-50 ${
-                  vncActive
-                    ? 'border-violet-300 bg-violet-50 text-violet-700 dark:border-violet-800 dark:bg-violet-950/40 dark:text-violet-300'
-                    : 'border-slate-300 bg-white text-slate-700 hover:bg-slate-50 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-200 dark:hover:bg-slate-800'
-                }`}
-                title={
-                  vncActive
-                    ? 'Stop VNC session'
-                    : 'Start VNC session'
-                }
-                aria-label={vncActive ? 'Stop VNC session' : 'Start VNC session'}
-              >
-                {vncChecking || vncConnecting ? <Loader2 size={12} className="animate-spin" /> : <MonitorSmartphone size={12} />}
-                {vncActive ? 'VNC on' : 'VNC'}
-              </button>
-              </>
-            ) : null}
-          </div>
-          <button
-            type="button"
-            onClick={onRefresh}
-            disabled={isCapturing}
-            className="inline-flex items-center gap-1.5 rounded-lg bg-sky-600 px-2.5 py-1 text-[11px] font-semibold text-white transition-colors hover:bg-sky-500 disabled:opacity-50"
-          >
-            {isCapturing ? <Loader2 size={12} className="animate-spin" /> : <RefreshCw size={12} />}
-            {isCapturing ? 'Capturing...' : 'Capture'}
-          </button>
-        </div>
-      </div>
-
       {/* Main content: screenshot + logs */}
-      <div className="flex-1 min-h-0 overflow-auto p-4 space-y-3">
-        {canShowVncTab ? (
-          <div className="inline-flex rounded-xl border border-slate-200 bg-white/80 p-1 shadow-sm dark:border-slate-800 dark:bg-slate-900/50">
-            <button
-              type="button"
-              onClick={() => setViewMode('screenshot')}
-              className={`rounded-lg px-3 py-1.5 text-xs font-medium transition-colors ${
-                viewMode === 'screenshot'
-                  ? 'bg-sky-600 text-white shadow-sm'
-                  : 'text-slate-600 hover:bg-slate-100 dark:text-slate-300 dark:hover:bg-slate-800'
-              }`}
-            >
-              Screenshot
-            </button>
-            <button
-              type="button"
-              onClick={() => setViewMode('vnc')}
-              disabled={!vncActive || !vncSessionInfo}
-              className={`rounded-lg px-3 py-1.5 text-xs font-medium transition-colors disabled:cursor-not-allowed disabled:opacity-50 ${
-                viewMode === 'vnc'
-                  ? 'bg-violet-600 text-white shadow-sm'
-                  : 'text-slate-600 hover:bg-slate-100 dark:text-slate-300 dark:hover:bg-slate-800'
-              }`}
-            >
-              VNC
-            </button>
-          </div>
-        ) : null}
+      <div className={`flex-1 min-h-0 p-4 space-y-3 ${isVncViewActive ? 'overflow-hidden' : 'overflow-auto'}`}>
 
         {error && (
           <div className="rounded-xl border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-700 dark:border-rose-900/60 dark:bg-rose-950/40 dark:text-rose-300">
@@ -202,40 +103,7 @@ export function LiveModePanel({
           </div>
         )}
 
-        {!vncError && !vncActive && vncAvailable === true && (
-          <div className="rounded-xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-800 dark:border-emerald-900/60 dark:bg-emerald-950/40 dark:text-emerald-300">
-            VNC is reachable on this scope. Click <span className="font-semibold">VNC</span> to start a live session.
-          </div>
-        )}
-
-        {vncActive && vncSessionInfo && (
-          <div className="rounded-2xl border border-violet-200 bg-violet-50/90 px-4 py-3 text-sm text-violet-900 shadow-sm dark:border-violet-900/60 dark:bg-violet-950/30 dark:text-violet-100">
-            <div className="flex items-center gap-2 font-semibold">
-              <MonitorSmartphone size={14} />
-              VNC session ready
-            </div>
-            <div className="mt-2 text-xs text-violet-800/90 dark:text-violet-200/90">
-              Manual session started only after your click. Screenshot mode stays separate, and you can switch into the embedded VNC viewer when ready.
-            </div>
-            <div className="mt-2 grid gap-1 text-[11px] text-violet-900/80 dark:text-violet-200/80">
-              <div>Target: {vncSessionInfo.targetHost}:{vncSessionInfo.targetPort}</div>
-              <div>WebSocket: {vncSessionInfo.wsUrl}</div>
-              <div>Session: {vncSessionInfo.sessionId}</div>
-            </div>
-            {viewMode !== 'vnc' ? (
-              <button
-                type="button"
-                onClick={() => setViewMode('vnc')}
-                className="mt-3 inline-flex items-center gap-1 rounded-lg bg-violet-600 px-2.5 py-1.5 text-xs font-semibold text-white transition-colors hover:bg-violet-500"
-              >
-                <MonitorSmartphone size={12} />
-                Open VNC Viewer
-              </button>
-            ) : null}
-          </div>
-        )}
-
-        {viewMode === 'vnc' && vncActive && vncSessionInfo ? (
+        {isVncViewActive ? (
           <VncViewer wsUrl={vncSessionInfo.wsUrl} />
         ) : capture ? (
           <div className="relative">
@@ -276,7 +144,7 @@ export function LiveModePanel({
         )}
 
         {/* Logs section - collapsible, below screenshot */}
-        {hasLogs && (
+        {hasLogs && !isVncViewActive && (
           <div className="rounded-xl border border-slate-200 dark:border-slate-800 overflow-hidden">
             <button
               type="button"
@@ -299,6 +167,102 @@ export function LiveModePanel({
           </div>
         )}
       </div>
+    </div>
+  );
+}
+
+export function LiveModeToolbar({
+  viewMode,
+  onChangeViewMode,
+  isCapturing,
+  autoRefresh,
+  refreshInterval,
+  vncAvailable = null,
+  vncActive = false,
+  vncConnecting = false,
+  vncSessionInfo = null,
+  onRefresh,
+  onToggleAutoRefresh,
+  onChangeRefreshInterval,
+  onToggleVnc,
+}: LiveModeToolbarProps) {
+  const canShowVncTab = Boolean(vncActive || vncAvailable);
+
+  return (
+    <div className="flex items-center gap-2">
+      {canShowVncTab ? (
+        <div className="inline-flex rounded-lg border border-slate-300 bg-white p-1 shadow-sm dark:border-slate-700 dark:bg-slate-900">
+          <button
+            type="button"
+            onClick={() => onChangeViewMode('screenshot')}
+            className={`rounded-md px-2.5 py-1 text-[11px] font-medium transition-colors ${
+              viewMode === 'screenshot'
+                ? 'bg-sky-600 text-white shadow-sm'
+                : 'text-slate-600 hover:bg-slate-100 dark:text-slate-300 dark:hover:bg-slate-800'
+            }`}
+          >
+            Screenshot
+          </button>
+          <button
+            type="button"
+            onClick={() => onChangeViewMode('vnc')}
+            disabled={!vncActive || !vncSessionInfo}
+            className={`rounded-md px-2.5 py-1 text-[11px] font-medium transition-colors disabled:cursor-not-allowed disabled:opacity-50 ${
+              viewMode === 'vnc'
+                ? 'bg-violet-600 text-white shadow-sm'
+                : 'text-slate-600 hover:bg-slate-100 dark:text-slate-300 dark:hover:bg-slate-800'
+            }`}
+          >
+            VNC
+          </button>
+        </div>
+      ) : null}
+      <button
+        type="button"
+        onClick={onToggleAutoRefresh}
+        className={`rounded-lg border px-2.5 py-1 text-[11px] font-medium transition-colors ${
+          autoRefresh
+            ? 'border-emerald-300 bg-emerald-50 text-emerald-700 dark:border-emerald-800 dark:bg-emerald-950/40 dark:text-emerald-300'
+            : 'border-slate-300 bg-white text-slate-700 hover:bg-slate-50 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-200 dark:hover:bg-slate-800'
+        }`}
+      >
+        Auto {autoRefresh ? 'on' : 'off'}
+      </button>
+      <select
+        value={refreshInterval}
+        onChange={(e) => onChangeRefreshInterval(Number(e.target.value))}
+        className="rounded-lg border border-slate-300 bg-white px-1.5 py-1 text-[11px] font-medium text-slate-700 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-200"
+      >
+        <option value={3}>3s</option>
+        <option value={5}>5s</option>
+        <option value={10}>10s</option>
+      </select>
+      {onToggleVnc ? (
+        <button
+          type="button"
+          onClick={onToggleVnc}
+          disabled={vncConnecting}
+          className={`inline-flex items-center gap-1.5 rounded-lg border px-2.5 py-1 text-[11px] font-medium transition-colors disabled:cursor-not-allowed disabled:opacity-50 ${
+            vncActive
+              ? 'border-violet-300 bg-violet-50 text-violet-700 dark:border-violet-800 dark:bg-violet-950/40 dark:text-violet-300'
+              : 'border-slate-300 bg-white text-slate-700 hover:bg-slate-50 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-200 dark:hover:bg-slate-800'
+          }`}
+          title={vncActive ? 'Stop VNC session' : 'Start VNC session'}
+          aria-label={vncActive ? 'Stop VNC session' : 'Start VNC session'}
+        >
+          {vncConnecting ? <Loader2 size={12} className="animate-spin" /> : <MonitorSmartphone size={12} />}
+          {vncActive ? 'VNC on' : 'VNC'}
+        </button>
+      ) : null}
+      <button
+        type="button"
+        onClick={onRefresh}
+        disabled={isCapturing}
+        className="inline-flex items-center gap-1.5 rounded-lg bg-sky-600 px-2.5 py-1 text-[11px] font-semibold text-white transition-colors hover:bg-sky-500 disabled:opacity-50"
+      >
+        {isCapturing ? <Loader2 size={12} className="animate-spin" /> : <RefreshCw size={12} />}
+        {isCapturing ? 'Capturing...' : 'Capture'}
+      </button>
     </div>
   );
 }

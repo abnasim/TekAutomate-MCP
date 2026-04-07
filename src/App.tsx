@@ -36,11 +36,11 @@ import { publicAssetUrl } from './utils/publicUrl';
 import { parseConnectQR } from './utils/parseConnectQR';
 import { QRConnectScanner } from './components/QRConnectScanner';
 import { ExecutePage } from './components/ExecutePage';
-import { LiveModePanel, type LiveModeCapture } from './components/ExecutePage/LiveModePanel';
+import { LiveModePanel, LiveModeToolbar, type LiveModeCapture } from './components/ExecutePage/LiveModePanel';
 import { resolveCommandSelection } from './utils/commandMaterializer';
 import type { AiAction } from './utils/aiActions';
 import { applyAiActionsToSteps } from './utils/aiActions';
-import { streamMcpChat, type McpChatAttachment } from './utils/ai/mcpClient';
+import { streamMcpChat } from './utils/ai/mcpClient';
 import { generateExecutionAudit, type ExecutionAuditReport } from './utils/executionAudit';
 import { decodeStatusFromText } from './utils/statusDecoder';
 import { getDocstring, ensureDocstringsLoaded, areDocstringsLoaded } from './components/docstrings';
@@ -60,7 +60,6 @@ type AskAiParsedResult = {
   tip?: string;
 };
 
-const EXECUTE_PAGE_LIVE_TOKEN_STORAGE = 'tekautomate.execute.live_token';
 
 const parseAskAiContent = (content: string): AskAiParsedResult => {
   const text = (content || '').trim();
@@ -75,7 +74,7 @@ const parseAskAiContent = (content: string): AskAiParsedResult => {
     .filter(Boolean);
 
   const tipMatch = text.match(/(?:important note|tip|gotcha)s?:?\s*(.+)/i);
-  const argMatch = text.match(/valid argument values for [`']?([^`' ]+)[`']?\s*(?:are|:)\s*([^\.]+)/i);
+  const argMatch = text.match(/valid argument values for [`']?([^`' ]+)[`']?\s*(?:are|:)\s*([^.]+)/i);
 
   const summary = sentences[0] || text || 'No details provided.';
   const syntax = codeMatches[0] || '';
@@ -386,6 +385,15 @@ interface DeviceEntry extends InstrumentConfig {
   status?: 'online' | 'offline' | 'idle' | 'acquiring';
 }
 
+interface LiveModeTargetOption {
+  id: string;
+  label: string;
+  visaResource: string;
+  targetHost?: string;
+  targetPort?: number;
+  config: InstrumentConfig;
+}
+
 interface InstrumentNode {
   id: string;
   deviceId?: string; // links to DeviceEntry.id
@@ -555,6 +563,16 @@ const getStepBackend = (step: Step, defaultBackend: Backend): Backend => {
 };
 
 const getVisaResourceString = (device: DeviceEntry): string => {
+  const isTekScopePc =
+    device.deviceType === 'TEKSCOPE_PC' ||
+    /tekscope/i.test(`${device.deviceDriver || ''} ${device.modelFamily || ''} ${device.alias || ''}`);
+
+  if (isTekScopePc) {
+    const host = String(device.host || '127.0.0.1').trim() || '127.0.0.1';
+    const port = Number(device.port || 4000);
+    return `TCPIP::${host}::${Number.isFinite(port) && port > 0 ? port : 4000}::SOCKET`;
+  }
+
   if (device.connectionType === 'tcpip') {
     return `TCPIP::${device.host}::INSTR`;
   } else if (device.connectionType === 'socket') {
@@ -1394,6 +1412,8 @@ function AppInner() {
     }
   }, [devices]);
 
+  const enabledDevices = useMemo(() => devices.filter((device) => device.enabled !== false), [devices]);
+
   // Non-passive wheel listener so mouse wheel horizontally scrolls the navbar
   useEffect(() => {
     const el = navScrollRef.current;
@@ -1421,42 +1441,6 @@ function AppInner() {
   const [selectedCategory, setSelectedCategory] = useState<string | null>(null);
   const [showPopularOnly, setShowPopularOnly] = useState(false);
   
-  // Popular commands - most commonly used SCPI commands
-  const popularCommands = useMemo(() => new Set([
-    // Acquisition
-    'ACQuire:MODe', 'ACQuire:NUMAVg', 'ACQuire:STOPAfter', 'ACQuire:STATE',
-    // Channels
-    'CH<x>:BANdwidth', 'CH<x>:COUPling', 'CH<x>:DISplay', 'CH<x>:LABel', 
-    'CH<x>:OFFSet', 'CH<x>:POSition', 'CH<x>:PRObe', 'CH<x>:SCAle', 'CH<x>:TERmination',
-    // Cursor
-    'CURSor:FUNCtion', 'CURSor:MODe', 'CURSor:SOUrce',
-    // Display
-    'DISplay:GLObal:CH<x>:STATE', 'DISplay:INTENSITy:BACKLight', 'DISplay:PERSistence',
-    'DISplay:WAVEView<x>:CURSor:CURSOR<x>:STATE',
-    // Front Panel
-    'FPAnel:PRESS', 'FPAnel:TURN',
-    // Horizontal
-    'HORizontal:DELay:MODe', 'HORizontal:DELay:TIMe', 'HORizontal:MODE', 
-    'HORizontal:POSition', 'HORizontal:RECOrdlength', 'HORizontal:SCAle',
-    // Math
-    'MATH<x>:DEFine', 'MATH<x>:DISplay', 'MATH<x>:LABel',
-    // Measurement
-    'MEASUrement:MEAS<x>:SOUrce', 'MEASUrement:MEAS<x>:TYPe', 'MEASUrement:MEAS<x>:VALue?',
-    'MEASUrement:IMMed:SOUrce1', 'MEASUrement:IMMed:TYPe', 'MEASUrement:IMMed:VALue?',
-    // Reference
-    'REF<x>:DISplay', 'REF<x>:LABel',
-    // Save/Recall
-    'SAVe:IMAGe', 'SAVe:SETUp', 'SAVe:WAVEform', 'RECAll:SETUp',
-    // Trigger
-    'TRIGger:A:EDGE:COUPling', 'TRIGger:A:EDGE:SLOpe', 'TRIGger:A:EDGE:SOUrce',
-    'TRIGger:A:LEVel:CH<x>', 'TRIGger:A:MODe', 'TRIGger:A:TYPe',
-    // Waveform Transfer
-    'DATa:SOUrce', 'DATa:STARt', 'DATa:STOP', 'DATa:ENCdg', 'DATa:WIDth',
-    'CURVe?', 'WFMOutpre?',
-    // System
-    '*IDN?', '*RST', '*CLS', '*OPC?', '*WAI',
-    'AUTOSet', 'FACtory', 'LOCk', 'UNLock',
-  ]), []);
   const [selectedBackends, setSelectedBackends] = useState<string[]>([]);
   // Command Library infinite scroll state
   const [libraryVisibleCount, setLibraryVisibleCount] = useState(50);
@@ -1540,24 +1524,11 @@ function AppInner() {
   }, [executorEndpoint]);
 
   // Fetch scanned instruments from executor — once per endpoint change (host:port)
-  const getStoredLiveToken = useCallback((): string => {
-    try {
-      return window.localStorage.getItem(EXECUTE_PAGE_LIVE_TOKEN_STORAGE)?.trim() || '';
-    } catch {
-      return '';
-    }
-  }, []);
-
   const buildExecutorHeaders = useCallback(
     (baseHeaders?: Record<string, string>): Record<string, string> => {
-      const headers: Record<string, string> = { ...(baseHeaders || {}) };
-      const liveToken = getStoredLiveToken();
-      if (liveToken) {
-        headers['X-Live-Token'] = liveToken;
-      }
-      return headers;
+      return { ...(baseHeaders || {}) };
     },
-    [getStoredLiveToken]
+    []
   );
 
   const lastScannedEndpoint = React.useRef('');
@@ -1596,7 +1567,6 @@ function AppInner() {
   const [liveModeAutoRefresh, setLiveModeAutoRefresh] = useState(false);
   const [liveModeRefreshInterval, setLiveModeRefreshInterval] = useState(5); // seconds: 3, 5, or 10
   const [liveModeVncAvailable, setLiveModeVncAvailable] = useState<boolean | null>(null);
-  const [liveModeVncChecking, setLiveModeVncChecking] = useState(false);
   const [liveModeVncConnecting, setLiveModeVncConnecting] = useState(false);
   const [liveModeVncError, setLiveModeVncError] = useState<string | null>(null);
   const [liveModeVncSession, setLiveModeVncSession] = useState<null | {
@@ -1605,18 +1575,11 @@ function AppInner() {
     targetHost: string;
     targetPort: number;
   }>(null);
+  const [liveModeViewMode, setLiveModeViewMode] = useState<'screenshot' | 'vnc'>('screenshot');
   const [liveModeInitialCaptureDone, setLiveModeInitialCaptureDone] = useState(false);
   const liveModeConsecutiveFailures = React.useRef(0);
   const liveModeVncTargetKeyRef = React.useRef('');
   const [connectedInstrumentIdn, setConnectedInstrumentIdn] = useState<string | null>(null);
-
-  useEffect(() => {
-    if (!liveModeVncError) return undefined;
-    const timeoutId = window.setTimeout(() => {
-      setLiveModeVncError((current) => (current === liveModeVncError ? null : current));
-    }, 5000);
-    return () => window.clearTimeout(timeoutId);
-  }, [liveModeVncError]);
   const [executorScannedInstruments, setExecutorScannedInstruments] = useState<Array<{
     resource: string;
     identity: string;
@@ -1626,6 +1589,114 @@ function AppInner() {
     reachable: boolean;
     connType: string;
   }>>([]);
+
+  useEffect(() => {
+    if (!liveModeVncError) return undefined;
+    const timeoutId = window.setTimeout(() => {
+      setLiveModeVncError((current) => (current === liveModeVncError ? null : current));
+    }, 5000);
+    return () => window.clearTimeout(timeoutId);
+  }, [liveModeVncError]);
+
+  useEffect(() => {
+    const handleVncViewerMessage = (event: MessageEvent) => {
+      const data = event.data;
+      if (!data || typeof data !== 'object' || data.source !== 'tekautomate-vnc') {
+        return;
+      }
+      if (data.type === 'connected') {
+        setLiveModeVncError(null);
+        return;
+      }
+      if (data.type === 'error' && typeof data.message === 'string' && data.message.trim()) {
+        setLiveModeVncError(data.message.trim());
+        return;
+      }
+      if (data.type === 'disconnected' && !data.clean) {
+        setLiveModeVncError('VNC connection lost. Please reconnect.');
+      }
+    };
+    window.addEventListener('message', handleVncViewerMessage);
+    return () => window.removeEventListener('message', handleVncViewerMessage);
+  }, []);
+
+  const parseScannedInstrumentHost = useCallback((resource: string): string => {
+    const tcpipMatch = resource.match(/TCPIP\d*::([^:]+)::/i);
+    if (tcpipMatch?.[1]) return tcpipMatch[1];
+    return '';
+  }, []);
+
+  const parseScannedInstrumentPort = useCallback((resource: string, connType: string): number => {
+    if (String(connType || '').toLowerCase() === 'socket') {
+      const socketMatch = resource.match(/::(\d+)::SOCKET/i);
+      if (socketMatch?.[1]) {
+        const parsed = Number(socketMatch[1]);
+        if (Number.isFinite(parsed) && parsed > 0) return parsed;
+      }
+    }
+    return 4000;
+  }, []);
+
+  const buildScannedInstrumentConfig = useCallback((instrument: {
+    resource: string;
+    manufacturer: string;
+    model: string;
+    connType: string;
+  }): InstrumentConfig => {
+    const host = parseScannedInstrumentHost(instrument.resource);
+    const connectionType = String(instrument.connType || '').toLowerCase() === 'socket'
+      ? 'socket'
+      : 'tcpip';
+    return {
+      ...config,
+      connectionType,
+      host,
+      port: connectionType === 'socket' ? parseScannedInstrumentPort(instrument.resource, instrument.connType) : config.port,
+      alias: instrument.model ? `${instrument.manufacturer} ${instrument.model}`.trim() : instrument.resource,
+      vncHost: host || config.vncHost,
+      vncPort: config.vncPort || 5900,
+    };
+  }, [config, parseScannedInstrumentHost, parseScannedInstrumentPort]);
+
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
+  const liveModeTargetOptions = useMemo<LiveModeTargetOption[]>(() => {
+    const formatConfiguredLiveLabel = (device: DeviceEntry) => {
+      const alias = String(device.alias || '').trim();
+      const model = String(device.deviceType || '').trim();
+      const host = String(device.host || '').trim();
+      if (alias && model && alias.toLowerCase() !== model.toLowerCase()) {
+        return `${alias} — ${model}`;
+      }
+      return alias || model || host || device.id;
+    };
+    const configured = enabledDevices.map((device) => ({
+      id: device.id,
+      label: formatConfiguredLiveLabel(device),
+      visaResource: getVisaResourceString(device),
+      targetHost: String(device.vncHost || device.host || '').trim(),
+      targetPort: Number(device.vncPort || 5900),
+      config: {
+        ...config,
+        ...device,
+      },
+    }));
+    const configuredResources = new Set(configured.map((option) => option.visaResource));
+    const scanned = executorScannedInstruments
+      .filter((instrument) => !configuredResources.has(instrument.resource))
+      .map((instrument) => {
+        const scannedConfig = buildScannedInstrumentConfig(instrument);
+        return {
+          id: `scan:${instrument.resource}`,
+          label: scannedConfig.alias || instrument.resource,
+          visaResource: instrument.resource,
+          targetHost: String(scannedConfig.vncHost || scannedConfig.host || '').trim(),
+          targetPort: Number(scannedConfig.vncPort || 5900),
+          config: scannedConfig,
+        };
+      });
+    return [...configured, ...scanned];
+  }, [buildScannedInstrumentConfig, config, enabledDevices, executorScannedInstruments]);
+
   const [runWindowResult, setRunWindowResult] = useState<{ ok: boolean; stdout: string; stderr: string; error: string | null; exit_code?: number } | null>(null);
   const [lastExecutionAudit, setLastExecutionAudit] = useState<ExecutionAuditReport | null>(null);
   const [askAiModalOpen, setAskAiModalOpen] = useState(false);
@@ -1649,7 +1720,6 @@ function AppInner() {
   });
 
   const fileInputRef = useRef<HTMLInputElement>(null);
-  const [showFlowDropdown, setShowFlowDropdown] = useState(false);
   const [showHelpDropdown, setShowHelpDropdown] = useState(false);
   const [showBuilderMoreMenu, setShowBuilderMoreMenu] = useState(false);
   const moreMenuBtnRef = useRef<HTMLButtonElement>(null);
@@ -4148,9 +4218,19 @@ function AppInner() {
     return true;
   }, [selectedDeviceFamily]);
 
-  const getVisaResourceString = (
-      source: Pick<InstrumentConfig, 'connectionType' | 'host' | 'port' | 'usbVendorId' | 'usbProductId' | 'usbSerial' | 'gpibBoard' | 'gpibAddress'> = config
+  const getLiveInstrumentVisaResourceString = useCallback((
+      source: Pick<InstrumentConfig, 'connectionType' | 'host' | 'port' | 'usbVendorId' | 'usbProductId' | 'usbSerial' | 'gpibBoard' | 'gpibAddress' | 'deviceType' | 'deviceDriver' | 'modelFamily' | 'alias'> = config
     ): string => {
+      const isTekScopePc =
+        source.deviceType === 'TEKSCOPE_PC' ||
+        /tekscope/i.test(`${source.deviceDriver || ''} ${source.modelFamily || ''} ${source.alias || ''}`);
+
+      if (isTekScopePc) {
+        const host = String(source.host || '127.0.0.1').trim() || '127.0.0.1';
+        const port = Number(source.port || 4000);
+        return `TCPIP::${host}::${Number.isFinite(port) && port > 0 ? port : 4000}::SOCKET`;
+      }
+
       switch (source.connectionType) {
         case 'tcpip':
           return `TCPIP::${source.host}::INSTR`;
@@ -4164,7 +4244,7 @@ function AppInner() {
         default:
           return `TCPIP::${source.host}::INSTR`;
       }
-    };
+    }, [config]);
 
   const activeInstrumentConfig = useMemo<InstrumentConfig>(() => {
     const enabledDevice = devices.find((device) => device.enabled !== false);
@@ -4175,52 +4255,31 @@ function AppInner() {
     };
   }, [config, devices]);
 
+  const liveModeInstrumentConfig = useMemo<InstrumentConfig>(() => {
+    const selectedDevice =
+      devices.find((device) => device.enabled !== false) ||
+      devices[0];
+    return {
+      ...config,
+      ...(selectedDevice || {}),
+    };
+  }, [config, devices]);
+
+  const liveModeVisaResource = useMemo(
+    () => getLiveInstrumentVisaResourceString(liveModeInstrumentConfig),
+    [getLiveInstrumentVisaResourceString, liveModeInstrumentConfig]
+  );
+
   const liveModeVncTarget = useMemo(() => {
-    const enabled = activeInstrumentConfig.vncEnabled !== false;
-    const targetHost = String(activeInstrumentConfig.vncHost || activeInstrumentConfig.host || '').trim();
-    const targetPort = Number(activeInstrumentConfig.vncPort || 5900);
+    const enabled = liveModeInstrumentConfig.vncEnabled !== false;
+    const targetHost = String(liveModeInstrumentConfig.vncHost || liveModeInstrumentConfig.host || '').trim();
+    const targetPort = Number(liveModeInstrumentConfig.vncPort || 5900);
     return {
       enabled,
       targetHost,
       targetPort: Number.isFinite(targetPort) && targetPort > 0 ? targetPort : 5900,
     };
-  }, [activeInstrumentConfig]);
-
-  const probeLiveModeVncAvailability = useCallback(async () => {
-    if (!executorEndpoint || !liveModeVncTarget.enabled || !liveModeVncTarget.targetHost) {
-      setLiveModeVncAvailable(false);
-      setLiveModeVncSession(null);
-      return;
-    }
-    setLiveModeVncChecking(true);
-    try {
-      const params = new URLSearchParams({
-        target_host: liveModeVncTarget.targetHost,
-        target_port: String(liveModeVncTarget.targetPort),
-      });
-      const res = await fetch(`http://${executorEndpoint.host}:${executorEndpoint.port}/vnc/probe?${params.toString()}`, {
-        headers: buildExecutorHeaders(),
-        signal: AbortSignal.timeout(8000),
-      });
-      const json = await res.json() as { ok?: boolean; available?: boolean; error?: string | null; requiresLiveToken?: boolean };
-      if (res.status === 401 && json.requiresLiveToken) {
-        setLiveModeVncAvailable(null);
-        setLiveModeVncError('Enter a live token to check VNC availability.');
-        return;
-      }
-      setLiveModeVncAvailable(Boolean(json.ok && json.available));
-      if (json.ok && json.available) {
-        setLiveModeVncError(null);
-      } else if (json.error) {
-        setLiveModeVncError(json.error);
-      }
-    } catch (error) {
-      setLiveModeVncAvailable(false);
-      setLiveModeVncError(describeExecutorVncError(error, 'Failed to probe VNC availability.'));
-    } finally {
-      setLiveModeVncChecking(false);
-    }
-  }, [buildExecutorHeaders, executorEndpoint, liveModeVncTarget]);
+  }, [liveModeInstrumentConfig]);
 
   const toggleLiveModeVnc = useCallback(async () => {
     if (!executorEndpoint) {
@@ -4234,7 +4293,7 @@ function AppInner() {
         await fetch(`http://${executorEndpoint.host}:${executorEndpoint.port}/vnc/stop`, {
           method: 'POST',
           headers: buildExecutorHeaders({ 'Content-Type': 'application/json' }),
-          body: JSON.stringify({ session_id: liveModeVncSession.sessionId }),
+          body: JSON.stringify({ session_id: liveModeVncSession.sessionId, force: true }),
           signal: AbortSignal.timeout(5000),
         });
         setLiveModeVncSession(null);
@@ -4264,14 +4323,10 @@ function AppInner() {
       const json = await res.json() as {
         ok?: boolean;
         error?: string;
-        requiresLiveToken?: boolean;
         session_id?: string;
         ws_url?: string;
         target?: { host?: string; port?: number };
       };
-      if (res.status === 401 && json.requiresLiveToken) {
-        throw new Error('Enter a live token before starting VNC.');
-      }
       if (!json.ok || !json.session_id || !json.ws_url) {
         throw new Error(json.error || 'Failed to start VNC session.');
       }
@@ -4282,6 +4337,7 @@ function AppInner() {
         targetHost: String(json.target?.host || liveModeVncTarget.targetHost),
         targetPort: Number(json.target?.port || liveModeVncTarget.targetPort),
       });
+      setLiveModeViewMode('vnc');
     } catch (error) {
       setLiveModeVncError(describeExecutorVncError(error, 'Failed to start VNC session.'));
     } finally {
@@ -4289,27 +4345,54 @@ function AppInner() {
     }
   }, [buildExecutorHeaders, executorEndpoint, liveModeVncSession, liveModeVncTarget]);
 
+  const stopLiveModeVncSession = useCallback(async () => {
+    if (!liveModeVncSession) {
+      setLiveModeVncSession(null);
+      return;
+    }
+    if (!executorEndpoint) {
+      setLiveModeVncSession(null);
+      return;
+    }
+    try {
+      await fetch(`http://${executorEndpoint.host}:${executorEndpoint.port}/vnc/stop`, {
+        method: 'POST',
+        headers: buildExecutorHeaders({ 'Content-Type': 'application/json' }),
+        body: JSON.stringify({ session_id: liveModeVncSession.sessionId, force: true }),
+        signal: AbortSignal.timeout(5000),
+      });
+    } catch {
+      // If the executor is already going away, we still want the app state cleared.
+    } finally {
+      setLiveModeVncSession(null);
+      setLiveModeVncError(null);
+      setLiveModeVncAvailable(null);
+      setLiveModeViewMode('screenshot');
+    }
+  }, [buildExecutorHeaders, executorEndpoint, liveModeVncSession]);
+
   useEffect(() => {
     const targetKey = executorEndpoint && liveModeVncTarget.enabled && liveModeVncTarget.targetHost
       ? `${executorEndpoint.host}:${executorEndpoint.port}|${liveModeVncTarget.targetHost}:${liveModeVncTarget.targetPort}`
       : '';
-    const previousTargetKey = liveModeVncTargetKeyRef.current;
-    if (previousTargetKey && previousTargetKey !== targetKey && executorEndpoint && liveModeVncSession) {
-      fetch(`http://${executorEndpoint.host}:${executorEndpoint.port}/vnc/stop`, {
-        method: 'POST',
-        headers: buildExecutorHeaders({ 'Content-Type': 'application/json' }),
-        body: JSON.stringify({ session_id: liveModeVncSession.sessionId }),
-      }).catch(() => undefined);
-      setLiveModeVncSession(null);
-    }
     liveModeVncTargetKeyRef.current = targetKey;
-    setLiveModeVncError(null);
+    if (!liveModeVncSession) {
+      setLiveModeVncError(null);
+    }
     if (!executorEndpoint || !liveModeVncTarget.enabled || !liveModeVncTarget.targetHost) {
       setLiveModeVncAvailable(null);
       return;
     }
-    setLiveModeVncAvailable(null);
-  }, [buildExecutorHeaders, executorEndpoint, liveModeVncSession, liveModeVncTarget]);
+    if (!liveModeVncSession) {
+      setLiveModeVncAvailable(null);
+    }
+  }, [executorEndpoint, liveModeVncSession, liveModeVncTarget]);
+
+  useEffect(() => {
+    setLiveModeCapture(null);
+    setLiveModeInitialCaptureDone(false);
+    liveModeConsecutiveFailures.current = 0;
+  }, [liveModeVisaResource]);
 
   useEffect(() => {
     if (!executorEndpoint || !liveModeVncSession) return undefined;
@@ -4328,6 +4411,7 @@ function AppInner() {
         if (cancelled) return;
         if (!json.ok || json.running === false) {
           setLiveModeVncSession(null);
+          setLiveModeViewMode('screenshot');
           if (json.error) {
             setLiveModeVncError(json.error);
           }
@@ -5947,7 +6031,7 @@ import pyvisa
 
 def main():
     p = argparse.ArgumentParser()
-    p.add_argument("--visa", default="${getVisaResourceString()}")
+    p.add_argument("--visa", default="${getLiveInstrumentVisaResourceString()}")
     p.add_argument("--host", default="${host}")
     p.add_argument("--timeout", type=float, default=${config.timeout})
     args, _unknown = p.parse_known_args()
@@ -6045,7 +6129,7 @@ if __name__ == "__main__":
 
     // Pure PyVISA
     if (isPyVISA) {
-      const resourceStr = getVisaResourceString(effectiveConfig);
+      const resourceStr = getLiveInstrumentVisaResourceString(effectiveConfig);
       return (
         header +
         `
@@ -6110,8 +6194,8 @@ if __name__ == "__main__":
     if (isTmDevices) {
       // For tm_devices, use just the host/IP address, not full VISA resource string
       const host = effectiveConfig.connectionType === 'tcpip' ? effectiveConfig.host : 
-                   effectiveConfig.connectionType === 'socket' ? getVisaResourceString(effectiveConfig) : 
-                   getVisaResourceString(effectiveConfig);
+                   effectiveConfig.connectionType === 'socket' ? getLiveInstrumentVisaResourceString(effectiveConfig) : 
+                   getLiveInstrumentVisaResourceString(effectiveConfig);
       const deviceType = effectiveConfig.deviceType.toLowerCase();
       const deviceDriver = effectiveConfig.deviceDriver || ''; // Empty = auto-detect
       const alias = effectiveConfig.alias || 'scope1';
@@ -6677,9 +6761,9 @@ if __name__ == "__main__":
     }
     if (liveModeCapturing) return;
 
-    const visaResource = getVisaResourceString(activeInstrumentConfig);
-    const familyHint = `${activeInstrumentConfig.modelFamily || ''} ${activeInstrumentConfig.deviceDriver || ''}`.toLowerCase();
-    const scopeType = activeInstrumentConfig.scopeGeneration || (/70[0-9]{3}/i.test(familyHint) ? 'export' : /dpo|mdo|tds/i.test(familyHint) ? 'legacy' : 'modern');
+    const visaResource = liveModeVisaResource;
+    const familyHint = `${liveModeInstrumentConfig.modelFamily || ''} ${liveModeInstrumentConfig.deviceDriver || ''}`.toLowerCase();
+    const scopeType = liveModeInstrumentConfig.scopeGeneration || (/70[0-9]{3}/i.test(familyHint) ? 'export' : /dpo|mdo|tds/i.test(familyHint) ? 'legacy' : 'modern');
     setLiveModeCapturing(true);
     setLiveModeError(null);
     try {
@@ -6754,11 +6838,11 @@ if __name__ == "__main__":
       setLiveModeCapturing(false);
     }
   }, [
-    activeInstrumentConfig,
     executorEndpoint,
-    getVisaResourceString,
     liveModeAutoRefresh,
     liveModeCapturing,
+    liveModeInstrumentConfig,
+    liveModeVisaResource,
     postToExecutor,
   ]);
 
@@ -6905,7 +6989,7 @@ if __name__ == "__main__":
       await fetch(disconnectUrl, {
         method: 'POST',
         headers: buildExecutorHeaders({ 'Content-Type': 'application/json' }),
-        body: JSON.stringify({ protocol_version: 1, action: 'disconnect', scope_visa: getVisaResourceString(activeInstrumentConfig) }),
+        body: JSON.stringify({ protocol_version: 1, action: 'disconnect', scope_visa: getLiveInstrumentVisaResourceString(activeInstrumentConfig) }),
       });
     } catch { /* non-fatal — executor might not have a live session */ }
     const useBlocklyCode = currentView === 'flow-designer' || (currentView === 'execute' && executionSource === 'blockly');
@@ -7427,7 +7511,7 @@ if __name__ == "__main__":
       .filter((x) => x.score >= 0)
       .sort((a, b) => b.score - a.score || a.cmd.scpi.localeCompare(b.cmd.scpi))
       .map((x) => x.cmd);
-  }, [commandLibrary, librarySearchDebounced, selectedCategory, showPopularOnly, popularCommands, isCommandCompatible, commandSearchMode]);
+  }, [commandLibrary, librarySearchDebounced, selectedCategory, showPopularOnly, isCommandCompatible]);
 
   const filteredCommandsSync = useMemo(() => computeFilteredCommands(), [computeFilteredCommands]);
 
@@ -7561,7 +7645,7 @@ if __name__ == "__main__":
     }
   };
 
-  const formatAskAiModalText = (raw: string): string => {
+  const formatAskAiModalText = useCallback((raw: string): string => {
     const cleaned = cleanAskAiText(raw);
     if (cleaned) return cleaned;
     const parsed = extractActionsJsonForAskAi(raw);
@@ -7588,7 +7672,7 @@ if __name__ == "__main__":
     return lines.length
       ? lines.join('\n')
       : 'AI returned structured action data without narrative text for this command.';
-  };
+  }, []);
 
   const askAiAboutStep = useCallback(async (step: Step) => {
     setAskAiModalOpen(true);
@@ -7643,24 +7727,11 @@ if __name__ == "__main__":
 
     const prompt = (() => {
       const scpi = libraryCmd?.scpi || commandText || '(unknown)';
-      const description =
-        libraryCmd?.description || 'N/A';
       const syntaxSet = libraryCmd?.manualEntry?.syntax?.set || 'N/A';
-      const syntaxQuery = libraryCmd?.manualEntry?.syntax?.query || 'N/A';
-      const args =
-        JSON.stringify(
-          libraryCmd?.params ||
-            libraryCmd?.manualEntry?.arguments ||
-            [],
-          null,
-          2
-        ) || '[]';
       const example =
         libraryCmd?.manualEntry?.examples?.[0]?.codeExamples?.scpi?.code ||
         libraryCmd?.example ||
         'N/A';
-      const notes = libraryCmd?.manualEntry?.notes?.join('. ') || 'None';
-      const conditions = (libraryCmd as any)?.conditions || 'None';
 
       setAskAiModalFallbackSyntax(syntaxSet);
       setAskAiModalFallbackExample(example);
@@ -7747,7 +7818,7 @@ Keep under 120 words. No headings. Bullets only. Stay on this command. Do not de
     } finally {
       setAskAiModalLoading(false);
     }
-  }, [config, devices, executionSource, lastExecutionAudit, runWindowLog, runWindowStatus, steps]);
+  }, [commandLibrary, config, devices, executionSource, formatAskAiModalText, lastExecutionAudit, runWindowLog, runWindowStatus, steps]);
 
   const replaceStepWithSteps = (items: Step[], targetId: string, replacement: Step[]): Step[] => {
     return items.flatMap((item) => {
@@ -9837,21 +9908,21 @@ Keep under 120 words. No headings. Bullets only. Stay on this command. Do not de
             executorEndpoint={executorEndpoint}
             instrumentEndpoint={executorEndpoint ? {
               executorUrl: `http://${executorEndpoint.host}:${executorEndpoint.port}`,
-              visaResource: getVisaResourceString(activeInstrumentConfig),
-              backend: activeInstrumentConfig.backend,
+              visaResource: liveModeVisaResource,
+              backend: liveModeInstrumentConfig.backend,
               liveMode: true,
             } : null}
             latestLiveScreenshot={liveModeCapture}
             chatContextAttachments={[]}
             flowContext={{
-              backend: activeInstrumentConfig.backend,
-              modelFamily: activeInstrumentConfig.modelFamily,
-              connectionType: activeInstrumentConfig.connectionType,
-              host: activeInstrumentConfig.host,
-              deviceType: activeInstrumentConfig.deviceType,
-              deviceDriver: activeInstrumentConfig.deviceDriver,
-              visaBackend: activeInstrumentConfig.visaBackend,
-              alias: activeInstrumentConfig.alias,
+              backend: liveModeInstrumentConfig.backend,
+              modelFamily: liveModeInstrumentConfig.modelFamily,
+              connectionType: liveModeInstrumentConfig.connectionType,
+              host: liveModeInstrumentConfig.host,
+              deviceType: liveModeInstrumentConfig.deviceType,
+              deviceDriver: liveModeInstrumentConfig.deviceDriver,
+              visaBackend: liveModeInstrumentConfig.visaBackend,
+              alias: liveModeInstrumentConfig.alias,
               instrumentMap: (() => {
                 const configuredDevices = (devices.length > 0 ? devices : [{ ...config, id: 'default', enabled: true }]).map((device) => ({
                   alias: device.alias,
@@ -9930,6 +10001,8 @@ Keep under 120 words. No headings. Bullets only. Stay on this command. Do not de
             }
             liveModeContent={
               <LiveModePanel
+                viewMode={liveModeViewMode}
+                onChangeViewMode={setLiveModeViewMode}
                 capture={liveModeCapture}
                 isCapturing={liveModeCapturing}
                 error={liveModeError}
@@ -9946,23 +10019,43 @@ Keep under 120 words. No headings. Bullets only. Stay on this command. Do not de
                 onChangeRefreshInterval={(seconds) => {
                   setLiveModeRefreshInterval(seconds);
                 }}
-                onToggleLiveTokenEditor={() => {
-                  window.dispatchEvent(new CustomEvent('tekautomate:toggle-live-token-editor'));
-                }}
-                vncAvailable={liveModeVncAvailable}
-                vncChecking={liveModeVncChecking}
+            vncAvailable={liveModeVncAvailable}
                 vncActive={Boolean(liveModeVncSession)}
                 vncConnecting={liveModeVncConnecting}
                 vncError={liveModeVncError}
                 vncSessionInfo={liveModeVncSession}
-                onCheckVnc={() => {
-                  void probeLiveModeVncAvailability();
+                onToggleVnc={() => {
+                  void toggleLiveModeVnc();
+                }}
+              />
+            }
+            liveModeToolbar={
+              <LiveModeToolbar
+                viewMode={liveModeViewMode}
+                onChangeViewMode={setLiveModeViewMode}
+                isCapturing={liveModeCapturing}
+                autoRefresh={liveModeAutoRefresh}
+                refreshInterval={liveModeRefreshInterval}
+                vncAvailable={liveModeVncAvailable}
+                vncActive={Boolean(liveModeVncSession)}
+                vncConnecting={liveModeVncConnecting}
+                vncSessionInfo={liveModeVncSession}
+                onRefresh={() => {
+                  void captureLiveScopeScreenshot('manual');
+                }}
+                onToggleAutoRefresh={() => {
+                  liveModeConsecutiveFailures.current = 0;
+                  setLiveModeAutoRefresh((prev) => !prev);
+                }}
+                onChangeRefreshInterval={(seconds) => {
+                  setLiveModeRefreshInterval(seconds);
                 }}
                 onToggleVnc={() => {
                   void toggleLiveModeVnc();
                 }}
               />
             }
+            liveVncActive={Boolean(liveModeVncSession)}
           />
         </div>
       )}
@@ -14097,7 +14190,7 @@ scpi.query('*OPC?')`;
                                 protocol_version: 1,
                                 action: 'send_scpi',
                                 timeout_sec: 10,
-                                scope_visa: getVisaResourceString(activeInstrumentConfig),
+                                scope_visa: getLiveInstrumentVisaResourceString(activeInstrumentConfig),
                                 liveMode: true,
                                 commands: [isQuery ? cmd : `${cmd};${cmd}?`],
                                 timeout_ms: 5000,
@@ -15193,7 +15286,11 @@ scpi.query('*OPC?')`;
                   <button
                     type="button"
                     className="w-full px-4 py-2.5 text-sm font-medium text-red-600 dark:text-red-400 border border-red-300 dark:border-red-700 rounded-lg hover:bg-red-50 dark:hover:bg-red-900/20"
-                    onClick={() => { setExecutorEndpoint(null); setShowExecutorModal(false); }}
+                    onClick={async () => {
+                      await stopLiveModeVncSession();
+                      setExecutorEndpoint(null);
+                      setShowExecutorModal(false);
+                    }}
                   >
                     Disconnect
                   </button>

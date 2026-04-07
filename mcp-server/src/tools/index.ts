@@ -413,7 +413,8 @@ export function getToolDefinitions() {
       name: 'get_instrument_info',
       description:
         'Return the latest TekAutomate instrument connection context mirrored from the browser. ' +
-        'Use when connected instrument details, backend, model family, live mode, executor context, or VISA resource matter.',
+        'Use when connected instrument details, backend, model family, executor context, selected live target, or VISA resource matter. ' +
+        'Treat this as the authoritative live context, then execute live tools directly instead of asking the user to restate executorUrl, visaResource, backend, or liveMode.',
       parameters: {
         type: 'object',
         properties: {},
@@ -425,7 +426,7 @@ export function getToolDefinitions() {
       name: 'get_run_log',
       description:
         'Return the latest TekAutomate execution log tail mirrored from the browser. ' +
-        'Use for failed runs, timeout debugging, screenshot-transfer issues, auth failures, and runtime diagnosis.',
+        'Use for failed runs, timeout debugging, screenshot-transfer issues, and runtime diagnosis.',
       parameters: {
         type: 'object',
         properties: {},
@@ -792,7 +793,7 @@ export function getToolDefinitions() {
     },
     {
       name: 'get_instrument_state',
-      description: 'Probe instrument identity/state via code_executor. Requires liveMode=true. Use outputMode="verbose" for full Python stdout/stderr/transcript. To target a different instrument, pass its VISA resource string as visaResource (e.g. "TCPIP::192.168.1.100::INSTR").',
+      description: 'Probe instrument identity/state via the local executor. In TekAutomate this is usually auto-targeted from the active live instrument. When multiple instruments are connected, call get_visa_resources first and pass visaResource explicitly (for example "TCPIP::192.168.1.100::INSTR"). Use outputMode="verbose" for full Python stdout/stderr/transcript. Prefer get_instrument_info for session context and use this when you want fresh instrument queries.',
       parameters: {
         type: 'object',
         properties: {
@@ -808,7 +809,7 @@ export function getToolDefinitions() {
     },
     {
       name: 'probe_command',
-      description: 'Probe a single SCPI command on any VISA instrument via code_executor. Requires liveMode=true. Use outputMode="verbose" to return full runtime output instead of only the query result. To target a different instrument, pass its VISA resource string as visaResource (e.g. "TCPIP::192.168.1.100::INSTR").',
+      description: 'Probe a single SCPI command on the selected VISA instrument via the local executor. In TekAutomate this usually uses the active live instrument automatically. When multiple instruments are connected, call get_visa_resources first and pass visaResource explicitly. Use outputMode="verbose" to return full runtime output instead of only the query result. If live context already exists, execute the probe instead of narrating the routing fields back to the user.',
       parameters: {
         type: 'object',
         properties: {
@@ -825,7 +826,7 @@ export function getToolDefinitions() {
     },
     {
       name: 'send_scpi',
-      description: 'Send one or more SCPI commands to any VISA instrument via code_executor. Requires liveMode=true. Queries return responses; writes return OK or error status. To target a different instrument than the default, pass its VISA resource string as visaResource (e.g. "TCPIP::192.168.1.100::INSTR"). Check the instruments list in the workspace context for available VISA resources.',
+      description: 'Send one or more SCPI commands to the selected VISA instrument via the local executor. Queries return responses; writes return OK or error status. In TekAutomate this usually uses the active live instrument automatically. When multiple instruments are connected, call get_visa_resources first and pass visaResource explicitly. If get_instrument_info already provided executorUrl, visaResource, backend, and liveMode, use them directly and execute without restating them to the user.',
       parameters: {
         type: 'object',
         properties: {
@@ -843,7 +844,7 @@ export function getToolDefinitions() {
     },
     {
       name: 'capture_screenshot',
-      description: 'Capture a fresh scope screenshot. The image always updates the user\'s UI. Pass analyze:true ONLY when you need to see and analyze the image yourself (e.g. diagnosing errors, reading measurements). Default: capture only (no image returned to you, saves tokens).',
+      description: 'Capture a fresh scope screenshot from the selected live instrument. The image always updates the user interface. Pass analyze:true only when you need the image returned to the model for analysis, such as diagnosing errors or reading measurements. Default behavior is capture-only.',
       parameters: {
         type: 'object',
         properties: {
@@ -863,7 +864,7 @@ export function getToolDefinitions() {
     },
     {
       name: 'get_visa_resources',
-      description: 'List all available VISA resources (instruments) via code_executor. Requires liveMode=true. Use this to discover which instruments are connected and their VISA resource strings. Use outputMode="verbose" for full runtime output.',
+      description: 'List available VISA resources from the active TekAutomate live session. Use this first when more than one instrument may be connected, then pass the chosen visaResource into send_scpi, probe_command, capture_screenshot, or other live tools. Prefer this over guessing instrument selection.',
       parameters: {
         type: 'object',
         properties: {
@@ -879,7 +880,7 @@ export function getToolDefinitions() {
     },
     {
       name: 'get_environment',
-      description: 'Inspect runtime environment via code_executor. Requires liveMode=true. Use outputMode="verbose" for full runtime output.',
+      description: 'Inspect the local executor runtime environment. Use when pyvisa, tm_devices, Python version, or backend/runtime setup matters. Use outputMode="verbose" for full runtime output.',
       parameters: {
         type: 'object',
         properties: {
@@ -960,6 +961,7 @@ const MCP_EXPOSED_TOOLS = new Set([
   'retrieve_rag_chunks',     // { corpus: "errors", query: "OPC Query Return Type" }
   'get_template_examples',   // { query: "jitter measurement" }
   // Live instrument tools
+  'get_visa_resources',
   'send_scpi',
   'capture_screenshot',
   'discover_scpi',

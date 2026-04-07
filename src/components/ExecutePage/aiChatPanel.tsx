@@ -1,11 +1,10 @@
-import React, { useState, useEffect, useRef, Suspense, useCallback } from 'react';
+import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { Bot, KeyRound, Loader2, Paperclip, Send, Settings, Terminal, X } from 'lucide-react';
 import { normalizeAiActions, parseAiActionResponse, type AiAction } from '../../utils/aiActions';
 import type { ExecutionAuditReport } from '../../utils/executionAudit';
 import type { StepPreview } from './StepsListPreview';
 
 import { useAiChat } from './useAiChat';
-import type { TekMode } from './aiChatReducer';
 import {
   clearStoredMcpHost,
   getStoredMcpHost,
@@ -285,7 +284,7 @@ export function AiChatPanel({
       return summary || `Applied ${result.applied} action(s).`;
     }
     return 'No flow changes were applied. The proposal already matches the current flow.';
-  }, [flowContext?.backend, flowContext?.deviceDriver, flowContext?.modelFamily, flowContext?.selectedStep?.id, onApplyAiActions, steps]);
+  }, [onApplyAiActions]);
 
   const handleChatKitActionsDetected = useCallback(async (actions: AiAction[], summary?: string) => {
     if (!actions.length) return;
@@ -410,7 +409,7 @@ export function AiChatPanel({
     if (resolved && resolved !== mcpHostInput) {
       setMcpHostInput(resolved);
     }
-  }, []);
+  }, [mcpHostInput]);
 
   const normalizeMcpHost = (value: string): string => {
     const trimmed = String(value || '').trim();
@@ -430,13 +429,6 @@ export function AiChatPanel({
     setStoredMcpHost(normalized);
     setMcpHostInput(normalized);
     setMcpHostStatus(`Saved MCP URL: ${normalized}`);
-  };
-
-  const clearMcpHost = () => {
-    clearStoredMcpHost();
-    const fallback = resolveMcpHost();
-    setMcpHostInput(fallback);
-    setMcpHostStatus('Cleared custom MCP URL.');
   };
 
   const testMcpHostConnection = async () => {
@@ -522,12 +514,6 @@ export function AiChatPanel({
     && openAiChatSurface === 'chatkit'
     && (state.tekMode === 'ai' || state.tekMode === 'live')
     && activeChatKitWorkflowId.length > 0;
-
-  const interactionSummary = state.tekMode === 'mcp'
-    ? 'Search commands, build flows, validate SCPI. No AI calls.'
-    : state.tekMode === 'live'
-      ? 'AI acts directly on your scope via tools.'
-      : 'Chat about measurements and debugging. Say "build it" when ready.';
 
   const cleanAssistantDisplayText = (text: string): string => {
     return String(text || '')
