@@ -7736,13 +7736,15 @@ async function runOpenAiToolLoop(
                 continue;
               }
               const textSummary = buildImageToolResultSummary(result);
-              const resolvedTransport = analysisImageUrl ? 'url' : analysisFileId ? 'file_id' : 'base64';
+              const resolvedTransport = analysisTransport === 'openai_image' ? 'base64' : analysisImageUrl ? 'url' : analysisFileId ? 'file_id' : 'base64';
               liveMessages.push({ role: 'tool', tool_call_id: toolId, content: `${textSummary} Vision transport: ${resolvedTransport}.` });
               liveMessages.push({
                 role: 'user',
                 content: [
                   { type: 'text', text: 'Here is the screenshot you just captured. Describe what you see on the scope display.' },
-                  ...(analysisImageUrl
+                  ...(analysisTransport === 'openai_image' && analysisImageData
+                    ? [{ type: 'image_url', image_url: { url: `data:${analysisImageData.mimeType};base64,${analysisImageData.base64}`, detail: 'auto' } }]
+                    : analysisImageUrl
                     ? [{ type: 'image_url', image_url: { url: analysisImageUrl, detail: 'auto' } }]
                     : analysisFileId
                     ? [{ type: 'image_url', image_url: { file_id: analysisFileId, detail: 'auto' } }]
