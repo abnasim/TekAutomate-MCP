@@ -202,34 +202,12 @@ export function resolveMcpHostCandidates(): string[] {
   const stored = resolveStoredMcpHost();
   if (stored) return [stored.replace(/\/+$/, '')];
 
-  const envHost = String(process.env.REACT_APP_MCP_HOST || '').trim();
-  if (envHost) return [envHost.replace(/\/+$/, '')];
-
-  if (typeof window !== 'undefined') {
-    const protocol = String(window.location?.protocol || '').toLowerCase();
-    const hostname = String(window.location?.hostname || '').toLowerCase();
-    const preferLocal =
-      protocol === 'file:' ||
-      hostname.length === 0 ||
-      isLocalHostName(hostname);
-    return preferLocal
-      ? [MCP_LOCAL_DEFAULT, MCP_HOSTED_DEFAULT]
-      : [MCP_HOSTED_DEFAULT, MCP_LOCAL_DEFAULT];
-  }
-
-  return [MCP_LOCAL_DEFAULT, MCP_HOSTED_DEFAULT];
+  return [];
 }
 
 export function resolveMcpHost(): string {
-  const candidates = resolveMcpHostCandidates();
-  if (typeof window !== 'undefined') {
-    const hostname = String(window.location?.hostname || '');
-    if (isLocalHostName(hostname)) {
-      const localCandidate = candidates.find((host) => host.includes('localhost') || host.includes('127.0.0.1'));
-      return localCandidate || candidates[0] || '';
-    }
-  }
-  return candidates[0] || '';
+  const stored = resolveStoredMcpHost();
+  return stored ? stored.replace(/\/+$/, '') : '';
 }
 
 export async function buildMcpRequest(params: McpChatRequest): Promise<McpChatRequest> {
