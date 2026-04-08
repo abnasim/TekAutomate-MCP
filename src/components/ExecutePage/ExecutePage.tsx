@@ -224,7 +224,7 @@ function ExecutePageContent({
 }: ExecutePageProps) {
   const [centerTab, setCenterTab] = useState<ExecutionSource | 'proposals'>(() => loadStoredCenterTab(executionSource));
   const [rightTab, setRightTab] = useState<'code' | 'logs'>('logs');
-  const [rightPanelOpen, setRightPanelOpen] = useState(true);
+  const [rightPanelOpen, setRightPanelOpen] = useState(false);
   const [copied, setCopied] = useState(false);
   const [copiedLog, setCopiedLog] = useState(false);
   const [editorOpen, setEditorOpen] = useState(false);
