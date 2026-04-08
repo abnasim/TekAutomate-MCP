@@ -222,10 +222,11 @@ export function LiveModeToolbar({
     if (!normalized) {
       clearStoredMcpHost();
       setMcpHostStatus('Cleared MCP URL.');
-      return;
+    } else {
+      setStoredMcpHost(normalized);
+      setMcpHostStatus(`Saved`);
     }
-    setStoredMcpHost(normalized);
-    setMcpHostStatus(`Saved MCP URL: ${normalized}`);
+    setShowMcpPill(false);
   };
 
   const testMcpHost = async () => {
@@ -254,49 +255,30 @@ export function LiveModeToolbar({
 
   return (
     <div className="relative z-30 flex items-center gap-2">
-      <div className="relative flex items-center gap-1" ref={mcpPillRef}>
-        <button
-          type="button"
-          onClick={() => setShowMcpPill((v) => !v)}
-          className="inline-flex items-center justify-center rounded-full border border-slate-300 bg-white px-2 py-1 text-[11px] text-slate-600 shadow-sm hover:bg-slate-50 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100 dark:hover:bg-slate-800"
-          title="Configure MCP server"
-        >
-          <Settings size={12} />
-        </button>
-      </div>
       {showMcpPill && (
-        <div
-          className="fixed z-[9999] flex items-center gap-2 rounded-full border border-slate-200 bg-white px-3 py-1.5 shadow-lg dark:border-slate-700 dark:bg-slate-900"
-          style={{
-            top: mcpPillRef.current
-              ? mcpPillRef.current.getBoundingClientRect().top + mcpPillRef.current.getBoundingClientRect().height / 2 - 16
-              : 0,
-            left: 8,
-          }}
-        >
+        <div className="flex items-center gap-1.5" ref={mcpPillRef}>
           <input
             type="url"
             value={mcpHostInput}
             onChange={(e) => setMcpHostInput(e.target.value)}
             placeholder="MCP server URL"
-            className="w-64 rounded-md border border-slate-200 px-2 py-1 text-[11px] text-slate-700 focus:outline-none focus:border-violet-500/60 dark:border-white/10 dark:bg-slate-800 dark:text-white"
+            className="w-56 rounded-md border border-slate-200 px-2 py-1 text-[11px] text-slate-700 focus:outline-none focus:border-violet-500/60 dark:border-slate-600 dark:bg-slate-800 dark:text-white"
+            autoFocus
           />
-          <div className="flex items-center gap-1">
-            <button
-              type="button"
-              onClick={saveMcpHost}
-              className="rounded-md border border-slate-200 px-2 py-1 text-[11px] font-semibold text-slate-600 hover:bg-slate-100 dark:border-white/10 dark:text-white/80 dark:hover:bg-white/10"
-            >
-              Save
-            </button>
-            <button
-              type="button"
-              onClick={() => void testMcpHost()}
-              className="rounded-md border border-slate-200 px-2 py-1 text-[11px] font-semibold text-slate-600 hover:bg-slate-100 dark:border-white/10 dark:text-white/80 dark:hover:bg-white/10"
-            >
-              Test
-            </button>
-          </div>
+          <button
+            type="button"
+            onClick={saveMcpHost}
+            className="rounded-md border border-slate-200 px-2 py-1 text-[11px] font-semibold text-slate-600 hover:bg-slate-100 dark:border-slate-600 dark:text-slate-200 dark:hover:bg-slate-700"
+          >
+            Save
+          </button>
+          <button
+            type="button"
+            onClick={() => void testMcpHost()}
+            className="rounded-md border border-slate-200 px-2 py-1 text-[11px] font-semibold text-slate-600 hover:bg-slate-100 dark:border-slate-600 dark:text-slate-200 dark:hover:bg-slate-700"
+          >
+            Test
+          </button>
           {mcpHostStatus && (
             <span className="text-[10px] text-cyan-600 dark:text-cyan-300 whitespace-nowrap">
               {mcpHostStatus}
@@ -304,6 +286,14 @@ export function LiveModeToolbar({
           )}
         </div>
       )}
+      <button
+        type="button"
+        onClick={() => setShowMcpPill((v) => !v)}
+        className="inline-flex items-center justify-center rounded-full border border-slate-300 bg-white px-2 py-1 text-[11px] text-slate-600 shadow-sm hover:bg-slate-50 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100 dark:hover:bg-slate-800"
+        title="Configure MCP server"
+      >
+        <Settings size={12} />
+      </button>
       {instrumentOptions && instrumentOptions.length > 0 && (
         <select
           value={selectedInstrumentId || instrumentOptions[0]?.id}
