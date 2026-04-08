@@ -646,7 +646,7 @@ function ExecutePageContent({
                 </span>
               </button>
             </div>
-            <div className="relative z-40 flex items-center gap-2 py-2 overflow-x-auto overflow-y-visible flex-nowrap min-w-0 nav-tabs-scroll">
+            <div className="relative z-40 flex items-center gap-2 py-2 overflow-x-auto overflow-y-visible flex-nowrap min-w-0 nav-tabs-scroll cursor-default">
               {centerTab !== 'live' && (
                 <>
                   <button
