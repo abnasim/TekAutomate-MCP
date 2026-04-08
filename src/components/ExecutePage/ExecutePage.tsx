@@ -653,25 +653,25 @@ function ExecutePageContent({
                 </span>
               </button>
             </div>
-            <div className="relative z-40 flex items-center gap-2 py-2 overflow-x-auto overflow-y-visible flex-nowrap min-w-0 nav-tabs-scroll cursor-default">
+            <div className="relative z-40 flex items-center gap-1.5 lg:gap-2 py-2 overflow-x-auto overflow-y-visible flex-nowrap min-w-0 nav-tabs-scroll cursor-default">
               <button
                 type="button"
                 onClick={() => setAssistantPanelOpen((value) => !value)}
-                className={`inline-flex h-9 w-9 items-center justify-center rounded-lg border transition ${
+                className={`inline-flex h-7 w-7 lg:h-9 lg:w-9 items-center justify-center rounded-lg border transition flex-shrink-0 ${
                   assistantPanelOpen
                     ? 'border-blue-400/50 bg-blue-500/15 text-blue-700 dark:border-blue-500/50 dark:text-blue-300'
                     : 'border-slate-200 bg-white text-slate-600 hover:bg-slate-100 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-300 dark:hover:bg-slate-800'
                 }`}
                 title={assistantPanelOpen ? 'Hide Chat' : 'Show Chat'}
               >
-                <MessageSquare size={16} />
+                <MessageSquare size={14} />
               </button>
               {centerTab !== 'live' && (
                 <>
                   <button
                     type="button"
                     onClick={() => setAutoApplyProposals((value) => !value)}
-                    className={`inline-flex h-9 w-9 items-center justify-center rounded-lg border transition ${
+                    className={`inline-flex h-7 w-7 lg:h-9 lg:w-9 items-center justify-center rounded-lg border transition flex-shrink-0 ${
                       autoApplyProposals
                         ? 'border-cyan-400/50 bg-cyan-500/15 text-cyan-700 dark:border-cyan-500/50 dark:text-cyan-300'
                         : 'border-slate-200 bg-white text-slate-600 hover:bg-slate-100 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-300 dark:hover:bg-slate-800'
@@ -684,7 +684,7 @@ function ExecutePageContent({
                     type="button"
                     onClick={() => { void handleApplyProposal(); }}
                     disabled={!workflowProposal?.actions?.length || applyingProposal || !onApplyAiActions}
-                    className="inline-flex items-center gap-2 rounded-lg border border-emerald-400/40 bg-emerald-500/15 px-3 py-2 text-sm font-semibold text-emerald-700 hover:bg-emerald-500/20 disabled:cursor-not-allowed disabled:opacity-40 dark:border-emerald-500/40 dark:text-emerald-300"
+                    className="inline-flex items-center gap-1.5 rounded-lg border border-emerald-400/40 bg-emerald-500/15 px-2 py-1 lg:px-3 lg:py-2 text-xs lg:text-sm font-semibold text-emerald-700 hover:bg-emerald-500/20 disabled:cursor-not-allowed disabled:opacity-40 dark:border-emerald-500/40 dark:text-emerald-300 flex-shrink-0"
                     title="Apply the latest workflow proposal"
                   >
                     <Sparkles size={16} />
@@ -694,7 +694,7 @@ function ExecutePageContent({
                     type="button"
                     onClick={clearProposalHistory}
                     disabled={!proposalHistory.length}
-                    className="inline-flex h-9 w-9 items-center justify-center rounded-lg border border-slate-200 bg-white text-slate-600 hover:bg-slate-100 disabled:cursor-not-allowed disabled:opacity-40 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-200 dark:hover:bg-slate-800"
+                    className="inline-flex h-7 w-7 lg:h-9 lg:w-9 items-center justify-center rounded-lg border border-slate-200 bg-white text-slate-600 hover:bg-slate-100 disabled:cursor-not-allowed disabled:opacity-40 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-200 dark:hover:bg-slate-800 flex-shrink-0"
                     title="Clear proposal history"
                   >
                     <Trash2 size={16} />
@@ -703,7 +703,7 @@ function ExecutePageContent({
                     type="button"
                     onClick={onUndo}
                     disabled={!canUndo}
-                    className="inline-flex h-9 w-9 items-center justify-center rounded-lg border border-slate-200 bg-white text-slate-600 hover:bg-slate-100 disabled:cursor-not-allowed disabled:opacity-40 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-200 dark:hover:bg-slate-800"
+                    className="inline-flex h-7 w-7 lg:h-9 lg:w-9 items-center justify-center rounded-lg border border-slate-200 bg-white text-slate-600 hover:bg-slate-100 disabled:cursor-not-allowed disabled:opacity-40 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-200 dark:hover:bg-slate-800 flex-shrink-0"
                     title="Undo"
                   >
                     <RotateCcw size={16} />
@@ -712,7 +712,7 @@ function ExecutePageContent({
                     type="button"
                     onClick={onRedo}
                     disabled={!canRedo}
-                    className="inline-flex h-9 w-9 items-center justify-center rounded-lg border border-slate-200 bg-white text-slate-600 hover:bg-slate-100 disabled:cursor-not-allowed disabled:opacity-40 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-200 dark:hover:bg-slate-800"
+                    className="inline-flex h-7 w-7 lg:h-9 lg:w-9 items-center justify-center rounded-lg border border-slate-200 bg-white text-slate-600 hover:bg-slate-100 disabled:cursor-not-allowed disabled:opacity-40 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-200 dark:hover:bg-slate-800 flex-shrink-0"
                     title="Redo"
                   >
                     <RotateCw size={16} />
@@ -722,7 +722,7 @@ function ExecutePageContent({
                       type="button"
                       onClick={() => onRunSingleStep(flowContext.selectedStep!)}
                       disabled={runStatus === 'running'}
-                      className="inline-flex h-9 items-center gap-1.5 rounded-lg border border-blue-300 px-2.5 text-xs font-medium text-blue-600 hover:bg-blue-50 dark:border-blue-600 dark:text-blue-400 dark:hover:bg-blue-900/20 disabled:cursor-not-allowed disabled:opacity-40"
+                      className="inline-flex h-7 lg:h-9 items-center gap-1 rounded-lg border border-blue-300 px-2 text-[11px] lg:text-xs font-medium text-blue-600 hover:bg-blue-50 dark:border-blue-600 dark:text-blue-400 dark:hover:bg-blue-900/20 disabled:cursor-not-allowed disabled:opacity-40 flex-shrink-0"
                       title={`Run step: ${flowContext.selectedStep.label}`}
                     >
                       <Play size={14} />
@@ -736,7 +736,7 @@ function ExecutePageContent({
                           type="button"
                           onClick={nextStep}
                           disabled={stepRunning || stepIndex >= flatSteps.length}
-                          className="inline-flex h-9 w-9 items-center justify-center rounded-lg bg-amber-500 text-white hover:bg-amber-600 disabled:cursor-not-allowed disabled:opacity-40"
+                          className="inline-flex h-7 w-7 lg:h-9 lg:w-9 items-center justify-center rounded-lg bg-amber-500 text-white hover:bg-amber-600 disabled:cursor-not-allowed disabled:opacity-40 flex-shrink-0"
                           title={stepIndex >= flatSteps.length ? 'Done' : `Step ${stepIndex + 1}/${flatSteps.length}`}
                         >
                           <SkipForward size={16} />
@@ -744,7 +744,7 @@ function ExecutePageContent({
                         <button
                           type="button"
                           onClick={stopStepping}
-                          className="inline-flex h-9 w-9 items-center justify-center rounded-lg border border-red-300 text-red-600 hover:bg-red-50 dark:border-red-700 dark:text-red-400 dark:hover:bg-red-900/20"
+                          className="inline-flex h-7 w-7 lg:h-9 lg:w-9 items-center justify-center rounded-lg border border-red-300 text-red-600 hover:bg-red-50 dark:border-red-700 dark:text-red-400 dark:hover:bg-red-900/20 flex-shrink-0"
                           title="Stop stepping"
                         >
                           <Square size={14} />
@@ -755,7 +755,7 @@ function ExecutePageContent({
                         type="button"
                         onClick={startStepping}
                         disabled={runStatus === 'running' || flatSteps.length === 0}
-                        className="inline-flex h-9 w-9 items-center justify-center rounded-lg border border-amber-300 text-amber-600 hover:bg-amber-50 dark:border-amber-600 dark:text-amber-400 dark:hover:bg-amber-900/20 disabled:cursor-not-allowed disabled:opacity-40"
+                        className="inline-flex h-7 w-7 lg:h-9 lg:w-9 items-center justify-center rounded-lg border border-amber-300 text-amber-600 hover:bg-amber-50 dark:border-amber-600 dark:text-amber-400 dark:hover:bg-amber-900/20 disabled:cursor-not-allowed disabled:opacity-40 flex-shrink-0"
                         title="Step through workflow"
                       >
                         <SkipForward size={16} />
@@ -766,7 +766,7 @@ function ExecutePageContent({
                     type="button"
                     onClick={onRun}
                     disabled={runStatus === 'running' || runStatus === 'connecting' || !executorEndpoint}
-                    className={`inline-flex items-center gap-2 rounded-lg px-3 py-2 text-sm font-semibold text-white disabled:cursor-not-allowed disabled:opacity-40 ${
+                    className={`inline-flex items-center gap-1.5 rounded-lg px-2 py-1 lg:px-3 lg:py-2 text-xs lg:text-sm font-semibold text-white disabled:cursor-not-allowed disabled:opacity-40 flex-shrink-0 ${
                       executorEndpoint ? 'bg-green-600 hover:bg-green-700' : 'bg-gray-500'
                     }`}
                     title={executorEndpoint ? 'Run all on scope' : 'Connect to executor first'}
