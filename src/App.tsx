@@ -9952,6 +9952,7 @@ Keep under 120 words. No headings. Bullets only. Stay on this command. Do not de
               })(),
             }}
             onRun={() => runOnScope(true)}
+            onRunSingleStep={(step) => runSingleStepProbe(step as any)}
             onUndo={undo}
             onRedo={redo}
             canUndo={past.length > 0}

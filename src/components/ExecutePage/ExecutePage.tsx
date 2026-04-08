@@ -45,6 +45,7 @@ export interface ExecutePageProps {
     }>;
   };
   onRun: () => void;
+  onRunSingleStep?: (step: StepPreview) => void;
   onUndo?: () => void;
   onRedo?: () => void;
   canUndo?: boolean;
@@ -206,6 +207,7 @@ function ExecutePageContent({
   chatContextAttachments,
   flowContext,
   onRun,
+  onRunSingleStep,
   onUndo,
   onRedo,
   canUndo = false,
@@ -399,13 +401,18 @@ function ExecutePageContent({
       },
       workflow: {
         stepCount: steps.length,
-        steps: steps.map((step, index) => ({
-          id: step.id,
-          index: index + 1,
-          type: step.type,
-          label: step.label,
-          command: typeof step.params?.command === 'string' ? step.params.command : undefined,
-        })),
+        steps: (function serializeSteps(items: typeof steps): Array<Record<string, unknown>> {
+          return items.map((step, index) => ({
+            id: step.id,
+            index: index + 1,
+            type: step.type,
+            label: step.label,
+            command: typeof step.params?.command === 'string' ? step.params.command : undefined,
+            ...(Array.isArray((step as any).children) && (step as any).children.length > 0
+              ? { children: serializeSteps((step as any).children) }
+              : {}),
+          }));
+        })(steps),
         selectedStep: typeof currentFlowContext.selectedStep?.id === 'string' ? currentFlowContext.selectedStep.id : null,
         validationErrors,
         backend: currentFlowContext.backend || securedInstrumentEndpoint?.backend || 'pyvisa',
@@ -647,6 +654,18 @@ function ExecutePageContent({
               </button>
             </div>
             <div className="relative z-40 flex items-center gap-2 py-2 overflow-x-auto overflow-y-visible flex-nowrap min-w-0 nav-tabs-scroll cursor-default">
+              <button
+                type="button"
+                onClick={() => setAssistantPanelOpen((value) => !value)}
+                className={`inline-flex h-9 w-9 items-center justify-center rounded-lg border transition ${
+                  assistantPanelOpen
+                    ? 'border-blue-400/50 bg-blue-500/15 text-blue-700 dark:border-blue-500/50 dark:text-blue-300'
+                    : 'border-slate-200 bg-white text-slate-600 hover:bg-slate-100 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-300 dark:hover:bg-slate-800'
+                }`}
+                title={assistantPanelOpen ? 'Hide Chat' : 'Show Chat'}
+              >
+                <MessageSquare size={16} />
+              </button>
               {centerTab !== 'live' && (
                 <>
                   <button
@@ -660,6 +679,16 @@ function ExecutePageContent({
                     title={autoApplyProposals ? 'Auto-apply on (click to disable)' : 'Auto-apply off (click to enable)'}
                   >
                     <Sparkles size={16} />
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => { void handleApplyProposal(); }}
+                    disabled={!workflowProposal?.actions?.length || applyingProposal || !onApplyAiActions}
+                    className="inline-flex items-center gap-2 rounded-lg border border-emerald-400/40 bg-emerald-500/15 px-3 py-2 text-sm font-semibold text-emerald-700 hover:bg-emerald-500/20 disabled:cursor-not-allowed disabled:opacity-40 dark:border-emerald-500/40 dark:text-emerald-300"
+                    title="Apply the latest workflow proposal"
+                  >
+                    <Sparkles size={16} />
+                    {applyingProposal ? 'Applying...' : 'Apply'}
                   </button>
                   <button
                     type="button"
@@ -688,16 +717,18 @@ function ExecutePageContent({
                   >
                     <RotateCw size={16} />
                   </button>
-                  <button
-                    type="button"
-                    onClick={() => { void handleApplyProposal(); }}
-                    disabled={!workflowProposal?.actions?.length || applyingProposal || !onApplyAiActions}
-                    className="inline-flex items-center gap-2 rounded-lg border border-emerald-400/40 bg-emerald-500/15 px-3 py-2 text-sm font-semibold text-emerald-700 hover:bg-emerald-500/20 disabled:cursor-not-allowed disabled:opacity-40 dark:border-emerald-500/40 dark:text-emerald-300"
-                    title="Apply the latest workflow proposal"
-                  >
-                    <Sparkles size={16} />
-                    {applyingProposal ? 'Applying...' : 'Apply'}
-                  </button>
+                  {executorEndpoint && onRunSingleStep && flowContext?.selectedStep && (
+                    <button
+                      type="button"
+                      onClick={() => onRunSingleStep(flowContext.selectedStep!)}
+                      disabled={runStatus === 'running'}
+                      className="inline-flex h-9 items-center gap-1.5 rounded-lg border border-blue-300 px-2.5 text-xs font-medium text-blue-600 hover:bg-blue-50 dark:border-blue-600 dark:text-blue-400 dark:hover:bg-blue-900/20 disabled:cursor-not-allowed disabled:opacity-40"
+                      title={`Run step: ${flowContext.selectedStep.label}`}
+                    >
+                      <Play size={14} />
+                      Run Step
+                    </button>
+                  )}
                   {executorEndpoint && (
                     stepping ? (
                       <>
@@ -750,15 +781,6 @@ function ExecutePageContent({
                   {liveModeToolbar}
                 </>
               )}
-              <button
-                type="button"
-                onClick={() => setAssistantPanelOpen((value) => !value)}
-                className="inline-flex items-center gap-1 rounded-lg border border-slate-200 bg-white px-2 py-1.5 text-xs font-medium text-slate-700 hover:bg-slate-100 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-200 dark:hover:bg-slate-800"
-                title={assistantPanelOpen ? 'Hide Chat' : 'Show Chat'}
-              >
-                <MessageSquare size={14} className="shrink-0" />
-                {assistantPanelOpen ? <ChevronLeft size={12} className="shrink-0" /> : <ChevronRight size={12} className="shrink-0" />}
-              </button>
             </div>
           </div>
           <div className="flex-1 min-h-0 overflow-hidden">
