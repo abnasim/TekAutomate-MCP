@@ -76,7 +76,7 @@ export const EulaDialog: React.FC<EulaDialogProps> = ({ isOpen, onAccept }) => {
             <div className="flex items-center gap-2 mb-3">
               <ShieldAlert className="w-5 h-5 text-amber-600 dark:text-amber-400 flex-shrink-0" />
               <h2 className="text-sm font-bold text-amber-800 dark:text-amber-300 uppercase tracking-wide">
-                AEware — Evaluation Software Notice
+                Unofficial Prototype — Evaluation Software Notice
               </h2>
             </div>
             <p className="text-sm font-semibold text-amber-900 dark:text-amber-200 mb-3">
@@ -85,7 +85,7 @@ export const EulaDialog: React.FC<EulaDialogProps> = ({ isOpen, onAccept }) => {
             <ul className="space-y-2 text-sm text-amber-900 dark:text-amber-200">
               <li className="flex items-start gap-2">
                 <span className="text-amber-500 mt-0.5">&#8226;</span>
-                TekAutomate is an AEware tool created for <strong>evaluation and testing purposes only</strong>
+                TekAutomate is an unofficial prototype created for <strong>evaluation and testing purposes only</strong>
               </li>
               <li className="flex items-start gap-2">
                 <span className="text-amber-500 mt-0.5">&#8226;</span>
