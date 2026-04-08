@@ -5745,7 +5745,7 @@ function isHostedStructuredBuildRequest(req: McpChatRequest): boolean {
 }
 
 function resolveHostedVectorStoreId(): string {
-  return String(process.env.COMMAND_VECTOR_STORE_ID || '').trim();
+  return '';
 }
 
 function buildHostedToolDefinitions(toolNames?: string[]): Array<{ name: string; description: string }> {

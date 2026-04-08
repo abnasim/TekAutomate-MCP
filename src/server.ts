@@ -1110,10 +1110,9 @@ function filterTools(q) {
           input?: unknown[];
           systemPrompt?: string;
         };
-        const serverKey = process.env.OPENAI_SERVER_API_KEY;
-        const vectorStoreId = process.env.COMMAND_VECTOR_STORE_ID;
-        if (!serverKey) {
-          sendJson(res, 500, { ok: false, error: 'OPENAI_SERVER_API_KEY not configured on server' });
+        const apiKey = String(body.apiKey || '').trim();
+        if (!apiKey) {
+          sendJson(res, 400, { ok: false, error: 'Missing apiKey' });
           return;
         }
         if (!body?.input) {
@@ -1125,16 +1124,13 @@ function filterTools(q) {
           input: body.input,
           stream: true,
         };
-        if (vectorStoreId) {
-          requestBody.tools = [{ type: 'file_search', vector_store_ids: [vectorStoreId] }];
-        }
         // Use server key — owns the vector store. User's apiKey is for authentication
         // to this service only; OpenAI is billed to the server account.
         const openaiRes = await fetch('https://api.openai.com/v1/responses', {
           method: 'POST',
           headers: {
             'Content-Type': 'application/json',
-            Authorization: `Bearer ${serverKey}`,
+            Authorization: `Bearer ${apiKey}`,
           },
           body: JSON.stringify(requestBody),
         });
