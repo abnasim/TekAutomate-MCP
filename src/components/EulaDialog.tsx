@@ -76,13 +76,13 @@ export const EulaDialog: React.FC<EulaDialogProps> = ({ isOpen, onAccept }) => {
             <div className="flex items-center gap-2 mb-3">
               <ShieldAlert className="w-5 h-5 text-amber-600 dark:text-amber-400 flex-shrink-0" />
               <h2 className="text-sm font-bold text-amber-800 dark:text-amber-300 uppercase tracking-wide">
-                Beta Software Notice
+                AEware — Evaluation Software Notice
               </h2>
             </div>
             <ul className="space-y-2 text-sm text-amber-900 dark:text-amber-200">
               <li className="flex items-start gap-2">
                 <span className="text-amber-500 mt-0.5">&#8226;</span>
-                This software is provided for <strong>evaluation and testing purposes</strong>
+                This is <strong>not an official Tektronix product</strong>. It is an AEware tool shared for <strong>evaluation and testing purposes only</strong>
               </li>
               <li className="flex items-start gap-2">
                 <span className="text-amber-500 mt-0.5">&#8226;</span>
