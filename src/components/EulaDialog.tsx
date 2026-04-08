@@ -79,10 +79,17 @@ export const EulaDialog: React.FC<EulaDialogProps> = ({ isOpen, onAccept }) => {
                 AEware — Evaluation Software Notice
               </h2>
             </div>
+            <p className="text-sm font-semibold text-amber-900 dark:text-amber-200 mb-3">
+              This is an <strong>unofficial tool</strong> and is <strong>not an official Tektronix product</strong>. It should not be confused with any official Tektronix software or service.
+            </p>
             <ul className="space-y-2 text-sm text-amber-900 dark:text-amber-200">
               <li className="flex items-start gap-2">
                 <span className="text-amber-500 mt-0.5">&#8226;</span>
-                This is <strong>not an official Tektronix product</strong>. It is an AEware tool shared for <strong>evaluation and testing purposes only</strong>
+                TekAutomate is an AEware tool created for <strong>evaluation and testing purposes only</strong>
+              </li>
+              <li className="flex items-start gap-2">
+                <span className="text-amber-500 mt-0.5">&#8226;</span>
+                It is not endorsed, supported, or maintained by Tektronix as an official product
               </li>
               <li className="flex items-start gap-2">
                 <span className="text-amber-500 mt-0.5">&#8226;</span>
