@@ -9342,12 +9342,12 @@ Keep under 120 words. No headings. Bullets only. Stay on this command. Do not de
                                             </div>
                                             <div>
                                               <label className="block text-xs font-medium mb-0.5 text-gray-900 dark:text-zinc-100">Port</label>
-                                              <input 
-                                                type="number" 
-                                                value={device.port} 
-                                                onChange={(e) => updateDeviceField('port', parseInt(e.target.value || '4000', 10))} 
+                                              <input
+                                                type="number"
+                                                value={device.port}
+                                                onChange={(e) => updateDeviceField('port', parseInt(e.target.value || '4000', 10))}
                                                 disabled={device.connectionType === 'tcpip'}
-                                                className="w-full px-1 py-0.5 text-xs border border-gray-300 dark:border-zinc-600 rounded bg-white dark:bg-zinc-700 text-gray-900 dark:text-zinc-100 placeholder-gray-500 dark:placeholder-zinc-400 disabled:bg-gray-100 dark:disabled:bg-zinc-800" 
+                                                className="w-full px-1 py-0.5 text-xs border border-gray-300 dark:border-zinc-600 rounded bg-white dark:bg-zinc-700 text-gray-900 dark:text-zinc-100 placeholder-gray-500 dark:placeholder-zinc-400 disabled:bg-gray-100 disabled:text-gray-400 disabled:cursor-not-allowed dark:disabled:bg-zinc-900 dark:disabled:text-zinc-500 dark:disabled:border-zinc-700"
                                               />
                                             </div>
                                           </>

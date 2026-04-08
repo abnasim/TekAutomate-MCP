@@ -263,10 +263,16 @@ export function LiveModeToolbar({
         >
           <Settings size={12} />
         </button>
+      </div>
+      {showMcpPill && (
         <div
-          className={`absolute right-full top-1/2 -translate-y-1/2 mr-2 z-50 flex items-center gap-2 rounded-full border border-slate-200 bg-white px-3 py-1.5 shadow-lg transition-all duration-200 dark:border-slate-700 dark:bg-slate-900 ${
-            showMcpPill ? 'opacity-100 translate-x-0 pointer-events-auto' : 'opacity-0 translate-x-3 pointer-events-none'
-          }`}
+          className="fixed z-[9999] flex items-center gap-2 rounded-full border border-slate-200 bg-white px-3 py-1.5 shadow-lg dark:border-slate-700 dark:bg-slate-900"
+          style={{
+            top: mcpPillRef.current
+              ? mcpPillRef.current.getBoundingClientRect().top + mcpPillRef.current.getBoundingClientRect().height / 2 - 16
+              : 0,
+            left: 8,
+          }}
         >
           <input
             type="url"
@@ -297,7 +303,7 @@ export function LiveModeToolbar({
             </span>
           )}
         </div>
-      </div>
+      )}
       {instrumentOptions && instrumentOptions.length > 0 && (
         <select
           value={selectedInstrumentId || instrumentOptions[0]?.id}
