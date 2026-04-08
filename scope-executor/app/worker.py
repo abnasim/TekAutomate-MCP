@@ -157,15 +157,29 @@ def _resource_manager_instance():
     return _resource_manager
 
 
-def _reset_resource_manager():
+def _reset_resource_manager(only_visa: str | None = None):
+    """Reset the VISA resource manager.
+
+    If only_visa is given, only close that one session and rebuild the RM.
+    Otherwise close ALL sessions and rebuild (full reset).
+    """
     global _resource_manager
     with _session_lock:
-        for visa, session in list(_scope_sessions.items()):
-            try:
-                session.close()
-            except Exception:
-                pass
-            _scope_sessions.pop(visa, None)
+        if only_visa:
+            # Only close the failing session — leave others intact
+            session = _scope_sessions.pop(only_visa, None)
+            if session is not None:
+                try:
+                    session.close()
+                except Exception:
+                    pass
+        else:
+            for visa, session in list(_scope_sessions.items()):
+                try:
+                    session.close()
+                except Exception:
+                    pass
+                _scope_sessions.pop(visa, None)
         if _resource_manager is not None:
             try:
                 _resource_manager.close()
@@ -384,8 +398,9 @@ def _get_scope_session(visa: str):
             session = rm.open_resource(visa)
         except Exception:
             # The cached ResourceManager itself can go stale after another job
-            # closes underlying VISA state. Rebuild it once and retry.
-            _reset_resource_manager()
+            # closes underlying VISA state. Rebuild it — but only close this
+            # instrument's session, not all of them.
+            _reset_resource_manager(only_visa=visa)
             rm = _resource_manager_instance()
             session = rm.open_resource(visa)
         try:
@@ -413,7 +428,7 @@ def _open_fresh_scope_session(visa: str):
     try:
         session = rm.open_resource(visa)
     except Exception:
-        _reset_resource_manager()
+        _reset_resource_manager(only_visa=visa)
         rm = _resource_manager_instance()
         session = rm.open_resource(visa)
     try:
@@ -489,7 +504,7 @@ def _handle_capture_screenshot(job: dict) -> dict:
                             scpi = _get_scope_session(visa)
                         except Exception:
                             _reset_scope_session(visa)
-                            _reset_resource_manager()
+                            _reset_resource_manager(only_visa=visa)
                             scpi = _get_scope_session(visa)
                         old_timeout = getattr(scpi, "timeout", capture_timeout_ms)
                         old_write_term = getattr(scpi, "write_termination", None)
@@ -549,7 +564,7 @@ def _handle_capture_screenshot(job: dict) -> dict:
                         _reset_socket_session(visa)
                     else:
                         _reset_scope_session(visa)
-                        _reset_resource_manager()
+                        _reset_resource_manager(only_visa=visa)
                     if attempt >= _CAPTURE_RETRY_COUNT - 1:
                         raise
             if last_error and 'data' not in locals():
@@ -597,16 +612,23 @@ def _handle_device_clear(job: dict) -> dict:
         except Exception:
             _reset_socket_session(visa)
             session = _get_socket_session(visa)
-        session.clear()
+        try:
+            session.clear()
+        except Exception:
+            # clear() can crash the VISA C library on error-state sessions;
+            # reset the session instead of letting the worker die
+            _reset_socket_session(visa)
         transport = "socket"
     else:
         try:
             session = _get_scope_session(visa)
         except Exception:
             _reset_scope_session(visa)
-            _reset_resource_manager()
             session = _get_scope_session(visa)
-        session.clear()
+        try:
+            session.clear()
+        except Exception:
+            _reset_scope_session(visa)
         transport = "visa"
 
     return {
@@ -681,7 +703,7 @@ def _handle_send_scpi(job: dict) -> dict:
                                 scpi.close()
                             except Exception:
                                 pass
-                            _reset_resource_manager()
+                            _reset_resource_manager(only_visa=visa)
                             scpi, close_scpi = _open_command_session(visa, command_timeout_ms, False)
                         if _requires_raw_read(cmd):
                             if use_socket:
@@ -897,12 +919,12 @@ def _run_job(job: dict):
                 "result_data": None,
             }
         )
+        # Only reset the failed instrument — don't nuke sessions for other instruments
         if visa:
             if _is_socket_resource(visa):
                 _reset_socket_session(visa)
             else:
                 _reset_scope_session(visa)
-                _reset_resource_manager()
 
 
 def main():
