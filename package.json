@@ -58,7 +58,7 @@
   "scripts": {
     "start": "craco start",
     "build": "cross-env CI=false craco build",
-    "build:railway": "cross-env CI=false PUBLIC_URL=/ NODE_ENV=production BABEL_ENV=production craco build",
+    "build:railway": "cross-env CI=false PUBLIC_URL=/ craco build",
     "start:railway": "serve -s build -l $PORT",
     "test": "craco test --watchAll=false",
     "test:report": "craco test --watchAll=false",
