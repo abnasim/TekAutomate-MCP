@@ -75,11 +75,36 @@ module.exports = {
         modifySourceMapLoader(webpackConfig.module.rules);
       }
 
-      // Remove ReactRefreshWebpackPlugin in production (prevents babel transform error)
+      // Remove ReactRefreshWebpackPlugin and react-refresh/babel in production
       if (process.env.NODE_ENV === 'production' && Array.isArray(webpackConfig.plugins)) {
         webpackConfig.plugins = webpackConfig.plugins.filter(
           (plugin) => !plugin || !plugin.constructor || plugin.constructor.name !== 'ReactRefreshWebpackPlugin'
         );
+      }
+
+      // Strip react-refresh/babel from babel-loader in production
+      if (process.env.NODE_ENV === 'production' && webpackConfig.module && webpackConfig.module.rules) {
+        const stripReactRefreshFromRules = (rules) => {
+          if (!Array.isArray(rules)) return;
+          rules.forEach((rule) => {
+            if (rule.use && Array.isArray(rule.use)) {
+              rule.use.forEach((use) => {
+                if (use && use.options && use.options.plugins) {
+                  use.options.plugins = use.options.plugins.filter(
+                    (p) => !String(typeof p === 'string' ? p : Array.isArray(p) ? p[0] : '').includes('react-refresh')
+                  );
+                }
+              });
+            }
+            if (rule.options && rule.options.plugins) {
+              rule.options.plugins = rule.options.plugins.filter(
+                (p) => !String(typeof p === 'string' ? p : Array.isArray(p) ? p[0] : '').includes('react-refresh')
+              );
+            }
+            if (rule.oneOf) stripReactRefreshFromRules(rule.oneOf);
+          });
+        };
+        stripReactRefreshFromRules(webpackConfig.module.rules);
       }
 
       if (Array.isArray(webpackConfig.plugins)) {

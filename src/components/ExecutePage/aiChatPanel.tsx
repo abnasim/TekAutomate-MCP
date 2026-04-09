@@ -1728,82 +1728,24 @@ export function AiChatPanel({
             );
           })}
 
-          {/* ── Advanced ── */}
-          <details className="group">
-            <summary className="cursor-pointer text-[10px] font-semibold uppercase tracking-widest text-slate-400 dark:text-white/40 hover:text-slate-600 dark:hover:text-white/60 select-none">
-              Advanced
-            </summary>
-            <div className="mt-2 space-y-2.5 pl-0.5">
-              <label className="block">
-                <span className="text-[10px] text-slate-500 dark:text-white/50">MCP server</span>
-                <div className="mt-1 flex gap-1.5">
-                  <input
-                    type="url"
-                    value={mcpHostInput}
-                    onChange={(e) => setMcpHostInput(e.target.value)}
-                    className="flex-1 rounded-lg border border-slate-200 dark:border-white/10 bg-slate-50 dark:bg-white/5 px-2 py-1.5 text-xs text-slate-700 dark:text-white/80 placeholder-slate-300 dark:placeholder-white/20 focus:outline-none focus:border-violet-500/50"
-                    placeholder="https://..."
-                  />
-                  <button type="button" onClick={() => void saveMcpHost()} className="text-[10px] px-2 py-1 rounded-md border border-slate-200 dark:border-white/10 text-slate-600 dark:text-white/70 hover:bg-slate-100 dark:hover:bg-white/10">Save</button>
-                  <button type="button" onClick={() => void testMcpHostConnection()} className="text-[10px] px-2 py-1 rounded-md border border-slate-200 dark:border-white/10 text-slate-600 dark:text-white/70 hover:bg-slate-100 dark:hover:bg-white/10">Test</button>
-                </div>
-                {mcpHostStatus && (
-                  <p className="mt-1 text-[10px] text-cyan-600 dark:text-cyan-400">{mcpHostStatus}</p>
-                )}
-              </label>
-              <label className="block">
-                <span className="text-[10px] text-slate-500 dark:text-white/50">ChatKit Workflow ID</span>
-                <div className="mt-1 flex gap-1.5">
-                  <input
-                    type="text"
-                    value={chatKitWorkflowId}
-                    onChange={(e) => {
-                      setChatKitWorkflowId(e.target.value);
-                      try { localStorage.setItem(CHATKIT_WORKFLOW_ID_KEY, e.target.value); } catch {}
-                    }}
-                    className="flex-1 rounded-lg border border-slate-200 dark:border-white/10 bg-slate-50 dark:bg-white/5 px-2 py-1.5 text-xs text-slate-700 dark:text-white/80 placeholder-slate-300 dark:placeholder-white/20 focus:outline-none focus:border-violet-500/50"
-                    placeholder="wf_... (from Agent Builder)"
-                  />
-                </div>
-                <p className="mt-0.5 text-[9px] text-slate-400 dark:text-white/30">
-                  Used when the OpenAI chat surface is set to ChatKit. Native Chat uses TekAutomate&apos;s built-in panel instead.
-                </p>
-              </label>
-              <label className="block">
-                <span className="text-[10px] text-slate-500 dark:text-white/50">Executor output</span>
-                <select
-                  value={instrumentOutputMode}
-                  onChange={(e) => setInstrumentOutputMode(e.target.value === 'clean' ? 'clean' : 'verbose')}
-                  className="mt-1 w-full rounded-lg border border-slate-200 dark:border-white/10 bg-slate-50 dark:bg-slate-800 px-2 py-1.5 text-xs text-slate-700 dark:text-white/80 focus:outline-none focus:border-violet-500/50"
-                >
-                  <option value="verbose" className="bg-white dark:bg-slate-800 dark:text-white/80">Verbose</option>
-                  <option value="clean" className="bg-white dark:bg-slate-800 dark:text-white/80">Clean</option>
-                </select>
-              </label>
-              <label
-                className="flex items-center justify-between gap-2 text-[10px] text-slate-500 dark:text-white/50"
-                title="AI handles tools directly, bypassing planner/shortcut interception."
-              >
-                <span>Tool-call mode</span>
-                <button
-                  type="button"
-                  role="switch"
-                  aria-checked={Boolean(state.toolCallMode)}
-                  onClick={() => setToolCallMode(!state.toolCallMode)}
-                  className={`relative h-4 w-8 rounded-full transition-colors ${
-                    state.toolCallMode
-                      ? 'bg-cyan-500'
-                      : 'bg-slate-300 dark:bg-white/20'
-                  }`}
-                >
-                  <span
-                    className="absolute top-0.5 h-3 w-3 rounded-full bg-white transition-all"
-                    style={{ left: state.toolCallMode ? '18px' : '2px' }}
-                  />
-                </button>
-              </label>
+          {/* ── MCP server ── */}
+          <label className="block">
+            <span className="text-[10px] text-slate-500 dark:text-white/50">MCP server</span>
+            <div className="mt-1 flex gap-1.5">
+              <input
+                type="url"
+                value={mcpHostInput}
+                onChange={(e) => setMcpHostInput(e.target.value)}
+                className="flex-1 rounded-lg border border-slate-200 dark:border-white/10 bg-slate-50 dark:bg-white/5 px-2 py-1.5 text-xs text-slate-700 dark:text-white/80 placeholder-slate-300 dark:placeholder-white/20 focus:outline-none focus:border-violet-500/50"
+                placeholder="https://..."
+              />
+              <button type="button" onClick={() => void saveMcpHost()} className="text-[10px] px-2 py-1 rounded-md border border-slate-200 dark:border-white/10 text-slate-600 dark:text-white/70 hover:bg-slate-100 dark:hover:bg-white/10">Save</button>
+              <button type="button" onClick={() => void testMcpHostConnection()} className="text-[10px] px-2 py-1 rounded-md border border-slate-200 dark:border-white/10 text-slate-600 dark:text-white/70 hover:bg-slate-100 dark:hover:bg-white/10">Test</button>
             </div>
-          </details>
+            {mcpHostStatus && (
+              <p className="mt-1 text-[10px] text-cyan-600 dark:text-cyan-400">{mcpHostStatus}</p>
+            )}
+          </label>
 
         </div>
       )}
