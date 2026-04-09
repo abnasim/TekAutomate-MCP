@@ -50,16 +50,16 @@ export const EulaDialog: React.FC<EulaDialogProps> = ({ isOpen, onAccept }) => {
   }
 
   return (
-    <div className="fixed inset-0 z-[9999] flex items-center justify-center bg-black/70 backdrop-blur-sm">
-      <div className="bg-white dark:bg-gray-800 rounded-xl shadow-2xl max-w-2xl w-full mx-4 max-h-[90vh] flex flex-col">
+    <div className="fixed inset-0 z-[9999] flex items-center justify-center bg-black/70 backdrop-blur-sm overflow-hidden">
+      <div className="bg-white dark:bg-gray-800 rounded-xl shadow-2xl max-w-2xl w-full mx-4 max-h-[88vh] flex flex-col">
         {/* Header */}
-        <div className="px-8 pt-8 pb-4">
-          <div className="flex items-center gap-3 mb-2">
-            <div className="w-10 h-10 rounded-lg bg-blue-100 dark:bg-blue-900/30 flex items-center justify-center">
-              <FileText className="w-5 h-5 text-blue-600 dark:text-blue-400" />
+        <div className="px-6 pt-6 pb-3">
+          <div className="flex items-center gap-3">
+            <div className="w-9 h-9 rounded-lg bg-blue-100 dark:bg-blue-900/30 flex items-center justify-center flex-shrink-0">
+              <FileText className="w-4 h-4 text-blue-600 dark:text-blue-400" />
             </div>
             <div>
-              <h1 className="text-xl font-bold text-gray-900 dark:text-white">
+              <h1 className="text-lg font-bold text-gray-900 dark:text-white">
                 License Agreement & Beta Notice
               </h1>
               <p className="text-xs text-gray-500 dark:text-gray-400">
@@ -70,56 +70,56 @@ export const EulaDialog: React.FC<EulaDialogProps> = ({ isOpen, onAccept }) => {
         </div>
 
         {/* Scrollable content */}
-        <div className="flex-1 overflow-y-auto px-8 pb-4 space-y-5">
+        <div className="flex-1 overflow-y-auto px-6 pb-3 space-y-4">
           {/* Beta Disclaimer */}
-          <div className="rounded-lg border border-amber-300 dark:border-amber-600 bg-amber-50 dark:bg-amber-900/20 p-5">
-            <div className="flex items-center gap-2 mb-3">
-              <ShieldAlert className="w-5 h-5 text-amber-600 dark:text-amber-400 flex-shrink-0" />
-              <h2 className="text-sm font-bold text-amber-800 dark:text-amber-300 uppercase tracking-wide">
+          <div className="rounded-lg border border-amber-300 dark:border-amber-600 bg-amber-50 dark:bg-amber-900/20 p-4">
+            <div className="flex items-center gap-2 mb-2">
+              <ShieldAlert className="w-4 h-4 text-amber-600 dark:text-amber-400 flex-shrink-0" />
+              <h2 className="text-xs font-bold text-amber-800 dark:text-amber-300 uppercase tracking-wide">
                 Unofficial Prototype — Evaluation Software Notice
               </h2>
             </div>
-            <p className="text-sm font-semibold text-amber-900 dark:text-amber-200 mb-3">
+            <p className="text-xs font-semibold text-amber-900 dark:text-amber-200 mb-2">
               This is an <strong>unofficial tool</strong> and is <strong>not an official Tektronix product</strong>. It should not be confused with any official Tektronix software or service.
             </p>
-            <ul className="space-y-2 text-sm text-amber-900 dark:text-amber-200">
+            <ul className="space-y-1.5 text-xs text-amber-900 dark:text-amber-200">
               <li className="flex items-start gap-2">
-                <span className="text-amber-500 mt-0.5">&#8226;</span>
-                TekAutomate is an unofficial prototype created for <strong>evaluation and testing purposes only</strong>
+                <span className="text-amber-500 mt-0.5 flex-shrink-0">&#8226;</span>
+                <span>TekAutomate is an unofficial prototype created for <strong>evaluation and testing purposes only</strong></span>
               </li>
               <li className="flex items-start gap-2">
-                <span className="text-amber-500 mt-0.5">&#8226;</span>
-                It is not endorsed, supported, or maintained by Tektronix as an official product
+                <span className="text-amber-500 mt-0.5 flex-shrink-0">&#8226;</span>
+                <span>It is not endorsed, supported, or maintained by Tektronix as an official product</span>
               </li>
               <li className="flex items-start gap-2">
-                <span className="text-amber-500 mt-0.5">&#8226;</span>
-                Features may change, break, or be removed without notice
+                <span className="text-amber-500 mt-0.5 flex-shrink-0">&#8226;</span>
+                <span>Features may change, break, or be removed without notice</span>
               </li>
               <li className="flex items-start gap-2">
-                <span className="text-amber-500 mt-0.5">&#8226;</span>
-                Data loss or unexpected behavior may occur
+                <span className="text-amber-500 mt-0.5 flex-shrink-0">&#8226;</span>
+                <span>Data loss or unexpected behavior may occur</span>
               </li>
               <li className="flex items-start gap-2">
-                <span className="text-amber-500 mt-0.5">&#8226;</span>
+                <span className="text-amber-500 mt-0.5 flex-shrink-0">&#8226;</span>
                 <strong>Tektronix and its contributors are not responsible for any damages, data loss, or issues arising from the use of this software</strong>
               </li>
               <li className="flex items-start gap-2">
-                <span className="text-amber-500 mt-0.5">&#8226;</span>
-                Not intended for production or mission-critical use
+                <span className="text-amber-500 mt-0.5 flex-shrink-0">&#8226;</span>
+                <span>Not intended for production or mission-critical use</span>
               </li>
               <li className="flex items-start gap-2">
-                <span className="text-amber-500 mt-0.5">&#8226;</span>
-                No guarantee of support, uptime, or continued availability
+                <span className="text-amber-500 mt-0.5 flex-shrink-0">&#8226;</span>
+                <span>No guarantee of support, uptime, or continued availability</span>
               </li>
             </ul>
           </div>
 
           {/* License text */}
           <div>
-            <h2 className="text-sm font-semibold text-gray-700 dark:text-gray-300 mb-2">
+            <h2 className="text-xs font-semibold text-gray-700 dark:text-gray-300 mb-1.5">
               Tektronix Sample Source Code License
             </h2>
-            <div className="rounded-lg border border-gray-200 dark:border-gray-600 bg-gray-50 dark:bg-gray-900 p-4 max-h-48 overflow-y-auto">
+            <div className="rounded-lg border border-gray-200 dark:border-gray-600 bg-gray-50 dark:bg-gray-900 p-3 max-h-32 overflow-y-auto">
               <pre className="text-xs text-gray-700 dark:text-gray-300 whitespace-pre-wrap font-sans leading-relaxed">
                 {LICENSE_TEXT}
               </pre>
@@ -127,7 +127,7 @@ export const EulaDialog: React.FC<EulaDialogProps> = ({ isOpen, onAccept }) => {
           </div>
 
           {/* Checkboxes */}
-          <div className="space-y-3 pt-1">
+          <div className="space-y-2.5">
             <label className="flex items-start gap-3 cursor-pointer group">
               <input
                 type="checkbox"
@@ -154,7 +154,7 @@ export const EulaDialog: React.FC<EulaDialogProps> = ({ isOpen, onAccept }) => {
         </div>
 
         {/* Footer with buttons */}
-        <div className="px-8 py-5 border-t border-gray-200 dark:border-gray-700 flex justify-end gap-3">
+        <div className="px-6 py-4 border-t border-gray-200 dark:border-gray-700 flex justify-end gap-3">
           <button
             type="button"
             onClick={() => setDeclined(true)}
