@@ -1,6 +1,7 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Code, Terminal, Copy, Pencil, Sparkles, Play, RotateCcw, RotateCw, Trash2, Mail, SkipForward, Square, MessageSquare } from 'lucide-react';
 import { resolveMcpHost, streamMcpChat } from '../../utils/ai/mcpClient';
+import { executeMcpTool } from '../../utils/ai/liveToolLoop';
 import { StepsListPreview } from './StepsListPreview';
 import type { StepPreview } from './StepsListPreview';
 import { PythonCodeEditor } from '../PythonCodeEditor';
@@ -9,6 +10,19 @@ import type { ExecutionAuditReport } from '../../utils/executionAudit';
 import { AiChatProvider } from './aiChatContext';
 import { AiChatPanel } from './aiChatPanel';
 import type { ParsedActionsPreview } from './OpenAiChatKitPanel';
+
+const LIVE_SESSION_KEY_STORAGE = 'tekautomate.live.session_key';
+function getOrCreateLiveSessionKey(): string {
+  try {
+    const existing = localStorage.getItem(LIVE_SESSION_KEY_STORAGE);
+    if (existing?.trim()) return existing.trim();
+    const created = `live:${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+    localStorage.setItem(LIVE_SESSION_KEY_STORAGE, created);
+    return created;
+  } catch {
+    return `live:fallback-${Date.now()}`;
+  }
+}
 
 export type ExecutionSource = 'steps' | 'blockly' | 'live';
 
@@ -388,6 +402,13 @@ function ExecutePageContent({
     const currentFlowContext = flowContext || {};
     const validationErrors = Array.isArray(currentFlowContext.validationErrors) ? [...currentFlowContext.validationErrors] : [];
 
+    // Only activate the live bridge (session key) for hosted/cloud MCP.
+    // When MCP is local (localhost / 127.0.0.1), Node.js can reach the executor
+    // directly on the LAN — no bridge needed, and adding a session key would
+    // incorrectly enable the bridge and break direct calls.
+    const isLocalMcp = /localhost|127\.0\.0\.1/.test(mcpHost);
+    const sessionKey = isLocalMcp ? null : getOrCreateLiveSessionKey();
+
     const payload = {
       instrument: {
         connected: !!securedInstrumentEndpoint?.executorUrl,
@@ -421,6 +442,9 @@ function ExecutePageContent({
         isEmpty: steps.length === 0,
       },
       runLog: String(runLog || ''),
+      liveSession: sessionKey
+        ? { sessionKey, threadId: null, workflowId: null, userId: 'tekautomate-live' }
+        : undefined,
     };
 
     void fetch(`${mcpHost.replace(/\/$/, '')}/runtime-context`, {
@@ -431,6 +455,142 @@ function ExecutePageContent({
       console.warn('[ExecutePage] Failed to sync live runtime context:', error);
     });
   }, [executionSource, securedInstrumentEndpoint, flowContext, steps, runLog]);
+
+  // Live action bridge poller — runs whenever in live mode, no chat session required.
+  // Picks up actions queued by external AI clients (Claude Desktop, Codex, etc.) and
+  // executes them directly from the browser against the local executor.
+  const instrumentEndpointRef = useRef(securedInstrumentEndpoint);
+  instrumentEndpointRef.current = securedInstrumentEndpoint;
+  const flowContextRef = useRef(flowContext);
+  flowContextRef.current = flowContext;
+
+  useEffect(() => {
+    if (executionSource !== 'live') return;
+    const mcpHost = resolveMcpHost();
+    if (!mcpHost) {
+      console.warn('[LiveBridge] No MCP host configured — polling disabled. Set MCP server URL in settings.');
+      return;
+    }
+    // Local MCP (localhost/127.0.0.1): Node.js can reach the executor directly
+    // on the LAN, so no bridge is needed. Skip polling loop entirely.
+    if (/localhost|127\.0\.0\.1/.test(mcpHost)) {
+      console.log('[LiveBridge] Local MCP detected — bridge polling disabled (Node.js calls executor directly).');
+      return;
+    }
+    if (!securedInstrumentEndpoint?.executorUrl) {
+      console.warn('[LiveBridge] No executor URL — polling disabled. Connect to an instrument first.');
+      return;
+    }
+    const sessionKey = getOrCreateLiveSessionKey();
+    console.log('[LiveBridge] Starting polling loop', { mcpHost, sessionKey, executorUrl: securedInstrumentEndpoint.executorUrl });
+
+    // Re-sync runtime context to MCP — called on start and after MCP restarts.
+    const syncContext = () => {
+      const ep = instrumentEndpointRef.current;
+      const fc = flowContextRef.current || {};
+      void fetch(`${mcpHost.replace(/\/$/, '')}/runtime-context`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          instrument: {
+            connected: !!ep?.executorUrl,
+            executorUrl: ep?.executorUrl || null,
+            visaResource: ep?.visaResource || null,
+            backend: ep?.backend || (fc as any).backend || 'pyvisa',
+            modelFamily: (fc as any).modelFamily || 'unknown',
+            deviceDriver: (fc as any).deviceDriver || null,
+            liveMode: true,
+          },
+          liveSession: { sessionKey, threadId: null, workflowId: null, userId: 'tekautomate-live' },
+        }),
+      }).then((r) => {
+        if (!r.ok) console.warn('[LiveBridge] runtime-context sync returned', r.status);
+      }).catch((e) => {
+        console.warn('[LiveBridge] runtime-context sync failed:', e instanceof Error ? e.message : e);
+      });
+    };
+
+    // Sync immediately and then every 15s so MCP restarts self-heal quickly.
+    console.log('[LiveBridge] Syncing runtime context to MCP…');
+    syncContext();
+    const syncInterval = window.setInterval(() => {
+      console.debug('[LiveBridge] Periodic context re-sync', { sessionKey });
+      syncContext();
+    }, 15_000);
+
+    let cancelled = false;
+    let consecutiveErrors = 0;
+    const loop = async () => {
+      while (!cancelled) {
+        let currentAction: { id: string; toolName: string; args?: Record<string, unknown> } | null = null;
+        try {
+          const nextRes = await fetch(
+            `${mcpHost.replace(/\/$/, '')}/live-actions/next?sessionKey=${encodeURIComponent(sessionKey)}&timeoutMs=20000`,
+          );
+          if (!nextRes.ok) {
+            await new Promise((r) => window.setTimeout(r, 1500));
+            continue;
+          }
+          // Recovered from errors — re-sync so MCP has fresh session key.
+          if (consecutiveErrors > 0) {
+            consecutiveErrors = 0;
+            syncContext();
+          }
+          const nextJson = (await nextRes.json()) as {
+            ok?: boolean;
+            action?: { id: string; toolName: string; args?: Record<string, unknown> } | null;
+          };
+          currentAction = nextJson.action || null;
+          if (!currentAction?.id || !currentAction.toolName) {
+            // Long-poll returned with no action (timeout) — normal, keep cycling.
+            continue;
+          }
+
+          console.log('[LiveBridge] action received:', currentAction.toolName, currentAction.args);
+          const result = await executeMcpTool(
+            currentAction.toolName,
+            currentAction.args || {},
+            instrumentEndpointRef.current || undefined,
+            {
+              modelFamily: flowContextRef.current?.modelFamily,
+              deviceDriver: flowContextRef.current?.deviceDriver,
+            },
+          );
+          console.log('[LiveBridge] result:', currentAction.toolName, result);
+
+          await fetch(`${mcpHost.replace(/\/$/, '')}/live-actions/result`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ id: currentAction.id, sessionKey, ok: true, result }),
+          });
+        } catch (error) {
+          consecutiveErrors += 1;
+          const errMsg = error instanceof Error ? error.message : String(error);
+          console.error('[LiveBridge] Error in polling loop:', errMsg, { consecutiveErrors, currentAction: currentAction?.toolName });
+          if (currentAction?.id) {
+            try {
+              await fetch(`${mcpHost.replace(/\/$/, '')}/live-actions/result`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                  id: currentAction.id,
+                  sessionKey,
+                  ok: false,
+                  error: errMsg,
+                }),
+              });
+            } catch { /* ignore */ }
+          }
+          await new Promise((r) => window.setTimeout(r, 1200));
+        }
+      }
+    };
+    void loop();
+    return () => {
+      cancelled = true;
+      window.clearInterval(syncInterval);
+    };
+  }, [executionSource, securedInstrumentEndpoint?.executorUrl]);
 
   const runLogLines = useMemo(
     () => {
@@ -594,7 +754,7 @@ function ExecutePageContent({
             />
           </div>
         )}
-        {!assistantPanelOpen && centerTab !== 'live' && (
+        {!assistantPanelOpen && (
           <button
             type="button"
             onClick={() => setAssistantPanelOpen(true)}
@@ -608,7 +768,7 @@ function ExecutePageContent({
         )}
 
         <main className="flex-1 flex flex-col min-w-0 bg-slate-100 dark:bg-slate-950">
-          <div className="relative z-40 flex items-center justify-between gap-4 border-b border-slate-200 dark:border-slate-800/50 px-2">
+          <div className="relative z-40 flex items-center justify-between gap-4 border-b border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 px-2">
             <div className="flex min-w-0">
               <button
                 onClick={() => {
