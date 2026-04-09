@@ -2,6 +2,27 @@ import { captureScreenshotProxy } from '../core/instrumentProxy';
 import type { ToolResult } from '../core/schemas';
 import { storeTempVisionImage } from '../core/tempImageStore';
 import { dispatchLiveActionThroughTekAutomate, shouldBridgeToTekAutomate, withRuntimeInstrumentDefaults } from './liveToolSupport';
+import fs from 'fs';
+import os from 'os';
+import path from 'path';
+
+function saveScreenshotLocally(payload: Record<string, unknown>): string | null {
+  try {
+    const base64 = typeof payload.base64 === 'string' ? payload.base64
+      : typeof payload.analysisBase64 === 'string' ? payload.analysisBase64 : '';
+    const mimeType = typeof payload.mimeType === 'string' ? payload.mimeType
+      : typeof payload.analysisMimeType === 'string' ? payload.analysisMimeType : 'image/png';
+    if (!base64) return null;
+    const ext = mimeType.includes('jpeg') ? 'jpg' : 'png';
+    const dir = path.join(os.tmpdir(), 'tekautomate');
+    fs.mkdirSync(dir, { recursive: true });
+    const filePath = path.join(dir, `screenshot_${Date.now()}.${ext}`);
+    fs.writeFileSync(filePath, Buffer.from(base64, 'base64'));
+    return filePath;
+  } catch {
+    return null;
+  }
+}
 
 interface Input extends Record<string, unknown> {
   executorUrl: string;
@@ -193,10 +214,30 @@ export async function captureScreenshot(input: Input): Promise<ToolResult<Record
     if (bridged.ok && input.analyze === true && (analysisTransport === 'auto' || analysisTransport === 'url')) {
       const urlPayload = buildUrlOnlyScreenshotPayload(maybeCompressed, input);
       if (!urlPayload) {
-        // No base URL (e.g. STDIO/local) — fall back to embedded MCP image content block
+        // No base URL (e.g. STDIO/local) — try mcp_image for Claude, then base64 data URI for Codex/others
         if (analysisTransport === 'auto') {
           const imagePayload = buildMcpImageScreenshotPayload(maybeCompressed);
-          if (imagePayload) return { ok: true, data: imagePayload, sourceMeta: [], warnings: [] };
+          const localPath = saveScreenshotLocally(maybeCompressed);
+          const base64 = typeof maybeCompressed.base64 === 'string' ? maybeCompressed.base64
+            : typeof maybeCompressed.analysisBase64 === 'string' ? maybeCompressed.analysisBase64 : '';
+          const mimeType = typeof maybeCompressed.mimeType === 'string' ? maybeCompressed.mimeType : 'image/png';
+          const dataUri = base64 ? `data:${mimeType};base64,${base64}` : null;
+          if (imagePayload) {
+            return {
+              ok: true,
+              data: { ...imagePayload, ...(localPath ? { localPath } : {}), ...(dataUri ? { dataUri } : {}) },
+              sourceMeta: [],
+              warnings: [],
+            };
+          }
+          if (localPath || dataUri) {
+            return {
+              ok: true,
+              data: { ok: true, captured: true, ...(localPath ? { localPath } : {}), ...(dataUri ? { dataUri } : {}) },
+              sourceMeta: [],
+              warnings: [],
+            };
+          }
         }
         return {
           ok: false,
@@ -262,10 +303,28 @@ export async function captureScreenshot(input: Input): Promise<ToolResult<Record
   if (input.analyze === true && (analysisTransport === 'auto' || analysisTransport === 'url')) {
     const urlPayload = buildUrlOnlyScreenshotPayload(maybeCompressed, input);
     if (!urlPayload) {
-      // No base URL (e.g. STDIO/local) — fall back to embedded MCP image content block
+      // No base URL (e.g. STDIO/local) — try mcp_image for Claude, then base64 data URI for Codex/others
       if (analysisTransport === 'auto') {
         const imagePayload = buildMcpImageScreenshotPayload(maybeCompressed);
-        if (imagePayload) return { ...result, ok: true, data: imagePayload, warnings: [] };
+        const localPath = saveScreenshotLocally(maybeCompressed);
+        const base64 = typeof maybeCompressed.base64 === 'string' ? maybeCompressed.base64
+          : typeof maybeCompressed.analysisBase64 === 'string' ? maybeCompressed.analysisBase64 : '';
+        const mimeType = typeof maybeCompressed.mimeType === 'string' ? maybeCompressed.mimeType : 'image/png';
+        const dataUri = base64 ? `data:${mimeType};base64,${base64}` : null;
+        if (imagePayload) {
+          return {
+            ...result, ok: true,
+            data: { ...imagePayload, ...(localPath ? { localPath } : {}), ...(dataUri ? { dataUri } : {}) },
+            warnings: [],
+          };
+        }
+        if (localPath || dataUri) {
+          return {
+            ...result, ok: true,
+            data: { ok: true, captured: true, ...(localPath ? { localPath } : {}), ...(dataUri ? { dataUri } : {}) },
+            warnings: [],
+          };
+        }
       }
       return {
         ok: false,
