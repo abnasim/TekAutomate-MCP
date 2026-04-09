@@ -193,6 +193,11 @@ export async function captureScreenshot(input: Input): Promise<ToolResult<Record
     if (bridged.ok && input.analyze === true && (analysisTransport === 'auto' || analysisTransport === 'url')) {
       const urlPayload = buildUrlOnlyScreenshotPayload(maybeCompressed, input);
       if (!urlPayload) {
+        // No base URL (e.g. STDIO/local) — fall back to embedded MCP image content block
+        if (analysisTransport === 'auto') {
+          const imagePayload = buildMcpImageScreenshotPayload(maybeCompressed);
+          if (imagePayload) return { ok: true, data: imagePayload, sourceMeta: [], warnings: [] };
+        }
         return {
           ok: false,
           data: {
@@ -257,6 +262,11 @@ export async function captureScreenshot(input: Input): Promise<ToolResult<Record
   if (input.analyze === true && (analysisTransport === 'auto' || analysisTransport === 'url')) {
     const urlPayload = buildUrlOnlyScreenshotPayload(maybeCompressed, input);
     if (!urlPayload) {
+      // No base URL (e.g. STDIO/local) — fall back to embedded MCP image content block
+      if (analysisTransport === 'auto') {
+        const imagePayload = buildMcpImageScreenshotPayload(maybeCompressed);
+        if (imagePayload) return { ...result, ok: true, data: imagePayload, warnings: [] };
+      }
       return {
         ok: false,
         data: {
