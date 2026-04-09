@@ -8,7 +8,7 @@ import { performance } from 'perf_hooks';
 type PromptCase = { label: string; prompt: string; flowContext: any };
 
 const MCP_HOST = process.env.MCP_HOST || 'http://localhost:8787';
-const OPENAI_API_KEY = process.env.OPENAI_API_KEY || process.env.OPENAI_SERVER_API_KEY || '';
+const OPENAI_API_KEY = process.env.OPENAI_API_KEY || '';
 const MODEL = process.env.AI_MODEL || 'gpt-5-mini';
 
 if (!OPENAI_API_KEY) {

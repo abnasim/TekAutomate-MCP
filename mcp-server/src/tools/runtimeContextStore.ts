@@ -1,28 +1,3 @@
-import { AsyncLocalStorage } from 'node:async_hooks';
-
-// ── Per-session isolation ────────────────────────────────────────────
-// When a tool runs inside an MCP session, AsyncLocalStorage holds the
-// session ID.  getRuntimeContextState() returns that session's context
-// instead of the shared global, so one user's instrument/executor never
-// leaks to another user.
-const _sessionStore = new AsyncLocalStorage<string>();
-const _perSessionState = new Map<string, RuntimeContextState>();
-
-/** Run `fn` scoped to the given MCP session. */
-export function runInSession<T>(sessionId: string, fn: () => T): T {
-  return _sessionStore.run(sessionId, fn);
-}
-
-/** Return the current MCP session ID, or undefined if not in a session. */
-export function currentSessionId(): string | undefined {
-  return _sessionStore.getStore();
-}
-
-/** Remove a session's context when the transport closes. */
-export function clearSessionContext(sessionId: string): void {
-  _perSessionState.delete(sessionId);
-}
-
 export interface RuntimeWorkflowStep {
   id?: string;
   index?: number;
@@ -50,6 +25,7 @@ export interface RuntimeInstrumentInfo {
   modelFamily: string;
   deviceDriver: string | null;
   liveMode: boolean;
+  devices?: Array<Record<string, unknown>>;
 }
 
 export interface RuntimeRunLogInfo {
@@ -94,6 +70,7 @@ const DEFAULT_INSTRUMENT: RuntimeInstrumentInfo = {
   modelFamily: 'unknown',
   deviceDriver: null,
   liveMode: false,
+  devices: [],
 };
 
 const DEFAULT_RUN_LOG: RuntimeRunLogInfo = {
@@ -111,25 +88,13 @@ const DEFAULT_LIVE_SESSION: RuntimeLiveSessionInfo = {
   userId: null,
 };
 
-let _globalState: RuntimeContextState = {
+let runtimeContextState: RuntimeContextState = {
   updatedAt: new Date(0).toISOString(),
   workflow: DEFAULT_WORKFLOW,
   instrument: DEFAULT_INSTRUMENT,
   runLog: DEFAULT_RUN_LOG,
   liveSession: DEFAULT_LIVE_SESSION,
 };
-
-function _getState(): RuntimeContextState {
-  const sid = _sessionStore.getStore();
-  if (sid) {
-    // If this session has explicit context (set via updateRuntimeContext
-    // while inside runInSession), use it.  Otherwise fall back to the
-    // global state so ChatKit/web-app context is visible to MCP tools.
-    const s = _perSessionState.get(sid);
-    if (s) return s;
-  }
-  return _globalState;
-}
 
 function toStringList(value: unknown): string[] {
   if (!Array.isArray(value)) return [];
@@ -172,7 +137,6 @@ export function updateRuntimeContext(input: {
   runLog?: unknown;
   liveSession?: unknown;
 }) {
-  const runtimeContextState = _getState();
   if (input.workflow && typeof input.workflow === 'object') {
     const workflow = input.workflow as Record<string, unknown>;
     const steps = normalizeSteps(workflow.steps);
@@ -190,14 +154,68 @@ export function updateRuntimeContext(input: {
 
   if (input.instrument && typeof input.instrument === 'object') {
     const instrument = input.instrument as Record<string, unknown>;
+    const previous = runtimeContextState.instrument;
+    const nextExecutorUrl =
+      typeof instrument.executorUrl === 'string' && instrument.executorUrl
+        ? instrument.executorUrl
+        : previous.executorUrl;
+    const nextVisaResource =
+      typeof instrument.visaResource === 'string' && instrument.visaResource
+        ? instrument.visaResource
+        : previous.visaResource;
+    const nextBackend =
+      typeof instrument.backend === 'string' && instrument.backend
+        ? instrument.backend
+        : previous.backend || 'pyvisa';
+    const nextModelFamily =
+      typeof instrument.modelFamily === 'string' && instrument.modelFamily
+        ? instrument.modelFamily
+        : previous.modelFamily || 'unknown';
+    const nextDeviceDriver =
+      typeof instrument.deviceDriver === 'string' && instrument.deviceDriver
+        ? instrument.deviceDriver
+        : previous.deviceDriver;
+    const explicitConnected = typeof instrument.connected === 'boolean' ? instrument.connected : null;
+    const nextLiveMode =
+      typeof instrument.liveMode === 'boolean'
+        ? instrument.liveMode
+        : previous.liveMode;
+
+    const rawInstrumentMap = Array.isArray((instrument as any).instrumentMap) ? (instrument as any).instrumentMap : [];
+    const normalizedDevices = rawInstrumentMap
+      .map((item) => (item && typeof item === 'object' ? (item as Record<string, unknown>) : null))
+      .filter((item): item is Record<string, unknown> => item !== null)
+      .map((item, idx) => ({
+        deviceId:
+          typeof item.alias === 'string' && item.alias
+            ? item.alias
+            : typeof item.deviceId === 'string' && item.deviceId
+              ? item.deviceId
+              : `device-${idx}`,
+        visaResource: typeof item.visaResource === 'string' ? item.visaResource : null,
+        backend: typeof item.backend === 'string' ? item.backend : undefined,
+        modelFamily: typeof item.modelFamily === 'string' ? item.modelFamily : undefined,
+        deviceDriver: typeof item.deviceDriver === 'string' ? item.deviceDriver : undefined,
+        alias: typeof item.alias === 'string' ? item.alias : undefined,
+        host: typeof item.host === 'string' ? item.host : undefined,
+        connectionType: typeof item.connectionType === 'string' ? item.connectionType : undefined,
+        visaBackend: typeof item.visaBackend === 'string' ? item.visaBackend : undefined,
+      }));
+
     runtimeContextState.instrument = {
-      connected: Boolean(instrument.connected),
-      executorUrl: typeof instrument.executorUrl === 'string' && instrument.executorUrl ? instrument.executorUrl : null,
-      visaResource: typeof instrument.visaResource === 'string' && instrument.visaResource ? instrument.visaResource : null,
-      backend: typeof instrument.backend === 'string' && instrument.backend ? instrument.backend : 'pyvisa',
-      modelFamily: typeof instrument.modelFamily === 'string' && instrument.modelFamily ? instrument.modelFamily : 'unknown',
-      deviceDriver: typeof instrument.deviceDriver === 'string' && instrument.deviceDriver ? instrument.deviceDriver : null,
-      liveMode: Boolean(instrument.liveMode),
+      connected:
+        explicitConnected === true
+          ? true
+          : explicitConnected === false
+            ? false
+            : Boolean(nextExecutorUrl && nextLiveMode),
+      executorUrl: nextExecutorUrl,
+      visaResource: nextVisaResource,
+      backend: nextBackend,
+      modelFamily: nextModelFamily,
+      deviceDriver: nextDeviceDriver,
+      liveMode: nextLiveMode,
+      devices: normalizedDevices.length > 0 ? normalizedDevices : previous.devices || [],
     };
   }
 
@@ -220,17 +238,16 @@ export function updateRuntimeContext(input: {
 }
 
 export function getRuntimeContextState(): RuntimeContextState {
-  const s = _getState();
   return {
-    updatedAt: s.updatedAt,
+    updatedAt: runtimeContextState.updatedAt,
     workflow: {
-      ...s.workflow,
-      steps: s.workflow.steps.map((step) => ({ ...step })),
-      validationErrors: [...s.workflow.validationErrors],
+      ...runtimeContextState.workflow,
+      steps: runtimeContextState.workflow.steps.map((step) => ({ ...step })),
+      validationErrors: [...runtimeContextState.workflow.validationErrors],
     },
-    instrument: { ...s.instrument },
-    runLog: { ...s.runLog },
-    liveSession: { ...s.liveSession },
+    instrument: { ...runtimeContextState.instrument },
+    runLog: { ...runtimeContextState.runLog },
+    liveSession: { ...runtimeContextState.liveSession },
   };
 }
 

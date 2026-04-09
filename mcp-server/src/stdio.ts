@@ -9,9 +9,8 @@
  * Usage:
  *   npx tsx mcp-server/src/stdio.ts
  *
- * Indexes are loaded lazily in the background so the MCP handshake
- * completes instantly.  Tools called before indexes are ready return
- * a friendly "still loading" message instead of crashing.
+ * Nothing in the existing HTTP server is modified — this is an
+ * additive, parallel entry point.
  */
 
 import { config } from 'dotenv';
@@ -30,7 +29,7 @@ import { initRagIndexes } from './core/ragIndex.js';
 import { initTemplateIndex } from './core/templateIndex.js';
 import { initProviderCatalog, providerSupplementsEnabled } from './core/providerCatalog.js';
 import { bootRouter } from './core/routerIntegration.js';
-import { getMcpExposedTools, runTool } from './tools/index.js';
+import { getSlimToolDefinitions, runTool } from './tools/index.js';
 
 function sanitizeToolResultForExternalMcp(toolName: string, result: unknown): unknown {
   if (toolName !== 'capture_screenshot' || !result || typeof result !== 'object') return result;
@@ -62,6 +61,55 @@ function sanitizeToolResultForExternalMcp(toolName: string, result: unknown): un
   };
 }
 
+function buildExternalMcpToolContent(toolName: string, result: unknown) {
+  if (!result || typeof result !== 'object') {
+    return [{ type: 'text' as const, text: typeof result === 'string' ? result : JSON.stringify(result, null, 2) }];
+  }
+
+  const record = result as Record<string, unknown>;
+  const data = record.data && typeof record.data === 'object'
+    ? (record.data as Record<string, unknown>)
+    : null;
+  const source = data ?? record;
+  const imageContent = source.imageContent && typeof source.imageContent === 'object'
+    ? (source.imageContent as Record<string, unknown>)
+    : null;
+
+  const isScreenshotLike = toolName === 'capture_screenshot'
+    || (toolName === 'instrument_live' && Boolean(imageContent || source.imageUrl || source.base64 || source.analysisBase64));
+
+  if (!isScreenshotLike || !imageContent || imageContent.type !== 'image') {
+    const safeResult = sanitizeToolResultForExternalMcp(toolName, result);
+    const text = typeof safeResult === 'string'
+      ? safeResult
+      : JSON.stringify(safeResult, null, 2);
+    return [{ type: 'text' as const, text }];
+  }
+
+  const metadata: Record<string, unknown> = {
+    ok: source.ok === false ? false : true,
+    captured: true,
+  };
+  if (typeof source.capturedAt === 'string') metadata.capturedAt = source.capturedAt;
+  if (typeof source.scopeType === 'string') metadata.scopeType = source.scopeType;
+  if (typeof source.sizeBytes === 'number') metadata.sizeBytes = source.sizeBytes;
+  if (typeof source.mimeType === 'string') metadata.mimeType = source.mimeType;
+  if (typeof source.originalMimeType === 'string') metadata.originalMimeType = source.originalMimeType;
+  if (typeof source.originalSizeBytes === 'number') metadata.originalSizeBytes = source.originalSizeBytes;
+
+  return [
+    {
+      type: 'image' as const,
+      data: String(imageContent.data || ''),
+      mimeType: String(imageContent.mimeType || source.mimeType || 'image/png'),
+    },
+    {
+      type: 'text' as const,
+      text: JSON.stringify(metadata),
+    },
+  ];
+}
+
 // ── env ──────────────────────────────────────────────────────────────
 const __dirname = dirname(fileURLToPath(import.meta.url));
 config({ path: resolve(__dirname, '..', '.env') });
@@ -69,13 +117,33 @@ config({ path: resolve(__dirname, '..', '.env') });
 // ── main ─────────────────────────────────────────────────────────────
 
 async function main() {
-  // ── Create MCP server immediately — don't block on indexes ────────
+  // All logs go to stderr so they don't corrupt the stdio JSON-RPC stream
+  console.error('[tekautomate-mcp] Initializing indexes…');
+
+  const initTasks = [
+    initCommandIndex(),
+    initTmDevicesIndex(),
+    initRagIndexes(),
+    initTemplateIndex(),
+    ...(providerSupplementsEnabled() ? [initProviderCatalog()] : []),
+  ];
+  await Promise.all(initTasks);
+  console.error('[tekautomate-mcp] Indexes ready');
+
+  if (String(process.env.MCP_ROUTER_DISABLED || '').trim() !== 'true') {
+    await bootRouter();
+    console.error('[tekautomate-mcp] Router ready');
+  }
+
+  // ── Create low-level MCP server ──────────────────────────────────
   const server = new Server(
     { name: 'tekautomate', version: '3.2.0' },
     { capabilities: { tools: {} } },
   );
 
-  const toolDefs = getMcpExposedTools();
+  // Only expose the slim MCP surface (gateway + live tools)
+  // All other tools are routed internally via tek_router
+  const toolDefs = getSlimToolDefinitions();
   const mcpTools = toolDefs.map((def) => ({
     name: def.name,
     description: def.description ?? def.name,
@@ -93,67 +161,14 @@ async function main() {
     tools: mcpTools,
   }));
 
-  // ── Lazy index loading — runs in background ──────────────────────
-  let indexesReady = false;
-  let indexError: string | null = null;
-
-  const initPromise = (async () => {
-    try {
-      console.error('[tekautomate-mcp] Loading indexes in background…');
-      const initTasks = [
-        initCommandIndex(),
-        initTmDevicesIndex(),
-        initRagIndexes(),
-        initTemplateIndex(),
-        ...(providerSupplementsEnabled() ? [initProviderCatalog()] : []),
-      ];
-      await Promise.all(initTasks);
-      console.error('[tekautomate-mcp] Indexes ready');
-
-      if (String(process.env.MCP_ROUTER_DISABLED || '').trim() !== 'true') {
-        await bootRouter();
-        console.error('[tekautomate-mcp] Router ready');
-      }
-      indexesReady = true;
-    } catch (err) {
-      indexError = err instanceof Error ? err.message : String(err);
-      console.error('[tekautomate-mcp] Index init failed:', indexError);
-    }
-  })();
-
   // ── tools/call handler ───────────────────────────────────────────
   server.setRequestHandler(CallToolRequestSchema, async (request) => {
     const { name, arguments: args } = request.params;
 
-    // If indexes aren't ready yet, wait briefly then check again
-    if (!indexesReady && !indexError) {
-      await Promise.race([initPromise, new Promise(r => setTimeout(r, 10_000))]);
-    }
-
-    if (indexError) {
-      return {
-        content: [{ type: 'text' as const, text: `TekAutomate server failed to initialize: ${indexError}` }],
-        isError: true,
-      };
-    }
-
-    if (!indexesReady) {
-      return {
-        content: [{ type: 'text' as const, text: 'TekAutomate indexes are still loading. Please try again in a few seconds.' }],
-        isError: true,
-      };
-    }
-
     try {
       const result = await runTool(name, (args as Record<string, unknown>) ?? {});
-      const safeResult = sanitizeToolResultForExternalMcp(name, result);
-
-      const text = typeof safeResult === 'string'
-        ? safeResult
-        : JSON.stringify(safeResult, null, 2);
-
       return {
-        content: [{ type: 'text' as const, text }],
+        content: buildExternalMcpToolContent(name, result),
       };
     } catch (err) {
       const msg = err instanceof Error ? err.message : String(err);
@@ -166,7 +181,7 @@ async function main() {
 
   console.error(`[tekautomate-mcp] Registered ${mcpTools.length} tools via stdio`);
 
-  // ── Connect stdio transport immediately ──────────────────────────
+  // ── Connect stdio transport ──────────────────────────────────────
   const transport = new StdioServerTransport();
   await server.connect(transport);
   console.error('[tekautomate-mcp] Stdio transport connected — ready for requests');
@@ -176,3 +191,4 @@ main().catch((err) => {
   console.error('[tekautomate-mcp] Fatal:', err);
   process.exit(1);
 });
+

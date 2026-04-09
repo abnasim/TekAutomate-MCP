@@ -26,20 +26,36 @@ import { verifyScpiCommands } from './verifyScpiCommands';
 import { browseScpiCommands } from './browseScpiCommands';
 import { discoverScpi } from './discoverScpi';
 import { buildOrEditWorkflow } from './buildOrEditWorkflow';
+import { analyzeScopeScreenshot } from './analyzeScopeScreenshot';
 import { prepareFlowActions } from './prepareFlowActions';
 import { reviewRunLog } from './reviewRunLog';
 import { stageWorkflowProposal } from './stageWorkflowProposal';
 import { getCurrentWorkflow } from './getCurrentWorkflow';
 import { getInstrumentInfo } from './getInstrumentInfo';
 import { getRunLog } from './getRunLog';
+import { instrumentLive } from './instrumentLive';
+import { knowledge } from './knowledge';
+import { tekRouterPublic } from './tekRouterPublic';
+import { workflowUi } from './workflowUi';
 import { GROUP_NAMES, COMMAND_GROUPS } from '../core/commandGroups';
 import { TEK_ROUTER_TOOL_DEFINITION } from '../core/toolRouter';
 
+// Live instrument is enabled by default (local use). Set LIVE_INSTRUMENT_ENABLED=false to disable (hosted/public mode).
+export function isLiveInstrumentEnabled(): boolean {
+  return String(process.env.LIVE_INSTRUMENT_ENABLED ?? 'true').trim().toLowerCase() !== 'false';
+}
+
 export const TOOL_HANDLERS = {
   tek_router: async (args: Record<string, unknown>) => {
+    const directResult = await tekRouterPublic(args as any);
+    if (directResult) return directResult;
     const { tekRouter } = await import('../core/toolRouter');
     return tekRouter(args as any);
   },
+  ...(isLiveInstrumentEnabled() ? { instrument_live: instrumentLive } : {}),
+  analyze_scope_screenshot: analyzeScopeScreenshot,
+  workflow_ui: workflowUi,
+  knowledge,
   smart_scpi_lookup: smartScpiLookup,
   search_scpi: searchScpi,
   save_learned_workflow: async (input: {
@@ -120,6 +136,152 @@ export type ToolName = keyof typeof TOOL_HANDLERS;
 export function getToolDefinitions() {
   return [
     TEK_ROUTER_TOOL_DEFINITION,
+    ...(isLiveInstrumentEnabled() ? [{
+      name: 'instrument_live',
+      description:
+        'Live instrument gateway for TekAutomate. Use `context` for connection info, `send` for SCPI commands, `screenshot` for capture, `snapshot`/`diff`/`inspect` for *LRN?-based state discovery, and `resources` for VISA discovery when needed. For screenshot analysis, the default transport prefers a short-lived MCP-hosted image URL over base64 to reduce token usage.',
+      parameters: {
+        type: 'object',
+        properties: {
+          action: {
+            type: 'string',
+            enum: ['context', 'send', 'screenshot', 'snapshot', 'diff', 'inspect', 'resources'],
+            description: 'Live instrument operation to run.',
+          },
+          args: {
+            type: 'object',
+            description: 'Optional nested arguments for the selected action. You may also pass action arguments at the top level.',
+          },
+          commands: {
+            type: 'array',
+            items: { type: 'string' },
+            description: 'For action:"send" — SCPI commands to send in order.',
+          },
+          analyze: {
+            type: 'boolean',
+            description: 'For action:"screenshot" — set true only when the model needs the image returned for analysis.',
+          },
+          analysisTransport: {
+            type: 'string',
+            enum: ['auto', 'url', 'file_id', 'base64', 'mcp_image', 'openai_image', 'claude_image'],
+            description: 'For action:"screenshot" — optional analysis transport hint. Default auto prefers a short-lived MCP URL. Use openai_image to return the same short-lived MCP image URL for OpenAI-hosted vision flows, claude_image to return a native MCP image content block, base64 only for legacy payloads, or file_id for explicit OpenAI Files upload.',
+          },
+          timeoutMs: {
+            type: 'number',
+            description: 'Optional timeout in milliseconds for send, screenshot, or discovery actions.',
+          },
+          visaResource: {
+            type: 'string',
+            description: 'Optional VISA resource string to target a specific instrument instead of the active one (e.g. TCPIP::127.0.0.1::4000::SOCKET). Call action:"resources" first to list available targets.',
+          },
+        },
+        required: ['action'],
+        additionalProperties: true,
+      },
+    }] : []),
+    {
+      name: 'analyze_scope_screenshot',
+      description:
+        'Capture a fresh live scope screenshot and analyze it server-side with OpenAI vision. Use this when the host/client does not re-attach screenshot images automatically. Returns compact analysis text plus capture metadata.',
+      parameters: {
+        type: 'object',
+        properties: {
+          executorUrl: { type: 'string' },
+          visaResource: { type: 'string' },
+          backend: { type: 'string' },
+          liveMode: { type: 'boolean' },
+          outputMode: { type: 'string', enum: ['clean', 'verbose'] },
+          scopeType: { type: 'string', enum: ['modern', 'legacy'] },
+          modelFamily: { type: 'string' },
+          deviceDriver: { type: 'string' },
+          timeoutMs: { type: 'number', description: 'Optional screenshot timeout in milliseconds.' },
+          prompt: { type: 'string', description: 'Optional visual-analysis instruction for the screenshot.' },
+          question: { type: 'string', description: 'Alias for prompt.' },
+          model: { type: 'string', description: 'Optional OpenAI model override. Defaults to OPENAI_SCREENSHOT_MODEL or gpt-4.1-mini.' },
+          detail: { type: 'string', enum: ['low', 'high', 'auto', 'original'], description: 'Optional OpenAI image detail level. Defaults to original.' },
+          apiKey: { type: 'string', description: 'Optional OpenAI API key override. Defaults to OPENAI_API_KEY.' },
+        },
+        required: [],
+        additionalProperties: false,
+      },
+    },
+    {
+      name: 'workflow_ui',
+      description:
+        'Workflow/UI state gateway for TekAutomate. Use `current` to inspect the current workflow, `stage` to hand a proposal back to the UI, and `logs` to read the latest execution log tail.',
+      parameters: {
+        type: 'object',
+        properties: {
+          action: {
+            type: 'string',
+            enum: ['current', 'stage', 'logs'],
+            description: 'Workflow/UI operation to run.',
+          },
+          args: {
+            type: 'object',
+            description: 'Optional nested arguments for the selected action. You may also pass action arguments at the top level.',
+          },
+          summary: {
+            type: 'string',
+            description: 'For action:"stage" — short human-readable proposal summary.',
+          },
+          findings: {
+            type: 'array',
+            items: { type: 'string' },
+            description: 'For action:"stage" — optional findings list.',
+          },
+          suggestedFixes: {
+            type: 'array',
+            items: { type: 'string' },
+            description: 'For action:"stage" — optional suggested fixes list.',
+          },
+          actions: {
+            type: 'array',
+            items: { type: 'object' },
+            description: 'For action:"stage" — non-empty TekAutomate workflow actions array.',
+          },
+        },
+        required: ['action'],
+        additionalProperties: true,
+      },
+    },
+    {
+      name: 'knowledge',
+      description:
+        'Knowledge gateway for TekAutomate support material. Use `retrieve` for targeted RAG chunks, `examples` for matching workflow templates, and `failures` for known runtime failures and fixes.',
+      parameters: {
+        type: 'object',
+        properties: {
+          action: {
+            type: 'string',
+            enum: ['retrieve', 'examples', 'failures'],
+            description: 'Knowledge operation to run.',
+          },
+          args: {
+            type: 'object',
+            description: 'Optional nested arguments for the selected action. You may also pass action arguments at the top level.',
+          },
+          corpus: {
+            type: 'string',
+            description: 'For action:"retrieve" — knowledge corpus such as scpi, tmdevices, templates, app_logic, errors, scope_logic, or pyvisa_tekhsi.',
+          },
+          query: {
+            type: 'string',
+            description: 'Targeted search phrase for retrieve, examples, or failures.',
+          },
+          topK: {
+            type: 'number',
+            description: 'For action:"retrieve" — max chunks to return.',
+          },
+          limit: {
+            type: 'number',
+            description: 'For action:"examples" or "failures" — max results to return.',
+          },
+        },
+        required: ['action'],
+        additionalProperties: true,
+      },
+    },
     {
       name: 'smart_scpi_lookup',
       description:
@@ -413,8 +575,7 @@ export function getToolDefinitions() {
       name: 'get_instrument_info',
       description:
         'Return the latest TekAutomate instrument connection context mirrored from the browser. ' +
-        'Use when connected instrument details, backend, model family, executor context, selected live target, or VISA resource matter. ' +
-        'Treat this as the authoritative live context, then execute live tools directly instead of asking the user to restate executorUrl, visaResource, backend, or liveMode.',
+        'Use when connected instrument details, backend, model family, executor context, selected live target, or VISA resource matter.',
       parameters: {
         type: 'object',
         properties: {},
@@ -793,7 +954,7 @@ export function getToolDefinitions() {
     },
     {
       name: 'get_instrument_state',
-      description: 'Probe instrument identity/state via the local executor. In TekAutomate this is usually auto-targeted from the active live instrument. When multiple instruments are connected, call get_visa_resources first and pass visaResource explicitly (for example "TCPIP::192.168.1.100::INSTR"). Use outputMode="verbose" for full Python stdout/stderr/transcript. Prefer get_instrument_info for session context and use this when you want fresh instrument queries.',
+      description: 'Probe instrument identity/state via the local executor. In TekAutomate this is usually auto-targeted from the active live instrument. When multiple instruments are connected, call get_visa_resources first and pass visaResource explicitly (for example "TCPIP::192.168.1.100::INSTR"). Use outputMode="verbose" for full Python stdout/stderr/transcript.',
       parameters: {
         type: 'object',
         properties: {
@@ -809,7 +970,7 @@ export function getToolDefinitions() {
     },
     {
       name: 'probe_command',
-      description: 'Probe a single SCPI command on the selected VISA instrument via the local executor. In TekAutomate this usually uses the active live instrument automatically. When multiple instruments are connected, call get_visa_resources first and pass visaResource explicitly. Use outputMode="verbose" to return full runtime output instead of only the query result. If live context already exists, execute the probe instead of narrating the routing fields back to the user.',
+      description: 'Probe a single SCPI command on the selected VISA instrument via the local executor. In TekAutomate this usually uses the active live instrument automatically. When multiple instruments are connected, call get_visa_resources first and pass visaResource explicitly. Use outputMode="verbose" to return full runtime output instead of only the query result.',
       parameters: {
         type: 'object',
         properties: {
@@ -826,7 +987,7 @@ export function getToolDefinitions() {
     },
     {
       name: 'send_scpi',
-      description: 'Send one or more SCPI commands to the selected VISA instrument via the local executor. Queries return responses; writes return OK or error status. In TekAutomate this usually uses the active live instrument automatically. When multiple instruments are connected, call get_visa_resources first and pass visaResource explicitly. If get_instrument_info already provided executorUrl, visaResource, backend, and liveMode, use them directly and execute without restating them to the user.',
+      description: 'Send one or more SCPI commands to the selected VISA instrument via the local executor. Queries return responses; writes return OK or error status. In TekAutomate this usually uses the active live instrument automatically. When multiple instruments are connected, call get_visa_resources first and pass visaResource explicitly.',
       parameters: {
         type: 'object',
         properties: {
@@ -844,7 +1005,7 @@ export function getToolDefinitions() {
     },
     {
       name: 'capture_screenshot',
-      description: 'Capture a fresh scope screenshot from the selected live instrument. The image always updates the user interface. Pass analyze:true only when you need the image returned to the model for analysis, such as diagnosing errors or reading measurements. Default behavior is capture-only.',
+      description: 'Capture a fresh scope screenshot from the selected live instrument. The image always updates the user interface. Pass analyze:true only when the model must see the image. When analysis is requested, the default transport prefers a short-lived MCP-hosted URL over base64 to reduce token usage.',
       parameters: {
         type: 'object',
         properties: {
@@ -856,7 +1017,8 @@ export function getToolDefinitions() {
           scopeType: { type: 'string', enum: ['modern', 'legacy'] },
           modelFamily: { type: 'string' },
           deviceDriver: { type: 'string' },
-          analyze: { type: 'boolean', description: 'Set true to receive the image for AI analysis. Default false (capture only, updates UI).' },
+          analyze: { type: 'boolean', description: 'Set true to return the screenshot for AI vision analysis. Default false (capture only, updates UI).' },
+          analysisTransport: { type: 'string', enum: ['auto', 'url', 'file_id', 'base64', 'mcp_image', 'openai_image', 'claude_image'], description: 'Optional analysis transport hint when analyze:true. Default auto prefers a short-lived MCP URL. Use openai_image to return the same short-lived MCP image URL for OpenAI-hosted vision flows, claude_image to return a native MCP image content block, base64 only for legacy payloads, or file_id for explicit OpenAI Files upload.' },
         },
         required: [],
         additionalProperties: false,
@@ -864,7 +1026,7 @@ export function getToolDefinitions() {
     },
     {
       name: 'get_visa_resources',
-      description: 'List available VISA resources from the active TekAutomate live session. Use this first when more than one instrument may be connected, then pass the chosen visaResource into send_scpi, probe_command, capture_screenshot, or other live tools. Prefer this over guessing instrument selection.',
+      description: 'List available VISA resources from the local executor. Use this first when more than one instrument may be connected, then pass the chosen visaResource into send_scpi, probe_command, capture_screenshot, or other live tools. Prefer this over guessing instrument selection.',
       parameters: {
         type: 'object',
         properties: {
@@ -1023,4 +1185,68 @@ export async function runTool(name: string, args: Record<string, unknown>) {
     return { ok: false, data: null, sourceMeta: [], warnings: [`Unknown tool: ${name}`] };
   }
   return fn(args);
+}
+
+const PUBLIC_MCP_EXPOSED_TOOLS = new Set([
+  'tek_router',
+  ...(isLiveInstrumentEnabled() ? ['instrument_live'] : []),
+  'workflow_ui',
+  'knowledge',
+]);
+
+const PUBLIC_TEK_ROUTER_PARAMS = {
+  type: 'object',
+  properties: {
+    action: {
+      type: 'string',
+      enum: ['search', 'lookup', 'browse', 'verify', 'build'],
+      description: 'SCPI/build operation to run.',
+    },
+    query: {
+      type: 'string',
+      description: 'For action:"search" or action:"build" - targeted search phrase or build request.',
+    },
+    args: {
+      type: 'object',
+      description: 'Optional nested arguments for the selected action. You may also pass action arguments at the top level.',
+    },
+    header: {
+      type: 'string',
+      description: 'For action:"lookup" - exact SCPI header such as TRIGger:A:EDGE:SOUrce.',
+    },
+    group: {
+      type: 'string',
+      description: 'For action:"browse" - command group such as Trigger, Measurement, or Bus.',
+    },
+    filter: {
+      type: 'string',
+      description: 'For action:"browse" - optional keyword filter within the chosen group.',
+    },
+    commands: {
+      type: 'array',
+      items: { type: 'string' },
+      description: 'For action:"verify" - fully formed SCPI commands to validate.',
+    },
+    limit: {
+      type: 'number',
+      description: 'Optional max results for search or browse.',
+    },
+    modelFamily: {
+      type: 'string',
+      description: 'Optional instrument family filter.',
+    },
+  },
+  required: ['action'],
+  additionalProperties: true,
+};
+
+export function getSlimToolDefinitions() {
+  return getToolDefinitions()
+    .filter((def) => PUBLIC_MCP_EXPOSED_TOOLS.has(def.name))
+    .map((def) => {
+      if (def.name === 'tek_router') {
+        return { ...def, parameters: PUBLIC_TEK_ROUTER_PARAMS };
+      }
+      return def;
+    });
 }

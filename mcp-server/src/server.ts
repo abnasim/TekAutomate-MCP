@@ -5,7 +5,7 @@ import { initTmDevicesIndex } from './core/tmDevicesIndex';
 import { initRagIndexes } from './core/ragIndex';
 import { initTemplateIndex } from './core/templateIndex';
 import { runToolLoop } from './core/toolLoop';
-import { getToolDefinitions, getMcpExposedTools, runTool } from './tools/index';
+import { getSlimToolDefinitions, getToolDefinitions, runTool } from './tools/index';
 import type { McpChatRequest } from './core/schemas';
 import { getLastWorkflowProposal } from './tools/stageWorkflowProposal';
 import { getRuntimeContextState, updateRuntimeContext } from './tools/runtimeContextStore';
@@ -14,6 +14,7 @@ import { bootRouter, createReloadProvidersHandler, createRouterHandler, getRoute
 import { getCommandIndex } from './core/commandIndex';
 import { getRagIndexes } from './core/ragIndex';
 import { getTemplateIndex } from './core/templateIndex';
+import { getTempVisionImage } from './core/tempImageStore';
 import fs from 'fs';
 import path from 'path';
 import { fileURLToPath } from 'url';
@@ -23,8 +24,94 @@ const __dirname = path.dirname(__filename);
 
 let lastAiDebug: Record<string, unknown> | null = null;
 
-function sanitizeToolResultForExternalMcp(toolName: string, result: unknown): unknown {
-  return result;
+function sanitizeToolResultForExternalMcp(
+  toolName: string,
+  result: unknown,
+): unknown {
+  const isScreenshotLike = (name: string, record: Record<string, unknown>): boolean => {
+    if (name === 'capture_screenshot') return true;
+    if (name !== 'instrument_live') return false;
+    const source = record.data && typeof record.data === 'object'
+      ? (record.data as Record<string, unknown>)
+      : record;
+    return typeof source.imageUrl === 'string'
+      || typeof source.base64 === 'string'
+      || typeof source.analysisBase64 === 'string';
+  };
+
+  if (!result || typeof result !== 'object') return result;
+  const record = result as Record<string, unknown>;
+  if (!isScreenshotLike(toolName, record)) return result;
+
+  const data = record.data && typeof record.data === 'object'
+    ? (record.data as Record<string, unknown>)
+    : record;
+  const sanitized: Record<string, unknown> = {
+    ok: data.ok === false ? false : true,
+    captured: true,
+  };
+  if (typeof data.capturedAt === 'string') sanitized.capturedAt = data.capturedAt;
+  if (typeof data.scopeType === 'string') sanitized.scopeType = data.scopeType;
+  if (typeof data.mimeType === 'string') sanitized.mimeType = data.mimeType;
+  if (typeof data.sizeBytes === 'number') sanitized.sizeBytes = data.sizeBytes;
+  if (typeof data.originalMimeType === 'string') sanitized.originalMimeType = data.originalMimeType;
+  if (typeof data.originalSizeBytes === 'number') sanitized.originalSizeBytes = data.originalSizeBytes;
+  if (typeof data.imageUrl === 'string') sanitized.imageUrl = data.imageUrl;
+  if (typeof data.expiresAt === 'string') sanitized.expiresAt = data.expiresAt;
+
+  return {
+    ...(record.ok === false ? { ok: false } : { ok: true }),
+    data: sanitized,
+    sourceMeta: Array.isArray(record.sourceMeta) ? record.sourceMeta : [],
+    warnings: Array.isArray(record.warnings) ? record.warnings : [],
+  };
+}
+
+function buildExternalMcpToolContent(toolName: string, result: unknown) {
+  if (!result || typeof result !== 'object') {
+    return [{ type: 'text' as const, text: typeof result === 'string' ? result : JSON.stringify(result, null, 2) }];
+  }
+
+  const record = result as Record<string, unknown>;
+  const data = record.data && typeof record.data === 'object'
+    ? (record.data as Record<string, unknown>)
+    : null;
+  const source = data ?? record;
+  const imageContent = source.imageContent && typeof source.imageContent === 'object'
+    ? (source.imageContent as Record<string, unknown>)
+    : null;
+
+  const isScreenshotLike = toolName === 'capture_screenshot'
+    || (toolName === 'instrument_live' && Boolean(imageContent || source.imageUrl || source.base64 || source.analysisBase64));
+
+  if (!isScreenshotLike || !imageContent || imageContent.type !== 'image') {
+    const safeResult = sanitizeToolResultForExternalMcp(toolName, result);
+    const text = typeof safeResult === 'string' ? safeResult : JSON.stringify(safeResult, null, 2);
+    return [{ type: 'text' as const, text }];
+  }
+
+  const metadata: Record<string, unknown> = {
+    ok: source.ok === false ? false : true,
+    captured: true,
+  };
+  if (typeof source.capturedAt === 'string') metadata.capturedAt = source.capturedAt;
+  if (typeof source.scopeType === 'string') metadata.scopeType = source.scopeType;
+  if (typeof source.mimeType === 'string') metadata.mimeType = source.mimeType;
+  if (typeof source.sizeBytes === 'number') metadata.sizeBytes = source.sizeBytes;
+  if (typeof source.originalMimeType === 'string') metadata.originalMimeType = source.originalMimeType;
+  if (typeof source.originalSizeBytes === 'number') metadata.originalSizeBytes = source.originalSizeBytes;
+
+  return [
+    {
+      type: 'image' as const,
+      data: String(imageContent.data || ''),
+      mimeType: String(imageContent.mimeType || source.mimeType || 'image/png'),
+    },
+    {
+      type: 'text' as const,
+      text: JSON.stringify(metadata),
+    },
+  ];
 }
 const REQUEST_LOG_DIR = path.join(__dirname, 'logs', 'requests');
 const MAX_LOG_FILES = 500;
@@ -215,6 +302,27 @@ function sendJson(res: http.ServerResponse, status: number, payload: unknown) {
   res.end(JSON.stringify(payload));
 }
 
+function getRequestBaseUrl(req: http.IncomingMessage): string {
+  const forwardedProto = String(req.headers['x-forwarded-proto'] || '').split(',')[0].trim();
+  const forwardedHost = String(req.headers['x-forwarded-host'] || '').split(',')[0].trim();
+  const host = forwardedHost || String(req.headers.host || '').trim() || 'localhost:3001';
+  const proto = forwardedProto || ((req.socket as any)?.encrypted ? 'https' : 'http');
+  return `${proto}://${host}`;
+}
+
+function extensionForMimeType(mimeType: string): string {
+  const normalized = String(mimeType || '').toLowerCase();
+  if (normalized === 'image/png') return 'png';
+  if (normalized === 'image/jpeg' || normalized === 'image/jpg') return 'jpg';
+  if (normalized === 'image/webp') return 'webp';
+  if (normalized === 'image/gif') return 'gif';
+  return 'img';
+}
+
+function getConfiguredPublicBaseUrl(): string {
+  return String(process.env.MCP_PUBLIC_URL || 'https://tekautomatemcpv2-production.up.railway.app').trim();
+}
+
 function getHealthPayload() {
   return {
     ok: startupState !== 'error',
@@ -371,7 +479,7 @@ export async function createServer(port = 8787): Promise<http.Server> {
         try { await startupInitPromise; } catch { /* degrade gracefully */ }
       }
       // Slim MCP surface — only gateway + live tools exposed
-      const toolDefs = getMcpExposedTools();
+        const toolDefs = getSlimToolDefinitions();
       const mcpTools = toolDefs.map((def: any) => ({
         name: def.name,
         description: def.description ?? def.name,
@@ -392,9 +500,12 @@ export async function createServer(port = 8787): Promise<http.Server> {
       }
       const { name, arguments: args } = request.params;
       try {
-        const result = await runTool(name, (args as Record<string, unknown>) ?? {});
-        const text = typeof result === 'string' ? result : JSON.stringify(result, null, 2);
-        return { content: [{ type: 'text' as const, text }] };
+        const toolArgs = {
+          ...((args as Record<string, unknown>) ?? {}),
+          __mcpBaseUrl: getConfiguredPublicBaseUrl(),
+        };
+        const result = await runTool(name, toolArgs);
+        return { content: buildExternalMcpToolContent(name, result) };
       } catch (err) {
         const msg = err instanceof Error ? err.message : String(err);
         return { content: [{ type: 'text' as const, text: `Error: ${msg}` }], isError: true };
@@ -619,6 +730,25 @@ function filterTools(q) {
       return;
     }
 
+    if (req.method === 'GET' && req.url?.startsWith('/temp/vision/')) {
+      const requestedId = decodeURIComponent(req.url.slice('/temp/vision/'.length));
+      const id = requestedId.split('.')[0];
+      const image = getTempVisionImage(id);
+      if (!image) {
+        res.statusCode = 404;
+        res.end('Not found');
+        return;
+      }
+      const ext = extensionForMimeType(image.mimeType);
+      res.statusCode = 200;
+      res.setHeader('Content-Type', image.mimeType);
+      res.setHeader('Content-Disposition', `inline; filename="scope-screenshot.${ext}"`);
+      res.setHeader('Cache-Control', 'private, max-age=60');
+      res.setHeader('Access-Control-Allow-Origin', '*');
+      res.end(image.buffer);
+      return;
+    }
+
     // ── GET / — Tools & API reference page ────────────────────────
     if (req.method === 'GET' && (req.url === '/' || req.url === '/index.html')) {
       res.statusCode = 200;
@@ -717,7 +847,7 @@ function filterTools(q) {
             res.statusCode = 204;
             res.end();
           } else if (method === 'tools/list') {
-            const toolDefs = getMcpExposedTools();
+            const toolDefs = getSlimToolDefinitions();
             const tools = toolDefs.map((def: any) => ({
               name: def.name,
               description: def.description ?? def.name,
@@ -730,7 +860,10 @@ function filterTools(q) {
             sendJson(res, 200, { jsonrpc: '2.0', id: rpcId, result: { tools } });
           } else if (method === 'tools/call') {
             const toolName = rpc.params?.name as string;
-            const toolArgs = (rpc.params?.arguments as Record<string, unknown>) ?? {};
+            const toolArgs = {
+              ...((rpc.params?.arguments as Record<string, unknown>) ?? {}),
+              __mcpBaseUrl: getRequestBaseUrl(req),
+            };
             console.log(`[MCP:json] call_tool name=${toolName} args=${JSON.stringify(toolArgs).slice(0, 200)}`);
             try {
               const result = await runTool(toolName, toolArgs);
@@ -882,7 +1015,7 @@ function filterTools(q) {
     // ── Tool endpoints: browser calls these directly, AI proxy not needed ──
 
     if (req.method === 'GET' && req.url === '/tools/list') {
-      const tools = getToolDefinitions();
+      const tools = getSlimToolDefinitions();
       sendJson(res, 200, { ok: true, tools });
       return;
     }
@@ -941,6 +1074,10 @@ function filterTools(q) {
         }
         // Inject instrument endpoint for live tools
         let args = body.args || {};
+        args = {
+          ...args,
+          __mcpBaseUrl: getRequestBaseUrl(req),
+        };
         const liveTools = ['get_instrument_state', 'probe_command', 'send_scpi', 'capture_screenshot', 'get_visa_resources', 'get_environment', 'discover_scpi'];
         if (liveTools.includes(toolName) && body.instrumentEndpoint) {
           args = {
@@ -973,10 +1110,9 @@ function filterTools(q) {
           input?: unknown[];
           systemPrompt?: string;
         };
-        const serverKey = process.env.OPENAI_SERVER_API_KEY;
-        const vectorStoreId = process.env.COMMAND_VECTOR_STORE_ID;
-        if (!serverKey) {
-          sendJson(res, 500, { ok: false, error: 'OPENAI_SERVER_API_KEY not configured on server' });
+        const apiKey = String(body.apiKey || '').trim();
+        if (!apiKey) {
+          sendJson(res, 400, { ok: false, error: 'Missing apiKey' });
           return;
         }
         if (!body?.input) {
@@ -988,16 +1124,13 @@ function filterTools(q) {
           input: body.input,
           stream: true,
         };
-        if (vectorStoreId) {
-          requestBody.tools = [{ type: 'file_search', vector_store_ids: [vectorStoreId] }];
-        }
         // Use server key — owns the vector store. User's apiKey is for authentication
         // to this service only; OpenAI is billed to the server account.
         const openaiRes = await fetch('https://api.openai.com/v1/responses', {
           method: 'POST',
           headers: {
             'Content-Type': 'application/json',
-            Authorization: `Bearer ${serverKey}`,
+            Authorization: `Bearer ${apiKey}`,
           },
           body: JSON.stringify(requestBody),
         });
@@ -1060,6 +1193,7 @@ function filterTools(q) {
       const requestId = `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
       try {
         const body = (await readJsonBody(req)) as unknown as McpChatRequest;
+        (body as unknown as Record<string, unknown>).__mcpBaseUrl = getRequestBaseUrl(req);
         const normalizedUserMessage = typeof body?.userMessage === 'string' ? body.userMessage.trim() : '';
         const mode = body?.mode === 'mcp_only' ? 'mcp_only' : 'mcp_ai';
         if (mode === 'mcp_only') {

@@ -942,22 +942,7 @@ export const TEK_ROUTER_TOOL_DEFINITION = {
     '## Actions (use tek_router for these):\n' +
     'BUILD WORKFLOW:   {"action":"build","query":"set up jitter measurement on CH1"}\n' +
     'MATERIALIZE:      {"action":"search_exec","query":"materialize scpi command","args":{"header":"CH<x>:SCAle","commandType":"set","value":"1.0","placeholderBindings":{"CH<x>":"CH1"}}}\n' +
-    'SAVE/LEARN:       The create action is being redesigned. Instead, generate a provider JSON file the user can drop into their MCP providers/ directory.\n' +
-    'Provider JSON format:\n' +
-    '```json\n' +
-    '{\n' +
-    '  "id": "shortcut:my_shortcut_name",\n' +
-    '  "name": "Human Readable Name",\n' +
-    '  "description": "What this shortcut does",\n' +
-    '  "category": "shortcut",\n' +
-    '  "modelFamily": "MSO2",\n' +
-    '  "triggers": ["trigger phrase 1", "trigger phrase 2"],\n' +
-    '  "steps": [\n' +
-    '    {"id": "step_1", "label": "Step description", "tool": "send_scpi", "args": {"commands": ["*IDN?"]}}\n' +
-    '  ]\n' +
-    '}\n' +
-    '```\n' +
-    'Tell the user to save this file as providers/<name>.json and redeploy.\n' +
+    'SAVE/LEARN:       {"action":"create","toolName":"Edge Trigger Setup","toolDescription":"Configure edge trigger","toolTriggers":["edge trigger","set trigger"],"toolCategory":"shortcut","toolSteps":[{"tool":"send_scpi","args":{"commands":["TRIGger:A:TYPe EDGE"]}}]}\n' +
     'LIST GROUPS:      {"action":"search_exec","query":"list command groups","args":{}}\n\n' +
 
     '## Recommended chain:\n' +

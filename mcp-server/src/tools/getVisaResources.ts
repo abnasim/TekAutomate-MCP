@@ -1,6 +1,6 @@
 import { getVisaResourcesProxy } from '../core/instrumentProxy';
 import type { ToolResult } from '../core/schemas';
-import { dispatchLiveActionThroughTekAutomate, shouldBridgeToTekAutomate, withRuntimeInstrumentDefaults } from './liveToolSupport';
+import { getInstrumentInfoState } from './runtimeContextStore';
 
 interface Input {
   executorUrl: string;
@@ -27,21 +27,39 @@ interface ScannedInstrument {
  * pyvisa list_resources() if /scan is unavailable.
  */
 export async function getVisaResources(input: Input): Promise<ToolResult<Record<string, unknown>>> {
-  if (shouldBridgeToTekAutomate(input)) {
-    const bridged = await dispatchLiveActionThroughTekAutomate('get_visa_resources', input, 45_000);
-    return {
-      ok: bridged.ok,
-      data: bridged.ok
-        ? ((bridged.result && typeof bridged.result === 'object' ? bridged.result : { result: bridged.result }) as Record<string, unknown>)
-        : { error: 'LIVE_ACTION_FAILED', message: bridged.error || 'TekAutomate failed to list VISA resources.' },
-      sourceMeta: [],
-      warnings: bridged.ok ? [] : [bridged.error || 'TekAutomate live action failed.'],
-    };
-  }
+  const instrumentState = getInstrumentInfoState();
+  const cachedDevices = Array.isArray(instrumentState.devices) ? instrumentState.devices : [];
+  const cachedInstruments = cachedDevices
+    .map((device) => {
+      const visaResource = typeof device.visaResource === 'string' ? device.visaResource : '';
+      if (!visaResource) return null;
+      const model = typeof device.modelFamily === 'string' ? device.modelFamily : '';
+      const manufacturer = typeof device.alias === 'string' ? device.alias : '';
+      return {
+        resource: visaResource,
+        identity: [manufacturer, model].filter(Boolean).join(' ').trim() || visaResource,
+        manufacturer: manufacturer || 'Tektronix',
+        model,
+        serial: '',
+        firmware: '',
+        reachable: true,
+        connType: typeof device.connectionType === 'string' ? device.connectionType : '',
+      } satisfies ScannedInstrument;
+    })
+    .filter((item): item is ScannedInstrument => item !== null);
 
-  input = withRuntimeInstrumentDefaults(input);
-  if (!input.liveMode) {
-    return { ok: false, data: {}, sourceMeta: [], warnings: ['live instrument mode is disabled'] };
+  if (cachedInstruments.length > 0) {
+    return {
+      ok: true,
+      data: {
+        instruments: cachedInstruments,
+        count: cachedInstruments.length,
+        source: 'runtime_context',
+        hint: 'These VISA resources were mirrored from TekAutomate runtime state.',
+      },
+      sourceMeta: [],
+      warnings: [],
+    };
   }
 
   // Try the richer /scan endpoint first
@@ -61,7 +79,7 @@ export async function getVisaResources(input: Input): Promise<ToolResult<Record<
           instruments: scanJson.instruments,
           count: scanJson.count || scanJson.instruments.length,
           source: 'executor_scan',
-          hint: 'Use the "resource" field as the visaResource parameter in send_scpi/probe_command to target a specific instrument.',
+          hint: 'Use the "resource" field as the visaResource parameter in instrument_live action:"send" to target a specific instrument. You can send commands to multiple instruments in parallel by making concurrent tool calls with different visaResource values.',
         },
         sourceMeta: [],
         warnings: [],

@@ -23,6 +23,7 @@ import {
   buildSessionContext,
   cleanupStaleSessions,
 } from './liveSession';
+import { storeTempVisionImage } from './tempImageStore';
 
 /**
  * Build shortcut from clean plan
@@ -5744,7 +5745,7 @@ function isHostedStructuredBuildRequest(req: McpChatRequest): boolean {
 }
 
 function resolveHostedVectorStoreId(): string {
-  return String(process.env.COMMAND_VECTOR_STORE_ID || '').trim();
+  return '';
 }
 
 function buildHostedToolDefinitions(toolNames?: string[]): Array<{ name: string; description: string }> {
@@ -6277,6 +6278,7 @@ async function executeHostedToolCall(
       outputMode: req.instrumentEndpoint.outputMode || 'verbose',
       modelFamily: req.flowContext.modelFamily,
       deviceDriver: req.flowContext.deviceDriver,
+      __mcpBaseUrl: (req as unknown as Record<string, unknown>).__mcpBaseUrl,
       ...args,
     };
   }
@@ -7676,21 +7678,77 @@ async function runOpenAiToolLoop(
 
           // Handle screenshot results: extract image for UI, only send to AI if analyze=true
           const imageData = extractImageFromToolResult(result, 'ui');
-          if (imageData) {
+          const imageUrl = extractImageUrlFromToolResult(result);
+          if (imageData || imageUrl) {
             const wantsAnalysis = toolArgs.analyze === true;
-            console.log(`[MCP] OpenAI live screenshot: ${imageData.base64.length} b64 chars, analyze=${wantsAnalysis}`);
+            console.log(`[MCP] OpenAI live screenshot: ${imageData ? imageData.base64.length : 0} b64 chars, imageUrl=${imageUrl ? 'yes' : 'no'}, analyze=${wantsAnalysis}`);
             // Always collect for UI update
-            liveScreenshots.push({ base64: imageData.base64, mimeType: imageData.mimeType, capturedAt: new Date().toISOString() });
+            if (imageData) {
+              liveScreenshots.push({ base64: imageData.base64, mimeType: imageData.mimeType, capturedAt: new Date().toISOString() });
+            }
             if (wantsAnalysis) {
               const analysisImageData = extractImageFromToolResult(result, 'analysis') || imageData;
+              const analysisTransportRaw = String((toolArgs as Record<string, unknown>).analysisTransport || 'auto').toLowerCase() as ScreenshotAnalysisTransport;
+              const analysisTransport = analysisTransportRaw === 'claude_image'
+                ? 'mcp_image'
+                : analysisTransportRaw;
+              const wantsUrlTransport = analysisTransport === 'auto' || analysisTransport === 'url';
+              const wantsOpenAiImage = analysisTransport === 'openai_image';
+              const analysisImageUrl = imageUrl || (wantsUrlTransport && analysisImageData
+                ? buildVisionImageUrlForHostedLoop(
+                    req,
+                    analysisImageData.base64,
+                    analysisImageData.mimeType,
+                    new Date().toISOString(),
+                  )
+                : null);
+              const analysisFileId = (analysisTransport === 'file_id' || wantsOpenAiImage) && analysisImageData
+                ? await uploadVisionImageToOpenAiFileHosted(
+                    req.apiKey,
+                    analysisImageData.base64,
+                    analysisImageData.mimeType,
+                    new Date().toISOString(),
+                  )
+                : null;
               // AI wants to see the image — inject it
+              if ((analysisTransport === 'file_id' || wantsOpenAiImage) && !analysisFileId) {
+                liveMessages.push({
+                  role: 'tool',
+                  tool_call_id: toolId,
+                  content: `Error: capture_screenshot requested analysisTransport=${analysisTransport}, but uploading the screenshot to OpenAI Files failed.`,
+                });
+                continue;
+              }
+              if (analysisTransport === 'url' && !analysisImageUrl) {
+                liveMessages.push({
+                  role: 'tool',
+                  tool_call_id: toolId,
+                  content: `Error: capture_screenshot requested analysisTransport=${analysisTransport}, but MCP could not create a temporary image URL.`,
+                });
+                continue;
+              }
+              if (analysisTransport === 'openai_image' && !analysisImageData) {
+                liveMessages.push({
+                  role: 'tool',
+                  tool_call_id: toolId,
+                  content: 'Error: capture_screenshot requested analysisTransport=openai_image, but no screenshot image payload was available.',
+                });
+                continue;
+              }
               const textSummary = buildImageToolResultSummary(result);
-              liveMessages.push({ role: 'tool', tool_call_id: toolId, content: textSummary });
+              const resolvedTransport = wantsOpenAiImage ? 'file_id' : analysisImageUrl ? 'url' : analysisFileId ? 'file_id' : 'base64';
+              liveMessages.push({ role: 'tool', tool_call_id: toolId, content: `${textSummary} Vision transport: ${resolvedTransport}.` });
               liveMessages.push({
                 role: 'user',
                 content: [
                   { type: 'text', text: 'Here is the screenshot you just captured. Describe what you see on the scope display.' },
-                  { type: 'image_url', image_url: { url: `data:${analysisImageData.mimeType};base64,${analysisImageData.base64}`, detail: 'auto' } },
+                  ...(wantsOpenAiImage && analysisFileId
+                    ? [{ type: 'image_url', image_url: { file_id: analysisFileId, detail: 'auto' } }]
+                    : analysisImageUrl
+                    ? [{ type: 'image_url', image_url: { url: analysisImageUrl, detail: 'auto' } }]
+                    : analysisFileId
+                    ? [{ type: 'image_url', image_url: { file_id: analysisFileId, detail: 'auto' } }]
+                    : [{ type: 'image_url', image_url: { url: `data:${analysisImageData.mimeType};base64,${analysisImageData.base64}`, detail: 'auto' } }]),
                 ],
               });
             } else {
@@ -7891,6 +7949,88 @@ function extractImageFromToolResult(
   }
 
   return null;
+}
+
+function extractImageUrlFromToolResult(result: unknown): string | null {
+  if (!result || typeof result !== 'object') return null;
+  const r = result as Record<string, unknown>;
+  const data = r.data && typeof r.data === 'object' ? (r.data as Record<string, unknown>) : null;
+  const candidate = typeof data?.imageUrl === 'string'
+    ? data.imageUrl
+    : typeof r.imageUrl === 'string'
+      ? r.imageUrl
+      : '';
+  const trimmed = candidate.trim();
+  return trimmed || null;
+}
+
+function guessImageExtensionFromMimeType(mimeType: string): string {
+  const lower = String(mimeType || '').toLowerCase();
+  if (lower.includes('jpeg') || lower.includes('jpg')) return 'jpg';
+  if (lower.includes('webp')) return 'webp';
+  if (lower.includes('gif')) return 'gif';
+  return 'png';
+}
+
+async function uploadVisionImageToOpenAiFileHosted(
+  apiKey: string,
+  base64: string,
+  mimeType: string,
+  capturedAt?: string,
+): Promise<string | null> {
+  if (!apiKey || !base64 || !String(mimeType || '').startsWith('image/')) return null;
+
+  try {
+    const fileName = `scope-${String(capturedAt || new Date().toISOString()).replace(/[:.]/g, '-')}.${guessImageExtensionFromMimeType(mimeType)}`;
+    const dataUri = `data:${mimeType};base64,${base64}`;
+    const res = await fetch('https://api.openai.com/v1/files', {
+      method: 'POST',
+      headers: {
+        Authorization: `Bearer ${apiKey}`,
+      },
+      body: (() => {
+        const form = new FormData();
+        form.append('purpose', 'vision');
+        form.append('file', new File([Buffer.from(base64, 'base64')], fileName, { type: mimeType }));
+        return form;
+      })(),
+    });
+    if (!res.ok) {
+      console.log(`[MCP] Files upload failed (${res.status}) for screenshot vision handoff`);
+      return null;
+    }
+    const json = await res.json() as { id?: string };
+    const fileId = typeof json.id === 'string' ? json.id.trim() : '';
+    if (fileId) return fileId;
+    console.log(`[MCP] Files upload returned no file id; falling back to data URL (${dataUri.length} chars prepared)`);
+    return null;
+  } catch (err) {
+    console.log(`[MCP] Files upload error for screenshot vision handoff: ${err instanceof Error ? err.message : String(err)}`);
+    return null;
+  }
+}
+
+type ScreenshotAnalysisTransport = 'auto' | 'url' | 'file_id' | 'base64' | 'mcp_image' | 'openai_image' | 'claude_image';
+
+function buildVisionImageUrlForHostedLoop(
+  req: McpChatRequest,
+  base64: string,
+  mimeType: string,
+  capturedAt?: string,
+): string | null {
+  const baseUrl = String((req as unknown as Record<string, unknown>).__mcpBaseUrl || '').trim();
+  if (!baseUrl || !base64 || !mimeType) return null;
+  try {
+    const stored = storeTempVisionImage({
+      buffer: Buffer.from(base64, 'base64'),
+      mimeType,
+      createdAt: capturedAt,
+    });
+    return `${baseUrl}${stored.path}`;
+  } catch (err) {
+    console.log(`[MCP] Failed to create temp screenshot URL: ${err instanceof Error ? err.message : String(err)}`);
+    return null;
+  }
 }
 
 /**
