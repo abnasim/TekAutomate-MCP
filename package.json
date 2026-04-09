@@ -58,7 +58,7 @@
   "scripts": {
     "start": "craco start",
     "build": "cross-env CI=false craco build",
-    "build:railway": "cross-env CI=false PUBLIC_URL=/ craco build",
+    "build:railway": "cross-env CI=false PUBLIC_URL=/ NODE_ENV=production BABEL_ENV=production craco build",
     "start:railway": "serve -s build -l $PORT",
     "test": "craco test --watchAll=false",
     "test:report": "craco test --watchAll=false",
@@ -127,6 +127,9 @@
         }
       ]
     }
+  },
+  "engines": {
+    "node": ">=20.0.0"
   },
   "eslintConfig": {
     "extends": [
