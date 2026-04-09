@@ -75,6 +75,13 @@ module.exports = {
         modifySourceMapLoader(webpackConfig.module.rules);
       }
 
+      // Remove ReactRefreshWebpackPlugin in production (prevents babel transform error)
+      if (process.env.NODE_ENV === 'production' && Array.isArray(webpackConfig.plugins)) {
+        webpackConfig.plugins = webpackConfig.plugins.filter(
+          (plugin) => !plugin || !plugin.constructor || plugin.constructor.name !== 'ReactRefreshWebpackPlugin'
+        );
+      }
+
       if (Array.isArray(webpackConfig.plugins)) {
         webpackConfig.plugins.forEach((plugin) => {
           if (plugin && plugin.constructor && plugin.constructor.name === 'ESLintWebpackPlugin') {
