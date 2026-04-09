@@ -412,7 +412,9 @@ export async function executeMcpTool(
   // Instrument tools: call executor directly from browser (no MCP needed)
   if (EXECUTOR_TOOLS.has(toolName) && instrumentEndpoint?.executorUrl) {
     const execUrl = instrumentEndpoint.executorUrl.replace(/\/$/, '');
-    const scopeVisa = instrumentEndpoint.visaResource;
+    const scopeVisa = typeof args.visaResource === 'string' && args.visaResource
+      ? args.visaResource
+      : instrumentEndpoint.visaResource;
 
     // Map tool name to executor action + payload
     let action = toolName;

@@ -231,7 +231,7 @@ export function AiChatPanel({
   const [testKeyStatus, setTestKeyStatus] = useState<string | null>(null);
   const [panelWidth, setPanelWidth] = useState(560);
   const [mcpStatus, setMcpStatus] = useState<{ available: boolean; message?: string }>({ available: true });
-  const [mcpHostInput, setMcpHostInput] = useState(() => resolveMcpHost());
+  const [mcpHostInput, setMcpHostInput] = useState(() => getStoredMcpHost());
   const [mcpHostStatus, setMcpHostStatus] = useState<string | null>(null);
   const [instrumentOutputMode, setInstrumentOutputMode] = useState<'clean' | 'verbose'>(() => {
     if (typeof window === 'undefined') return 'verbose';
@@ -405,11 +405,11 @@ export function AiChatPanel({
 
   useEffect(() => {
     const stored = getStoredMcpHost();
-    const resolved = stored || resolveMcpHost();
-    if (resolved && resolved !== mcpHostInput) {
-      setMcpHostInput(resolved);
+    if (stored && stored !== mcpHostInput) {
+      setMcpHostInput(stored);
     }
-  }, [mcpHostInput]);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   const normalizeMcpHost = (value: string): string => {
     const trimmed = String(value || '').trim();

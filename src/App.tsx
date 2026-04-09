@@ -8497,14 +8497,14 @@ Keep under 120 words. No headings. Bullets only. Stay on this command. Do not de
               
               <button
                 onClick={() => setShowStepsAIPromptInput(true)}
-                className={`h-8 min-w-[7rem] px-3 py-1.5 rounded text-xs font-medium flex items-center justify-center gap-1.5 transition-colors flex-shrink-0 whitespace-nowrap ${
-                  stepsAIPromptCopied 
-                    ? 'bg-green-100 text-green-700' 
-                    : 'bg-gradient-to-r from-purple-500 to-indigo-500 hover:from-purple-600 hover:to-indigo-600 text-white'
+                className={`h-7 lg:h-8 px-2 lg:px-3 py-1 lg:py-1.5 rounded text-[11px] lg:text-xs font-medium flex items-center justify-center gap-1 whitespace-nowrap flex-shrink-0 ${
+                  stepsAIPromptCopied
+                    ? 'bg-green-100 text-green-700 dark:bg-green-900 dark:text-green-300'
+                    : 'bg-gray-100 dark:bg-gray-700 dark:text-gray-200'
                 }`}
                 title="Generate Steps JSON using AI"
               >
-                {stepsAIPromptCopied ? <Check size={16} className="flex-shrink-0" /> : <Sparkles size={16} className="flex-shrink-0" />}
+                {stepsAIPromptCopied ? <Check size={14} className="flex-shrink-0" /> : <Sparkles size={14} className="flex-shrink-0" />}
                 {stepsAIPromptCopied ? 'Copied!' : 'AI Builder'}
               </button>
               <button
@@ -8528,23 +8528,22 @@ Keep under 120 words. No headings. Bullets only. Stay on this command. Do not de
                     alert('Failed to parse JSON from clipboard. Make sure you copied valid JSON.');
                   }
                 }}
-                className="h-8 min-w-[7rem] px-3 py-1.5 bg-blue-100 hover:bg-blue-200 text-blue-700 rounded text-xs font-medium flex items-center justify-center gap-1.5 flex-shrink-0 whitespace-nowrap"
+                className="h-7 lg:h-8 px-2 lg:px-3 py-1 lg:py-1.5 rounded text-[11px] lg:text-xs font-medium flex items-center justify-center gap-1 whitespace-nowrap flex-shrink-0 bg-gray-100 dark:bg-gray-700 dark:text-gray-200"
                 title="Paste JSON from clipboard (from AI output)"
               >
-                <ClipboardPaste size={16} className="flex-shrink-0" />
+                <ClipboardPaste size={14} className="flex-shrink-0" />
                 Paste JSON
               </button>
-              
-              <button 
+
+              <button
                 data-tour="gen-code-button"
                 onClick={() => {
                   triggerControls.codegen();
                   setExportOpen(true);
-                }} 
-                className="h-8 px-3 py-1.5 bg-blue-600 hover:bg-blue-700 text-white rounded text-xs font-medium whitespace-nowrap flex items-center justify-center gap-1.5 flex-shrink-0"
-                style={{ minWidth: '100px' }}
+                }}
+                className="h-7 lg:h-8 px-2 lg:px-3 py-1 lg:py-1.5 rounded text-[11px] lg:text-xs font-medium flex items-center justify-center gap-1 whitespace-nowrap flex-shrink-0 bg-gray-100 dark:bg-gray-700 dark:text-gray-200"
               >
-                <Code2 size={16} className="flex-shrink-0" />
+                <Code2 size={14} className="flex-shrink-0" />
                 Gen Code
               </button>
               <TekAcademyHeaderButton />
@@ -9342,12 +9341,12 @@ Keep under 120 words. No headings. Bullets only. Stay on this command. Do not de
                                             </div>
                                             <div>
                                               <label className="block text-xs font-medium mb-0.5 text-gray-900 dark:text-zinc-100">Port</label>
-                                              <input 
-                                                type="number" 
-                                                value={device.port} 
-                                                onChange={(e) => updateDeviceField('port', parseInt(e.target.value || '4000', 10))} 
+                                              <input
+                                                type="number"
+                                                value={device.port}
+                                                onChange={(e) => updateDeviceField('port', parseInt(e.target.value || '4000', 10))}
                                                 disabled={device.connectionType === 'tcpip'}
-                                                className="w-full px-1 py-0.5 text-xs border border-gray-300 dark:border-zinc-600 rounded bg-white dark:bg-zinc-700 text-gray-900 dark:text-zinc-100 placeholder-gray-500 dark:placeholder-zinc-400 disabled:bg-gray-100 dark:disabled:bg-zinc-800" 
+                                                className="w-full px-1 py-0.5 text-xs border border-gray-300 dark:border-zinc-600 rounded bg-white dark:bg-zinc-700 text-gray-900 dark:text-zinc-100 placeholder-gray-500 dark:placeholder-zinc-400 disabled:bg-gray-100 disabled:text-gray-400 disabled:cursor-not-allowed dark:disabled:bg-zinc-900 dark:disabled:text-zinc-500 dark:disabled:border-zinc-700"
                                               />
                                             </div>
                                           </>
@@ -9953,6 +9952,7 @@ Keep under 120 words. No headings. Bullets only. Stay on this command. Do not de
               })(),
             }}
             onRun={() => runOnScope(true)}
+            onRunSingleStep={(step) => runSingleStepProbe(step as any)}
             onUndo={undo}
             onRedo={redo}
             canUndo={past.length > 0}
