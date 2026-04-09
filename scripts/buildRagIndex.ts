@@ -2,7 +2,7 @@ import fs from 'fs';
 import path from 'path';
 import { fileURLToPath } from 'url';
 
-type RagCorpus = 'scpi' | 'tmdevices' | 'app_logic' | 'scope_logic' | 'templates' | 'errors' | 'pyvisa_tekhsi';
+type RagCorpus = 'scpi' | 'tmdevices' | 'app_logic' | 'scope_logic' | 'templates' | 'errors' | 'pyvisa_tekhsi' | 'tek_docs';
 
 interface RagChunk extends Record<string, unknown> {
   id: string;
