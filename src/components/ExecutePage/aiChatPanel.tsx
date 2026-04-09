@@ -233,7 +233,7 @@ export function AiChatPanel({
   const [mcpStatus, setMcpStatus] = useState<{ available: boolean; message?: string }>({ available: true });
   const [mcpHostInput, setMcpHostInput] = useState(() => getStoredMcpHost());
   const [mcpHostStatus, setMcpHostStatus] = useState<string | null>(null);
-  const [instrumentOutputMode, setInstrumentOutputMode] = useState<'clean' | 'verbose'>(() => {
+  const [instrumentOutputMode] = useState<'clean' | 'verbose'>(() => {
     if (typeof window === 'undefined') return 'verbose';
     try {
       return window.localStorage.getItem(INSTRUMENT_OUTPUT_MODE_STORAGE) === 'clean' ? 'clean' : 'verbose';
@@ -249,7 +249,7 @@ export function AiChatPanel({
   const CHATKIT_DEFAULT_USER_ID = 'tekautomate-user';
   const CHATKIT_LIVE_USER_ID = 'tekautomate-live';
   const CHATKIT_DEFAULT_WORKFLOW = 'wf_69cb9085f72c8190ae05b360552d6987032b7c148cd57c24';
-  const [chatKitWorkflowId, setChatKitWorkflowId] = useState(() => {
+  const [chatKitWorkflowId] = useState(() => {
     try { return localStorage.getItem(CHATKIT_WORKFLOW_ID_KEY) || CHATKIT_DEFAULT_WORKFLOW; } catch { return CHATKIT_DEFAULT_WORKFLOW; }
   });
   const prevStepsRef = useRef(steps);
@@ -313,7 +313,6 @@ export function AiChatPanel({
     setTekMode,
     setProvider,
     setModel,
-    setToolCallMode,
   } = useAiChat({
     steps,
     runLog,

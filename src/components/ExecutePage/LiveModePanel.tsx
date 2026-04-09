@@ -1,6 +1,6 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { Camera, ChevronDown, ChevronRight, Image as ImageIcon, Loader2, MonitorSmartphone, RefreshCw, Settings, Terminal } from 'lucide-react';
-import { clearStoredMcpHost, getStoredMcpHost, resolveMcpHost, resolveMcpHostCandidates, setStoredMcpHost } from '../../utils/ai/mcpClient';
+import { clearStoredMcpHost, getStoredMcpHost, resolveMcpHostCandidates, setStoredMcpHost } from '../../utils/ai/mcpClient';
 import { VncViewer } from './VncViewer';
 
 export interface LiveModeCapture {

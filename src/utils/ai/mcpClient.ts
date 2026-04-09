@@ -2,8 +2,6 @@ import type { StepPreview } from '../../components/ExecutePage/StepsListPreview'
 import { searchCommands as searchScpiCommands } from './scpiSearch';
 import { searchTmCommands } from './tmSearch';
 
-const MCP_HOSTED_DEFAULT = 'https://tekautomate-mcp-production.up.railway.app';
-const MCP_LOCAL_DEFAULT = 'http://localhost:8787';
 export const MCP_HOST_STORAGE_KEY = 'tekautomate.mcp.host';
 
 export interface McpChatRequest {
