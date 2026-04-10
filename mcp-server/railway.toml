@@ -9,26 +9,13 @@ healthcheckPath = "/health"
 
 # ── Environment variables ──
 # Set these in your Railway project's Variables tab.
-# Required variables are marked with (required).
+# API keys are NOT needed here — the frontend sends them with each request.
 
 [variables]
-# (required) The public URL of this deployed MCP server.
-# Used to construct temp image URLs for screenshot vision.
+# Public URL of this deployed MCP server (used for screenshot image URLs).
 # Example: https://your-project.up.railway.app
 MCP_PUBLIC_URL = ""
 
-# (required) Disable live instrument control on shared/hosted deployments.
-# Set to true only if you are deploying for personal/local use with a real instrument.
+# Set to true only for personal/local deployments with a real instrument.
+# Keep false for shared/hosted deployments.
 LIVE_INSTRUMENT_ENABLED = "false"
-
-# (required) Your OpenAI API key for AI features.
-OPENAI_API_KEY = ""
-
-# (required) OpenAI Assistant ID for hosted assistant mode.
-OPENAI_ASSISTANT_ID = ""
-
-# (required) OpenAI Prompt ID for Responses API structured output.
-OPENAI_PROMPT_ID = ""
-
-# (optional) Port — Railway sets this automatically, leave blank.
-# PORT = ""
