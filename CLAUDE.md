@@ -26,7 +26,7 @@ The TekAutomate MCP is available as a Claude.ai custom connector AND via direct 
 
 ### Direct Endpoint
 ```bash
-POST https://tekautomate-mcp-production.up.railway.app/mcp
+POST https://tekautomatemcpv2.up.railway.app/mcp
 Content-Type: application/json
 ```
 
@@ -34,7 +34,7 @@ Content-Type: application/json
 ```bash
 curl -s -X POST -H "Content-Type: application/json" \
   -d '{"jsonrpc":"2.0","id":1,"method":"tools/call","params":{"name":"TOOL_NAME","arguments":{ARGS}}}' \
-  https://tekautomate-mcp-production.up.railway.app/mcp
+  https://tekautomatemcpv2.up.railway.app/mcp
 ```
 
 ### Available Tools
@@ -64,29 +64,29 @@ curl -s -X POST -H "Content-Type: application/json" \
 # search_scpi
 curl -s -X POST -H "Content-Type: application/json" \
   -d '{"jsonrpc":"2.0","id":1,"method":"tools/call","params":{"name":"search_scpi","arguments":{"query":"edge trigger","limit":5}}}' \
-  https://tekautomate-mcp-production.up.railway.app/mcp
+  https://tekautomatemcpv2.up.railway.app/mcp
 
 # send_scpi
 curl -s -X POST -H "Content-Type: application/json" \
   -d '{"jsonrpc":"2.0","id":1,"method":"tools/call","params":{"name":"send_scpi","arguments":{"commands":["*IDN?"]}}}' \
-  https://tekautomate-mcp-production.up.railway.app/mcp
+  https://tekautomatemcpv2.up.railway.app/mcp
 
 # get_instrument_info
 curl -s -X POST -H "Content-Type: application/json" \
   -d '{"jsonrpc":"2.0","id":1,"method":"tools/call","params":{"name":"get_instrument_info","arguments":{}}}' \
-  https://tekautomate-mcp-production.up.railway.app/mcp
+  https://tekautomatemcpv2.up.railway.app/mcp
 
 # discover_scpi (snapshot)
 curl -s -X POST -H "Content-Type: application/json" \
   -d '{"jsonrpc":"2.0","id":1,"method":"tools/call","params":{"name":"discover_scpi","arguments":{"action":"snapshot"}}}' \
-  https://tekautomate-mcp-production.up.railway.app/mcp
+  https://tekautomatemcpv2.up.railway.app/mcp
 ```
 
 ### Health Check
 ```bash
 curl -s -X POST -H "Content-Type: application/json" \
   -d '{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":"2024-11-05","capabilities":{},"clientInfo":{"name":"health-check","version":"0.1"}}}' \
-  https://tekautomate-mcp-production.up.railway.app/mcp
+  https://tekautomatemcpv2.up.railway.app/mcp
 ```
 Expected: `serverInfo.name: "tekautomate"`, `serverInfo.version: "3.2.0"`
 

@@ -1,0 +1,21 @@
+[build]
+builder = "NIXPACKS"
+
+[deploy]
+startCommand = "npm start"
+restartPolicyType = "ON_FAILURE"
+restartPolicyMaxRetries = 10
+healthcheckPath = "/health"
+
+# ── Environment variables ──
+# Set these in your Railway project's Variables tab.
+# API keys are NOT needed here — the frontend sends them with each request.
+
+[variables]
+# Public URL of this deployed MCP server (used for screenshot image URLs).
+# Example: https://your-project.up.railway.app
+MCP_PUBLIC_URL = ""
+
+# Set to true only for personal/local deployments with a real instrument.
+# Keep false for shared/hosted deployments.
+LIVE_INSTRUMENT_ENABLED = "false"
