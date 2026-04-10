@@ -320,7 +320,9 @@ function extensionForMimeType(mimeType: string): string {
 }
 
 function getConfiguredPublicBaseUrl(): string {
-  return String(process.env.MCP_PUBLIC_URL || 'https://tekautomatemcpv2.up.railway.app').trim();
+  // Never hardcode a domain. Use MCP_PUBLIC_URL env var (set by whoever hosts this server).
+  // If not set, returns empty string — callers must handle this gracefully.
+  return String(process.env.MCP_PUBLIC_URL || '').trim();
 }
 
 function getHealthPayload() {
@@ -537,7 +539,7 @@ export async function createServer(port = 8787): Promise<http.Server> {
         <h3>${def.name}</h3>
         <p class="desc">${(def.description ?? '').replace(/\n/g, '<br>')}</p>
         ${Object.keys(props).length > 0 ? `<table><thead><tr><th>Parameter</th><th>Type</th><th>Description</th></tr></thead><tbody>${paramRows}</tbody></table>` : '<p class="no-params">No parameters</p>'}
-        <details><summary>Example curl</summary><pre>curl -X POST ${process.env.MCP_PUBLIC_URL || 'https://tekautomatemcpv2.up.railway.app'}/tools/execute \\
+        <details><summary>Example curl</summary><pre>curl -X POST ${process.env.MCP_PUBLIC_URL || '<your-mcp-host>'}/tools/execute \\
   -H "Content-Type: application/json" \\
   -d '${JSON.stringify({ tool: def.name, args: Object.fromEntries(required.map((r: string) => [r, '<value>'])) })}'</pre></details>
       </div>`;
@@ -610,7 +612,7 @@ details pre{margin-top:0.5rem;font-size:0.75rem;background:#0f172a;padding:0.75r
       <h4>Claude Web (claude.ai)</h4>
       <div class="label">Settings &gt; Connectors &gt; Add Custom Connector</div>
       <pre>Name: TekAutomate
-URL:  ${process.env.MCP_PUBLIC_URL || 'https://tekautomatemcpv2.up.railway.app'}/mcp
+URL:  ${process.env.MCP_PUBLIC_URL || '<your-mcp-host>'}/mcp
 
 No OAuth — leave Advanced settings blank</pre>
     </div>
@@ -621,7 +623,7 @@ No OAuth — leave Advanced settings blank</pre>
   "mcpServers": {
     "tekautomate": {
       "type": "http",
-      "url": "${process.env.MCP_PUBLIC_URL || 'https://tekautomatemcpv2.up.railway.app'}/mcp"
+      "url": "${process.env.MCP_PUBLIC_URL || '<your-mcp-host>'}/mcp"
     }
   }
 }
