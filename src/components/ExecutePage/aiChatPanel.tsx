@@ -511,7 +511,7 @@ export function AiChatPanel({
   const useChatKitEmbed =
     state.provider === 'openai'
     && openAiChatSurface === 'chatkit'
-    && (state.tekMode === 'ai' || state.tekMode === 'live')
+    && state.tekMode === 'ai'
     && activeChatKitWorkflowId.length > 0;
 
   const cleanAssistantDisplayText = (text: string): string => {
@@ -1748,7 +1748,76 @@ export function AiChatPanel({
 
         </div>
       )}
-      {useChatKitEmbed ? (
+      {executionSource === 'live' ? (
+        <div className="flex-1 min-h-0 overflow-auto flex flex-col gap-4 p-4">
+          <div className="rounded-xl border border-cyan-500/20 bg-cyan-500/5 p-4 flex flex-col gap-3">
+            <div className="text-xs font-bold tracking-widest uppercase text-cyan-600 dark:text-cyan-400">Live Instrument Mode</div>
+            <div className="text-sm text-slate-700 dark:text-slate-300 leading-relaxed">
+              In-app chat is not available in Live mode. Use an external AI tool connected to your own MCP for interactive live sessions.
+            </div>
+            <div className="rounded-lg border border-cyan-500/30 bg-cyan-500/10 px-3 py-2 flex gap-2 items-start">
+              <span className="text-cyan-500 dark:text-cyan-400 mt-0.5 text-base leading-none">⚙</span>
+              <div className="flex flex-col gap-0.5">
+                <div className="text-xs font-semibold text-cyan-600 dark:text-cyan-400">Required for all setups</div>
+                <div className="text-xs text-slate-600 dark:text-slate-400 leading-relaxed">
+                  <code className="font-mono text-cyan-700 dark:text-cyan-300">TekAutomateExecutor.exe</code> must be running to bridge AI commands to your instrument. Find it in the <code className="font-mono">dist/</code> folder of your TekAutomate installation.
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <div className="text-xs font-semibold uppercase tracking-widest text-slate-400 dark:text-slate-500 px-1">How to use Live mode with AI</div>
+
+          {[
+            {
+              icon: '◆',
+              title: 'Run TekAutomate locally',
+              desc: 'Download and run TekAutomate on your PC. The MCP server starts automatically — no extra setup needed. Then connect Claude, Codex, or any MCP app to your local instance.',
+              color: 'text-cyan-500 dark:text-cyan-400',
+              border: 'border-cyan-500/20',
+              bg: 'bg-cyan-500/5',
+              href: 'https://github.com/tektronix/tekautomate',
+              linkLabel: 'Download TekAutomate →',
+            },
+            {
+              icon: '❖',
+              title: 'Use with Claude or Codex',
+              desc: 'Add your local MCP server (localhost:8787) to Claude Desktop, OpenAI Codex, Cursor, or any MCP-compatible tool. Full access to live instrument control, SCPI commands, and screenshots.',
+              color: 'text-orange-500 dark:text-orange-400',
+              border: 'border-orange-500/20',
+              bg: 'bg-orange-500/5',
+              href: 'https://tekautomatemcpv2.up.railway.app',
+              linkLabel: 'MCP server docs →',
+            },
+            {
+              icon: '⬡',
+              title: 'Self-host your own MCP',
+              desc: 'Deploy your own TekAutomate MCP on Railway with one click. Set LIVE_INSTRUMENT_ENABLED=true and point it at your TekAutomateExecutor.exe in the dist folder for full live access.',
+              color: 'text-violet-500 dark:text-violet-400',
+              border: 'border-violet-500/20',
+              bg: 'bg-violet-500/5',
+              href: 'https://tekautomatemcpv2.up.railway.app',
+              linkLabel: 'Deploy on Railway →',
+            },
+          ].map((item) => (
+            <div key={item.title} className={`rounded-xl border ${item.border} ${item.bg} p-3 flex gap-3 items-start`}>
+              <span className={`text-lg leading-none mt-0.5 ${item.color}`}>{item.icon}</span>
+              <div className="flex flex-col gap-1">
+                <div className={`text-sm font-semibold ${item.color}`}>{item.title}</div>
+                <div className="text-xs text-slate-500 dark:text-slate-400 leading-relaxed">{item.desc}</div>
+                <a
+                  href={item.href}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className={`text-xs font-medium ${item.color} hover:underline opacity-80 hover:opacity-100 transition-opacity`}
+                >
+                  {item.linkLabel}
+                </a>
+              </div>
+            </div>
+          ))}
+        </div>
+      ) : useChatKitEmbed ? (
           <OpenAiChatKitPanel
             key={`chatkit-${state.tekMode}-${activeChatKitWorkflowId}-${activeChatKitUserId}`}
             apiKey={state.openaiApiKey || state.apiKey}

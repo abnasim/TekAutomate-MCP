@@ -1216,11 +1216,10 @@ export function useAiChat(params: {
             : undefined,
       });
     } catch (err) {
-      dispatch({ type: 'STREAM_DONE' }); // finalize streaming turn before error
-      dispatch({
-        type: 'SET_ERROR',
-        error: err instanceof Error ? err.message : 'AI request failed.',
-      });
+      const errorMsg = err instanceof Error ? err.message : 'AI request failed.';
+      dispatch({ type: 'STREAM_CHUNK', chunk: `\u26a0\ufe0f ${errorMsg}` }); // show error in message bubble
+      dispatch({ type: 'STREAM_DONE' });
+      dispatch({ type: 'SET_ERROR', error: errorMsg });
     }
   };
 

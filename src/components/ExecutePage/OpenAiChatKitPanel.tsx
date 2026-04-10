@@ -111,7 +111,7 @@ function getOrCreateLiveSessionKey(workflowId?: string, userId?: string): string
 
 function getStartScreenGreeting(isLiveMode: boolean): string {
   return isLiveMode
-    ? 'What would you like to do?'
+    ? 'TekAutomate Live'
     : 'How can I help?';
 }
 
@@ -1556,6 +1556,40 @@ function OpenAiChatKitPanelInner({
           >
             {startScreenGreeting}
           </div>
+          {isLiveMode && (
+            <div style={{
+              borderRadius: 10,
+              border: `1px solid ${chatKitTheme === 'dark' ? 'rgba(32,224,255,0.18)' : 'rgba(0,127,224,0.22)'}`,
+              background: chatKitTheme === 'dark' ? 'rgba(32,224,255,0.05)' : 'rgba(0,127,224,0.04)',
+              padding: '12px 14px',
+              display: 'flex',
+              flexDirection: 'column',
+              gap: 6,
+              maxWidth: 560,
+            }}>
+              <div style={{ fontSize: 12, fontWeight: 700, color: chatKitTheme === 'dark' ? '#20E0FF' : '#007FE0', letterSpacing: '0.04em', textTransform: 'uppercase' }}>
+                Live Instrument Mode
+              </div>
+              <div style={{ fontSize: 13, color: chatKitTheme === 'dark' ? '#cbd5e1' : '#334155', lineHeight: 1.55 }}>
+                Live control requires a running TekAutomate MCP instance with instrument access.
+                Run TekAutomate locally or{' '}
+                <a
+                  href="https://github.com/tektronix/tekautomate"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  style={{ color: chatKitTheme === 'dark' ? '#20E0FF' : '#007FE0', textDecoration: 'none', fontWeight: 600 }}
+                >
+                  self-host your own instance
+                </a>
+                {' '}— then connect from TekAutomate, Claude, Codex, or any MCP-compatible app.
+              </div>
+              {!instrumentEndpoint?.executorUrl && (
+                <div style={{ fontSize: 12, color: chatKitTheme === 'dark' ? '#f97316' : '#ea580c', fontWeight: 500, marginTop: 2 }}>
+                  ⚠ No instrument connected. Start TekAutomate locally and connect a scope to use Live mode.
+                </div>
+              )}
+            </div>
+          )}
           <div style={{ display: 'flex', flexWrap: 'wrap', gap: 10 }}>
             {startScreenPrompts.map((item) => (
               <button
