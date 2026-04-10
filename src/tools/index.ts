@@ -263,7 +263,7 @@ export function getToolDefinitions() {
           },
           corpus: {
             type: 'string',
-            description: 'For action:"retrieve" — knowledge corpus such as scpi, tmdevices, templates, app_logic, errors, scope_logic, or pyvisa_tekhsi.',
+            description: 'For action:"retrieve" — knowledge corpus: scpi, tmdevices, templates, app_logic, errors, scope_logic, pyvisa_tekhsi, or tek_docs (Tektronix documentation).',
           },
           query: {
             type: 'string',
