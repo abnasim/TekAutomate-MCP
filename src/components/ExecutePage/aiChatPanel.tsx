@@ -243,6 +243,7 @@ export function AiChatPanel({
   });
   const [openAiChatSurface, setOpenAiChatSurface] = useState<'chatkit' | 'native'>('chatkit');
   const [transientUiNow, setTransientUiNow] = useState(() => Date.now());
+  const [desktopConfigCopied, setDesktopConfigCopied] = useState(false);
   const CHATKIT_WORKFLOW_ID_KEY = 'tekautomate.chatkit.workflow_id';
   const CHATKIT_LIVE_WORKFLOW_ID = 'wf_69ccc162bc34819089705162201bc4b80128ecc0657c5932';
   const CHATKIT_LIVE_THREAD_KEY = 'tekautomate.chatkit.thread_id.live';
@@ -1816,6 +1817,58 @@ export function AiChatPanel({
               </div>
             </div>
           ))}
+
+          {/* Claude Desktop config snippet */}
+          <div className="text-xs font-semibold uppercase tracking-widest text-slate-400 dark:text-slate-500 px-1">Claude Desktop quick setup</div>
+          <div className="rounded-xl border border-slate-200/60 dark:border-white/10 bg-slate-50 dark:bg-white/[0.04] p-3 flex flex-col gap-2">
+            <div className="flex items-center justify-between gap-2">
+              <div className="text-xs font-semibold text-slate-600 dark:text-slate-300 font-mono">claude_desktop_config.json</div>
+              <button
+                onClick={() => {
+                  const cfg = `{\n  "mcpServers": {\n    "tekautomate": {\n      "command": "npx",\n      "args": ["-y", "mcp-remote", "https://tekautomatemcpv2.up.railway.app/mcp"]\n    }\n  }\n}`;
+                  navigator.clipboard.writeText(cfg).then(() => {
+                    setDesktopConfigCopied(true);
+                    setTimeout(() => setDesktopConfigCopied(false), 2000);
+                  });
+                }}
+                className="text-xs px-2 py-0.5 rounded-md border border-slate-300 dark:border-white/15 text-slate-500 dark:text-slate-400 hover:text-slate-700 dark:hover:text-slate-200 hover:border-slate-400 dark:hover:border-white/30 transition-colors font-medium"
+              >
+                {desktopConfigCopied ? '✓ Copied' : 'Copy'}
+              </button>
+            </div>
+            <pre className="text-[11px] leading-relaxed font-mono text-slate-500 dark:text-slate-400 whitespace-pre overflow-x-auto rounded-lg bg-slate-100 dark:bg-white/[0.03] p-2 border border-slate-200/60 dark:border-white/[0.06]">{`{
+  "mcpServers": {
+    "tekautomate": {
+      "command": "npx",
+      "args": ["-y", "mcp-remote",
+               "https://tekautomatemcpv2.up.railway.app/mcp"]
+    }
+  }
+}`}</pre>
+            <div className="text-[11px] text-slate-400 dark:text-slate-500 leading-relaxed">
+              Paste into <code className="font-mono text-slate-500 dark:text-slate-400">%APPDATA%\Claude\claude_desktop_config.json</code> (Windows) or{' '}
+              <code className="font-mono text-slate-500 dark:text-slate-400">~/Library/Application Support/Claude/claude_desktop_config.json</code> (Mac), then restart Claude Desktop. For your own local/hosted MCP, replace the URL.
+            </div>
+          </div>
+
+          {/* .mcpb one-click install */}
+          <div className="rounded-xl border border-violet-500/20 bg-violet-500/5 p-3 flex gap-3 items-center">
+            <span className="text-violet-400 text-lg leading-none">⬇</span>
+            <div className="flex flex-col gap-0.5 flex-1 min-w-0">
+              <div className="text-xs font-semibold text-violet-500 dark:text-violet-400">One-click install (.mcpb)</div>
+              <div className="text-[11px] text-slate-500 dark:text-slate-400 leading-relaxed">
+                Download the TekAutomate MCP bundle — double-click to install directly into Claude Desktop. No config file editing needed.
+              </div>
+            </div>
+            <a
+              href="https://github.com/abnasim/TekAutomate/raw/master/mcp-server/tekautomate-mcp.mcpb"
+              target="_blank"
+              rel="noopener noreferrer"
+              className="shrink-0 text-xs font-medium text-violet-500 dark:text-violet-400 hover:underline opacity-80 hover:opacity-100 transition-opacity"
+            >
+              Download .mcpb →
+            </a>
+          </div>
         </div>
       ) : useChatKitEmbed ? (
           <OpenAiChatKitPanel
