@@ -58,7 +58,8 @@ _visa_locks: dict[str, threading.Lock] = {}  # Per-VISA resource lock — preven
 _recent_capture_results: dict[str, tuple[float, dict]] = {}
 _recent_capture_errors: dict[str, tuple[float, str]] = {}
 _recent_scpi_activity: dict[str, tuple[float, dict]] = {}
-_DEFAULT_CAPTURE_TIMEOUT_MS = 15000
+_save_dir_ensured: set[str] = set()  # VISA resources that already had C:/TekScope mkdir'd
+_DEFAULT_CAPTURE_TIMEOUT_MS = 8000
 _BUSY_CAPTURE_CACHE_MAX_AGE_SEC = 10.0
 _SCPI_CHUNK_SIZE_SOCKET = 8
 _SCPI_CHUNK_SIZE_VISA = 12
@@ -198,17 +199,17 @@ def _capture_lock_for(visa: str) -> threading.Lock:
 
 
 def _capture_timeout_ms(job: dict) -> int:
-    """Resolve a practical screenshot timeout from job fields."""
+    """Resolve a practical screenshot timeout from job fields. Max 8 s."""
     timeout_ms = job.get("timeout_ms")
     if timeout_ms is not None:
         try:
-            return max(5000, min(int(timeout_ms), 15000))
+            return max(3000, min(int(timeout_ms), 8000))
         except Exception:
             pass
     timeout_sec = job.get("timeout_sec")
     if timeout_sec is not None:
         try:
-            return max(5000, min(int(timeout_sec) * 1000, 15000))
+            return max(3000, min(int(timeout_sec) * 1000, 8000))
         except Exception:
             pass
     return _DEFAULT_CAPTURE_TIMEOUT_MS
@@ -327,32 +328,19 @@ def _raw_payload_to_result(data: bytes) -> dict:
     }
 
 
-def _readfile_payload_via_visa_stream(scpi, chunk_size: int = 65536) -> bytes:
-    """Read FILESystem:READFile payload via low-level VISA reads.
+def _readfile_payload_via_visa_stream(scpi) -> bytes:
+    """Read FILESystem:READFile response for INSTR/VXI-11 resources.
 
-    FILESystem:READFile is not IEEE 488.2 compliant and may not terminate in a
-    way that MessageBasedResource.read_raw() can consume reliably. We therefore
-    read low-level chunks until the driver reports the transfer completed, or
-    a timeout occurs after at least some bytes were received.
+    Uses read_raw() which reads until the VXI-11 END indicator — the scope
+    signals completion, so this returns cleanly without hanging.
+
+    Do NOT use visalib.read() + success_max_count_read here: that is the
+    pattern for raw SOCKET resources.  For INSTR/VXI-11, read_raw() is
+    correct and matches what the save_screenshot step generator produces.
+
+    Returns raw file bytes (no IEEE 488.2 header on Tektronix scopes).
     """
-    data = bytearray()
-    success_max = getattr(pyvisa.constants.StatusCode, "success_max_count_read", None) if pyvisa else None
-    error_timeout = getattr(pyvisa.constants.StatusCode, "error_timeout", None) if pyvisa else None
-
-    while True:
-        try:
-            chunk, status = scpi.visalib.read(scpi.session, chunk_size)
-            if chunk:
-                data.extend(bytes(chunk))
-            if status != success_max:
-                break
-        except Exception as exc:
-            error_code = getattr(exc, "error_code", None)
-            if data and error_timeout is not None and error_code == error_timeout:
-                break
-            raise
-
-    return bytes(data)
+    return scpi.read_raw()
 
 
 def _open_command_session(visa: str, timeout_ms: int, use_socket: bool):
@@ -413,6 +401,7 @@ def _get_scope_session(visa: str):
 
 def _reset_scope_session(visa: str):
     """Force close and remove a cached session so next _get_scope_session opens fresh."""
+    _save_dir_ensured.discard(visa)  # re-run mkdir on next screenshot after reconnect
     with _session_lock:
         session = _scope_sessions.pop(visa, None)
         if session is not None:
@@ -512,24 +501,34 @@ def _handle_capture_screenshot(job: dict) -> dict:
                         try:
                             scpi.timeout = capture_timeout_ms
                             scpi.write_termination = "\n"
-                            scpi.read_termination = None
+                            scpi.read_termination = "\n"
+
+                            _SAVE_PATH = 'C:/TekScope/screenshot.png'
+                            # Create save dir once per session — not on every screenshot
+                            if visa not in _save_dir_ensured:
+                                try:
+                                    scpi.write('FILESYSTEM:MKDir "C:/TekScope"')
+                                except Exception:
+                                    pass  # already exists or unsupported — ignore
+                                _save_dir_ensured.add(visa)
 
                             if scope_type == "legacy":
                                 # DPO 5k/7k series - HARDCOPY method
-                                temp_path = 'C:/Temp/screenshot.png'
                                 scpi.write('HARDCOPY:PORT FILE')
-                                scpi.write(f'HARDCOPY:FILENAME "{temp_path}"')
+                                scpi.write(f'HARDCOPY:FILENAME "{_SAVE_PATH}"')
                                 scpi.write('HARDCOPY START')
                                 scpi.write('*WAI')
-                                scpi.write(f'FILESYSTEM:READFILE "{temp_path}"')
+                                scpi.write(f'FILESYSTEM:READFILE "{_SAVE_PATH}"')
                                 data = _readfile_payload_via_visa_stream(scpi)
-                                scpi.write(f'FILESYSTEM:DELETE "{temp_path}"')
-                                scpi.write('*WAI')
+                                try:
+                                    scpi.write(f'FILESYSTEM:DELETE "{_SAVE_PATH}"')
+                                    scpi.write('*WAI')
+                                except Exception:
+                                    pass
                             elif scope_type == "export":
                                 # MSO/DPO 70000 series - EXPort method
                                 import time as _time
-                                remote_path = 'C:/TekScope/screenshot.png'
-                                scpi.write(f'EXPort:FILEName "{remote_path}"')
+                                scpi.write(f'EXPort:FILEName "{_SAVE_PATH}"')
                                 scpi.write('EXPort:FORMat PNG')
                                 scpi.write('EXPort:VIEW FULLSCREEN')
                                 scpi.write('EXPort:PALEtte COLOR')
@@ -539,20 +538,26 @@ def _handle_capture_screenshot(job: dict) -> dict:
                                 _time.sleep(1.0)
                                 old_read_timeout = scpi.timeout
                                 scpi.timeout = 30000
-                                scpi.write(f'FILESYSTEM:READFILE "{remote_path}"')
+                                scpi.write(f'FILESYSTEM:READFILE "{_SAVE_PATH}"')
                                 data = _readfile_payload_via_visa_stream(scpi)
                                 scpi.timeout = old_read_timeout
-                                scpi.write(f'FILESYSTEM:DELETE "{remote_path}"')
+                                try:
+                                    scpi.write(f'FILESYSTEM:DELETE "{_SAVE_PATH}"')
+                                except Exception:
+                                    pass
                             else:
                                 # MSO 2/4/5/6 series - SAVE:IMAGE method (modern)
-                                temp_path = 'C:/Temp_Screen.png'
-                                scpi.write(f'SAVE:IMAGE "{temp_path}"')
-                                if str(scpi.query('*OPC?')).strip() != '1':
-                                    raise RuntimeError("SAVE:IMAGE did not complete")
-                                scpi.write(f'FILESYSTEM:READFILE "{temp_path}"')
+                                scpi.write(f'SAVE:IMAGE "{_SAVE_PATH}"')
+                                opc_resp = str(scpi.query('*OPC?')).strip()
+                                if opc_resp != '1':
+                                    raise RuntimeError(f"SAVE:IMAGE did not complete (OPC={opc_resp!r})")
+                                scpi.write(f'FILESYSTEM:READFILE "{_SAVE_PATH}"')
                                 data = _readfile_payload_via_visa_stream(scpi)
-                                scpi.write(f'FILESYSTEM:DELETE "{temp_path}"')
-                                scpi.query('*OPC?')
+                                try:
+                                    scpi.write(f'FILESYSTEM:DELETE "{_SAVE_PATH}"')
+                                    scpi.write('*WAI')
+                                except Exception:
+                                    pass
                         finally:
                             scpi.timeout = old_timeout
                             scpi.write_termination = old_write_term

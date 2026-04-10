@@ -5,7 +5,7 @@ Tkinter port of the original PySide6 version.
 import tkinter as tk
 from tkinter import ttk
 
-from app.instrument_scanner import InstrumentInfo
+from app.instrument_scanner import InstrumentInfo, ip_to_visa_resources, pin_resource, unpin_resource, _load_pinned_resources
 from app.tk_utils import TkSignal
 
 BG       = "#121212"
@@ -29,6 +29,7 @@ class InstrumentPanel(ttk.Frame):
         super().__init__(parent)
         self.scan_requested = TkSignal()
         self.clear_requested = TkSignal()
+        self.add_ip_requested = TkSignal()   # emits (ip_str)
         self._instruments: list[InstrumentInfo] = []
         self._clear_buttons: dict[str, ttk.Button] = {}
         self._build()
@@ -45,6 +46,21 @@ class InstrumentPanel(ttk.Frame):
 
         self._scan_btn = ttk.Button(hdr, text="Scan", command=self._on_scan)
         self._scan_btn.pack(side=tk.RIGHT)
+
+        # ── Add IP row ────────────────────────────────────────────────
+        add_row = ttk.Frame(self)
+        add_row.pack(fill=tk.X, pady=(0, 6))
+
+        self._ip_var = tk.StringVar()
+        self._ip_entry = ttk.Entry(add_row, textvariable=self._ip_var, width=20)
+        self._ip_entry.pack(side=tk.LEFT, padx=(0, 4))
+        self._ip_entry.insert(0, "e.g. 10.234.25.20")
+        self._ip_entry.bind("<FocusIn>", self._ip_placeholder_clear)
+        self._ip_entry.bind("<FocusOut>", self._ip_placeholder_restore)
+        self._ip_entry.bind("<Return>", lambda e: self._on_add_ip())
+
+        self._add_btn = ttk.Button(add_row, text="Add IP", command=self._on_add_ip)
+        self._add_btn.pack(side=tk.LEFT)
 
         # ── Scrollable cards area ─────────────────────────────────────
         container = ttk.Frame(self)
@@ -78,6 +94,31 @@ class InstrumentPanel(ttk.Frame):
 
     def _on_canvas_configure(self, event):
         self._canvas.itemconfigure(self._canvas_window, width=event.width)
+
+    _PLACEHOLDER = "e.g. 10.234.25.20"
+
+    def _ip_placeholder_clear(self, _event=None):
+        if self._ip_var.get() == self._PLACEHOLDER:
+            self._ip_entry.delete(0, tk.END)
+
+    def _ip_placeholder_restore(self, _event=None):
+        if not self._ip_var.get().strip():
+            self._ip_entry.insert(0, self._PLACEHOLDER)
+
+    def _on_add_ip(self):
+        ip = self._ip_var.get().strip()
+        if not ip or ip == self._PLACEHOLDER:
+            return
+        self._add_btn.configure(state=tk.DISABLED, text="Adding…")
+        self._status.configure(text=f"Probing {ip}…")
+        self.add_ip_requested.emit(ip)
+
+    def on_add_ip_done(self, ip: str, success: bool, msg: str = ""):
+        self._add_btn.configure(state=tk.NORMAL, text="Add IP")
+        self._status.configure(text=msg)
+        if success:
+            self._ip_entry.delete(0, tk.END)
+            self._ip_placeholder_restore()
 
     def _on_scan(self):
         self._scan_btn.configure(state=tk.DISABLED, text="Scanning\u2026")

@@ -525,6 +525,14 @@ class _Handler(BaseHTTPRequestHandler):
             target_port = self._parse_int_param(data.get("target_port"), default=5900, name="target_port")
             listen_port = self._parse_int_param(data.get("listen_port"), default=6080, name="listen_port")
             result = self.server_thread.vnc_start(target_host, target_port, listen_port) if self.server_thread else {"ok": False, "error": "Server unavailable"}
+            # Fix ws_url: replace 127.0.0.1 with the hostname the browser used to reach
+            # this executor — so remote browsers get the correct WS address.
+            if result.get("ok") and result.get("ws_url"):
+                host_header = self.headers.get("Host", "") or ""
+                req_host = host_header.split(":")[0].strip()
+                if req_host and req_host not in ("127.0.0.1", "localhost", "::1", "0.0.0.0"):
+                    result = dict(result)
+                    result["ws_url"] = result["ws_url"].replace("127.0.0.1", req_host, 1)
             code = 200 if result.get("ok") else 400
             self._json_response(code, result)
             self._emit("POST", "/vnc/start", code, f"target={target_host}:{target_port} ws={result.get('ws_url') or '-'}")

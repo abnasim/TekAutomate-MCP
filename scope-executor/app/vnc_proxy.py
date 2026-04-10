@@ -385,8 +385,8 @@ class VncProxyManager:
                     session.listen_port,
                     compression=None,
                     max_size=None,
-                    ping_interval=20,
-                    ping_timeout=20,
+                    ping_interval=None,
+                    ping_timeout=None,
                 ):
                     self._log(
                         f"WebSocket server listening on {session.bind_host}:{session.listen_port} "

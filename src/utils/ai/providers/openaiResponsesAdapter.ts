@@ -1,5 +1,6 @@
 import type { AssembledContext, ChatTurn } from '../types';
 import { trimConversationHistory } from '../historyTrim';
+import { resolveMcpHost } from '../mcpClient';
 
 export class OpenAiResponsesAdapter {
   private apiKey: string;
@@ -36,7 +37,7 @@ export class OpenAiResponsesAdapter {
     const mcpHost =
       (typeof process !== 'undefined' && process.env?.REACT_APP_MCP_HOST) ||
       (typeof localStorage !== 'undefined' && localStorage.getItem('tekautomate.mcp.host')) ||
-      'http://localhost:8787';
+      resolveMcpHost();
 
     // Always try MCP proxy first — it uses OPENAI_SERVER_API_KEY + COMMAND_VECTOR_STORE_ID
     const proxyUrl = `${mcpHost.replace(/\/$/, '')}/ai/responses-proxy`;

@@ -1,6 +1,6 @@
 {
   "version": "1.0.0",
-  "generatedAt": "2026-04-04T18:30:52.064Z",
+  "generatedAt": "2026-04-08T18:59:37.891Z",
   "corpora": {
     "scpi": "scpi_index.json",
     "tmdevices": "tmdevices_index.json",

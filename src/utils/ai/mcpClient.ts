@@ -165,12 +165,23 @@ export async function executeToolDirect(
   return res.json() as Promise<Record<string, unknown>>;
 }
 
+const RAILWAY_MCP_HOST = 'https://tekautomate-mcp-production.up.railway.app';
+const LOCAL_MCP_HOST = 'http://localhost:8787';
+
+function getDefaultMcpHost(): string {
+  if (typeof window === 'undefined') return LOCAL_MCP_HOST;
+  const host = window.location.hostname;
+  const isLocal = host === 'localhost' || host === '127.0.0.1' || host === '0.0.0.0';
+  return isLocal ? LOCAL_MCP_HOST : RAILWAY_MCP_HOST;
+}
+
 function resolveStoredMcpHost(): string {
-  if (typeof window === 'undefined') return '';
+  if (typeof window === 'undefined') return LOCAL_MCP_HOST;
   try {
-    return String(localStorage.getItem(MCP_HOST_STORAGE_KEY) || '').trim();
+    const stored = String(localStorage.getItem(MCP_HOST_STORAGE_KEY) || '').trim();
+    return stored || getDefaultMcpHost();
   } catch {
-    return '';
+    return getDefaultMcpHost();
   }
 }
 

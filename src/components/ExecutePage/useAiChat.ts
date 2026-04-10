@@ -1146,7 +1146,7 @@ export function useAiChat(params: {
         const host =
           process.env.REACT_APP_MCP_HOST ||
           (typeof window !== 'undefined' && localStorage.getItem('tekautomate.mcp.host')) ||
-          'http://localhost:8787';
+          resolveMcpHost();
         const debugRes = await fetch(`${host.replace(/\/$/, '')}/ai/debug/last`);
         const debugJson = (await debugRes.json()) as {
           debug?: {

@@ -62,6 +62,7 @@ class MainWindow:
         self.instr_panel = InstrumentPanel(main)
         self.instr_panel.scan_requested.connect(self._run_scan)
         self.instr_panel.clear_requested.connect(self._clear_instrument_buffer)
+        self.instr_panel.add_ip_requested.connect(self._add_ip_instrument)
         self.instr_panel.grid(row=0, column=1, sticky="nsew", padx=(0, 10))
 
         # Right: Activity Log
@@ -184,6 +185,60 @@ class MainWindow:
         self._scan_thread.scan_error.connect(
             lambda m: self.log_panel.log(f"Scan error: {m}", "error"))
         self._scan_thread.start()
+
+    def _add_ip_instrument(self, ip: str):
+        """Probe a user-supplied IP, add to panel and pin it for future scans."""
+        from app.instrument_scanner import (
+            InstrumentInfo, ip_to_visa_resources, pin_resource,
+            _parse_idn, _is_valid_idn,
+        )
+        import pyvisa
+
+        def _probe():
+            resources = ip_to_visa_resources(ip)
+            found_any = False
+            try:
+                try:
+                    rm = pyvisa.ResourceManager()
+                except Exception:
+                    rm = pyvisa.ResourceManager("@py")
+
+                for res in resources:
+                    try:
+                        inst = rm.open_resource(res, timeout=4000)
+                        idn = inst.query("*IDN?").strip()
+                        inst.close()
+                        if not _is_valid_idn(idn):
+                            continue
+                        mfr, model, serial, fw = _parse_idn(idn)
+                        info = InstrumentInfo(
+                            resource=res, identity=idn,
+                            manufacturer=mfr, model=model,
+                            serial=serial, firmware=fw,
+                            reachable=True,
+                            conn_type="tcpip",
+                        )
+                        pin_resource(res)
+                        self.root.after(0, lambda i=info: (
+                            self.instr_panel.add_instrument(i),
+                            self._refresh_vnc_targets(),
+                        ))
+                        found_any = True
+                        break  # one good response is enough
+                    except Exception:
+                        continue
+            except Exception as e:
+                self.root.after(0, lambda: self.instr_panel.on_add_ip_done(ip, False, f"Error: {e}"))
+                return
+
+            if found_any:
+                self.root.after(0, lambda: self.instr_panel.on_add_ip_done(ip, True, f"Added {ip}"))
+                self.root.after(0, lambda: self.log_panel.log(f"Added instrument at {ip}", "success"))
+            else:
+                self.root.after(0, lambda: self.instr_panel.on_add_ip_done(ip, False, f"No instrument found at {ip}"))
+                self.root.after(0, lambda: self.log_panel.log(f"No instrument responded at {ip}", "error"))
+
+        threading.Thread(target=_probe, daemon=True).start()
 
     def _clear_instrument_buffer(self, resource: str, label: str):
         self.instr_panel.set_clear_busy(resource, True)

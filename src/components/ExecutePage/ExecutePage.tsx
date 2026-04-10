@@ -447,13 +447,22 @@ function ExecutePageContent({
         : undefined,
     };
 
-    void fetch(`${mcpHost.replace(/\/$/, '')}/runtime-context`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(payload),
-    }).catch((error) => {
-      console.warn('[ExecutePage] Failed to sync live runtime context:', error);
-    });
+    const pushContext = () => {
+      void fetch(`${mcpHost.replace(/\/$/, '')}/runtime-context`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload),
+      }).catch((error) => {
+        console.warn('[ExecutePage] Failed to sync live runtime context:', error);
+      });
+    };
+
+    // Push immediately on state change
+    pushContext();
+
+    // Re-push every 30s so Railway MCP always has fresh context after a redeploy
+    const intervalId = setInterval(pushContext, 30_000);
+    return () => clearInterval(intervalId);
   }, [executionSource, securedInstrumentEndpoint, flowContext, steps, runLog]);
 
   // Live action bridge poller — runs whenever in live mode, no chat session required.

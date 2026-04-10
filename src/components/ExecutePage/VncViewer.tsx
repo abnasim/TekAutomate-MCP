@@ -12,6 +12,11 @@ type ViewerState = {
   visible: boolean;
 };
 
+type PasswordState = {
+  visible: boolean;
+  value: string;
+};
+
 const CONNECTING_STATE: ViewerState = {
   title: 'Connecting VNC...',
   message: 'Starting the noVNC session.',
@@ -23,6 +28,8 @@ export function VncViewer({ wsUrl, title = 'Scope VNC Viewer' }: VncViewerProps)
   const rfbRef = useRef<any>(null);
   const connectTimeoutRef = useRef<number | null>(null);
   const [viewerState, setViewerState] = useState<ViewerState>(CONNECTING_STATE);
+  const [passwordState, setPasswordState] = useState<PasswordState>({ visible: false, value: '' });
+  const passwordInputRef = useRef<HTMLInputElement | null>(null);
 
   const overlayHiddenClass = useMemo(
     () => (viewerState.visible ? '' : 'hidden'),
@@ -101,16 +108,8 @@ export function VncViewer({ wsUrl, title = 'Scope VNC Viewer' }: VncViewerProps)
 
         rfb.addEventListener('credentialsrequired', () => {
           clearConnectTimeout();
-          const password = window.prompt('Enter VNC password for this scope:', '') || '';
-          if (!password) {
-            showState({
-              title: 'Password required',
-              message: 'The scope requested a VNC password. Reconnect when you are ready.',
-              visible: true,
-            });
-            return;
-          }
-          rfb.sendCredentials({ password });
+          setPasswordState({ visible: true, value: '' });
+          setTimeout(() => passwordInputRef.current?.focus(), 50);
         });
 
         rfb.addEventListener('securityfailure', (event: any) => {
@@ -151,9 +150,27 @@ export function VncViewer({ wsUrl, title = 'Scope VNC Viewer' }: VncViewerProps)
     };
   }, [wsUrl]);
 
+  const handlePasswordSubmit = () => {
+    const rfb = rfbRef.current;
+    if (!rfb) return;
+    const pw = passwordState.value;
+    setPasswordState({ visible: false, value: '' });
+    if (pw) {
+      rfb.sendCredentials({ password: pw });
+    } else {
+      setViewerState({
+        title: 'Password required',
+        message: 'The scope VNC requires a password. Click VNC to try again.',
+        visible: true,
+      });
+    }
+  };
+
   return (
     <div className="relative h-full overflow-hidden rounded-2xl border border-slate-200 bg-slate-950 shadow-sm dark:border-slate-800">
       <div ref={screenRef} aria-label={title} className="h-full min-h-[24rem] w-full" />
+
+      {/* Status overlay */}
       <div
         className={`absolute inset-0 flex items-center justify-center bg-[rgba(2,6,23,0.34)] backdrop-blur-[2px] ${overlayHiddenClass}`}
         style={{ pointerEvents: 'none' }}
@@ -163,6 +180,39 @@ export function VncViewer({ wsUrl, title = 'Scope VNC Viewer' }: VncViewerProps)
           {viewerState.message}
         </div>
       </div>
+
+      {/* VNC password prompt — shown when TightVNC requires auth */}
+      {passwordState.visible && (
+        <div className="absolute inset-0 flex items-center justify-center bg-[rgba(2,6,23,0.6)] backdrop-blur-[3px]">
+          <div className="w-[280px] rounded-[14px] border border-[rgba(148,163,184,0.28)] bg-[rgba(15,23,42,0.96)] px-5 py-4 shadow-[0_16px_40px_rgba(15,23,42,0.5)]">
+            <strong className="mb-1 block text-[13px] text-slate-100">VNC Password</strong>
+            <p className="mb-3 text-[11px] text-slate-400">The scope requires a password to connect.</p>
+            <input
+              ref={passwordInputRef}
+              type="password"
+              className="mb-3 w-full rounded-md border border-slate-600 bg-slate-800 px-3 py-1.5 text-[12px] text-slate-100 outline-none focus:border-blue-500"
+              placeholder="Enter VNC password"
+              value={passwordState.value}
+              onChange={e => setPasswordState(s => ({ ...s, value: e.target.value }))}
+              onKeyDown={e => { if (e.key === 'Enter') handlePasswordSubmit(); }}
+            />
+            <div className="flex gap-2">
+              <button
+                onClick={handlePasswordSubmit}
+                className="flex-1 rounded-md bg-blue-600 px-3 py-1.5 text-[12px] font-medium text-white hover:bg-blue-500"
+              >
+                Connect
+              </button>
+              <button
+                onClick={() => setPasswordState({ visible: false, value: '' })}
+                className="rounded-md border border-slate-600 px-3 py-1.5 text-[12px] text-slate-300 hover:bg-slate-700"
+              >
+                Cancel
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

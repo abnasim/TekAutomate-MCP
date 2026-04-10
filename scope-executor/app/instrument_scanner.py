@@ -3,10 +3,56 @@ VISA instrument discovery. Runs pyvisa.ResourceManager().list_resources()
 in a background thread and optionally queries *IDN? for identification.
 """
 
+import json
+import os
 import threading
 from dataclasses import dataclass, field
 
 from app.tk_utils import TkSignal
+
+_PINNED_FILE = os.path.join(os.path.dirname(os.path.abspath(__file__)), "pinned_instruments.json")
+
+
+def _load_pinned_resources() -> list[str]:
+    try:
+        with open(_PINNED_FILE, "r") as f:
+            data = json.load(f)
+        return [str(r) for r in data if r]
+    except Exception:
+        return []
+
+
+def _save_pinned_resources(resources: list[str]):
+    try:
+        with open(_PINNED_FILE, "w") as f:
+            json.dump(resources, f, indent=2)
+    except Exception:
+        pass
+
+
+def pin_resource(resource: str):
+    """Add a VISA resource string to the persistent pinned list."""
+    existing = _load_pinned_resources()
+    if resource not in existing:
+        existing.append(resource)
+        _save_pinned_resources(existing)
+
+
+def unpin_resource(resource: str):
+    """Remove a VISA resource string from the persistent pinned list."""
+    existing = _load_pinned_resources()
+    if resource in existing:
+        existing.remove(resource)
+        _save_pinned_resources(existing)
+
+
+def ip_to_visa_resources(host: str) -> list[str]:
+    """Build the INSTR and SOCKET VISA resource strings for a given host IP."""
+    host = host.strip()
+    return [
+        f"TCPIP::{host}::INSTR",
+        f"TCPIP::{host}::4000::SOCKET",
+    ]
 
 
 @dataclass
@@ -125,6 +171,11 @@ class InstrumentScanThread(threading.Thread):
             "TCPIP::localhost::INSTR",
         ]
         for res in fallback_resources:
+            if res not in resources:
+                resources.append(res)
+
+        # Add any user-pinned IPs from config
+        for res in _load_pinned_resources():
             if res not in resources:
                 resources.append(res)
 
