@@ -1773,7 +1773,7 @@ export function AiChatPanel({
             {
               icon: '◆',
               title: 'Run TekAutomate locally',
-              desc: 'Download and run TekAutomate on your PC. The MCP server starts automatically — no extra setup needed. Then connect Claude, Codex, or any MCP app to your local instance.',
+              desc: 'Download and run TekAutomate on your PC — the MCP server starts automatically. You can also run just the MCP server standalone and use TekAutomate on the web, pointing it at your local MCP URL.',
               color: 'text-cyan-500 dark:text-cyan-400',
               border: 'border-cyan-500/20',
               bg: 'bg-cyan-500/5',
@@ -1783,7 +1783,7 @@ export function AiChatPanel({
             {
               icon: '❖',
               title: 'Use with Codex or Claude Desktop',
-              desc: 'OpenAI Codex supports localhost MCP directly. Claude Desktop supports local MCP via its config file (stdio transport) — not the web connector which requires HTTPS. Cursor and other editors work the same way.',
+              desc: 'OpenAI Codex and Cursor support localhost MCP directly. Claude Desktop supports local MCP via its config file (stdio transport). Claude Desktop also works with the hosted Railway MCP since it\'s HTTPS — the web connector requires HTTPS but Claude Desktop has no such restriction.',
               color: 'text-orange-500 dark:text-orange-400',
               border: 'border-orange-500/20',
               bg: 'bg-orange-500/5',
@@ -1797,7 +1797,7 @@ export function AiChatPanel({
               color: 'text-violet-500 dark:text-violet-400',
               border: 'border-violet-500/20',
               bg: 'bg-violet-500/5',
-              href: 'https://tekautomatemcpv2.up.railway.app',
+              href: 'https://github.com/abnasim/TekAutomateMCPV2',
               linkLabel: 'Deploy on Railway →',
             },
           ].map((item) => (
@@ -1825,7 +1825,7 @@ export function AiChatPanel({
               <div className="text-xs font-semibold text-slate-600 dark:text-slate-300 font-mono">claude_desktop_config.json</div>
               <button
                 onClick={() => {
-                  const cfg = `{\n  "mcpServers": {\n    "tekautomate": {\n      "command": "npx",\n      "args": ["-y", "mcp-remote", "https://tekautomatemcpv2.up.railway.app/mcp"]\n    }\n  }\n}`;
+                  const cfg = `{\n  "mcpServers": {\n    "tekautomate": {\n      "command": "npx",\n      "args": ["-y", "mcp-remote", "http://localhost:8787/mcp"]\n    }\n  }\n}`;
                   navigator.clipboard.writeText(cfg).then(() => {
                     setDesktopConfigCopied(true);
                     setTimeout(() => setDesktopConfigCopied(false), 2000);
@@ -1841,7 +1841,7 @@ export function AiChatPanel({
     "tekautomate": {
       "command": "npx",
       "args": ["-y", "mcp-remote",
-               "https://tekautomatemcpv2.up.railway.app/mcp"]
+               "http://localhost:8787/mcp"]
     }
   }
 }`}</pre>
