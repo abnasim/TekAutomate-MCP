@@ -2,6 +2,7 @@
 """Tektronix documentation scraper v2 — uses real sitemap-discovered URLs."""
 
 import json
+import os
 import re
 import time
 import hashlib
@@ -287,6 +288,66 @@ def categorize_url(url):
         return 'Document'
 
 
+def find_pdf_url(soup, page_url):
+    """Try to find a PDF download link on the page."""
+    # Common patterns on tek.com PDF pages
+    for a in soup.find_all('a', href=True):
+        href = a['href']
+        if href.lower().endswith('.pdf') or 'download.tek.com' in href:
+            return urljoin(page_url, href)
+    # Also check meta tags / og:url
+    for meta in soup.find_all('meta', attrs={'property': 'og:url'}):
+        content = meta.get('content', '')
+        if content.lower().endswith('.pdf'):
+            return content
+    return None
+
+
+def make_pdf_ref_chunk(title, source_url, pdf_url, category, page_text=""):
+    """
+    For PDF-only (or short-content) pages: create one chunk that includes
+    whatever page text exists PLUS a pointer to the PDF for full content.
+    AI can then decide whether the snippet is enough or to fetch the PDF.
+    """
+    parts = []
+    if page_text.strip():
+        parts.append(page_text.strip())
+    parts.append(
+        f"Full document available as PDF — fetch: {pdf_url}"
+    )
+    body = " ".join(parts)
+
+    # Must have at least a title + PDF pointer to be useful
+    if not pdf_url and not page_text.strip():
+        return False
+
+    tags = extract_tags(title, body)
+    type_tag = category.lower().replace(' ', '_')
+    if type_tag not in tags:
+        tags.append(type_tag)
+
+    slug = slugify(title)
+    chunk_id = f"tek_{slug}_pdf_ref"
+    if chunk_id in seen_ids:
+        h = hashlib.md5(source_url.encode()).hexdigest()[:6]
+        chunk_id = f"tek_{slug}_{h}_pdf_ref"
+    if chunk_id in seen_ids:
+        return False
+    seen_ids.add(chunk_id)
+
+    chunk = {
+        "id": chunk_id,
+        "corpus": CORPUS,
+        "title": title,
+        "body": body[:3000],
+        "tags": sorted(set(tags))[:12],
+        "source": source_url,
+        "pdf_url": pdf_url,
+    }
+    all_chunks.append(chunk)
+    return True
+
+
 def process_page(url):
     """Fetch and process a single page into chunks."""
     html_text = fetch(url)
@@ -335,8 +396,23 @@ def process_page(url):
                 if make_chunk(full_title, chunk_body, url, i + 1):
                     chunks_added += 1
 
-    if chunks_added > 0:
-        success_urls.append(url)
+    # If no full chunks extracted — page is likely PDF-only or very short.
+    # Grab whatever text is on the page (abstract/description) + PDF link.
+    # AI gets the snippet + can fetch the PDF for full content.
+    if chunks_added == 0:
+        pdf_url = find_pdf_url(soup, url)
+        # Get whatever text exists on the page (even if short)
+        page_text = clean_text(content.get_text(' ', strip=True))
+        # Trim to a reasonable abstract length
+        page_text_trimmed = ' '.join(page_text.split()[:300])
+        if pdf_url or page_text_trimmed:
+            if make_pdf_ref_chunk(full_title, url, pdf_url or '', category, page_text_trimmed):
+                chunks_added += 1
+                success_urls.append(url)
+                return chunks_added
+        return 0
+
+    success_urls.append(url)
     return chunks_added
 
 
@@ -352,7 +428,28 @@ print("="*60)
 with open('/tmp/tek_final_urls.txt') as f:
     urls = [line.strip() for line in f if line.strip()]
 
-print(f"Loaded {len(urls)} URLs to scrape")
+# Incremental mode: if an existing output file is present, skip URLs already scraped.
+# This lets you re-run after adding new URLs without re-fetching everything.
+existing_output = "/home/exedev/tek_docs_scraped.json"
+already_scraped_sources = set()
+if os.path.exists(existing_output):
+    try:
+        existing_chunks = json.load(open(existing_output))
+        for c in existing_chunks:
+            src = c.get('source', '')
+            if src:
+                already_scraped_sources.add(src)
+            # Also pre-populate seen_ids so we don't create duplicate IDs
+            if c.get('id'):
+                seen_ids.add(c['id'])
+        all_chunks.extend(existing_chunks)
+        print(f"Incremental mode: loaded {len(existing_chunks)} existing chunks, {len(already_scraped_sources)} scraped sources")
+    except Exception as e:
+        print(f"Warning: could not load existing output ({e}), starting fresh")
+
+urls_to_scrape = [u for u in urls if u not in already_scraped_sources]
+print(f"Loaded {len(urls)} URLs total, {len(urls_to_scrape)} new to scrape")
+urls = urls_to_scrape
 print()
 
 total_chunks = 0
