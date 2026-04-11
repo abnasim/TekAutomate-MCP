@@ -1783,7 +1783,7 @@ export function AiChatPanel({
             {
               icon: '❖',
               title: 'Use with Codex or Claude Desktop',
-              desc: 'OpenAI Codex and Cursor support localhost MCP directly. Claude Desktop supports local MCP via its config file (stdio transport). Claude Desktop also works with the hosted Railway MCP since it\'s HTTPS — the web connector requires HTTPS but Claude Desktop has no such restriction.',
+              desc: 'OpenAI Codex and Cursor support localhost MCP directly. Claude Desktop supports local MCP via its config file (stdio transport) — or install it as a one-click extension using the .mcpb bundle below. Claude Desktop also works with the hosted Railway MCP (HTTPS). The web connector requires HTTPS but Claude Desktop has no such restriction.',
               color: 'text-orange-500 dark:text-orange-400',
               border: 'border-orange-500/20',
               bg: 'bg-orange-500/5',
