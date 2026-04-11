@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
-import { Bot, KeyRound, Loader2, Paperclip, Send, Settings, Terminal, X } from 'lucide-react';
+import { Bot, KeyRound, Loader2, Paperclip, Send, Settings, Square, Terminal, X } from 'lucide-react';
 import { normalizeAiActions, parseAiActionResponse, type AiAction } from '../../utils/aiActions';
 import type { ExecutionAuditReport } from '../../utils/executionAudit';
 import type { StepPreview } from './StepsListPreview';
@@ -314,6 +314,7 @@ export function AiChatPanel({
     setTekMode,
     setProvider,
     setModel,
+    cancelRequest,
   } = useAiChat({
     steps,
     runLog,
@@ -2081,6 +2082,12 @@ export function AiChatPanel({
             </div>
           ))
         )}
+        {state.isLoading && (
+          <div className="flex items-center gap-2 px-3 py-2 text-xs text-slate-400 dark:text-white/40">
+            <Loader2 size={12} className="animate-spin flex-shrink-0" />
+            <span>Thinking… <button onClick={cancelRequest} className="underline hover:text-red-400 transition-colors">Stop</button></span>
+          </div>
+        )}
         <div ref={messagesEndRef} />
       </div>
 
@@ -2245,15 +2252,27 @@ export function AiChatPanel({
                 <Paperclip size={12} />
                 Attach
               </button>
-              <button
-                type="button"
-                onClick={handleSend}
-                disabled={state.isLoading || (!input.trim() && attachments.length === 0 && contextAttachments.length === 0)}
-                className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-gradient-to-r from-violet-600 to-cyan-600 hover:from-violet-500 hover:to-cyan-500 text-white text-xs font-semibold disabled:opacity-40 transition-all"
-              >
-                {state.isLoading ? <Loader2 size={12} className="animate-spin" /> : <Send size={12} />}
-                {state.isLoading ? 'Thinking...' : 'Send'}
-              </button>
+              {state.isLoading ? (
+                <button
+                  type="button"
+                  onClick={cancelRequest}
+                  className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-red-600 hover:bg-red-500 text-white text-xs font-semibold transition-all"
+                  title="Stop and unlock the chat"
+                >
+                  <Square size={12} />
+                  Stop
+                </button>
+              ) : (
+                <button
+                  type="button"
+                  onClick={handleSend}
+                  disabled={!input.trim() && attachments.length === 0 && contextAttachments.length === 0}
+                  className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-gradient-to-r from-violet-600 to-cyan-600 hover:from-violet-500 hover:to-cyan-500 text-white text-xs font-semibold disabled:opacity-40 transition-all"
+                >
+                  <Send size={12} />
+                  Send
+                </button>
+              )}
             </div>
           </div>
         </div>

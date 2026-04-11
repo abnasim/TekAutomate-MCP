@@ -1,4 +1,4 @@
-import { useMemo, useState, useEffect } from 'react';
+import { useMemo, useState, useEffect, useRef } from 'react';
 import type { AiAction, AiActionParseResult } from '../../utils/aiActions';
 import { canMaterializeAiAction, normalizeAiActions, parseAiActionResponse } from '../../utils/aiActions';
 import { streamMcpChat, disconnectLiveSession, resolveMcpHost, type McpChatAttachment } from '../../utils/ai/mcpClient';
@@ -683,6 +683,8 @@ export function useAiChat(params: {
   onApplyAiActions?: (actions: AiAction[]) => Promise<{ applied: number; rerunStarted: boolean; changed: boolean }>;
 }) {
   const { state, dispatch } = useAiChatContext();
+  const abortRef = useRef<AbortController | null>(null);
+
   const [lastDiagnostics, setLastDiagnostics] = useState<{
     corpora: string[];
     retrievedChunkIds: string[];
@@ -790,6 +792,7 @@ export function useAiChat(params: {
       },
     });
     dispatch({ type: 'STREAM_START', tekMode: effectiveTekMode });
+    abortRef.current = new AbortController();
 
     try {
       setLastDiagnostics(null);
@@ -1217,9 +1220,16 @@ export function useAiChat(params: {
       });
     } catch (err) {
       const errorMsg = err instanceof Error ? err.message : 'AI request failed.';
-      dispatch({ type: 'STREAM_CHUNK', chunk: `\u26a0\ufe0f ${errorMsg}` }); // show error in message bubble
-      dispatch({ type: 'STREAM_DONE' });
-      dispatch({ type: 'SET_ERROR', error: errorMsg });
+      if (err instanceof Error && err.name === 'AbortError') {
+        // User cancelled — no error message needed, just reset loading
+        dispatch({ type: 'STREAM_DONE' });
+      } else {
+        dispatch({ type: 'STREAM_CHUNK', chunk: `\u26a0\ufe0f ${errorMsg}` }); // show error in message bubble
+        dispatch({ type: 'STREAM_DONE' });
+        dispatch({ type: 'SET_ERROR', error: errorMsg });
+      }
+    } finally {
+      abortRef.current = null;
     }
   };
 
@@ -1338,6 +1348,21 @@ export function useAiChat(params: {
   const setOpenAiAssistantId = (value: string) =>
     dispatch({ type: 'SET_OPENAI_ASSISTANT_ID', value });
 
+  /**
+   * Immediately unlock the UI from a stuck loading state.
+   * The in-flight HTTP / AI request will still complete in the background
+   * (we can't abort it without signal threading), but the user gets control back.
+   */
+  const cancelRequest = () => {
+    if (abortRef.current) {
+      abortRef.current.abort();
+      abortRef.current = null;
+    }
+    if (state.isLoading) {
+      dispatch({ type: 'STREAM_DONE' });
+    }
+  };
+
   return {
     state,
     providerModels,
@@ -1353,5 +1378,6 @@ export function useAiChat(params: {
     setModel,
     setToolCallMode,
     setOpenAiAssistantId,
+    cancelRequest,
   };
 }
