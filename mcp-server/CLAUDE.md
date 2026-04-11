@@ -1,5 +1,34 @@
 # CLAUDE.md
 
+## Repo Structure (IMPORTANT — read before pushing)
+
+Four git repos, all should have identical `src/` code:
+
+| Local Folder | GitHub Remote | Purpose |
+|---|---|---|
+| `TekAutomateMCPV2/` | `TekAutomateMCPV2.git` | Source of truth — Railway hosted, live=true |
+| `TekAutomateMCPPublic/` | `TekAutomate-MCP.git` | Public hosted version, live=false |
+| `Tek_Automator/` (root) | `TekAutomate.git` | Full app repo — tracks mcp-server as a subfolder |
+| `Tek_Automator/mcp-server/` | `TekAutomateMCPV2.git` (origin) | Nested git repo — local deployment, runs on localhost:8787 |
+
+**mcp-server is a nested git repo inside Tek_Automator.**
+- Pushing from `TekAutomateMCPV2/` → pushes to `TekAutomateMCPV2.git`
+- Pushing from `Tek_Automator/` root → commits `mcp-server/` file changes to `TekAutomate.git`
+- Pushing from `Tek_Automator/mcp-server/` → pushes to `TekAutomateMCPV2.git`
+
+**After every code change, push ALL of:**
+1. `TekAutomateMCPV2/` → `git push`
+2. `TekAutomateMCPPublic/` → `git push`
+3. `Tek_Automator/` root → `git add mcp-server/src/... && git push`
+4. `Tek_Automator/mcp-server/` is local only — files stay in sync via reset/copy
+
+**Differences between repos are runtime config only (`.env`), NOT source code:**
+- `mcp-server`: `LIVE_INSTRUMENT_ENABLED=true`, executor on localhost, port 8787
+- `TekAutomateMCPV2`: `LIVE_INSTRUMENT_ENABLED=true`, Railway URLs
+- `TekAutomateMCPPublic`: `LIVE_INSTRUMENT_ENABLED=false`, public Railway URL
+
+---
+
 ## TekAutomate MCP - Instrument Copilot
 
 You have access to TekAutomate MCP tools for Tektronix oscilloscope control.
