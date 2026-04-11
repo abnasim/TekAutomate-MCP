@@ -12,10 +12,10 @@
   },
   "repository": {
     "type": "git",
-    "url": "https://github.com/abnasim/TekAutomate-MCP"
+    "url": "https://github.com/abnasim/TekAutomate"
   },
-  "homepage": "https://tekautomate-mcp-production.up.railway.app",
-  "documentation": "https://tekautomate-mcp-production.up.railway.app/setup",
+  "homepage": "https://tekautomatemcpv2.up.railway.app",
+  "documentation": "https://tekautomatemcpv2.up.railway.app/setup",
   "support": "https://github.com/abnasim/TekAutomate/issues",
   "server": {
     "type": "node",
@@ -57,8 +57,8 @@
     "mcp_url": {
       "type": "string",
       "title": "MCP Server URL",
-      "description": "URL of your TekAutomate MCP server.\n\n• Hosted (default): https://tekautomate-mcp-production.up.railway.app/mcp\n• Local (TekAutomate running on your PC): http://localhost:8787/mcp\n• Self-hosted Railway: https://your-project.up.railway.app/mcp",
-      "default": "https://tekautomate-mcp-production.up.railway.app/mcp",
+      "description": "URL of your TekAutomate MCP server.\n\n• Hosted (default): https://tekautomatemcpv2.up.railway.app/mcp\n• Local (TekAutomate running on your PC): http://localhost:8787/mcp\n• Self-hosted Railway: https://your-project.up.railway.app/mcp",
+      "default": "https://tekautomatemcpv2.up.railway.app/mcp",
       "required": true
     }
   },
