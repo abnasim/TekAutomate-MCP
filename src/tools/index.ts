@@ -248,7 +248,7 @@ export function getToolDefinitions() {
     {
       name: 'knowledge',
       description:
-        'Knowledge gateway for TekAutomate support material. Use action:"retrieve" with a corpus to search docs/reference (scpi for commands, tmdevices for Python driver API, app_logic for architecture, scope_logic for measurement concepts, pyvisa_tekhsi for connection examples). Use action:"examples" to find matching workflow templates. Use action:"failures" to look up known runtime errors and their fixes.',
+        'Knowledge gateway for TekAutomate support material. Use action:"retrieve" with a corpus to search docs/reference (scpi for commands, tmdevices for Python driver API, app_logic for architecture, scope_logic for measurement concepts, pyvisa_tekhsi for connection examples, tek_docs for scraped Tektronix product documentation covering MSO/DPO/MDO series specs, features, and application notes). Use action:"examples" to find matching workflow templates. Use action:"failures" to look up known runtime errors and their fixes.',
       parameters: {
         type: 'object',
         properties: {
@@ -263,7 +263,7 @@ export function getToolDefinitions() {
           },
           corpus: {
             type: 'string',
-            description: 'For action:"retrieve" — which knowledge corpus to search. Pick the best match:\n• "scpi" — SCPI command syntax, parameters, and programming guide docs (use for "how do I send/query X command")\n• "tmdevices" — tm_devices Python library: driver classes, methods, and API reference (use for "how do I use tm_devices to...")\n• "app_logic" — TekAutomate architecture, AiAction schemas, internal system design docs (use for "how does TekAutomate work internally")\n• "errors" — known runtime error patterns and fixes (prefer action:"failures" instead)\n• "scope_logic" — oscilloscope measurement logic, channel/trigger/acquisition concepts\n• "templates" — workflow template reference (prefer action:"examples" instead)\n• "pyvisa_tekhsi" — PyVISA and TekHSI connection/streaming examples',
+            description: 'For action:"retrieve" — which knowledge corpus to search. Pick the best match:\n• "scpi" — SCPI command syntax, parameters, and programming guide docs (use for "how do I send/query X command")\n• "tmdevices" — tm_devices Python library: driver classes, methods, and API reference (use for "how do I use tm_devices to...")\n• "app_logic" — TekAutomate architecture, AiAction schemas, internal system design docs (use for "how does TekAutomate work internally")\n• "errors" — known runtime error patterns and fixes (prefer action:"failures" instead)\n• "scope_logic" — oscilloscope measurement logic, channel/trigger/acquisition concepts\n• "templates" — workflow template reference (prefer action:"examples" instead)\n• "pyvisa_tekhsi" — PyVISA and TekHSI connection/streaming examples\n• "tek_docs" — scraped Tektronix product documentation: MSO/DPO/MDO/MDO series specs, application notes, product features, and instrument-specific details',
           },
           query: {
             type: 'string',
@@ -704,8 +704,8 @@ export function getToolDefinitions() {
         properties: {
           corpus: {
             type: 'string',
-            enum: ['scpi', 'tmdevices', 'app_logic', 'errors', 'templates', 'pyvisa_tekhsi', 'scope_logic'],
-            description: 'Which knowledge corpus to search.',
+            enum: ['scpi', 'tmdevices', 'app_logic', 'errors', 'templates', 'pyvisa_tekhsi', 'scope_logic', 'tek_docs'],
+            description: 'Which knowledge corpus to search. Use tek_docs for Tektronix product documentation (MSO/DPO/MDO specs, features, application notes).',
           },
           query: { type: 'string', description: 'Short targeted search phrase. Prefer exact bug names, procedure names, symptoms, or keywords.' },
           topK: { type: 'number', description: 'Max chunks to return (default 5).' },
