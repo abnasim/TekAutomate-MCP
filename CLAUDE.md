@@ -1,5 +1,34 @@
 # CLAUDE.md
 
+## Repo Structure (IMPORTANT — read before pushing)
+
+Four git repos, all should have identical `src/` code:
+
+| Local Folder | GitHub Remote | Purpose |
+|---|---|---|
+| `TekAutomateMCPV2/` | `TekAutomateMCPV2.git` | Source of truth — Railway hosted, live=true |
+| `TekAutomateMCPPublic/` | `TekAutomate-MCP.git` | Public hosted version, live=false |
+| `Tek_Automator/` (root) | `TekAutomate.git` | Full app repo — tracks mcp-server as a subfolder |
+| `Tek_Automator/mcp-server/` | `TekAutomateMCPV2.git` (origin) | Nested git repo — local deployment, runs on localhost:8787 |
+
+**mcp-server is a nested git repo inside Tek_Automator.**
+- Pushing from `TekAutomateMCPV2/` → pushes to `TekAutomateMCPV2.git`
+- Pushing from `Tek_Automator/` root → commits `mcp-server/` file changes to `TekAutomate.git`
+- Pushing from `Tek_Automator/mcp-server/` → pushes to `TekAutomateMCPV2.git`
+
+**After every code change, push ALL of:**
+1. `TekAutomateMCPV2/` → `git push`
+2. `TekAutomateMCPPublic/` → `git push`
+3. `Tek_Automator/` root → `git add mcp-server/src/... && git push`
+4. `Tek_Automator/mcp-server/` is local only — files stay in sync via reset/copy
+
+**Differences between repos are runtime config only (`.env`), NOT source code:**
+- `mcp-server`: `LIVE_INSTRUMENT_ENABLED=true`, executor on localhost, port 8787
+- `TekAutomateMCPV2`: `LIVE_INSTRUMENT_ENABLED=true`, Railway URLs
+- `TekAutomateMCPPublic`: `LIVE_INSTRUMENT_ENABLED=false`, public Railway URL
+
+---
+
 ## TekAutomate MCP - Instrument Copilot
 
 You have access to TekAutomate MCP tools for Tektronix oscilloscope control.
@@ -26,7 +55,7 @@ The TekAutomate MCP is available as a Claude.ai custom connector AND via direct 
 
 ### Direct Endpoint
 ```bash
-POST https://tekautomate-mcp-production.up.railway.app/mcp
+POST https://tekautomatemcpv2.up.railway.app/mcp
 Content-Type: application/json
 ```
 
@@ -34,7 +63,7 @@ Content-Type: application/json
 ```bash
 curl -s -X POST -H "Content-Type: application/json" \
   -d '{"jsonrpc":"2.0","id":1,"method":"tools/call","params":{"name":"TOOL_NAME","arguments":{ARGS}}}' \
-  https://tekautomate-mcp-production.up.railway.app/mcp
+  https://tekautomatemcpv2.up.railway.app/mcp
 ```
 
 ### Available Tools
@@ -64,29 +93,29 @@ curl -s -X POST -H "Content-Type: application/json" \
 # search_scpi
 curl -s -X POST -H "Content-Type: application/json" \
   -d '{"jsonrpc":"2.0","id":1,"method":"tools/call","params":{"name":"search_scpi","arguments":{"query":"edge trigger","limit":5}}}' \
-  https://tekautomate-mcp-production.up.railway.app/mcp
+  https://tekautomatemcpv2.up.railway.app/mcp
 
 # send_scpi
 curl -s -X POST -H "Content-Type: application/json" \
   -d '{"jsonrpc":"2.0","id":1,"method":"tools/call","params":{"name":"send_scpi","arguments":{"commands":["*IDN?"]}}}' \
-  https://tekautomate-mcp-production.up.railway.app/mcp
+  https://tekautomatemcpv2.up.railway.app/mcp
 
 # get_instrument_info
 curl -s -X POST -H "Content-Type: application/json" \
   -d '{"jsonrpc":"2.0","id":1,"method":"tools/call","params":{"name":"get_instrument_info","arguments":{}}}' \
-  https://tekautomate-mcp-production.up.railway.app/mcp
+  https://tekautomatemcpv2.up.railway.app/mcp
 
 # discover_scpi (snapshot)
 curl -s -X POST -H "Content-Type: application/json" \
   -d '{"jsonrpc":"2.0","id":1,"method":"tools/call","params":{"name":"discover_scpi","arguments":{"action":"snapshot"}}}' \
-  https://tekautomate-mcp-production.up.railway.app/mcp
+  https://tekautomatemcpv2.up.railway.app/mcp
 ```
 
 ### Health Check
 ```bash
 curl -s -X POST -H "Content-Type: application/json" \
   -d '{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":"2024-11-05","capabilities":{},"clientInfo":{"name":"health-check","version":"0.1"}}}' \
-  https://tekautomate-mcp-production.up.railway.app/mcp
+  https://tekautomatemcpv2.up.railway.app/mcp
 ```
 Expected: `serverInfo.name: "tekautomate"`, `serverInfo.version: "3.2.0"`
 
