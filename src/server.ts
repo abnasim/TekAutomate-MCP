@@ -320,7 +320,8 @@ function extensionForMimeType(mimeType: string): string {
 }
 
 function getConfiguredPublicBaseUrl(): string {
-  return String(process.env.MCP_PUBLIC_URL || 'https://tekautomatemcpv2-production.up.railway.app').trim();
+  // Never hardcode a domain. Set MCP_PUBLIC_URL in the Railway Variables tab.
+  return String(process.env.MCP_PUBLIC_URL || '').trim();
 }
 
 function getHealthPayload() {

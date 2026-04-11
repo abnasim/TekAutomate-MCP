@@ -1,0 +1,12 @@
+[build]
+builder = "NIXPACKS"
+
+[deploy]
+startCommand = "npm start"
+restartPolicyType = "ON_FAILURE"
+restartPolicyMaxRetries = 10
+healthcheckPath = "/health"
+
+# ── Set these in the Railway Variables tab ──────────────────────────────────
+# MCP_PUBLIC_URL      = https://tekautomate-mcp-production.up.railway.app   (no trailing slash)
+# LIVE_INSTRUMENT_ENABLED = false   (keep false — this is the shared public instance)
