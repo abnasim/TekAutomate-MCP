@@ -4741,7 +4741,7 @@ async function runChatConversation(
     for (let round = 0; round < MAX_TOOL_ROUNDS; round++) {
       iterations++;
       const response = await client.messages.create({
-        model: req.model || 'claude-sonnet-4-6',
+        model: req.model || 'claude-sonnet-4-5',
         system: systemPrompt,
         max_tokens: 4096,
         messages: messages as any,
@@ -4809,9 +4809,6 @@ async function runChatConversation(
       messages.push({ role: 'user', content: toolResults as any });
     }
 
-    if (!finalText) {
-      finalText = 'No response was generated. The model may have only made tool calls without producing a final answer. Please try again.';
-    }
     const normalizedText = await normalizeChatBuildLikeResponse(req, finalText);
     const modelMs = Date.now() - modelStartedAt;
     return {
@@ -8315,6 +8312,10 @@ async function runAnthropicToolLoop(
       historyChars,
       toolResultChars,
     });
+  }
+
+  if (!finalText) {
+    finalText = 'No response was generated. The model may have only made tool calls without producing a final answer. Please try again.';
   }
 
   return {
