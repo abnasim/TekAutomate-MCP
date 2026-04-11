@@ -170,9 +170,14 @@ def chunk_text(text, max_words=MAX_WORDS):
 
 
 def extract_tags(title, body):
-    tags = set()
+    # Content-type tags are derived from the TITLE only (not body).
+    # Body text can contain words like "FAQ" in sidebar nav/links — using only
+    # the title (which the scraper prefixes with the category, e.g. "FAQ: ...")
+    # gives reliable, URL-driven content-type classification.
+    title_upper = title.upper()
     combined = (title + ' ' + body).upper()
 
+    model_tags = set()
     models = [
         'MSO2', 'MSO3', 'MSO4', 'MSO5', 'MSO6', 'MSO44', 'MSO46', 'MSO54', 'MSO56', 'MSO58', 'MSO64',
         'MSO6B', 'MSO4B', 'MSO5B',
@@ -184,8 +189,9 @@ def extract_tags(title, body):
     ]
     for m in models:
         if m in combined:
-            tags.add(m.replace(' ', '_'))
+            model_tags.add(m.replace(' ', '_'))
 
+    topic_tags = set()
     topics = {
         'TRIGGER': 'trigger', 'PROBE': 'probe', 'BANDWIDTH': 'bandwidth',
         'DECODE': 'decode', 'PROTOCOL': 'protocol', 'SERIAL BUS': 'serial_bus',
@@ -209,24 +215,36 @@ def extract_tags(title, body):
     }
     for keyword, tag in topics.items():
         if keyword in combined:
-            tags.add(tag)
+            topic_tags.add(tag)
 
-    # Add content type tags
-    url_lower = ''
-    if 'APPLICATION NOTE' in combined or 'APP NOTE' in combined:
-        tags.add('app_note')
-    if 'PRIMER' in combined:
-        tags.add('primer')
-    if 'DATASHEET' in combined:
-        tags.add('datasheet')
-    if 'FAQ' in combined:
-        tags.add('faq')
-    if 'TECHNICAL BRIEF' in combined:
-        tags.add('tech_brief')
-    if 'BLOG' in combined:
-        tags.add('blog')
+    # Content-type tags: derived from title ONLY to avoid false positives from
+    # body text (e.g. nav sidebars on tek.com often contain the word "FAQ").
+    content_type_tags = set()
+    if 'APPLICATION NOTE' in title_upper or 'APP NOTE' in title_upper:
+        content_type_tags.add('app_note')
+    if 'PRIMER' in title_upper:
+        content_type_tags.add('primer')
+    if 'DATASHEET' in title_upper:
+        content_type_tags.add('datasheet')
+    if 'FAQ' in title_upper:
+        content_type_tags.add('faq')
+    if 'TECHNICAL BRIEF' in title_upper:
+        content_type_tags.add('tech_brief')
+    if 'BLOG' in title_upper:
+        content_type_tags.add('blog')
 
-    return sorted(list(tags))[:12]
+    # Priority ordering: content-type first (never truncated), then topics, then model tags.
+    # This ensures structural tags like 'faq' survive the 12-tag limit even on heavily
+    # model-tagged pages (e.g. I2C FAQ that mentions 8 different oscilloscope models).
+    ordered = sorted(content_type_tags) + sorted(topic_tags) + sorted(model_tags)
+    # Deduplicate while preserving order
+    seen = set()
+    result = []
+    for tag in ordered:
+        if tag not in seen:
+            seen.add(tag)
+            result.append(tag)
+    return result[:16]  # raised from 12 → 16 so model tags don't crowd out topic tags
 
 
 def make_chunk(title, body, source, page_num=1, prefix="tek"):

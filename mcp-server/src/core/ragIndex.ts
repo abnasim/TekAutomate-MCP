@@ -309,7 +309,9 @@ function scoreProductMatch(doc: RagChunkDoc, normalizedQuery: string): number {
   // FAQs and how-to content are universal — never penalise for model tag mismatch.
   // These docs describe procedures that work on all scope families; they just happen
   // to mention older models (DPO7000, MDO3000) in their examples.
-  if (docTags.includes('faq') || docTags.includes('how_to')) return 0;
+  // Title-prefix check is the safety net: scraper always prefixes FAQ titles with "FAQ:"
+  // so this catches any chunk whose faq tag was truncated by the 12-tag limit.
+  if (docTags.includes('faq') || docTags.includes('how_to') || doc.title.startsWith('FAQ:')) return 0;
 
   // Penalty: doc has model-specific tags, but none match → wrong product family
   const hasOtherModelTags = docTags.some((tag) => TEK_DOCS_MODEL_TAGS.has(normalizeTekTag(tag)));
@@ -330,7 +332,9 @@ function scoreHowToIntent(doc: RagChunkDoc, normalizedQuery: string): number {
   const isHowToQuery = HOW_TO_KEYWORDS.some((kw) => normalizedQuery.includes(kw));
   if (!isHowToQuery) return 0;
   const tags = doc.tags || [];
-  if (tags.includes('faq')) return 4;       // FAQ = exactly what how-to queries need
+  // faq tag OR title-prefix — same safety net as scoreProductMatch so chunks
+  // whose faq tag was truncated by the 12-tag limit still receive the boost.
+  if (tags.includes('faq') || doc.title.startsWith('FAQ:')) return 4;
   if (tags.includes('scope_logic')) return 2; // Scope procedure docs also relevant
   return 0;
 }
