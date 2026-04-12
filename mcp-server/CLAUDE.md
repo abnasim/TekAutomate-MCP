@@ -182,7 +182,7 @@ Do NOT call tek_router build or tek_router search_exec. Use search_scpi directly
 - Use offset to page if first results don't match.
 - get_command_by_header only when compact result doesn't have enough info.
 - verify_scpi_commands accepts a batch. Call once before execution, not per command.
-- Use analyze:false for screenshots unless diagnosing. analyze:true costs 50K+ tokens.
+- Use analyze:true whenever you need to see the result — channel verification, decode visibility, clipping check, trigger confirmation, or final task sign-off. Use analyze:false only when you are refreshing the user's UI display and have no need to inspect the image yourself.
 
 ---
 
@@ -304,11 +304,20 @@ All other commands return immediately. Do NOT add *OPC? after ordinary commands.
 For every action:
 1. LOOKUP - check *LRN? context, shortcuts, or search_scpi
 2. EXECUTE - send_scpi
-3. VERIFY - query-back (set+query). For set-only commands, verify via related query or ask user to share a screenshot.
+3. VERIFY - query-back for value changes. For any command that changes what is visible on screen (channel on/off, scale, offset, decode, trigger) — take capture_screenshot analyze:true and check the result before claiming success. Never ask the user to share a screenshot; you have the tool.
 4. ASSESS - did it work? If not, diagnose and retry once.
 
 Chain multiple actions in one turn. Execute all before responding.
-After any multi-step task, capture a final screenshot (analyze:false).
+After any multi-step task, capture a final screenshot (analyze:true) to confirm the end state visually.
+
+### Mandatory screenshot checkpoints (always analyze:true)
+- After enabling or disabling a channel
+- After autoset, vertical scale/offset, or horizontal scale/position changes
+- After decode/bus setup or threshold changes
+- After trigger configuration changes — verify trigger is actually firing
+- After any command that changes what is visible on screen
+- Whenever a measurement returns 9.9E37 — diagnose visually before retrying
+- As the final step of any setup or configuration task
 
 ---
 
