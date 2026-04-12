@@ -7,7 +7,7 @@ import { initTemplateIndex } from './core/templateIndex';
 import { runToolLoop } from './core/toolLoop';
 import { getSlimToolDefinitions, getToolDefinitions, runTool } from './tools/index';
 import type { McpChatRequest } from './core/schemas';
-import { getLastWorkflowProposal } from './tools/stageWorkflowProposal';
+import { getLastWorkflowProposal, stageWorkflowProposal } from './tools/stageWorkflowProposal';
 import { getRuntimeContextState, updateRuntimeContext } from './tools/runtimeContextStore';
 import { completeLiveAction, getPendingLiveActionCount, waitForNextLiveAction } from './tools/liveActionBridge';
 import { bootRouter, createReloadProvidersHandler, createRouterHandler, getRouterHealth } from './core/routerIntegration';
@@ -674,6 +674,35 @@ export async function createServer(port = 8787): Promise<http.Server> {
           __mcpBaseUrl: getConfiguredPublicBaseUrl(),
         };
         const result = await runTool(name, toolArgs);
+
+        // ── Auto-stage: if any MCP tool returns data.actions, push proposal immediately ──
+        // This means even if the agent skips workflow_ui{stage}, the proposal still
+        // reaches the browser. Happens for tek_router{build} → buildOrEditWorkflow.
+        // Skip workflow_ui itself (it already calls stageWorkflowProposal internally).
+        if (name !== 'workflow_ui' && name !== 'stage_workflow_proposal') {
+          const rd = result && typeof result === 'object' ? (result as Record<string, unknown>).data : null;
+          const autoActions = rd && typeof rd === 'object' && Array.isArray((rd as Record<string, unknown>).actions)
+            ? (rd as Record<string, unknown>).actions as unknown[]
+            : null;
+          if (autoActions && autoActions.length > 0) {
+            const sk = getLiveSessionState().sessionKey;
+            if (sk) {
+              console.log(`[MCP auto-stage] ${name} returned ${autoActions.length} actions — auto-staging for sessionKey=${sk}`);
+              void stageWorkflowProposal({
+                summary: typeof (rd as Record<string, unknown>).summary === 'string'
+                  ? String((rd as Record<string, unknown>).summary)
+                  : `Workflow proposal from ${name}`,
+                findings: Array.isArray((rd as Record<string, unknown>).findings) ? (rd as Record<string, unknown>).findings as string[] : [],
+                suggestedFixes: Array.isArray((rd as Record<string, unknown>).suggestedFixes) ? (rd as Record<string, unknown>).suggestedFixes as string[] : [],
+                actions: autoActions,
+                sessionKey: sk,
+              });
+            } else {
+              console.warn(`[MCP auto-stage] ${name} returned actions but sessionKey is null — no auto-stage`);
+            }
+          }
+        }
+
         return { content: buildExternalMcpToolContent(name, result) };
       } catch (err) {
         const msg = err instanceof Error ? err.message : String(err);

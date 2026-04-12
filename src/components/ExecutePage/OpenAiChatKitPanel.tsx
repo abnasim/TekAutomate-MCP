@@ -1125,7 +1125,7 @@ function OpenAiChatKitPanelInner({
     onResponseEnd: () => {
       responseScanTimersRef.current.forEach((timer) => window.clearTimeout(timer));
       responseScanTimersRef.current = [];
-      [150, 600, 1200, 2200, 3500].forEach((delay) => {
+      [150, 600, 1200, 2200, 3500, 6000, 10000].forEach((delay) => {
         const timer = window.setTimeout(() => {
           const matched = scanContainerForActions();
           void fetchLatestStagedProposal().then((proposalMatched) => {
@@ -1530,9 +1530,15 @@ function OpenAiChatKitPanelInner({
     };
 
     // Push immediately so the server has the sessionKey before the agent runs.
-    // Don't wait for the first 8s poll timeout to expire.
+    // Also retry at 3s and 7s — if Railway is still restarting when the page
+    // loads, the first push silently fails (error swallowed). Without retries,
+    // the sessionKey won't arrive until the next 8s live-bridge timeout fires.
     const initialHost = getHost();
     if (initialHost) refreshSessionKey(initialHost);
+    const retryHandles = [
+      window.setTimeout(() => { const h = getHost(); if (h && !cancelled) refreshSessionKey(h); }, 3000),
+      window.setTimeout(() => { const h = getHost(); if (h && !cancelled) refreshSessionKey(h); }, 7000),
+    ];
 
     const loop = async () => {
       while (!cancelled) {
@@ -1582,7 +1588,51 @@ function OpenAiChatKitPanelInner({
     };
 
     void loop();
-    return () => { cancelled = true; };
+
+    // ── Fallback interval: poll /workflow-proposals/latest every 5s ───────────
+    // Guarantees proposals are picked up even if the live bridge misses them
+    // (e.g. sessionKey timing, Railway restart, live bridge timing gap).
+    // fetchLatestStagedProposal deduplicates via seenProposalIdRef so it's safe
+    // to call repeatedly.
+    const fallbackInterval = window.setInterval(() => {
+      if (cancelled) return;
+      const host = getHost();
+      if (!host) return;
+      const sk = sessionKey;
+      void fetch(`${host}/workflow-proposals/latest?sessionKey=${encodeURIComponent(sk)}`)
+        .then((r) => r.ok ? r.json() : null)
+        .then((json) => {
+          if (cancelled) return;
+          const proposal = (json as { proposal?: { id?: string; createdAt?: string; summary?: string; findings?: unknown[]; suggestedFixes?: unknown[]; actions?: unknown[] } | null } | null)?.proposal;
+          if (!proposal?.id || !proposal?.actions?.length) return;
+          if (proposal.id === seenProposalIdRef.current) return;
+          const createdAtMs = Date.parse(String(proposal.createdAt || ''));
+          if (Number.isFinite(createdAtMs) && createdAtMs < proposalSessionStartedAtRef.current) return;
+          const accepted = setStructuredProposalRef.current?.({
+            summary: proposal.summary,
+            findings: Array.isArray(proposal.findings) ? proposal.findings : [],
+            suggestedFixes: Array.isArray(proposal.suggestedFixes) ? proposal.suggestedFixes : [],
+            actions: Array.isArray(proposal.actions) ? proposal.actions : [],
+            rawJson: JSON.stringify({
+              summary: proposal.summary || '',
+              findings: Array.isArray(proposal.findings) ? proposal.findings : [],
+              suggestedFixes: Array.isArray(proposal.suggestedFixes) ? proposal.suggestedFixes : [],
+              actions: Array.isArray(proposal.actions) ? proposal.actions : [],
+            }),
+          });
+          if (accepted) {
+            seenProposalIdRef.current = String(proposal.id);
+            console.log('[ChatKit fallback poll] Applied proposal from /workflow-proposals/latest:', proposal.id);
+          }
+        })
+        .catch(() => {});
+    }, 5000);
+
+    return () => {
+      cancelled = true;
+      retryHandles.forEach((h) => window.clearTimeout(h));
+      window.clearInterval(fallbackInterval);
+    };
   }, [workflowId, userId]);
 
   // ── Live instrument action loop ───────────────────────────────────────────
