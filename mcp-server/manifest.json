@@ -5,7 +5,7 @@
   "display_name": "TekAutomate MCP",
   "version": "1.0.0",
   "description": "AI-powered Tektronix oscilloscope control — SCPI lookup, live instrument control, screenshots, and workflow automation.",
-  "long_description": "TekAutomate MCP connects AI assistants (Claude Desktop, Codex, Cursor) to Tektronix oscilloscopes.\n\nFeatures:\n- SCPI command search across a built-in Tektronix corpus\n- Live instrument control via VISA (when LIVE_INSTRUMENT_ENABLED=true)\n- Scope screenshot capture and vision analysis\n- Workflow building and step proposal\n- RAG-backed knowledge retrieval from Tektronix documentation\n\nRequires TekAutomateExecutor.exe to be running for live instrument features. Find it in the dist/ folder of your TekAutomate installation.\n\nUses mcp-remote to bridge the HTTP MCP endpoint to Claude Desktop's stdio transport. Configure the MCP URL below to point at the hosted server or your own local/self-hosted instance.",
+  "long_description": "TekAutomate MCP connects Claude Desktop to a locally running TekAutomate MCP server.\n\nFeatures:\n- SCPI command search across a built-in Tektronix corpus\n- Live instrument control via VISA (requires TekAutomateExecutor running locally)\n- Scope screenshot capture and vision analysis\n- Workflow building and step proposal\n- RAG-backed knowledge retrieval from Tektronix documentation\n\nRequires TekAutomate to be running on your PC (starts the MCP server automatically on localhost:8787). TekAutomateExecutor.exe must also be running to enable live instrument features.",
   "author": {
     "name": "Abdul Nasim",
     "url": "https://github.com/abnasim/TekAutomate"
@@ -14,15 +14,15 @@
     "type": "git",
     "url": "https://github.com/abnasim/TekAutomate"
   },
-  "homepage": "https://tekautomatemcpv2.up.railway.app",
-  "documentation": "https://tekautomatemcpv2.up.railway.app/setup",
+  "homepage": "https://tekautomate.dev",
+  "documentation": "https://github.com/abnasim/TekAutomate",
   "support": "https://github.com/abnasim/TekAutomate/issues",
   "server": {
     "type": "node",
     "entry_point": "server/index.js",
     "mcp_config": {
       "command": "npx",
-      "args": ["-y", "mcp-remote", "${user_config.mcp_url}"],
+      "args": ["-y", "mcp-remote", "http://localhost:8787/mcp"],
       "env": {}
     }
   },
@@ -53,15 +53,6 @@
     "tek"
   ],
   "license": "MIT",
-  "user_config": {
-    "mcp_url": {
-      "type": "string",
-      "title": "MCP Server URL",
-      "description": "URL of your TekAutomate MCP server.\n\n• Hosted (default): https://tekautomatemcpv2.up.railway.app/mcp\n• Local (TekAutomate running on your PC): http://localhost:8787/mcp\n• Self-hosted Railway: https://your-project.up.railway.app/mcp",
-      "default": "https://tekautomatemcpv2.up.railway.app/mcp",
-      "required": true
-    }
-  },
   "compatibility": {
     "claude_desktop": ">=0.10.0",
     "platforms": ["darwin", "win32", "linux"],
