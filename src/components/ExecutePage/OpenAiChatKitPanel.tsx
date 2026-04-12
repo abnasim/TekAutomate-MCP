@@ -695,6 +695,8 @@ function OpenAiChatKitPanelInner({
   onLiveScreenshotRef.current = onLiveScreenshot;
   const autoApplyRef = useRef(autoApply);
   autoApplyRef.current = autoApply;
+  const runLogRef = useRef(runLog);
+  runLogRef.current = runLog;
   const lastContextSentRef = useRef('');
   const lastParsedJsonRef = useRef('');
   const responseScanTimersRef = useRef<number[]>([]);
@@ -1160,7 +1162,7 @@ function OpenAiChatKitPanelInner({
       // ── Client-only tool: get_run_log ──
       // Returns the latest local execution log tail from the browser.
       if (name === 'get_run_log') {
-        const raw = String(runLog || '');
+        const raw = String(runLogRef.current || '');
         const lines = raw.split(/\r?\n/).filter(Boolean);
         const tailLines = lines.slice(-60);
         return {
@@ -1174,8 +1176,12 @@ function OpenAiChatKitPanelInner({
 
       // ── Client-only proposal tools ──
       // Capture structured workflow proposals directly in the UI.
-      // Support both the legacy ChatKit tool name and the newer MCP staging name.
+      // Handles three entry points:
+      //  1. stage_workflow_proposal / propose_workflow_actions — called directly by agent
+      //  2. workflow_ui with action:'stage' — the public MCP wrapper the agent uses
+      // All three bypass the live bridge and apply the proposal instantly in-browser.
       if (name === 'propose_workflow_actions' || name === 'stage_workflow_proposal') {
+        console.log(`[onClientTool] ${name} intercepted — applying proposal locally`);
         const accepted = setStructuredProposal({
           summary: typeof params.summary === 'string' ? params.summary : '',
           findings: Array.isArray(params.findings) ? params.findings : [],
@@ -1188,6 +1194,56 @@ function OpenAiChatKitPanelInner({
           message: accepted
             ? 'TekAutomate captured the workflow proposal.'
             : 'Proposal was ignored because no valid actions were provided.',
+        };
+      }
+
+      // ── Client-only: workflow_ui{stage} ──
+      // The agent calls workflow_ui with action:'stage' to hand proposals to the UI.
+      // Intercept here so the proposal renders instantly in-browser without
+      // needing the live bridge + /live-actions/next round-trip.
+      if (name === 'workflow_ui' && String(params.action || '') === 'stage') {
+        console.log('[onClientTool] workflow_ui{stage} intercepted — applying proposal locally', params);
+        const accepted = setStructuredProposal({
+          summary: typeof params.summary === 'string' ? params.summary : '',
+          findings: Array.isArray(params.findings) ? params.findings : [],
+          suggestedFixes: Array.isArray(params.suggestedFixes) ? params.suggestedFixes : [],
+          actions: Array.isArray(params.actions) ? params.actions : [],
+        });
+        return {
+          ok: accepted,
+          appliedUi: accepted,
+          proposalId: `local_${Date.now()}`,
+          message: accepted
+            ? 'Workflow proposal captured in TekAutomate UI. The Steps panel will show it for review.'
+            : 'Proposal was ignored because no valid actions were provided. Ensure actions array is non-empty.',
+        };
+      }
+
+      // ── Client-only: workflow_ui{current} ──
+      // Agent calls this to inspect the current flow — serve it from browser state
+      // rather than making a round-trip to Railway.
+      if (name === 'workflow_ui' && String(params.action || '') === 'current') {
+        console.log('[onClientTool] workflow_ui{current} intercepted — returning local flow state');
+        const liveSessionKey = getOrCreateLiveSessionKey(workflowId, userId);
+        return {
+          ...buildRuntimeWorkflowPayload(stepsRef.current || [], flowContextRef.current),
+          sessionKey: liveSessionKey,
+        };
+      }
+
+      // ── Client-only: workflow_ui{logs} ──
+      // Return current run log directly from browser state.
+      if (name === 'workflow_ui' && String(params.action || '') === 'logs') {
+        console.log('[onClientTool] workflow_ui{logs} intercepted — returning local run log');
+        const raw = String(runLogRef.current || '');
+        const lines = raw.split(/\r?\n/).filter(Boolean);
+        const tailLines = lines.slice(-60);
+        return {
+          hasLogs: tailLines.length > 0,
+          lineCount: lines.length,
+          tailLineCount: tailLines.length,
+          logTail: tailLines.join('\n'),
+          lastLine: tailLines.length ? tailLines[tailLines.length - 1] : '',
         };
       }
 
