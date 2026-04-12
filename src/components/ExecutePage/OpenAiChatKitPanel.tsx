@@ -704,6 +704,10 @@ function OpenAiChatKitPanelInner({
   // Proposals are ALWAYS staged on that host (the one Agent Builder calls),
   // so we must fetch from there regardless of what local/hosted MCP the user has configured.
   const chatKitMcpHostRef = useRef<string>('');
+  // ref so the proposal polling loop (useEffect) can call it without stale closure
+  const setStructuredProposalRef = useRef<((proposal: {
+    summary?: string; findings?: unknown[]; suggestedFixes?: unknown[]; actions?: unknown[]; rawJson?: string;
+  }) => boolean) | null>(null);
 
   const setStructuredProposal = useCallback((
     proposal: {
@@ -745,6 +749,7 @@ function OpenAiChatKitPanelInner({
     }
     return true;
   }, []);
+  setStructuredProposalRef.current = setStructuredProposal;
 
   const extractActionsPreview = useCallback((text: string): ParsedActionsPreview | null => {
     const rawJson =
@@ -1447,11 +1452,22 @@ function OpenAiChatKitPanelInner({
           }
           const json = (await res.json()) as { action?: { id: string; toolName: string; args?: Record<string, unknown> } | null };
           const action = json.action;
-          if (!action?.id || action.toolName !== 'workflow_proposal') continue;
+          if (!action?.id || action.toolName !== 'workflow_proposal') {
+            if (action?.id) {
+              console.debug('[ChatKit proposal] Skipping action with unexpected toolName:', action.toolName);
+            }
+            continue;
+          }
 
+          console.log('[ChatKit proposal] Received workflow_proposal from bridge', action.id);
           const proposal = action.args?.proposal;
           if (proposal && typeof proposal === 'object') {
-            onProposalDetectedRef.current?.(proposal as any);
+            // Route through setStructuredProposal so actions are normalized via parseAiActionResponse
+            // and a proper ParsedActionsPreview (with rawJson, AiAction[]) is emitted.
+            const applied = setStructuredProposalRef.current?.(proposal as any);
+            console.log('[ChatKit proposal] setStructuredProposal result:', applied, proposal);
+          } else {
+            console.warn('[ChatKit proposal] No proposal object in args', action.args);
           }
 
           // ACK so the bridge cleans up the record
