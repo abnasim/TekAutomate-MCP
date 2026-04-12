@@ -65,10 +65,15 @@ export async function stageWorkflowProposal(
     };
   }
 
-  // If agent didn't pass sessionKey (e.g. new flow, skipped workflow_ui{current}),
-  // auto-inject from runtime context — the browser always pushes its sessionKey there.
+  // Priority: explicit agent-passed key → connection-bound key → global state → 'default'
+  // __connectionSessionKey is injected by the MCP handler and bound to this specific
+  // ChatKit conversation — using it prevents other browsers' key-pushes from interfering.
+  const connectionKey = typeof (input as any).__connectionSessionKey === 'string'
+    ? String((input as any).__connectionSessionKey).trim()
+    : '';
   const sessionKey =
     String(input.sessionKey || '').trim() ||
+    connectionKey ||
     getLiveSessionState().sessionKey ||
     'default';
 
