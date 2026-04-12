@@ -6925,6 +6925,143 @@ if __name__ == "__main__":
     }
   }, [executorEndpoint, buildSingleStepProbeScript, postToExecutor]);
 
+  // Helper function to deduplicate parameters (used for UI display and preview generation)
+  // Declared here so it's available to useCallbacks below (const is not hoisted).
+  const deduplicateParams = (params: CommandParam[], command: string): CommandParam[] => {
+    if (!Array.isArray(params) || params.length === 0) return params;
+
+    // Only remove TRUE duplicates: same name appearing more than once.
+    // Keep the first occurrence (which typically has richer data).
+    const seen = new Set<string>();
+    const result: CommandParam[] = [];
+
+    for (const p of params) {
+      const key = (p.name || '').toLowerCase();
+      if (!key) continue;
+      if (seen.has(key)) continue;
+      seen.add(key);
+      result.push(p);
+    }
+
+    // Also deduplicate by identical option sets — if two differently-named params
+    // have the exact same enum options, keep the one with the more descriptive name.
+    const optionSets = new Map<string, number>();
+    const indicesToRemove = new Set<number>();
+
+    for (let i = 0; i < result.length; i++) {
+      const p = result[i];
+      if (!p.options || p.options.length < 2) continue;
+      const optKey = p.options.map(o => o.toUpperCase()).sort().join('|');
+      if (optionSets.has(optKey)) {
+        const prevIdx = optionSets.get(optKey)!;
+        const prevName = result[prevIdx].name.toLowerCase();
+        const thisName = p.name.toLowerCase();
+        if (thisName === 'value' || thisName.startsWith('parameter')) {
+          indicesToRemove.add(i);
+        } else if (prevName === 'value' || prevName.startsWith('parameter')) {
+          indicesToRemove.add(prevIdx);
+          optionSets.set(optKey, i);
+        }
+      } else {
+        optionSets.set(optKey, i);
+      }
+    }
+
+    return result.filter((_, i) => !indicesToRemove.has(i));
+  };
+
+  /**
+   * Run a single selected step directly on the live instrument via the executor's send_scpi action.
+   * Works for query / write / set_and_query steps. Shows result in the Run Window.
+   */
+  const runSingleStepLive = useCallback(async (step: Step) => {
+    if (!executorEndpoint) {
+      setRunWindowResult({ ok: false, stdout: '', stderr: '', error: 'Executor not configured.' });
+      setRunWindowLog('Executor not configured. Open Execute settings and connect endpoint first.');
+      setRunWindowStatus('error');
+      setShowRunWindow(true);
+      return;
+    }
+
+    // Extract SCPI command(s) from step params
+    const dedupedParams = deduplicateParams(
+      (step.params?.cmdParams || []) as CommandParam[],
+      String(step.params?.command || ''),
+    );
+    const substCmd = substituteSCPI(
+      String(step.params?.command || ''),
+      dedupedParams,
+      (step.params?.paramValues || {}) as Record<string, any>,
+    ).trim();
+
+    let commands: string[] = [];
+    let summary = '';
+
+    if (step.type === 'query') {
+      const cmd = substCmd.endsWith('?') ? substCmd : `${substCmd}?`;
+      commands = [cmd];
+      summary = `Query: ${cmd}`;
+    } else if (step.type === 'write') {
+      if (!substCmd) {
+        setRunWindowLog('No SCPI command set on this step.');
+        setRunWindowStatus('error');
+        setShowRunWindow(true);
+        return;
+      }
+      commands = [substCmd];
+      summary = `Write: ${substCmd}`;
+    } else if (step.type === 'set_and_query') {
+      const header = substCmd.replace(/\?$/, '').split(/\s+/)[0] || '';
+      const writeCmd = substCmd.replace(/\?$/, '');
+      commands = header ? [writeCmd, `${header}?`] : [writeCmd];
+      summary = `Set+Query: ${writeCmd}${header ? ` → ${header}?` : ''}`;
+    } else {
+      setRunWindowLog(`Step type "${step.type}" is not directly runnable in live mode.\nOnly query / write / set_and_query steps send SCPI commands.`);
+      setRunWindowStatus('error');
+      setShowRunWindow(true);
+      return;
+    }
+
+    const url = `http://${executorEndpoint.host}:${executorEndpoint.port}/run`;
+    setShowRunWindow(true);
+    setRunWindowStatus('running');
+    setRunWindowResult(null);
+    setRunWindowLog(
+      `Live Run — single step\n${summary}\nSending to instrument…\n`,
+    );
+
+    try {
+      const res = await fetch(url, {
+        method: 'POST',
+        headers: buildExecutorHeaders({ 'Content-Type': 'application/json' }),
+        body: JSON.stringify({
+          protocol_version: 1,
+          action: 'send_scpi',
+          timeout_sec: 15,
+          scope_visa: liveModeVisaResource,
+          liveMode: true,
+          commands,
+        }),
+      });
+      if (!res.ok) throw new Error(`Executor returned ${res.status}`);
+      const data = await res.json();
+      const responses: Array<{ command: string; response?: string; error?: string }> =
+        data?.responses || data?.results || [];
+      const lines = responses.map((r) =>
+        r.error ? `✗ ${r.command}\n  Error: ${r.error}` : `✓ ${r.command}\n  → ${r.response ?? 'OK'}`,
+      );
+      const output = lines.join('\n') || 'No response.';
+      setRunWindowLog((prev) => prev + output + '\n');
+      setRunWindowResult({ ok: true, stdout: output, stderr: '', error: null });
+      setRunWindowStatus('done');
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : String(e);
+      setRunWindowLog((prev) => prev + `\n[Error] ${msg}\n`);
+      setRunWindowResult({ ok: false, stdout: '', stderr: '', error: msg });
+      setRunWindowStatus('error');
+    }
+  }, [executorEndpoint, buildExecutorHeaders, liveModeVisaResource, deduplicateParams, substituteSCPI]);
+
   const saveFailedAuditReport = useCallback((report: ExecutionAuditReport) => {
     try {
       const key = 'tekautomate_execution_audit_reports';
@@ -8199,56 +8336,6 @@ Keep under 120 words. No headings. Bullets only. Stay on this command. Do not de
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [selectedStep, steps, commandLibrary]);
 
-  // Helper function to deduplicate parameters (used for UI display and preview generation)
-  const deduplicateParams = (params: CommandParam[], command: string): CommandParam[] => {
-    if (!Array.isArray(params) || params.length === 0) return params;
-
-    // Only remove TRUE duplicates: same name appearing more than once.
-    // Keep the first occurrence (which typically has richer data).
-    // All filtering/hiding logic belongs in the render filter, not here.
-    const seen = new Set<string>();
-    const result: CommandParam[] = [];
-
-    for (const p of params) {
-      const key = (p.name || '').toLowerCase();
-      if (!key) continue;
-      if (seen.has(key)) continue; // skip duplicate names
-      seen.add(key);
-      result.push(p);
-    }
-
-    // Also deduplicate by identical option sets — if two differently-named params
-    // have the exact same enum options, keep the one with the more descriptive name.
-    // This handles cases like both "mode" and "value" having ["ADDR7", "ADDR10"].
-    const optionSets = new Map<string, number>(); // optionsKey -> index in result
-    const indicesToRemove = new Set<number>();
-
-    for (let i = 0; i < result.length; i++) {
-      const p = result[i];
-      if (!p.options || p.options.length < 2) continue;
-      const optKey = p.options.map(o => o.toUpperCase()).sort().join('|');
-      if (optionSets.has(optKey)) {
-        // Duplicate option set — keep the one with a more specific name
-        const prevIdx = optionSets.get(optKey)!;
-        const prevName = result[prevIdx].name.toLowerCase();
-        const thisName = p.name.toLowerCase();
-        // Prefer the non-generic name (not "value", "parameter", etc.)
-        if (thisName === 'value' || thisName.startsWith('parameter')) {
-          indicesToRemove.add(i);
-        } else if (prevName === 'value' || prevName.startsWith('parameter')) {
-          indicesToRemove.add(prevIdx);
-          optionSets.set(optKey, i);
-        } else {
-          // Both have specific names — keep both (they might serve different purposes)
-        }
-      } else {
-        optionSets.set(optKey, i);
-      }
-    }
-
-    return result.filter((_, i) => !indicesToRemove.has(i));
-  };
-  
   // Deduplicate parameters for preview generation
   const deduplicatedParams = selectedStepData?.params?.cmdParams && selectedStepData?.params?.command
     ? deduplicateParams(selectedStepData.params.cmdParams, selectedStepData.params.command)
@@ -9953,6 +10040,7 @@ Keep under 120 words. No headings. Bullets only. Stay on this command. Do not de
             }}
             onRun={() => runOnScope(true)}
             onRunSingleStep={(step) => runSingleStepProbe(step as any)}
+            onRunSingleStepLive={(step) => runSingleStepLive(step as any)}
             onUndo={undo}
             onRedo={redo}
             canUndo={past.length > 0}
