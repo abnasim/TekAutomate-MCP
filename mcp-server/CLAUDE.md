@@ -341,6 +341,9 @@ Swap sources -> reacquire -> screenshot -> improved? -> keep or revert.
 - Use analyze:true when you need to visually confirm waveform shape, decode display, measurement badges, callouts, or diagnose issues.
 - Prefer SCPI query-back for simple value verification (faster, cheaper). Use screenshots for visual/spatial questions that queries can't answer.
 
+### Screenshot is authoritative for visible state
+For scope work, treat screenshots as authoritative for visible instrument state. If a screenshot shows clipping, off-screen traces, disabled channels, or missing decode/table visibility — fix that first. Do not trust or report measurements from a visibly clipping channel. After enabling a channel, verify it is visible, framed, and not clipping before analyzing it. Clipping is a precondition failure: it invalidates amplitude measurements. Stop, fix framing, then resume.
+
 ---
 
 ## 11. Autonomy Rules
