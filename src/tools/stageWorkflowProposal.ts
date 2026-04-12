@@ -7,6 +7,7 @@ export interface StagedWorkflowProposal {
   findings: string[];
   suggestedFixes: string[];
   actions: unknown[];
+  sessionKey: string;
 }
 
 interface StageWorkflowProposalInput {
@@ -14,9 +15,13 @@ interface StageWorkflowProposalInput {
   findings?: unknown[];
   suggestedFixes?: unknown[];
   actions?: unknown[];
+  sessionKey?: unknown;
 }
 
-let lastWorkflowProposal: StagedWorkflowProposal | null = null;
+// Keyed by sessionKey — supports multiple concurrent users on the same public MCP.
+// Falls back to 'default' when no sessionKey is provided (legacy / single-user).
+const proposalsBySession = new Map<string, StagedWorkflowProposal>();
+const MAX_SESSIONS = 500; // guard against unbounded growth
 
 function toStringList(value: unknown): string[] {
   if (!Array.isArray(value)) return [];
@@ -34,8 +39,9 @@ function createProposalId(): string {
   return `proposal_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
 }
 
-export function getLastWorkflowProposal(): StagedWorkflowProposal | null {
-  return lastWorkflowProposal;
+export function getLastWorkflowProposal(sessionKey?: string): StagedWorkflowProposal | null {
+  const key = String(sessionKey || '').trim() || 'default';
+  return proposalsBySession.get(key) ?? null;
 }
 
 export async function stageWorkflowProposal(
@@ -53,11 +59,11 @@ export async function stageWorkflowProposal(
         actionCount: 0,
       },
       sourceMeta: [],
-      warnings: [
-        'Proposal was not staged because no actions were provided.',
-      ],
+      warnings: ['Proposal was not staged because no actions were provided.'],
     };
   }
+
+  const sessionKey = String(input.sessionKey || '').trim() || 'default';
 
   const proposal: StagedWorkflowProposal = {
     id: createProposalId(),
@@ -66,9 +72,16 @@ export async function stageWorkflowProposal(
     findings: toStringList(input.findings),
     suggestedFixes: toStringList(input.suggestedFixes),
     actions,
+    sessionKey,
   };
 
-  lastWorkflowProposal = proposal;
+  // Evict oldest entry if we hit the cap (prevents unbounded memory growth)
+  if (proposalsBySession.size >= MAX_SESSIONS) {
+    const oldestKey = proposalsBySession.keys().next().value;
+    if (oldestKey !== undefined) proposalsBySession.delete(oldestKey);
+  }
+
+  proposalsBySession.set(sessionKey, proposal);
 
   return {
     ok: true,
@@ -78,6 +91,7 @@ export async function stageWorkflowProposal(
       createdAt: proposal.createdAt,
       actionCount: actions.length,
       summary: proposal.summary,
+      sessionKey,
     },
     sourceMeta: [],
     warnings: [],
