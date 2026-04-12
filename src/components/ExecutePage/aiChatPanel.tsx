@@ -1601,9 +1601,13 @@ export function AiChatPanel({
           <button
             type="button"
             onClick={() => setShowSettings((s) => !s)}
-            className="text-slate-400 dark:text-white/40 hover:text-slate-700 dark:hover:text-white/80 transition-colors"
+            className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-semibold border transition-colors ${
+              showSettings
+                ? 'border-violet-400/60 bg-violet-500/10 text-violet-600 dark:text-violet-300'
+                : 'border-slate-200 dark:border-white/10 text-slate-500 dark:text-white/50 hover:text-slate-700 dark:hover:text-white/70 hover:border-slate-300 dark:hover:border-white/20'
+            }`}
           >
-            <Settings size={14} />
+            MCP
           </button>
         </div>
       </div>
@@ -1723,51 +1727,51 @@ export function AiChatPanel({
           <div className="rounded-xl border border-cyan-500/20 bg-cyan-500/5 p-4 flex flex-col gap-3">
             <div className="text-xs font-bold tracking-widest uppercase text-cyan-600 dark:text-cyan-400">Live Instrument Mode</div>
             <div className="text-sm text-slate-700 dark:text-slate-300 leading-relaxed">
-              In-app chat is not available in Live mode. Use an external AI tool connected to your own MCP for interactive live sessions.
+              Live mode connects directly to your instrument via <strong>TekAutomateExecutor</strong> running on your PC. For AI-assisted live sessions, connect Claude Desktop or Codex to your own hosted MCP.
             </div>
             <div className="rounded-lg border border-cyan-500/30 bg-cyan-500/10 px-3 py-2 flex gap-2 items-start">
               <span className="text-cyan-500 dark:text-cyan-400 mt-0.5 text-base leading-none">⚙</span>
               <div className="flex flex-col gap-0.5">
-                <div className="text-xs font-semibold text-cyan-600 dark:text-cyan-400">Required for all setups</div>
+                <div className="text-xs font-semibold text-cyan-600 dark:text-cyan-400">Required: TekAutomateExecutor</div>
                 <div className="text-xs text-slate-600 dark:text-slate-400 leading-relaxed">
-                  <code className="font-mono text-cyan-700 dark:text-cyan-300">TekAutomateExecutor.exe</code> must be running to bridge AI commands to your instrument. Find it in the <code className="font-mono">dist/</code> folder of your TekAutomate installation.
+                  <code className="font-mono text-cyan-700 dark:text-cyan-300">TekAutomateExecutor.exe</code> must be running on the same PC as your instrument. Connect to it using the executor gear icon at the top of this panel.
                 </div>
               </div>
             </div>
           </div>
 
-          <div className="text-xs font-semibold uppercase tracking-widest text-slate-400 dark:text-slate-500 px-1">How to use Live mode with AI</div>
+          <div className="text-xs font-semibold uppercase tracking-widest text-slate-400 dark:text-slate-500 px-1">AI + Live Instrument setup</div>
 
           {[
             {
               icon: '◆',
-              title: 'Run TekAutomate locally',
-              desc: 'Download and run TekAutomate on your PC — the MCP server starts automatically. You can also run just the MCP server standalone and use TekAutomate on the web, pointing it at your local MCP URL.',
+              title: 'Fork your own MCP (recommended)',
+              desc: 'Fork TekAutomateMCPV2 and deploy it on Railway with one click. Set LIVE_INSTRUMENT_ENABLED=true and point your MCP URL here. Your AI tools connect to your MCP — your MCP bridges to your executor — your executor controls your instrument.',
               color: 'text-cyan-500 dark:text-cyan-400',
               border: 'border-cyan-500/20',
               bg: 'bg-cyan-500/5',
-              href: 'https://github.com/abnasim/TekAutomate',
-              linkLabel: 'Download TekAutomate →',
+              href: 'https://github.com/abnasim/TekAutomateMCPV2',
+              linkLabel: 'Fork TekAutomateMCPV2 →',
             },
             {
               icon: '❖',
-              title: 'Use with Codex or Claude Desktop',
-              desc: 'OpenAI Codex and Cursor support localhost MCP directly. Claude Desktop supports local MCP via its config file (stdio transport) — or install it as a one-click extension using the .mcpb bundle below. Claude Desktop also works with the hosted Railway MCP (HTTPS). The web connector requires HTTPS but Claude Desktop has no such restriction.',
+              title: 'Connect Claude Desktop or Codex',
+              desc: 'Claude Desktop and Cursor/Codex connect to your MCP via mcp-remote. Use the .mcpb bundle for one-click Claude Desktop install, or paste the config snippet below. Point the MCP URL at your own Railway deployment.',
               color: 'text-orange-500 dark:text-orange-400',
               border: 'border-orange-500/20',
               bg: 'bg-orange-500/5',
-              href: 'https://tekautomatemcpv2.up.railway.app',
+              href: 'https://github.com/abnasim/TekAutomateMCPV2',
               linkLabel: 'MCP server docs →',
             },
             {
               icon: '⬡',
-              title: 'Self-host your own MCP',
-              desc: 'Deploy your own TekAutomate MCP on Railway with one click. Set LIVE_INSTRUMENT_ENABLED=true. Then in TekAutomate, enter the executor IP shown when you click the camera icon on TekAutomateExecutor.',
+              title: 'Run TekAutomate locally',
+              desc: 'Download and run TekAutomate on your PC — the local MCP server starts automatically on localhost:8787. Claude Desktop can connect to it directly without Railway.',
               color: 'text-violet-500 dark:text-violet-400',
               border: 'border-violet-500/20',
               bg: 'bg-violet-500/5',
-              href: 'https://github.com/abnasim/TekAutomateMCPV2',
-              linkLabel: 'Deploy on Railway →',
+              href: 'https://github.com/abnasim/TekAutomate',
+              linkLabel: 'Download TekAutomate →',
             },
           ].map((item) => (
             <div key={item.title} className={`rounded-xl border ${item.border} ${item.bg} p-3 flex gap-3 items-start`}>
