@@ -1,5 +1,6 @@
 import type { ToolResult } from '../core/schemas';
 import { getLiveSessionState } from './runtimeContextStore';
+import { pushLiveProposal } from './liveActionBridge';
 
 export interface StagedWorkflowProposal {
   id: string;
@@ -88,6 +89,12 @@ export async function stageWorkflowProposal(
   }
 
   proposalsBySession.set(sessionKey, proposal);
+
+  // Push to browser instantly via live bridge (fire-and-forget).
+  // Browser polls /live-actions/next?sessionKey=<key>:proposal — no live instrument needed.
+  if (sessionKey !== 'default') {
+    pushLiveProposal(proposal, sessionKey);
+  }
 
   return {
     ok: true,

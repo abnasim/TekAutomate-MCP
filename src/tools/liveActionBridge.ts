@@ -4,7 +4,8 @@ export type LiveActionToolName =
   | 'send_scpi'
   | 'capture_screenshot'
   | 'get_instrument_state'
-  | 'probe_command';
+  | 'probe_command'
+  | 'workflow_proposal'; // fire-and-forget — no browser result required
 
 export interface LiveActionRequest {
   id: string;
@@ -216,6 +217,33 @@ export async function waitForNextLiveAction(sessionKey: string, timeoutMs = 25_0
     waiters.push(wrappedResolve);
     liveActionWaiters.set(normalized, waiters);
   });
+}
+
+/**
+ * Fire-and-forget proposal push via live bridge.
+ * Unlike enqueueLiveAction, this does NOT wait for the browser to ACK.
+ * The browser polls /live-actions/next, picks up the proposal, displays it,
+ * and optionally ACKs — but the MCP tool call returns immediately.
+ * Uses a ':proposal' suffix on the sessionKey to avoid colliding with
+ * instrument action queues on the same session.
+ */
+export function pushLiveProposal(proposal: unknown, sessionKey: string): void {
+  const proposalKey = `${sessionKey}:proposal`;
+  const id = createActionId();
+  const record: PendingActionRecord = {
+    id,
+    sessionKey: proposalKey,
+    toolName: 'workflow_proposal',
+    args: { proposal },
+    createdAt: new Date().toISOString(),
+    status: 'queued',
+    resolveHandlers: [],
+    rejectHandlers: [],
+    // Auto-cleanup after 2 minutes — if browser never picks it up, discard
+    timeoutHandle: setTimeout(() => cleanupRecord(id), 120_000),
+  };
+  liveActionQueue.push(record);
+  notifySession(proposalKey);
 }
 
 export function completeLiveAction(input: {
