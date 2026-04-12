@@ -93,7 +93,15 @@ export async function stageWorkflowProposal(
   // Push to browser instantly via live bridge (fire-and-forget).
   // Browser polls /live-actions/next?sessionKey=<key>:proposal — no live instrument needed.
   if (sessionKey !== 'default') {
+    console.log(
+      `[stage_workflow_proposal] Pushing proposal ${proposal.id} to live bridge. sessionKey=${sessionKey} actions=${actions.length}`,
+    );
     pushLiveProposal(proposal, sessionKey);
+  } else {
+    console.warn(
+      `[stage_workflow_proposal] sessionKey resolved to 'default' — browser will not receive proposal. ` +
+      `Check that the browser is pushing liveSession to /runtime-context and the agent is passing sessionKey.`,
+    );
   }
 
   return {

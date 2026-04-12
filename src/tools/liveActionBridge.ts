@@ -184,6 +184,7 @@ export async function waitForNextLiveAction(sessionKey: string, timeoutMs = 25_0
   if (queued) {
     queued.status = 'claimed';
     queued.claimedAt = new Date().toISOString();
+    console.log(`[waitForNextLiveAction] Immediately claiming action ${queued.id} (${queued.toolName}) for sessionKey=${normalized}`);
     return stripRecord(queued);
   }
 
@@ -230,6 +231,7 @@ export async function waitForNextLiveAction(sessionKey: string, timeoutMs = 25_0
 export function pushLiveProposal(proposal: unknown, sessionKey: string): void {
   const proposalKey = `${sessionKey}:proposal`;
   const id = createActionId();
+  console.log(`[pushLiveProposal] Enqueuing proposal ${id} for proposalKey=${proposalKey}`);
   const record: PendingActionRecord = {
     id,
     sessionKey: proposalKey,

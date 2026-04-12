@@ -225,8 +225,12 @@ export function updateRuntimeContext(input: {
 
   if (input.liveSession && typeof input.liveSession === 'object') {
     const liveSession = input.liveSession as Record<string, unknown>;
+    const newSessionKey = typeof liveSession.sessionKey === 'string' && liveSession.sessionKey ? liveSession.sessionKey : null;
+    if (newSessionKey && newSessionKey !== runtimeContextState.liveSession.sessionKey) {
+      console.log(`[runtimeContextStore] liveSession.sessionKey updated: ${runtimeContextState.liveSession.sessionKey ?? 'null'} → ${newSessionKey}`);
+    }
     runtimeContextState.liveSession = {
-      sessionKey: typeof liveSession.sessionKey === 'string' && liveSession.sessionKey ? liveSession.sessionKey : null,
+      sessionKey: newSessionKey,
       threadId: typeof liveSession.threadId === 'string' && liveSession.threadId ? liveSession.threadId : null,
       workflowId: typeof liveSession.workflowId === 'string' && liveSession.workflowId ? liveSession.workflowId : null,
       userId: typeof liveSession.userId === 'string' && liveSession.userId ? liveSession.userId : null,
