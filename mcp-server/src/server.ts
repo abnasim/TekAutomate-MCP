@@ -8,7 +8,7 @@ import { runToolLoop } from './core/toolLoop';
 import { getSlimToolDefinitions, getToolDefinitions, runTool } from './tools/index';
 import type { McpChatRequest } from './core/schemas';
 import { getLastWorkflowProposal, stageWorkflowProposal } from './tools/stageWorkflowProposal';
-import { getRuntimeContextState, updateRuntimeContext } from './tools/runtimeContextStore';
+import { getRuntimeContextState, updateRuntimeContext, getActiveSessionKeys } from './tools/runtimeContextStore';
 import { completeLiveAction, getPendingLiveActionCount, waitForNextLiveAction } from './tools/liveActionBridge';
 import { bootRouter, createReloadProvidersHandler, createRouterHandler, getRouterHealth } from './core/routerIntegration';
 import { getCommandIndex } from './core/commandIndex';
@@ -676,8 +676,8 @@ export async function createServer(port = 8787): Promise<http.Server> {
         const result = await runTool(name, toolArgs);
 
         // ── Auto-stage: if any MCP tool returns data.actions, push proposal immediately ──
-        // This means even if the agent skips workflow_ui{stage}, the proposal still
-        // reaches the browser. Happens for tek_router{build} → buildOrEditWorkflow.
+        // Pushes to ALL recently active browser sessions (not just the last one to push),
+        // so Chrome opening while Firefox is active doesn't steal the proposal.
         // Skip workflow_ui itself (it already calls stageWorkflowProposal internally).
         if (name !== 'workflow_ui' && name !== 'stage_workflow_proposal') {
           const rd = result && typeof result === 'object' ? (result as Record<string, unknown>).data : null;
@@ -685,20 +685,22 @@ export async function createServer(port = 8787): Promise<http.Server> {
             ? (rd as Record<string, unknown>).actions as unknown[]
             : null;
           if (autoActions && autoActions.length > 0) {
-            const sk = getLiveSessionState().sessionKey;
-            if (sk) {
-              console.log(`[MCP auto-stage] ${name} returned ${autoActions.length} actions — auto-staging for sessionKey=${sk}`);
-              void stageWorkflowProposal({
-                summary: typeof (rd as Record<string, unknown>).summary === 'string'
-                  ? String((rd as Record<string, unknown>).summary)
-                  : `Workflow proposal from ${name}`,
-                findings: Array.isArray((rd as Record<string, unknown>).findings) ? (rd as Record<string, unknown>).findings as string[] : [],
-                suggestedFixes: Array.isArray((rd as Record<string, unknown>).suggestedFixes) ? (rd as Record<string, unknown>).suggestedFixes as string[] : [],
-                actions: autoActions,
-                sessionKey: sk,
-              });
+            const activeSessions = getActiveSessionKeys();
+            if (activeSessions.length > 0) {
+              console.log(`[MCP auto-stage] ${name} returned ${autoActions.length} actions — staging for ${activeSessions.length} active session(s)`);
+              for (const sk of activeSessions) {
+                void stageWorkflowProposal({
+                  summary: typeof (rd as Record<string, unknown>).summary === 'string'
+                    ? String((rd as Record<string, unknown>).summary)
+                    : `Workflow proposal from ${name}`,
+                  findings: Array.isArray((rd as Record<string, unknown>).findings) ? (rd as Record<string, unknown>).findings as string[] : [],
+                  suggestedFixes: Array.isArray((rd as Record<string, unknown>).suggestedFixes) ? (rd as Record<string, unknown>).suggestedFixes as string[] : [],
+                  actions: autoActions,
+                  sessionKey: sk,
+                });
+              }
             } else {
-              console.warn(`[MCP auto-stage] ${name} returned actions but sessionKey is null — no auto-stage`);
+              console.warn(`[MCP auto-stage] ${name} returned actions but no active sessions registered`);
             }
           }
         }

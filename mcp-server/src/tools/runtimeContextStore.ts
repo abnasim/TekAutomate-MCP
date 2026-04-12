@@ -96,6 +96,36 @@ let runtimeContextState: RuntimeContextState = {
   liveSession: DEFAULT_LIVE_SESSION,
 };
 
+// ── Active session registry ──────────────────────────────────────────────────
+// Tracks every sessionKey that has pushed to /runtime-context recently.
+// Keyed by sessionKey → last push timestamp (ms).
+// Used by auto-staging to push proposals to ALL active browsers, not just the
+// last one to push (which would cause cross-browser session collision).
+const ACTIVE_SESSION_TTL_MS = 5 * 60 * 1000; // 5 minutes
+const MAX_ACTIVE_SESSIONS = 50;
+const activeSessionRegistry = new Map<string, number>();
+
+function registerActiveSession(sessionKey: string) {
+  activeSessionRegistry.set(sessionKey, Date.now());
+  // Evict expired entries if we hit the cap
+  if (activeSessionRegistry.size > MAX_ACTIVE_SESSIONS) {
+    const cutoff = Date.now() - ACTIVE_SESSION_TTL_MS;
+    for (const [key, ts] of activeSessionRegistry) {
+      if (ts < cutoff) activeSessionRegistry.delete(key);
+      if (activeSessionRegistry.size <= MAX_ACTIVE_SESSIONS) break;
+    }
+  }
+}
+
+export function getActiveSessionKeys(): string[] {
+  const cutoff = Date.now() - ACTIVE_SESSION_TTL_MS;
+  const keys: string[] = [];
+  for (const [key, ts] of activeSessionRegistry) {
+    if (ts >= cutoff) keys.push(key);
+  }
+  return keys;
+}
+
 function toStringList(value: unknown): string[] {
   if (!Array.isArray(value)) return [];
   return value.map((item) => String(item || '').trim()).filter(Boolean);
@@ -225,8 +255,10 @@ export function updateRuntimeContext(input: {
 
   if (input.liveSession && typeof input.liveSession === 'object') {
     const liveSession = input.liveSession as Record<string, unknown>;
+    const newKey = typeof liveSession.sessionKey === 'string' && liveSession.sessionKey ? liveSession.sessionKey : null;
+    if (newKey) registerActiveSession(newKey);
     runtimeContextState.liveSession = {
-      sessionKey: typeof liveSession.sessionKey === 'string' && liveSession.sessionKey ? liveSession.sessionKey : null,
+      sessionKey: newKey,
       threadId: typeof liveSession.threadId === 'string' && liveSession.threadId ? liveSession.threadId : null,
       workflowId: typeof liveSession.workflowId === 'string' && liveSession.workflowId ? liveSession.workflowId : null,
       userId: typeof liveSession.userId === 'string' && liveSession.userId ? liveSession.userId : null,
