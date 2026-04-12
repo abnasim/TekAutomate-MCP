@@ -502,7 +502,11 @@ export async function createServer(port = 8787): Promise<http.Server> {
     }
   }
 
-  async function createMcpProtocolServer() {
+  // connectionSessionKey: captured at MCP session creation time from the browser
+  // that just established this ChatKit session. Each MCP connection is one ChatKit
+  // conversation — binding the key here gives us per-conversation isolation with
+  // zero race conditions from other browsers pushing to shared state.
+  async function createMcpProtocolServer(connectionSessionKey?: string) {
     const sdk = await getMcpSdk();
     if (!sdk) throw new Error('MCP SDK not installed. Run: npm install @modelcontextprotocol/sdk');
     const mcp = new sdk.Server(
@@ -672,12 +676,16 @@ export async function createServer(port = 8787): Promise<http.Server> {
         const toolArgs = {
           ...((args as Record<string, unknown>) ?? {}),
           __mcpBaseUrl: getConfiguredPublicBaseUrl(),
+          // Inject the connection-bound sessionKey so workflow_ui{current} and
+          // stage_workflow_proposal can use it without touching shared global state.
+          __connectionSessionKey: connectionSessionKey,
         };
         const result = await runTool(name, toolArgs);
 
         // ── Auto-stage: if any MCP tool returns data.actions, push proposal immediately ──
-        // Pushes to ALL recently active browser sessions (not just the last one to push),
-        // so Chrome opening while Firefox is active doesn't steal the proposal.
+        // Uses connectionSessionKey (captured at MCP session creation, bound to THIS
+        // ChatKit conversation's connection) — not the shared global liveSession slot.
+        // This gives per-conversation isolation: each browser's proposals stay isolated.
         // Skip workflow_ui itself (it already calls stageWorkflowProposal internally).
         if (name !== 'workflow_ui' && name !== 'stage_workflow_proposal') {
           const rd = result && typeof result === 'object' ? (result as Record<string, unknown>).data : null;
@@ -685,22 +693,21 @@ export async function createServer(port = 8787): Promise<http.Server> {
             ? (rd as Record<string, unknown>).actions as unknown[]
             : null;
           if (autoActions && autoActions.length > 0) {
-            const activeSessions = getActiveSessionKeys();
-            if (activeSessions.length > 0) {
-              console.log(`[MCP auto-stage] ${name} returned ${autoActions.length} actions — staging for ${activeSessions.length} active session(s)`);
-              for (const sk of activeSessions) {
-                void stageWorkflowProposal({
-                  summary: typeof (rd as Record<string, unknown>).summary === 'string'
-                    ? String((rd as Record<string, unknown>).summary)
-                    : `Workflow proposal from ${name}`,
-                  findings: Array.isArray((rd as Record<string, unknown>).findings) ? (rd as Record<string, unknown>).findings as string[] : [],
-                  suggestedFixes: Array.isArray((rd as Record<string, unknown>).suggestedFixes) ? (rd as Record<string, unknown>).suggestedFixes as string[] : [],
-                  actions: autoActions,
-                  sessionKey: sk,
-                });
-              }
+            // Prefer the connection-bound key; fall back to global state if not set.
+            const sk = connectionSessionKey || getLiveSessionState().sessionKey;
+            if (sk) {
+              console.log(`[MCP auto-stage] ${name} → sessionKey=${sk} actions=${autoActions.length}`);
+              void stageWorkflowProposal({
+                summary: typeof (rd as Record<string, unknown>).summary === 'string'
+                  ? String((rd as Record<string, unknown>).summary)
+                  : `Workflow proposal from ${name}`,
+                findings: Array.isArray((rd as Record<string, unknown>).findings) ? (rd as Record<string, unknown>).findings as string[] : [],
+                suggestedFixes: Array.isArray((rd as Record<string, unknown>).suggestedFixes) ? (rd as Record<string, unknown>).suggestedFixes as string[] : [],
+                actions: autoActions,
+                sessionKey: sk,
+              });
             } else {
-              console.warn(`[MCP auto-stage] ${name} returned actions but no active sessions registered`);
+              console.warn(`[MCP auto-stage] ${name} — no sessionKey available`);
             }
           }
         }
@@ -995,7 +1002,14 @@ function filterTools(q) {
             const transport = new sdk.StreamableHTTPServerTransport({
               sessionIdGenerator: () => newSessionId,
             });
-            const mcpServer = await createMcpProtocolServer();
+            // Capture the sessionKey at connection time — this browser just pushed
+            // its key to /runtime-context right before creating the ChatKit session,
+            // so the global state reflects THIS browser's key at this exact moment.
+            // Binding it to the MCP server closure isolates all tool calls for this
+            // conversation from other browsers' keys regardless of future pushes.
+            const capturedSessionKey = getLiveSessionState().sessionKey ?? undefined;
+            console.log(`[MCP] new connection ${newSessionId} — captured sessionKey=${capturedSessionKey ?? 'none'}`);
+            const mcpServer = await createMcpProtocolServer(capturedSessionKey);
             await mcpServer.connect(transport);
             transport.onclose = () => {
               if (transport.sessionId) {
