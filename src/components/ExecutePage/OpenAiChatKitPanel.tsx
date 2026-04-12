@@ -1417,6 +1417,60 @@ function OpenAiChatKitPanelInner({
     }
   }, [steps, flowContext, instrumentEndpoint, runLog, activeThreadId, workspaceRevision, workflowId, userId, isLiveMode]);
 
+  // ── Proposal polling loop ─────────────────────────────────────────────────
+  // Always runs when ChatKit is mounted — no live instrument required.
+  // Polls /live-actions/next?sessionKey=<key>:proposal on the ChatKit MCP host.
+  // When workflow_ui{stage} is called by the agent, pushLiveProposal enqueues
+  // the proposal there and the long-poll wakes up instantly.
+  useEffect(() => {
+    const sessionKey = getOrCreateLiveSessionKey(workflowId, userId);
+    const proposalKey = `${sessionKey}:proposal`;
+    let cancelled = false;
+
+    const getHost = () =>
+      (chatKitMcpHostRef.current || resolveMcpHost() || '').replace(/\/+$/, '');
+
+    const loop = async () => {
+      while (!cancelled) {
+        const host = getHost();
+        if (!host) {
+          await new Promise((r) => window.setTimeout(r, 2000));
+          continue;
+        }
+        try {
+          const res = await fetch(
+            `${host}/live-actions/next?sessionKey=${encodeURIComponent(proposalKey)}&timeoutMs=20000`,
+          );
+          if (!res.ok) {
+            await new Promise((r) => window.setTimeout(r, 1500));
+            continue;
+          }
+          const json = (await res.json()) as { action?: { id: string; toolName: string; args?: Record<string, unknown> } | null };
+          const action = json.action;
+          if (!action?.id || action.toolName !== 'workflow_proposal') continue;
+
+          const proposal = action.args?.proposal;
+          if (proposal && typeof proposal === 'object') {
+            onProposalDetectedRef.current?.(proposal as any);
+          }
+
+          // ACK so the bridge cleans up the record
+          void fetch(`${host}/live-actions/result`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ id: action.id, sessionKey: proposalKey, ok: true, result: null }),
+          }).catch(() => {});
+        } catch {
+          if (!cancelled) await new Promise((r) => window.setTimeout(r, 1500));
+        }
+      }
+    };
+
+    void loop();
+    return () => { cancelled = true; };
+  }, [workflowId, userId]);
+
+  // ── Live instrument action loop ───────────────────────────────────────────
   useEffect(() => {
     const mcpHost = resolveMcpHost();
     if (!isLiveMode) return;

@@ -4,7 +4,8 @@ export type LiveActionToolName =
   | 'send_scpi'
   | 'capture_screenshot'
   | 'get_instrument_state'
-  | 'probe_command';
+  | 'probe_command'
+  | 'workflow_proposal'; // fire-and-forget — no browser result required
 
 export interface LiveActionRequest {
   id: string;
@@ -216,6 +217,24 @@ export async function waitForNextLiveAction(sessionKey: string, timeoutMs = 25_0
     waiters.push(wrappedResolve);
     liveActionWaiters.set(normalized, waiters);
   });
+}
+
+export function pushLiveProposal(proposal: unknown, sessionKey: string): void {
+  const proposalKey = `${sessionKey}:proposal`;
+  const id = createActionId();
+  const record: PendingActionRecord = {
+    id,
+    sessionKey: proposalKey,
+    toolName: 'workflow_proposal',
+    args: { proposal },
+    createdAt: new Date().toISOString(),
+    status: 'queued',
+    resolveHandlers: [],
+    rejectHandlers: [],
+    timeoutHandle: setTimeout(() => cleanupRecord(id), 120_000),
+  };
+  liveActionQueue.push(record);
+  notifySession(proposalKey);
 }
 
 export function completeLiveAction(input: {
