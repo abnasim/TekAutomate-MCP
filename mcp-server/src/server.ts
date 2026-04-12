@@ -1507,10 +1507,12 @@ function filterTools(q) {
           apiKey?: string;
           workflowId?: string;
           userId?: string;
+          sessionKey?: string;
         };
         const apiKey = String(body?.apiKey || process.env.OPENAI_API_KEY || '').trim();
         const workflowId = String(body?.workflowId || process.env.CHATKIT_WORKFLOW_ID || '').trim();
         const userId = String(body?.userId || 'tekautomate-user').trim();
+        const sessionKey = String(body?.sessionKey || '').trim();
         if (!apiKey) {
           sendJson(res, 400, { ok: false, error: 'Missing apiKey (or set OPENAI_API_KEY env var).' });
           return;
@@ -1530,6 +1532,9 @@ function filterTools(q) {
           body: JSON.stringify({
             workflow: { id: workflowId },
             user: userId,
+            ...(sessionKey ? {
+              additional_instructions: `The user's browser sessionKey is: ${sessionKey}. When calling workflow_ui with action:"stage", always pass sessionKey:"${sessionKey}" so the proposal is routed to the correct browser.`,
+            } : {}),
             chatkit_configuration: {
               file_upload: {
                 enabled: true,

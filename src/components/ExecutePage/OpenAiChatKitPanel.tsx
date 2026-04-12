@@ -998,6 +998,9 @@ function OpenAiChatKitPanelInner({
             apiKey,
             workflowId: resolvedWorkflowId,
             userId: resolvedUserId,
+            // Pass sessionKey so Railway can inject it as additional_instructions
+            // into the OpenAI session — agent always has the right key in context.
+            sessionKey: getOrCreateLiveSessionKey(workflowId, userId),
             chatkit_configuration: {
               file_upload: {
                 enabled: true,
