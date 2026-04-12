@@ -1387,7 +1387,10 @@ function OpenAiChatKitPanelInner({
       workflow: buildRuntimeWorkflowPayload(stepsRef.current || [], flowContextRef.current),
       instrument: buildRuntimeInstrumentPayload(instrumentEndpointRef.current, flowContextRef.current, isLiveMode),
       runLog: String(runLog || ''),
-      liveSession: isLiveMode ? buildLiveSessionPayload(activeThreadId, workflowId, userId) : null,
+      // Always push liveSession (sessionKey) regardless of isLiveMode.
+      // The sessionKey is needed by the public MCP to route staged proposals to the correct user.
+      // Without it, workflow_ui{stage} auto-inject falls back to 'default' and proposals never match.
+      liveSession: buildLiveSessionPayload(activeThreadId, workflowId, userId),
     };
 
     const postContext = (host: string) =>
@@ -1401,14 +1404,12 @@ function OpenAiChatKitPanelInner({
 
     void postContext(mcpHost);
 
-    // Also push the sessionKey to the ChatKit MCP host (public MCP / Agent Builder target)
-    // so workflow_ui{current} returns the sessionKey to the OpenAI agent for scoped proposal staging.
+    // Also push sessionKey to the ChatKit MCP host when it differs from the local MCP.
     const chatKitHost = chatKitMcpHostRef.current;
     if (chatKitHost && chatKitHost !== mcpHost.replace(/\/+$/, '')) {
       void fetch(`${chatKitHost}/runtime-context`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        // Only send liveSession — we don't want to overwrite instrument/workflow state on a shared public MCP
         body: JSON.stringify({ liveSession: payload.liveSession }),
       }).catch((error) => {
         console.warn('[ChatKit] Failed to sync sessionKey to ChatKit MCP host:', error);
