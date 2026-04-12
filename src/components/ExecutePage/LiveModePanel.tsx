@@ -1,5 +1,5 @@
 import React, { useEffect, useRef, useState } from 'react';
-import { Camera, ChevronDown, ChevronRight, Image as ImageIcon, Loader2, MonitorSmartphone, RefreshCw, Settings, Terminal } from 'lucide-react';
+import { Camera, ChevronDown, ChevronRight, Image as ImageIcon, Loader2, MonitorSmartphone, RefreshCw, Terminal } from 'lucide-react';
 import { clearStoredMcpHost, getStoredMcpHost, resolveMcpHostCandidates, setStoredMcpHost } from '../../utils/ai/mcpClient';
 import { VncViewer } from './VncViewer';
 
@@ -289,10 +289,14 @@ export function LiveModeToolbar({
       <button
         type="button"
         onClick={() => setShowMcpPill((v) => !v)}
-        className="inline-flex items-center justify-center rounded-full border border-slate-300 bg-white px-2 py-1 text-[11px] text-slate-600 shadow-sm hover:bg-slate-50 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100 dark:hover:bg-slate-800"
-        title="Configure MCP server"
+        className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-semibold border transition-colors ${
+          showMcpPill
+            ? 'border-violet-400/60 bg-violet-500/10 text-violet-600 dark:text-violet-300'
+            : 'border-slate-200 dark:border-white/10 text-slate-500 dark:text-white/50 hover:text-slate-700 dark:hover:text-white/70 hover:border-slate-300 dark:hover:border-white/20'
+        }`}
+        title="Configure MCP server for Live Mode"
       >
-        <Settings size={12} />
+        MCP
       </button>
       {instrumentOptions && instrumentOptions.length > 0 && (
         <select

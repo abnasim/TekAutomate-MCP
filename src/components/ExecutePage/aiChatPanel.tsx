@@ -1601,13 +1601,14 @@ export function AiChatPanel({
           <button
             type="button"
             onClick={() => setShowSettings((s) => !s)}
-            className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-semibold border transition-colors ${
+            className={`inline-flex items-center justify-center w-7 h-7 rounded-full border transition-colors ${
               showSettings
                 ? 'border-violet-400/60 bg-violet-500/10 text-violet-600 dark:text-violet-300'
                 : 'border-slate-200 dark:border-white/10 text-slate-500 dark:text-white/50 hover:text-slate-700 dark:hover:text-white/70 hover:border-slate-300 dark:hover:border-white/20'
             }`}
+            title="API key settings"
           >
-            MCP
+            <KeyRound size={12} />
           </button>
         </div>
       </div>

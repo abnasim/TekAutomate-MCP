@@ -208,7 +208,7 @@ export function getToolDefinitions() {
     {
       name: 'workflow_ui',
       description:
-        'Workflow/UI state gateway for TekAutomate.\n\nRULE: Any time you build, edit, or design workflow steps for the user, you MUST call workflow_ui{stage} immediately — do NOT ask the user for confirmation first. The user expects to see the proposal appear in the UI automatically.\n\nActions:\n- `current` — inspect the current workflow steps (always call this first when the user wants to edit an existing flow)\n- `stage` — send a workflow proposal to the TekAutomate UI (ALWAYS call this after building any workflow)\n- `logs` — read the latest execution log tail',
+        'TekAutomate workflow gateway. Actions: current — read the live workflow steps (call first before any edit); stage — push a proposal to the UI (call immediately after building steps, no confirmation needed); logs — read the latest run log.',
       parameters: {
         type: 'object',
         properties: {
