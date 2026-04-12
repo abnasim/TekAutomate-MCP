@@ -1,5 +1,5 @@
 import type { ToolResult } from '../core/schemas';
-import { getLiveSessionState, getActiveSessionKeys } from './runtimeContextStore';
+import { getLiveSessionState } from './runtimeContextStore';
 import { pushLiveProposal } from './liveActionBridge';
 
 export interface StagedWorkflowProposal {
@@ -90,22 +90,12 @@ export async function stageWorkflowProposal(
 
   proposalsBySession.set(sessionKey, proposal);
 
-  // Push to the primary session key via live bridge.
-  // Also push to ALL other active browser sessions so that opening a second
-  // browser/tab doesn't steal the proposal from the original session.
-  // Each browser has its own unique sessionKey — proposals are stored per-key
-  // so each browser only sees proposals intended for it.
-  const keysToNotify = new Set<string>();
-  if (sessionKey !== 'default') keysToNotify.add(sessionKey);
-  for (const k of getActiveSessionKeys()) {
-    if (k !== 'default') keysToNotify.add(k);
-  }
-  for (const k of keysToNotify) {
-    if (k !== sessionKey) {
-      // Store a copy under the other browser's key too
-      proposalsBySession.set(k, { ...proposal, sessionKey: k });
-    }
-    pushLiveProposal(k === sessionKey ? proposal : { ...proposal, sessionKey: k }, k);
+  // Push via live bridge — only to the explicit sessionKey.
+  // The agent receives sessionKey via additional_instructions injected at session
+  // creation, so it always passes the right key. Broadcasting to all sessions
+  // breaks isolation (every browser sees every proposal).
+  if (sessionKey !== 'default') {
+    pushLiveProposal(proposal, sessionKey);
   }
 
   return {
