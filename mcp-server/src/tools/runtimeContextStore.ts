@@ -126,6 +126,39 @@ export function getActiveSessionKeys(): string[] {
   return keys;
 }
 
+// ── Pending MCP session key queue ────────────────────────────────────────────
+// When /chatkit/session is called with a sessionKey, it's enqueued here.
+// When a new /mcp connection is established, it dequeues the oldest entry.
+// FIFO order ensures ChatKit sessions and MCP connections are matched correctly
+// without relying on shared liveSession state that can be overwritten by other browsers.
+const pendingMcpSessionKeys: Array<{ key: string; enqueuedAt: number }> = [];
+const PENDING_KEY_TTL_MS = 30_000; // 30 seconds — discard stale entries
+
+export function enqueueMcpSessionKey(sessionKey: string): void {
+  if (!sessionKey) return;
+  const now = Date.now();
+  // Evict stale entries first
+  while (pendingMcpSessionKeys.length > 0 && now - pendingMcpSessionKeys[0].enqueuedAt > PENDING_KEY_TTL_MS) {
+    pendingMcpSessionKeys.shift();
+  }
+  pendingMcpSessionKeys.push({ key: sessionKey, enqueuedAt: now });
+  console.log(`[runtimeContextStore] Enqueued MCP sessionKey=${sessionKey} (queue size=${pendingMcpSessionKeys.length})`);
+}
+
+export function dequeueMcpSessionKey(): string | null {
+  const now = Date.now();
+  // Evict stale entries
+  while (pendingMcpSessionKeys.length > 0 && now - pendingMcpSessionKeys[0].enqueuedAt > PENDING_KEY_TTL_MS) {
+    pendingMcpSessionKeys.shift();
+  }
+  const entry = pendingMcpSessionKeys.shift();
+  if (entry) {
+    console.log(`[runtimeContextStore] Dequeued MCP sessionKey=${entry.key} (queue size=${pendingMcpSessionKeys.length})`);
+    return entry.key;
+  }
+  return null;
+}
+
 function toStringList(value: unknown): string[] {
   if (!Array.isArray(value)) return [];
   return value.map((item) => String(item || '').trim()).filter(Boolean);

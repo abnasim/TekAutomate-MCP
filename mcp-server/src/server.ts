@@ -8,7 +8,7 @@ import { runToolLoop } from './core/toolLoop';
 import { getSlimToolDefinitions, getToolDefinitions, runTool } from './tools/index';
 import type { McpChatRequest } from './core/schemas';
 import { getLastWorkflowProposal, stageWorkflowProposal } from './tools/stageWorkflowProposal';
-import { getRuntimeContextState, updateRuntimeContext, getActiveSessionKeys } from './tools/runtimeContextStore';
+import { getRuntimeContextState, updateRuntimeContext, getActiveSessionKeys, enqueueMcpSessionKey, dequeueMcpSessionKey } from './tools/runtimeContextStore';
 import { completeLiveAction, getPendingLiveActionCount, waitForNextLiveAction } from './tools/liveActionBridge';
 import { bootRouter, createReloadProvidersHandler, createRouterHandler, getRouterHealth } from './core/routerIntegration';
 import { getCommandIndex } from './core/commandIndex';
@@ -1002,13 +1002,12 @@ function filterTools(q) {
             const transport = new sdk.StreamableHTTPServerTransport({
               sessionIdGenerator: () => newSessionId,
             });
-            // Capture the sessionKey at connection time — this browser just pushed
-            // its key to /runtime-context right before creating the ChatKit session,
-            // so the global state reflects THIS browser's key at this exact moment.
-            // Binding it to the MCP server closure isolates all tool calls for this
-            // conversation from other browsers' keys regardless of future pushes.
-            const capturedSessionKey = getLiveSessionState().sessionKey ?? undefined;
-            console.log(`[MCP] new connection ${newSessionId} — captured sessionKey=${capturedSessionKey ?? 'none'}`);
+            // Dequeue the sessionKey enqueued by /chatkit/session for this browser.
+            // FIFO order matches ChatKit session creation order to MCP connection order —
+            // immune to other browsers' periodic key-pushes overwriting shared state.
+            // Falls back to getLiveSessionState() for backward compatibility.
+            const capturedSessionKey = dequeueMcpSessionKey() ?? getLiveSessionState().sessionKey ?? undefined;
+            console.log(`[MCP] new connection ${newSessionId} — capturedSessionKey=${capturedSessionKey ?? 'none'}`);
             const mcpServer = await createMcpProtocolServer(capturedSessionKey);
             await mcpServer.connect(transport);
             transport.onclose = () => {
@@ -1535,6 +1534,8 @@ function filterTools(q) {
           sendJson(res, 400, { ok: false, error: 'Missing workflowId (or set CHATKIT_WORKFLOW_ID env var).' });
           return;
         }
+        // Enqueue sessionKey so the next /mcp connection can dequeue it (FIFO isolation)
+        if (sessionKey) enqueueMcpSessionKey(sessionKey);
         // Call OpenAI ChatKit Sessions API
         const sessionRes = await fetch('https://api.openai.com/v1/chatkit/sessions', {
           method: 'POST',
