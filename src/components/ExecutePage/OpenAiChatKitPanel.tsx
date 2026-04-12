@@ -700,6 +700,10 @@ function OpenAiChatKitPanelInner({
   const responseScanTimersRef = useRef<number[]>([]);
   const seenProposalIdRef = useRef('');
   const proposalSessionStartedAtRef = useRef(Date.now());
+  // Track which MCP host was used to create the ChatKit session.
+  // Proposals are ALWAYS staged on that host (the one Agent Builder calls),
+  // so we must fetch from there regardless of what local/hosted MCP the user has configured.
+  const chatKitMcpHostRef = useRef<string>('');
 
   const setStructuredProposal = useCallback((
     proposal: {
@@ -832,8 +836,17 @@ function OpenAiChatKitPanelInner({
   }, [captureActionsPreview]);
 
   const fetchLatestStagedProposal = useCallback(async () => {
-    const hosts = Array.from(new Set(resolveMcpHostCandidates().map((host) => host.replace(/\/+$/, ''))));
+    // Always fetch from the MCP host that was used to create the ChatKit session.
+    // That's where Agent Builder stages proposals — not the user's local/custom MCP.
+    // Fall back to resolveMcpHostCandidates() only if session hasn't been created yet.
+    const chatKitHost = chatKitMcpHostRef.current;
+    const hosts = chatKitHost
+      ? [chatKitHost]
+      : Array.from(new Set(resolveMcpHostCandidates().map((host) => host.replace(/\/+$/, ''))));
     if (!hosts.length) return false;
+
+    // Include sessionKey so the public MCP can isolate proposals per user.
+    const sessionKey = getOrCreateLiveSessionKey(workflowId, userId);
 
     let newest:
       | {
@@ -852,7 +865,8 @@ function OpenAiChatKitPanelInner({
 
     for (const host of hosts) {
       try {
-        const res = await fetch(`${host}/workflow-proposals/latest`);
+        const url = `${host}/workflow-proposals/latest?sessionKey=${encodeURIComponent(sessionKey)}`;
+        const res = await fetch(url);
         if (!res.ok) continue;
         const json = (await res.json()) as {
           ok?: boolean;
@@ -965,6 +979,9 @@ function OpenAiChatKitPanelInner({
       try {
         // Try MCP server first (if available — handles session creation server-side)
         const mcpHost = resolveMcpHost();
+        // Capture which MCP host is used — proposals are always staged here (Agent Builder is hardwired to it).
+        // fetchLatestStagedProposal must always poll THIS host, not whatever local/custom MCP the user entered.
+        if (mcpHost) chatKitMcpHostRef.current = mcpHost.replace(/\/+$/, '');
         const sessionUrl = `${mcpHost.replace(/\/$/, '')}/chatkit/session`;
         console.log('[ChatKit] Creating session via:', sessionUrl);
         const res = await fetch(sessionUrl, {
@@ -1373,13 +1390,30 @@ function OpenAiChatKitPanelInner({
       liveSession: isLiveMode ? buildLiveSessionPayload(activeThreadId, workflowId, userId) : null,
     };
 
-    void fetch(`${mcpHost.replace(/\/$/, '')}/runtime-context`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(payload),
-    }).catch((error) => {
-      console.warn('[ChatKit] Failed to sync runtime context:', error);
-    });
+    const postContext = (host: string) =>
+      fetch(`${host.replace(/\/+$/, '')}/runtime-context`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload),
+      }).catch((error) => {
+        console.warn('[ChatKit] Failed to sync runtime context to', host, error);
+      });
+
+    void postContext(mcpHost);
+
+    // Also push the sessionKey to the ChatKit MCP host (public MCP / Agent Builder target)
+    // so workflow_ui{current} returns the sessionKey to the OpenAI agent for scoped proposal staging.
+    const chatKitHost = chatKitMcpHostRef.current;
+    if (chatKitHost && chatKitHost !== mcpHost.replace(/\/+$/, '')) {
+      void fetch(`${chatKitHost}/runtime-context`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        // Only send liveSession — we don't want to overwrite instrument/workflow state on a shared public MCP
+        body: JSON.stringify({ liveSession: payload.liveSession }),
+      }).catch((error) => {
+        console.warn('[ChatKit] Failed to sync sessionKey to ChatKit MCP host:', error);
+      });
+    }
   }, [steps, flowContext, instrumentEndpoint, runLog, activeThreadId, workspaceRevision, workflowId, userId, isLiveMode]);
 
   useEffect(() => {
