@@ -1,4 +1,5 @@
 import type { ToolResult } from '../core/schemas';
+import { getLiveSessionState } from './runtimeContextStore';
 
 export interface StagedWorkflowProposal {
   id: string;
@@ -63,7 +64,12 @@ export async function stageWorkflowProposal(
     };
   }
 
-  const sessionKey = String(input.sessionKey || '').trim() || 'default';
+  // If agent didn't pass sessionKey (e.g. new flow, skipped workflow_ui{current}),
+  // auto-inject from runtime context — the browser always pushes its sessionKey there.
+  const sessionKey =
+    String(input.sessionKey || '').trim() ||
+    getLiveSessionState().sessionKey ||
+    'default';
 
   const proposal: StagedWorkflowProposal = {
     id: createProposalId(),
