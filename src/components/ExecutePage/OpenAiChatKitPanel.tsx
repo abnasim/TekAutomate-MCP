@@ -1010,6 +1010,22 @@ function OpenAiChatKitPanelInner({
           const secret = extractClientSecret(data);
           if (secret) {
             setInitError(null);
+            // Immediately push sessionKey now that we know which host is active.
+            // The proposal polling loop also does this but only on mount + timeouts —
+            // doing it here ensures the server has the key right after session creation.
+            const liveKey = getOrCreateLiveSessionKey(workflowId, userId);
+            void fetch(`${chatKitMcpHostRef.current}/runtime-context`, {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({
+                liveSession: {
+                  sessionKey: liveKey,
+                  workflowId: resolvedWorkflowId,
+                  userId: resolvedUserId,
+                  threadId: null,
+                },
+              }),
+            }).catch(() => {});
             return secret;
           }
         }
@@ -1484,11 +1500,9 @@ function OpenAiChatKitPanelInner({
   // When workflow_ui{stage} is called by the agent, pushLiveProposal enqueues
   // the proposal there and the long-poll wakes up instantly.
   //
-  // KEY: after every long-poll timeout (20s with no action), we re-push the
-  // sessionKey to the MCP server. This ensures the server always has the current
-  // sessionKey within one poll cycle, even after a Railway restart/redeploy that
-  // clears in-memory state. Without this, the server falls back to 'default' key
-  // and pushLiveProposal is never called.
+  // KEY: pushes sessionKey immediately on mount and after every poll timeout.
+  // This ensures the server always has the sessionKey even after a Railway
+  // restart/redeploy that clears in-memory state — without needing any user action.
   useEffect(() => {
     const sessionKey = getOrCreateLiveSessionKey(workflowId, userId);
     const proposalKey = `${sessionKey}:proposal`;
@@ -1497,9 +1511,9 @@ function OpenAiChatKitPanelInner({
     const getHost = () =>
       (chatKitMcpHostRef.current || resolveMcpHost() || '').replace(/\/+$/, '');
 
-    // Re-push sessionKey to MCP so server survives restarts/redeploys.
-    // Only sends the liveSession fragment (sessionKey + identifiers) — not the full
-    // workflow/instrument payload. Keeps it lightweight (called every 20s).
+    // Push sessionKey to MCP server. Lightweight — only liveSession fragment.
+    // Called immediately on mount AND after every poll timeout so the server
+    // always has the current key even after a Railway restart.
     const refreshSessionKey = (host: string) => {
       void fetch(`${host}/runtime-context`, {
         method: 'POST',
@@ -1515,6 +1529,11 @@ function OpenAiChatKitPanelInner({
       }).catch(() => {});
     };
 
+    // Push immediately so the server has the sessionKey before the agent runs.
+    // Don't wait for the first 8s poll timeout to expire.
+    const initialHost = getHost();
+    if (initialHost) refreshSessionKey(initialHost);
+
     const loop = async () => {
       while (!cancelled) {
         const host = getHost();
@@ -1524,7 +1543,7 @@ function OpenAiChatKitPanelInner({
         }
         try {
           const res = await fetch(
-            `${host}/live-actions/next?sessionKey=${encodeURIComponent(proposalKey)}&timeoutMs=20000`,
+            `${host}/live-actions/next?sessionKey=${encodeURIComponent(proposalKey)}&timeoutMs=8000`,
           );
           if (!res.ok) {
             await new Promise((r) => window.setTimeout(r, 1500));
