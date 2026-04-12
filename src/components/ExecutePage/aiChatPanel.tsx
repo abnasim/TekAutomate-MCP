@@ -1649,45 +1649,20 @@ export function AiChatPanel({
                 </button>
                 {isActive && (
                   <div className="px-3 pb-2.5 space-y-2 border-t border-slate-100 dark:border-white/5 pt-2">
-                    {pid === 'openai' && (
-                      <div className="space-y-1">
-                        <div className="text-[10px] text-slate-500 dark:text-white/50">Chat surface</div>
-                        <div className="inline-flex rounded-full border border-slate-200 dark:border-white/10 bg-slate-100 dark:bg-white/5 p-0.5">
-                          {([
-                            { id: 'chatkit', label: 'ChatKit' },
-                            { id: 'native', label: 'Native Chat' },
-                          ] as const).map((surface) => {
-                            const selected = openAiChatSurface === surface.id;
-                            return (
-                              <button
-                                key={surface.id}
-                                type="button"
-                                onClick={() => setOpenAiChatSurface(surface.id)}
-                                className={`px-2.5 py-1 rounded-full text-[10px] font-semibold transition-colors ${
-                                  selected
-                                    ? 'bg-violet-500/15 text-violet-700 dark:text-violet-200'
-                                    : 'text-slate-500 dark:text-white/55 hover:text-slate-800 dark:hover:text-white/85'
-                                }`}
-                              >
-                                {surface.label}
-                              </button>
-                            );
-                          })}
-                        </div>
-                      </div>
+                    {pid !== 'openai' && (
+                      <select
+                        value={state.model}
+                        onChange={(e) => setModel(e.target.value)}
+                        className="w-full rounded-lg border border-slate-200 dark:border-white/10 bg-slate-50 dark:bg-slate-800 px-2 py-1.5 text-xs text-slate-700 dark:text-white/80 focus:outline-none focus:border-violet-500/50"
+                      >
+                        {!providerModels.includes(state.model) && state.model ? (
+                          <option value={state.model} className="bg-white dark:bg-slate-800 dark:text-white/80">{state.model}</option>
+                        ) : null}
+                        {providerModels.map((m) => (
+                          <option key={m} value={m} className="bg-white dark:bg-slate-800 dark:text-white/80">{m}</option>
+                        ))}
+                      </select>
                     )}
-                    <select
-                      value={state.model}
-                      onChange={(e) => setModel(e.target.value)}
-                      className="w-full rounded-lg border border-slate-200 dark:border-white/10 bg-slate-50 dark:bg-slate-800 px-2 py-1.5 text-xs text-slate-700 dark:text-white/80 focus:outline-none focus:border-violet-500/50"
-                    >
-                      {!providerModels.includes(state.model) && state.model ? (
-                        <option value={state.model} className="bg-white dark:bg-slate-800 dark:text-white/80">{state.model}</option>
-                      ) : null}
-                      {providerModels.map((m) => (
-                        <option key={m} value={m} className="bg-white dark:bg-slate-800 dark:text-white/80">{m}</option>
-                      ))}
-                    </select>
                     <div className="relative">
                       <KeyRound className="absolute left-2.5 top-2 h-3.5 w-3.5 text-slate-400 dark:text-white/30" />
                       <input
@@ -1723,30 +1698,23 @@ export function AiChatPanel({
                         {testingKey ? 'Testing...' : 'Test'}
                       </button>
                     </div>
+                    {pid === 'openai' && (
+                      <a
+                        href="https://platform.openai.com/api-keys"
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="inline-flex items-center gap-1.5 text-[10px] text-violet-600 dark:text-violet-400 hover:text-violet-700 dark:hover:text-violet-300 transition-colors"
+                      >
+                        <span className="inline-flex items-center justify-center h-3.5 w-3.5 rounded-full bg-violet-500/15 text-violet-600 dark:text-violet-400 text-[8px] font-bold">?</span>
+                        Get your API key at platform.openai.com →
+                      </a>
+                    )}
                   </div>
                 )}
               </div>
             );
           })}
 
-          {/* ── MCP server ── */}
-          <label className="block">
-            <span className="text-[10px] text-slate-500 dark:text-white/50">MCP server</span>
-            <div className="mt-1 flex gap-1.5">
-              <input
-                type="url"
-                value={mcpHostInput}
-                onChange={(e) => setMcpHostInput(e.target.value)}
-                className="flex-1 rounded-lg border border-slate-200 dark:border-white/10 bg-slate-50 dark:bg-white/5 px-2 py-1.5 text-xs text-slate-700 dark:text-white/80 placeholder-slate-300 dark:placeholder-white/20 focus:outline-none focus:border-violet-500/50"
-                placeholder="https://..."
-              />
-              <button type="button" onClick={() => void saveMcpHost()} className="text-[10px] px-2 py-1 rounded-md border border-slate-200 dark:border-white/10 text-slate-600 dark:text-white/70 hover:bg-slate-100 dark:hover:bg-white/10">Save</button>
-              <button type="button" onClick={() => void testMcpHostConnection()} className="text-[10px] px-2 py-1 rounded-md border border-slate-200 dark:border-white/10 text-slate-600 dark:text-white/70 hover:bg-slate-100 dark:hover:bg-white/10">Test</button>
-            </div>
-            {mcpHostStatus && (
-              <p className="mt-1 text-[10px] text-cyan-600 dark:text-cyan-400">{mcpHostStatus}</p>
-            )}
-          </label>
 
         </div>
       )}
