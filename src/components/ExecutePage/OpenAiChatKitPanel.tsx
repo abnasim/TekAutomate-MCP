@@ -1483,6 +1483,12 @@ function OpenAiChatKitPanelInner({
   // Polls /live-actions/next?sessionKey=<key>:proposal on the ChatKit MCP host.
   // When workflow_ui{stage} is called by the agent, pushLiveProposal enqueues
   // the proposal there and the long-poll wakes up instantly.
+  //
+  // KEY: after every long-poll timeout (20s with no action), we re-push the
+  // sessionKey to the MCP server. This ensures the server always has the current
+  // sessionKey within one poll cycle, even after a Railway restart/redeploy that
+  // clears in-memory state. Without this, the server falls back to 'default' key
+  // and pushLiveProposal is never called.
   useEffect(() => {
     const sessionKey = getOrCreateLiveSessionKey(workflowId, userId);
     const proposalKey = `${sessionKey}:proposal`;
@@ -1490,6 +1496,24 @@ function OpenAiChatKitPanelInner({
 
     const getHost = () =>
       (chatKitMcpHostRef.current || resolveMcpHost() || '').replace(/\/+$/, '');
+
+    // Re-push sessionKey to MCP so server survives restarts/redeploys.
+    // Only sends the liveSession fragment (sessionKey + identifiers) — not the full
+    // workflow/instrument payload. Keeps it lightweight (called every 20s).
+    const refreshSessionKey = (host: string) => {
+      void fetch(`${host}/runtime-context`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          liveSession: {
+            sessionKey,
+            workflowId: getWorkflowId(workflowId),
+            userId: userId?.trim() || 'tekautomate-user',
+            threadId: null,
+          },
+        }),
+      }).catch(() => {});
+    };
 
     const loop = async () => {
       while (!cancelled) {
@@ -1509,9 +1533,9 @@ function OpenAiChatKitPanelInner({
           const json = (await res.json()) as { action?: { id: string; toolName: string; args?: Record<string, unknown> } | null };
           const action = json.action;
           if (!action?.id || action.toolName !== 'workflow_proposal') {
-            if (action?.id) {
-              console.debug('[ChatKit proposal] Skipping action with unexpected toolName:', action.toolName);
-            }
+            // Long-poll timed out (no action) — re-push sessionKey so the server
+            // always has it even after a Railway restart that clears in-memory state.
+            refreshSessionKey(host);
             continue;
           }
 
