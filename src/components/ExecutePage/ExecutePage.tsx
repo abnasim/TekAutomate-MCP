@@ -60,6 +60,7 @@ export interface ExecutePageProps {
   };
   onRun: () => void;
   onRunSingleStep?: (step: StepPreview) => void;
+  onRunSingleStepLive?: (step: StepPreview) => void;
   onUndo?: () => void;
   onRedo?: () => void;
   canUndo?: boolean;
@@ -222,6 +223,7 @@ function ExecutePageContent({
   flowContext,
   onRun,
   onRunSingleStep,
+  onRunSingleStepLive,
   onUndo,
   onRedo,
   canUndo = false,
@@ -892,10 +894,22 @@ function ExecutePageContent({
                       onClick={() => onRunSingleStep(flowContext.selectedStep!)}
                       disabled={runStatus === 'running'}
                       className="inline-flex h-7 lg:h-9 items-center gap-1 rounded-lg border border-blue-300 px-2 text-[11px] lg:text-xs font-medium text-blue-600 hover:bg-blue-50 dark:border-blue-600 dark:text-blue-400 dark:hover:bg-blue-900/20 disabled:cursor-not-allowed disabled:opacity-40 flex-shrink-0"
-                      title={`Run step: ${flowContext.selectedStep.label}`}
+                      title={`Run step via executor: ${flowContext.selectedStep.label}`}
                     >
                       <Play size={14} />
                       Run Step
+                    </button>
+                  )}
+                  {instrumentEndpoint?.liveMode && onRunSingleStepLive && flowContext?.selectedStep && (
+                    <button
+                      type="button"
+                      onClick={() => onRunSingleStepLive(flowContext.selectedStep!)}
+                      disabled={runStatus === 'running'}
+                      className="inline-flex h-7 lg:h-9 items-center gap-1 rounded-lg border border-emerald-400 px-2 text-[11px] lg:text-xs font-medium text-emerald-600 hover:bg-emerald-50 dark:border-emerald-500 dark:text-emerald-400 dark:hover:bg-emerald-900/20 disabled:cursor-not-allowed disabled:opacity-40 flex-shrink-0"
+                      title={`Run on live instrument: ${flowContext.selectedStep.label}`}
+                    >
+                      <Play size={14} />
+                      Run Live
                     </button>
                   )}
                   {executorEndpoint && (
