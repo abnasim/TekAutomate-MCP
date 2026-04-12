@@ -99,13 +99,16 @@ function getOrCreateLiveSessionKey(workflowId?: string, userId?: string): string
   const resolvedWorkflowId = getWorkflowId(workflowId);
   const resolvedUserId = userId?.trim() || 'tekautomate-user';
   try {
-    const existing = localStorage.getItem(CHATKIT_LIVE_SESSION_KEY);
+    // sessionStorage is per-tab — two browser windows on the same PC get different
+    // keys, so proposals are always routed to the correct window.
+    // localStorage would share the key across all tabs on the same origin.
+    const existing = sessionStorage.getItem(CHATKIT_LIVE_SESSION_KEY);
     if (existing && existing.trim()) return existing.trim();
     const created = `chatkit:${resolvedWorkflowId}:${resolvedUserId}:live-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
-    localStorage.setItem(CHATKIT_LIVE_SESSION_KEY, created);
+    sessionStorage.setItem(CHATKIT_LIVE_SESSION_KEY, created);
     return created;
   } catch {
-    return `chatkit:${resolvedWorkflowId}:${resolvedUserId}:live-fallback`;
+    return `chatkit:${resolvedWorkflowId}:${resolvedUserId}:live-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
   }
 }
 
