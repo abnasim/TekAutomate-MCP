@@ -796,19 +796,6 @@ function ExecutePageContent({
               </button>
               {/* Blockly tab hidden — not integrated yet */}
               <button
-                onClick={() => {
-                  setExecutionSource('live');
-                  setCenterTab('live');
-                }}
-                className={`px-4 py-3 text-sm font-medium ${
-                  centerTab === 'live'
-                    ? 'border-b-2 border-purple-500 text-slate-900 bg-slate-200/70 dark:text-white dark:bg-slate-800/30'
-                    : 'text-slate-500 hover:text-slate-900 dark:text-slate-400 dark:hover:text-white'
-                }`}
-              >
-                Live
-              </button>
-              <button
                 onClick={() => setCenterTab('proposals')}
                 className={`px-4 py-3 text-sm font-medium ${
                   centerTab === 'proposals'
@@ -822,6 +809,19 @@ function ExecutePageContent({
                     <Mail size={14} className="text-cyan-600 dark:text-cyan-400" />
                   ) : null}
                 </span>
+              </button>
+              <button
+                onClick={() => {
+                  setExecutionSource('live');
+                  setCenterTab('live');
+                }}
+                className={`px-4 py-3 text-sm font-medium ${
+                  centerTab === 'live'
+                    ? 'border-b-2 border-purple-500 text-slate-900 bg-slate-200/70 dark:text-white dark:bg-slate-800/30'
+                    : 'text-slate-500 hover:text-slate-900 dark:text-slate-400 dark:hover:text-white'
+                }`}
+              >
+                Live
               </button>
             </div>
             <div className="relative z-40 flex items-center gap-1.5 lg:gap-2 py-2 overflow-x-auto overflow-y-visible flex-nowrap min-w-0 nav-tabs-scroll cursor-default">
