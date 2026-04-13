@@ -308,9 +308,14 @@ class _Handler(BaseHTTPRequestHandler):
 
         action = data.get("action")
         action_label = str(action or "unknown")
-        if data.get("protocol_version") != PROTOCOL_VERSION or action not in {"run_python", "capture_screenshot", "send_scpi", "disconnect", "device_clear"}:
+        if data.get("protocol_version") != PROTOCOL_VERSION or action not in {"run_python", "capture_screenshot", "send_scpi", "disconnect", "device_clear", "get_visa_resources"}:
             self._json_response(400, {"ok": False, "error": "Bad request"})
             self._emit("POST", "/run", 400, f"bad protocol action={action_label}")
+            return
+
+        # get_visa_resources: delegate directly to the /scan handler
+        if action == "get_visa_resources":
+            self._handle_scan()
             return
 
         srv = self.server_thread
