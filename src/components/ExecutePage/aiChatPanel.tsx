@@ -913,6 +913,22 @@ export function AiChatPanel({
                   </div>
                 </div>
               )}
+              {actionCount > 0 && onApplyAiActions && (
+                <button
+                  type="button"
+                  className="w-full rounded-lg bg-cyan-500 px-3 py-2 text-[12px] font-semibold text-white hover:bg-cyan-600 active:scale-[0.98] transition-all"
+                  onClick={() => {
+                    void prepareAndApplyAiActions(
+                      parsedActions!.actions,
+                      parsedActions?.summary,
+                      parsedActions?.findings,
+                      parsedActions?.suggestedFixes
+                    ).then(showApplyStatus);
+                  }}
+                >
+                  Apply to Flow ({actionCount} {actionCount === 1 ? 'step' : 'steps'})
+                </button>
+              )}
               <details className="rounded-lg border border-slate-200 dark:border-white/10 bg-slate-50/70 dark:bg-black/20">
                 <summary className="cursor-pointer list-none px-3 py-2 text-[10px] font-semibold uppercase tracking-wide text-slate-500 dark:text-white/35">
                   Raw JSON
@@ -968,19 +984,30 @@ export function AiChatPanel({
       const before = source.slice(0, scpiMatch.index).trim();
       const jsonStr = source.slice(scpiMatch.index + 'SCPI_COMMANDS:'.length).trim();
       try {
-        const cards = JSON.parse(jsonStr) as Array<{
+        type ScpiCard = {
           header: string;
           description: string;
           set: string | null;
           query: string | null;
+          resolvedCommand?: string | null; // value-substituted write command from toolLoop
           type: string;
           group: string;
           families: string[];
           example: string;
-        }>;
+        };
+        // Support both legacy array format and new {summary, commands, actions} object format
+        const rawParsed = JSON.parse(jsonStr) as ScpiCard[] | { summary?: string; commands: ScpiCard[]; actions?: unknown[] };
+        const cards: ScpiCard[] = Array.isArray(rawParsed) ? rawParsed : (rawParsed.commands || []);
+        const scpiSummary: string = !Array.isArray(rawParsed) ? (rawParsed.summary || '') : '';
+        const scpiActions: unknown[] = !Array.isArray(rawParsed) ? (rawParsed.actions || []) : [];
         return (
           <div className="space-y-2">
             {!!before && <div className="text-xs text-slate-600 dark:text-white/70">{before}</div>}
+            {!!scpiSummary && (
+              <div className="text-[12px] leading-relaxed text-slate-600 dark:text-white/65 pb-0.5">
+                {scpiSummary}
+              </div>
+            )}
             {cards.map((card, idx) => (
               <div
                 key={`scpi-card-${idx}`}
@@ -991,11 +1018,16 @@ export function AiChatPanel({
                     <div className="text-xs font-semibold text-slate-900 dark:text-white truncate" title={card.header}>
                       {card.header}
                     </div>
-                    <div className="mt-0.5 text-[11px] text-slate-500 dark:text-white/50 line-clamp-1">
+                    <div className="mt-0.5 text-[11px] text-slate-500 dark:text-white/50 line-clamp-2">
                       {card.description}
                     </div>
+                    {card.group && (
+                      <div className="mt-1 inline-flex items-center rounded-full bg-slate-100 dark:bg-white/[0.06] px-1.5 py-0.5 text-[9px] font-medium text-slate-500 dark:text-white/40 uppercase tracking-wide">
+                        {card.group}
+                      </div>
+                    )}
                   </div>
-                  <div className="flex gap-1 flex-shrink-0">
+                  <div className="flex gap-1 flex-shrink-0 pt-0.5">
                     {card.query && (
                       <button
                         type="button"
@@ -1023,6 +1055,9 @@ export function AiChatPanel({
                       <button
                         type="button"
                         onClick={() => {
+                          // Prefer the resolved command (value substituted by toolLoop),
+                          // fall back to example or raw set syntax
+                          const writeCmd = card.resolvedCommand || card.example || card.set || '';
                           void prepareAndApplyAiActions([{
                             id: `scpi-w-${idx}-${Date.now()}`,
                             action_type: 'insert_step_after',
@@ -1030,7 +1065,7 @@ export function AiChatPanel({
                             confidence: 'high',
                             reason: `Add write: ${card.header}`,
                             payload: {
-                              newStep: { type: 'write', label: card.header, params: { command: card.example } },
+                              newStep: { type: 'write', label: card.header, params: { command: writeCmd } },
                             },
                           }]).then(showApplyStatus).catch((err) => {
                             showApplyStatus(err instanceof Error ? err.message : 'Failed to add write.');
@@ -1043,15 +1078,41 @@ export function AiChatPanel({
                     )}
                   </div>
                 </div>
-                {(card.set || card.query) && (
+                {(card.resolvedCommand || card.set || card.query) && (
                   <div className="border-t border-slate-100 dark:border-white/5 px-3 py-1.5 bg-slate-50 dark:bg-white/[0.02]">
-                    <div className="text-[10px] font-mono text-slate-500 dark:text-white/40 truncate">
-                      {card.set || card.query}
-                    </div>
+                    {/* Show resolved (value-substituted) command prominently, raw template dimly */}
+                    {card.resolvedCommand && card.resolvedCommand !== (card.set || card.query) ? (
+                      <div className="space-y-0.5">
+                        <div className="text-[10px] font-mono font-semibold text-cyan-600 dark:text-cyan-400 truncate" title={card.resolvedCommand}>
+                          {card.resolvedCommand}
+                        </div>
+                        <div className="text-[9px] font-mono text-slate-400 dark:text-white/25 truncate" title={card.set || card.query || ''}>
+                          {card.set || card.query}
+                        </div>
+                      </div>
+                    ) : (
+                      <div className="text-[10px] font-mono text-slate-500 dark:text-white/40 truncate" title={card.set || card.query || ''}>
+                        {card.set || card.query}
+                      </div>
+                    )}
                   </div>
                 )}
               </div>
             ))}
+            {scpiActions.length > 0 && onApplyAiActions && (
+              <button
+                type="button"
+                className="w-full rounded-lg bg-cyan-500 px-3 py-2 text-[12px] font-semibold text-white hover:bg-cyan-600 active:scale-[0.98] transition-all"
+                onClick={() => {
+                  void prepareAndApplyAiActions(
+                    scpiActions as AiAction[],
+                    scpiSummary || undefined,
+                  ).then(showApplyStatus);
+                }}
+              >
+                Apply All to Flow ({scpiActions.length} {scpiActions.length === 1 ? 'step' : 'steps'})
+              </button>
+            )}
           </div>
         );
       } catch {

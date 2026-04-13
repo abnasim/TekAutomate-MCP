@@ -423,6 +423,17 @@ export async function executeMcpTool(
       action = 'send_scpi';
       payload = { commands: ['*IDN?', '*ESR?', 'ALLEV?'], timeout_ms: 5000 };
     }
+    // get_visa_resources: call /scan (GET) instead of /run — returns rich instrument list
+    if (toolName === 'get_visa_resources') {
+      try {
+        const scanRes = await fetch(`${execUrl}/scan`, { signal: AbortSignal.timeout(35000) });
+        const scanJson = await scanRes.json() as { ok?: boolean; instruments?: unknown[]; count?: number };
+        if (scanJson.ok && Array.isArray(scanJson.instruments)) {
+          return { ok: true, instruments: scanJson.instruments, count: scanJson.count ?? scanJson.instruments.length, source: 'executor_scan' };
+        }
+      } catch { /* fall through */ }
+      return { ok: false, instruments: [], error: 'Executor /scan not reachable' };
+    }
     // discover_scpi: route through browser executor (not remote MCP)
     // The MCP server can't reach the local executor — browser can.
     if (toolName === 'discover_scpi') {

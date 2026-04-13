@@ -12,15 +12,18 @@ export function withRuntimeInstrumentDefaults<T extends Record<string, unknown>>
   const connectionKey = typeof (input as any).__connectionSessionKey === 'string' && (input as any).__connectionSessionKey
     ? (input as any).__connectionSessionKey as string : null;
   const instrument = getInstrumentInfoState(connectionKey);
+  // Env vars act as a hard override for local direct-executor mode (EXECUTOR_URL set in .env)
+  const envExecutorUrl = process.env.EXECUTOR_URL || '';
+  const envVisaResource = process.env.VISA_RESOURCE || '';
   return {
     executorUrl:
       typeof input.executorUrl === 'string' && input.executorUrl
         ? input.executorUrl
-        : instrument.executorUrl || '',
+        : instrument.executorUrl || envExecutorUrl,
     visaResource:
       typeof input.visaResource === 'string' && input.visaResource
         ? input.visaResource
-        : instrument.visaResource || '',
+        : instrument.visaResource || envVisaResource,
     backend:
       typeof input.backend === 'string' && input.backend
         ? input.backend
@@ -28,7 +31,7 @@ export function withRuntimeInstrumentDefaults<T extends Record<string, unknown>>
     liveMode:
       typeof input.liveMode === 'boolean'
         ? input.liveMode
-        : instrument.liveMode,
+        : instrument.liveMode || Boolean(envExecutorUrl),
     ...input,
   } as T & RuntimeBackedEndpoint;
 }
@@ -38,6 +41,9 @@ export function shouldBridgeToTekAutomate(input: {
   liveMode?: unknown;
   [key: string]: unknown;
 }): boolean {
+  // If EXECUTOR_URL is set in env, we're in direct local mode — never bridge through browser
+  if (process.env.EXECUTOR_URL) return false;
+
   const runtime = getRuntimeContextState();
   const connectionKey = typeof (input as any).__connectionSessionKey === 'string' && (input as any).__connectionSessionKey
     ? (input as any).__connectionSessionKey as string : null;

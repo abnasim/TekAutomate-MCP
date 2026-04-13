@@ -4,7 +4,7 @@ Tkinter port of the original PySide6 version.
 """
 import socket
 import tkinter as tk
-from tkinter import ttk, messagebox
+from tkinter import ttk
 from datetime import datetime
 
 from app.tk_utils import TkSignal
@@ -20,8 +20,6 @@ RED      = "#E05555"
 WHITE    = "#FFFFFF"
 MUTED    = "#777777"
 DIM      = "#444444"
-DEFAULT_MCP_URL = "https://tekautomate-mcp-production.up.railway.app/mcp"
-
 
 def _local_ip() -> str:
     try:
@@ -37,15 +35,11 @@ class ConnectionPanel(ttk.Frame):
         super().__init__(parent)
         self.host_changed = TkSignal()
         self.port_changed = TkSignal()
-        self.live_token_generate_requested = TkSignal()
-        self.live_token_revoke_requested = TkSignal()
         self.vnc_test_requested = TkSignal()
         self.vnc_target_changed = TkSignal()
         self._clients: dict[str, tuple[ttk.Frame, datetime]] = {}
         self._qr_photo = None  # prevent GC
         self._qr_visible = False
-        self._active_token = ""
-        self._active_mcp_link = ""
         self._vnc_targets: dict[str, tuple[str, int]] = {}
         self._build()
 
@@ -81,47 +75,6 @@ class ConnectionPanel(ttk.Frame):
 
         self._status_lbl = ttk.Label(status_row, text="Starting...")
         self._status_lbl.pack(side=tk.LEFT)
-
-        token_frame = ttk.LabelFrame(self, text="LIVE TOKEN")
-
-        token_controls = ttk.Frame(token_frame)
-        token_controls.pack(fill=tk.X, padx=8, pady=(4, 2))
-
-        self._token_duration_var = tk.StringVar(value="1 hr")
-        self._token_duration_combo = ttk.Combobox(
-            token_controls,
-            textvariable=self._token_duration_var,
-            state="readonly",
-            values=["1 hr", "1 day", "1 week", "1 month", "1 year"],
-            width=10,
-        )
-        self._token_duration_combo.pack(side=tk.LEFT, fill=tk.X, expand=True)
-
-        ttk.Button(token_controls, text="Generate", command=self._generate_token).pack(side=tk.LEFT, padx=(6, 0))
-        ttk.Button(token_controls, text="Revoke", command=self._revoke_token).pack(side=tk.LEFT, padx=(6, 0))
-
-        self._token_var = tk.StringVar(value="No active token")
-        token_row = ttk.Frame(token_frame)
-        token_row.pack(fill=tk.X, padx=8, pady=(2, 2))
-        self._token_entry = ttk.Entry(token_row, textvariable=self._token_var)
-        self._token_entry.pack(side=tk.LEFT, fill=tk.X, expand=True)
-        ttk.Button(token_row, text="Copy", command=self._copy_token).pack(side=tk.LEFT, padx=(6, 0))
-
-        self._mcp_link_var = tk.StringVar(value="No active MCP link")
-        mcp_row = ttk.Frame(token_frame)
-        mcp_row.pack(fill=tk.X, padx=8, pady=(0, 2))
-        self._mcp_link_entry = ttk.Entry(mcp_row, textvariable=self._mcp_link_var)
-        self._mcp_link_entry.pack(side=tk.LEFT, fill=tk.X, expand=True)
-        ttk.Button(mcp_row, text="Copy MCP Link", command=self._copy_mcp_link).pack(side=tk.LEFT, padx=(6, 0))
-
-        self._token_status_var = tk.StringVar(value="Generate a token to allow remote live control.")
-        ttk.Label(
-            token_frame,
-            textvariable=self._token_status_var,
-            wraplength=190,
-            anchor=tk.W,
-            justify=tk.LEFT,
-        ).pack(fill=tk.X, padx=8, pady=(0, 6))
 
         vnc_frame = ttk.LabelFrame(self, text="VNC STATUS")
         vnc_frame.pack(fill=tk.X, pady=(0, 8))
@@ -204,7 +157,8 @@ class ConnectionPanel(ttk.Frame):
             self._qr_toggle_btn.configure(text="Show QR Code")
             self._qr_visible = False
         else:
-            self._qr_frame.pack(fill=tk.X, pady=(0, 8), before=self._clients_container.master if hasattr(self._clients_container, 'master') else None)
+            # Pack QR frame just before the clients card
+            self._qr_frame.pack(fill=tk.X, pady=(0, 8), before=self._clients_container)
             self._qr_toggle_btn.configure(text="Hide QR Code")
             self._qr_visible = True
             self._refresh_qr()
@@ -224,25 +178,8 @@ class ConnectionPanel(ttk.Frame):
     def get_timeout(self) -> int:
         return 30
 
-    def get_selected_token_duration_minutes(self) -> int:
-        label = self._token_duration_var.get().strip().lower()
-        mapping = {
-            "1 hr": 60,
-            "1 day": 1440,
-            "1 week": 10080,
-            "1 month": 43200,
-            "1 year": 525600,
-        }
-        return mapping.get(label, 60)
-
     def _url(self):
         return f"tekautomate://connect?v=1&host={self.get_host()}&port={self.get_port()}"
-
-    def _mcp_link(self, token: str | None = None) -> str:
-        live_token = (token or self._active_token or "").strip()
-        if not live_token:
-            return ""
-        return f"{DEFAULT_MCP_URL}?token={live_token}"
 
     def _refresh_qr(self):
         url = self._url()
@@ -265,31 +202,6 @@ class ConnectionPanel(ttk.Frame):
              "starting": "Starting..."}.get(status, status)
         self._pip_canvas.itemconfigure(self._pip_id, fill=c)
         self._status_lbl.configure(text=t)
-
-    def set_live_token_status(self, status: dict | None, token: str | None = None):
-        status = status or {}
-        active = bool(status.get("active"))
-        if token:
-            self._active_token = token
-            self._token_var.set(token)
-        elif active:
-            self._token_var.set(str(status.get("tokenPreview") or "Token active"))
-        else:
-            self._active_token = ""
-            self._token_var.set("No active token")
-
-        link = self._mcp_link(token=token if token else None) if active else ""
-        self._active_mcp_link = link
-        self._mcp_link_var.set(link or "No active MCP link")
-
-        remaining = int(status.get("remainingSec") or 0)
-        if active:
-            minutes, seconds = divmod(remaining, 60)
-            hours, minutes = divmod(minutes, 60)
-            ttl = f"{hours:02d}:{minutes:02d}:{seconds:02d}" if hours else f"{minutes:02d}:{seconds:02d}"
-            self._token_status_var.set(f"Active live token. Expires in {ttl}. Paste the MCP link into Claude or paste the token into TekAutomate Live mode.")
-        else:
-            self._token_status_var.set("Generate a token to allow remote live control.")
 
     def set_vnc_status(self, summary: dict | None):
         summary = summary or {}
@@ -376,36 +288,6 @@ class ConnectionPanel(ttk.Frame):
         ts.pack(side=tk.RIGHT)
 
         self._clients[ip] = (row, now)
-
-    def _generate_token(self):
-        self.live_token_generate_requested.emit(self.get_selected_token_duration_minutes())
-
-    def _revoke_token(self):
-        self.live_token_revoke_requested.emit()
-
-    def _copy_token(self):
-        token = self._active_token or self._token_var.get().strip()
-        if not token or token == "No active token":
-            messagebox.showinfo("Live Token", "Generate a token first.")
-            return
-        try:
-            self.clipboard_clear()
-            self.clipboard_append(token)
-            self.update_idletasks()
-        except Exception:
-            messagebox.showerror("Live Token", "Failed to copy token to clipboard.")
-
-    def _copy_mcp_link(self):
-        link = self._active_mcp_link or self._mcp_link_var.get().strip()
-        if not link or link == "No active MCP link":
-            messagebox.showinfo("MCP Link", "Generate a token first.")
-            return
-        try:
-            self.clipboard_clear()
-            self.clipboard_append(link)
-            self.update_idletasks()
-        except Exception:
-            messagebox.showerror("MCP Link", "Failed to copy MCP link to clipboard.")
 
     def _request_vnc_test(self):
         self.vnc_test_requested.emit()

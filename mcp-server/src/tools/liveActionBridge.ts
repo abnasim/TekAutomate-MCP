@@ -4,6 +4,7 @@ export type LiveActionToolName =
   | 'send_scpi'
   | 'capture_screenshot'
   | 'get_instrument_state'
+  | 'get_visa_resources'
   | 'probe_command'
   | 'workflow_proposal'; // fire-and-forget — no browser result required
 

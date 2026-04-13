@@ -41,34 +41,27 @@ class MainWindow:
         self.root.protocol("WM_DELETE_WINDOW", self._on_close)
 
     def _build(self):
-        # ── Three columns ─────────────────────────────────────────────
-        main = ttk.Frame(self.master)
-        main.pack(fill=tk.BOTH, expand=True, padx=20, pady=(16, 0))
+        # ── Three resizable panes ──────────────────────────────────────
+        paned = ttk.PanedWindow(self.master, orient=tk.HORIZONTAL)
+        paned.pack(fill=tk.BOTH, expand=True, padx=8, pady=(12, 0))
 
-        main.grid_columnconfigure(0, weight=0, minsize=220)
-        main.grid_columnconfigure(1, weight=2)
-        main.grid_columnconfigure(2, weight=2)
-        main.grid_rowconfigure(0, weight=1)
-
-        # Left: Connection – fixed width
-        self.conn_panel = ConnectionPanel(main)
-        self.conn_panel.grid(row=0, column=0, sticky="nsew", padx=(0, 10))
-        self.conn_panel.live_token_generate_requested.connect(self._generate_live_token)
-        self.conn_panel.live_token_revoke_requested.connect(self._revoke_live_token)
+        # Left: Connection
+        self.conn_panel = ConnectionPanel(paned)
         self.conn_panel.vnc_test_requested.connect(self._test_vnc_target)
         self.conn_panel.vnc_target_changed.connect(self._on_vnc_target_changed)
+        paned.add(self.conn_panel, weight=1)
 
         # Centre: Instruments
-        self.instr_panel = InstrumentPanel(main)
+        self.instr_panel = InstrumentPanel(paned)
         self.instr_panel.scan_requested.connect(self._run_scan)
         self.instr_panel.clear_requested.connect(self._clear_instrument_buffer)
         self.instr_panel.add_ip_requested.connect(self._add_ip_instrument)
-        self.instr_panel.grid(row=0, column=1, sticky="nsew", padx=(0, 10))
+        paned.add(self.instr_panel, weight=2)
 
         # Right: Activity Log
-        self.log_panel = LogPanel(main)
+        self.log_panel = LogPanel(paned)
         self.log_panel.clear_buffer_requested = self._clear_visible_instrument_buffers
-        self.log_panel.grid(row=0, column=2, sticky="nsew")
+        paned.add(self.log_panel, weight=3)
 
         # ── Plugin bar ────────────────────────────────────────────────
         self.plugin_bar = PluginBar(self.master)
@@ -100,11 +93,9 @@ class MainWindow:
         self._server.request_logged.connect(self._on_request)
         self._server.client_seen.connect(self.conn_panel.on_client_seen)
         self._server.script_line.connect(self._on_script_line)
-        self._server.live_token_changed.connect(lambda status: self.conn_panel.set_live_token_status(status))
         if not self._server.prepare():
             self._on_error(self._server._prepare_error or "Failed to prepare server")
             return
-        self.conn_panel.set_live_token_status(self._server.get_live_token_status())
         self._server.start()
         self._startup_probe_attempts = 0
         self.root.after(500, self._verify_server_started)
@@ -116,6 +107,8 @@ class MainWindow:
         self.conn_panel.set_status("ready")
         self.tray.set_status("ready", host, port)
         self.log_panel.log(f"Server started on {host}:{port}", "success")
+        # Show last known instruments immediately without blocking startup
+        self.root.after(100, self._load_cached_instruments)
 
     def _on_error(self, msg):
         self._server_ready = False
@@ -169,30 +162,91 @@ class MainWindow:
             return
         self.root.after(500, self._verify_server_started)
 
+    def _load_cached_instruments(self):
+        """Show last scan results immediately on startup (non-blocking)."""
+        from app.instrument_scanner import load_scan_cache, InstrumentInfo
+        cached = load_scan_cache()
+        if not cached:
+            return
+        for d in cached:
+            info = InstrumentInfo(
+                resource=d.get("resource", ""),
+                identity=d.get("identity", ""),
+                manufacturer=d.get("manufacturer", ""),
+                model=d.get("model", ""),
+                serial=d.get("serial", ""),
+                firmware=d.get("firmware", ""),
+                reachable=d.get("reachable", True),
+                conn_type=d.get("conn_type", "tcpip"),
+            )
+            self.instr_panel.add_instrument(info)
+        self.instr_panel._status.configure(text=f"Cached: {len(cached)} instrument(s) — press Scan to refresh")
+        self._refresh_vnc_targets()
+
     def _run_scan(self):
         if self._scan_thread and self._scan_thread.is_alive():
             return
         self.instr_panel.clear()
         self.log_panel.log("Scanning for VISA instruments...", "dim")
+        self._found_in_scan: list = []
         self._scan_thread = InstrumentScanThread(query_idn=True, timeout_ms=3000)
-        self._scan_thread.instrument_found.connect(self.instr_panel.add_instrument)
-        self._scan_thread.instrument_found.connect(lambda _info: self._refresh_vnc_targets())
-        self._scan_thread.scan_finished.connect(self.instr_panel.on_scan_finished)
-        self._scan_thread.scan_finished.connect(
-            lambda n: self.log_panel.log(f"Scan complete: {n} instrument(s) found", "success"))
-        self._scan_thread.scan_finished.connect(lambda _n: self._refresh_vnc_targets())
+
+        def _on_found(info):
+            self._found_in_scan.append(info)
+            self.instr_panel.add_instrument(info)
+            self._refresh_vnc_targets()
+
+        def _on_finished(n):
+            from app.instrument_scanner import save_scan_cache
+            save_scan_cache(self._found_in_scan)
+            self.instr_panel.on_scan_finished(n)
+            self.log_panel.log(f"Scan complete: {n} instrument(s) found", "success")
+            self._refresh_vnc_targets()
+
+        self._scan_thread.instrument_found.connect(_on_found)
+        self._scan_thread.scan_finished.connect(_on_finished)
         self._scan_thread.scan_error.connect(self.instr_panel.on_scan_error)
         self._scan_thread.scan_error.connect(
             lambda m: self.log_panel.log(f"Scan error: {m}", "error"))
         self._scan_thread.start()
 
     def _add_ip_instrument(self, ip: str):
-        """Probe a user-supplied IP, add to panel and pin it for future scans."""
+        """Probe a user-supplied IP or host:port, add to panel and pin it."""
         from app.instrument_scanner import (
             InstrumentInfo, ip_to_visa_resources, pin_resource,
             _parse_idn, _is_valid_idn,
         )
         import pyvisa
+
+        def _query_idn_visa(res: str, rm) -> str | None:
+            """Query *IDN? via PyVISA (INSTR resources)."""
+            try:
+                inst = rm.open_resource(res, timeout=4000)
+                idn = inst.query("*IDN?").strip()
+                inst.close()
+                return idn if _is_valid_idn(idn) else None
+            except Exception:
+                return None
+
+        def _query_idn_socket(res: str) -> str | None:
+            """Query *IDN? via raw SocketInstr (SOCKET resources)."""
+            try:
+                from app.socket_instr import SocketInstr
+            except ModuleNotFoundError:
+                try:
+                    from socket_instr import SocketInstr
+                except ModuleNotFoundError:
+                    return None
+            try:
+                parts = res.split("::")
+                host = parts[1] if len(parts) > 1 else "127.0.0.1"
+                port = int(parts[2]) if len(parts) > 2 and parts[2].isdigit() else 4000
+                sock = SocketInstr(host, port, timeout=4)
+                idn = sock.query("*IDN?").strip()
+                sock.close()
+                return idn if _is_valid_idn(idn) else None
+            except Exception:
+                return None
 
         def _probe():
             resources = ip_to_visa_resources(ip)
@@ -203,30 +257,42 @@ class MainWindow:
                 except Exception:
                     rm = pyvisa.ResourceManager("@py")
 
+                newly_found: list[InstrumentInfo] = []
                 for res in resources:
-                    try:
-                        inst = rm.open_resource(res, timeout=4000)
-                        idn = inst.query("*IDN?").strip()
-                        inst.close()
-                        if not _is_valid_idn(idn):
-                            continue
-                        mfr, model, serial, fw = _parse_idn(idn)
-                        info = InstrumentInfo(
-                            resource=res, identity=idn,
-                            manufacturer=mfr, model=model,
-                            serial=serial, firmware=fw,
-                            reachable=True,
-                            conn_type="tcpip",
-                        )
-                        pin_resource(res)
-                        self.root.after(0, lambda i=info: (
-                            self.instr_panel.add_instrument(i),
-                            self._refresh_vnc_targets(),
-                        ))
-                        found_any = True
-                        break  # one good response is enough
-                    except Exception:
+                    is_socket = "SOCKET" in res.upper()
+                    idn = _query_idn_socket(res) if is_socket else _query_idn_visa(res, rm)
+                    if not idn:
                         continue
+                    mfr, model, serial, fw = _parse_idn(idn)
+                    conn_type = "socket" if is_socket else "tcpip"
+                    info = InstrumentInfo(
+                        resource=res, identity=idn,
+                        manufacturer=mfr, model=model,
+                        serial=serial, firmware=fw,
+                        reachable=True,
+                        conn_type=conn_type,
+                    )
+                    pin_resource(res)
+                    newly_found.append(info)
+                    self.root.after(0, lambda i=info: (
+                        self.instr_panel.add_instrument(i),
+                        self._refresh_vnc_targets(),
+                    ))
+                    found_any = True
+                    # Don't break — add all responding resources (INSTR + SOCKET both useful)
+
+                # Merge newly found instruments into the scan cache so MCP's /scan
+                # picks them up immediately without needing a full rescan.
+                if newly_found:
+                    from app.instrument_scanner import load_scan_cache, save_scan_cache
+                    cached = load_scan_cache()
+                    cached_resources = {d["resource"] for d in cached}
+                    merged = list(cached)
+                    for i in newly_found:
+                        if i.resource not in cached_resources:
+                            merged.append(i)
+                    save_scan_cache(merged)
+
             except Exception as e:
                 self.root.after(0, lambda: self.instr_panel.on_add_ip_done(ip, False, f"Error: {e}"))
                 return
@@ -300,21 +366,6 @@ class MainWindow:
         self.root.deiconify()
         self.root.lift()
         self.root.focus_force()
-
-    def _generate_live_token(self, duration_minutes: int):
-        if not self._server:
-            self.log_panel.log("Server is not ready for token generation.", "error")
-            return
-        token, status = self._server.generate_live_token(int(duration_minutes))
-        self.conn_panel.set_live_token_status(status, token=token)
-        self.log_panel.log(f"Generated live token for {status.get('durationMinutes')} minute(s).", "success")
-
-    def _revoke_live_token(self):
-        if not self._server:
-            return
-        status = self._server.revoke_live_token()
-        self.conn_panel.set_live_token_status(status)
-        self.log_panel.log("Revoked live token.", "warning")
 
     def _infer_vnc_target(self) -> tuple[str | None, int]:
         selected_host, selected_port = self.conn_panel.get_selected_vnc_target()

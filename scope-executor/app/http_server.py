@@ -186,29 +186,53 @@ class _Handler(BaseHTTPRequestHandler):
         """Scan for VISA instruments and return results as JSON."""
         self._emit("GET", "/scan", 200, "Scanning for VISA instruments...")
         try:
-            from app.instrument_scanner import InstrumentScanThread, InstrumentInfo
+            from app.instrument_scanner import InstrumentScanThread, load_scan_cache, save_scan_cache, InstrumentInfo
             instruments: list[dict] = []
+            found_resources: set[str] = set()
             scan_done = threading.Event()
             scan_error_msg = [None]
 
+            def _on_found(info):
+                instruments.append({
+                    "resource": info.resource,
+                    "identity": info.identity,
+                    "manufacturer": info.manufacturer,
+                    "model": info.model,
+                    "serial": info.serial,
+                    "firmware": info.firmware,
+                    "reachable": info.reachable,
+                    "connType": info.conn_type,
+                })
+                found_resources.add(info.resource)
+
             scanner = InstrumentScanThread(query_idn=True, timeout_ms=3000)
-            scanner.instrument_found.connect(lambda info: instruments.append({
-                "resource": info.resource,
-                "identity": info.identity,
-                "manufacturer": info.manufacturer,
-                "model": info.model,
-                "serial": info.serial,
-                "firmware": info.firmware,
-                "reachable": info.reachable,
-                "connType": info.conn_type,
-            }))
+            scanner.instrument_found.connect(_on_found)
             scanner.scan_error.connect(lambda err: scan_error_msg.__setitem__(0, err))
             scanner.scan_finished.connect(lambda _count: scan_done.set())
             scanner.start()
             scan_done.wait(timeout=30)
 
+            # Merge in pinned/manually-added instruments from cache that the live
+            # scan didn't find (e.g. SOCKET instruments not visible to VISA RM).
+            try:
+                cached = load_scan_cache()
+                for d in cached:
+                    if d.get("resource") and d["resource"] not in found_resources:
+                        instruments.append({
+                            "resource": d["resource"],
+                            "identity": d.get("identity", ""),
+                            "manufacturer": d.get("manufacturer", ""),
+                            "model": d.get("model", ""),
+                            "serial": d.get("serial", ""),
+                            "firmware": d.get("firmware", ""),
+                            "reachable": d.get("reachable", True),
+                            "connType": d.get("conn_type", "tcpip"),
+                        })
+            except Exception:
+                pass
+
             if scan_error_msg[0]:
-                self._json_response(200, {"ok": False, "error": scan_error_msg[0], "instruments": []})
+                self._json_response(200, {"ok": False, "error": scan_error_msg[0], "instruments": instruments})
                 self._emit("GET", "/scan", 200, f"Scan error: {scan_error_msg[0]}")
             else:
                 self._json_response(200, {"ok": True, "instruments": instruments, "count": len(instruments)})
