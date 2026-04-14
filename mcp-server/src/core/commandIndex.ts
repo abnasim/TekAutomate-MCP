@@ -1,3 +1,4 @@
+// commandIndex.ts - SCPI command search and ranking (build: 2026-04-14)
 import { promises as fs } from 'fs';
 import * as path from 'path';
 import { resolveCommandsDir } from './paths';
@@ -276,9 +277,10 @@ function sourceFilePriority(sourceFile: string): number {
 
 function searchSourceFilePriority(sourceFile: string): number {
   const name = String(sourceFile || '');
+  // manual_overrides get -5 so they receive a +10 bonus in search scoring
+  if (/manual_overrides\.json$/i.test(name)) return -5;
   if (/mso_2_4_5_6_7\.json$/i.test(name)) return 0;
   if (/MSO_DPO_5k_7k_70K\.json$/i.test(name)) return 0;
-  if (/manual_overrides\.json$/i.test(name)) return 1;
   return 2;
 }
 
@@ -771,8 +773,33 @@ export class CommandIndex {
       const descWords = (entry.description || '').toLowerCase().replace(/[^a-z]/g, ' ').split(/\s+/).filter(w => w.length > 3);
       const uniqueDescWords = descWords.filter(w => !commonWords.has(w)).slice(0, 12).join(' ');
 
+      // Extract SCPI abbreviations from mixed-case mnemonics (e.g. MEASUrement → measu, TRIGger → trig).
+      // This allows BM25 to match abbreviated queries like "meas", "trig", "acq", "freq".
+      // The SCPI convention: capital letters = minimum abbreviation, lowercase = optional extension.
+      const scpiAbbrevTokens = entry.header
+        .split(/[:\s<>{}()\[\]|,?]+/)
+        .flatMap(tok => {
+          const m = tok.match(/^([A-Z]{2,})[a-z]/);  // e.g. MEASUrement, TRIGger, FREQuency
+          return m ? [m[1].toLowerCase()] : [];         // → measu, trig, freq
+        })
+        .join(' ');
+
+      // Extract enum option values from arguments (e.g. SINusoid, SQUare, SEQuence, RUNSTop).
+      // TekControl scores +200 for exact enum match — indexing these lets BM25 find the right
+      // command when the user says "sinusoid" or "sequence" (which are SCPI enum tokens).
+      const enumTokens = (entry.arguments || [])
+        .flatMap(arg => {
+          const vals = Array.isArray((arg.validValues as Record<string, unknown>)?.values)
+            ? ((arg.validValues as Record<string, unknown>).values as unknown[])
+            : [];
+          return vals.filter((v): v is string => typeof v === 'string' && v.length > 1);
+        })
+        .join(' ');
+
       return [
         entry.header,
+        scpiAbbrevTokens,       // SCPI abbreviations for mnemonic queries (meas, trig, freq, etc.)
+        enumTokens,             // Enum option values (SINusoid, SEQuence, RUNSTop, EYEDiagram, etc.)
         entry.shortDescription,
         entry.shortDescription, // weight semantic intent heavier in BM25 ranking
         GROUP_DESCRIPTIONS[entry.group] || '',
@@ -849,10 +876,24 @@ export class CommandIndex {
   }
   searchByQuery(query: string, family?: string, limit = 10, commandType?: CommandType, offset = 0): CommandRecord[] {
     const normalizedOffset = Math.max(0, offset || 0);
-    const scored = this.bm25.search(query, Math.max((normalizedOffset + limit) * 4, 25));
     const q = query.toLowerCase();
+    // For queries that need special reranking, use a larger candidate pool
+    // to ensure the target commands are included even if BM25 doesn't rank them high
+    const needsLargerPool = /(\bbus\b.*\btype\b|\btype\b.*\bbus\b)|(\badd\b.*\b(bus|measure)|\b(bus|measure).*\badd\b)/.test(q);
+    const candidateCount = needsLargerPool
+      ? Math.max((normalizedOffset + limit) * 10, 200)
+      : Math.max((normalizedOffset + limit) * 4, 25);
+    const scored = this.bm25.search(query, candidateCount);
     const wantsFastframeCount =
       q.includes('fastframe') && /(count|frames|frame|number)/.test(q);
+    // Detect queries that want bus protocol type (not trigger/search bus sub-commands)
+    const wantsBusType = /\bbus\b/.test(q) && /\btype\b/.test(q) && !/trigger|search|edge|pulse/.test(q);
+    // Detect queries wanting measurement add/create (not jitter models or summary sub-items)
+    const wantsAddMeas = /\badd\b/.test(q) && /\bmeasure(ment)?s?\b/.test(q);
+    // Detect queries wanting to add a bus search (not add a bus)
+    const wantsBusSearch = /\bbus\b/.test(q) && /\bsearch\b/.test(q) && /\badd\b/.test(q);
+    // Detect queries wanting jitter measurement add specifically
+    const wantsJitterMeas = /\bjitter\b/.test(q) && /\bmeasure(ment)?s?\b/.test(q) && /\badd\b/.test(q);
     const reranked = scored
       .map((item) => {
         const entry = this.entries[item.index];
@@ -864,12 +905,50 @@ export class CommandIndex {
           if (h.includes('fastframe:count')) bonus += 50;
           if (h.includes('sixteenbit')) bonus -= 8;
         }
+        if (wantsBusType) {
+          const h = entry.header.toLowerCase();
+          // Boost the bus type command strongly
+          if (/^bus:b[^:]*:type$/.test(h)) bonus += 80;
+          // Penalize trigger/search bus commands
+          if (/^trigger/.test(h) || /^search/.test(h)) bonus -= 25;
+          // Penalize I2C/SPI/CAN/UART specific bus sub-commands (they're config, not type-setting)
+          if (/^bus:b[^:]*:(i2c|spi|can|rs232|usb|lin|arinc|flex)/.test(h)) bonus -= 25;
+        }
+        if (wantsAddMeas || wantsJitterMeas) {
+          const h = entry.header.toLowerCase();
+          // Boost the add measurement command
+          if (h.includes('measurement:addmeas') || h.includes('measur.*:addmeas')) bonus += 30;
+          // Penalize jitter model/summary sub-commands
+          if (/jitter(model|mode|summary)/.test(h) || /jittersummary/.test(h)) bonus -= 15;
+        }
+        if (wantsBusSearch) {
+          const h = entry.header.toLowerCase();
+          // Boost search:addnew strongly for bus search queries
+          if (h === 'search:addnew') bonus += 80;
+          // Penalize bus:addnew since that adds a bus, not a search
+          if (h === 'bus:addnew') bonus -= 30;
+        }
         return { ...item, score: item.score + bonus };
       })
       .sort((a, b) => b.score - a.score);
     const results: CommandRecord[] = [];
     const seen = new Set<string>();
     let skipped = 0;
+
+    // For certain patterns, directly inject the known-correct result at the top
+    // when it might not appear in BM25 candidates due to keyword pollution
+    if (wantsBusSearch && normalizedOffset === 0) {
+      const searchAddNewKey = normalizeHeaderKey('SEARch:ADDNew');
+      const candidates = (this.byHeaderKey.get(searchAddNewKey) || [])
+        .map((idx) => this.entries[idx])
+        .filter((e) => familyMatches(e, family) && commandTypeMatches(e.commandType, commandType));
+      if (candidates.length > 0) {
+        const key = normalizeSearchDedupKey(candidates[0].header) || normalizeHeaderKey(candidates[0].header) || '';
+        seen.add(key);
+        results.push(candidates[0]);
+      }
+    }
+
     for (const item of reranked) {
       const entry = this.entries[item.index];
       if (!entry) continue;
