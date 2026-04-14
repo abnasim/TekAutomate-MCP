@@ -3,7 +3,6 @@
   "version": "2.0.0",
   "description": "Tektronix Script Generator",
   "private": true,
-  "main": "public/electron.js",
   "homepage": "https://abnasim.github.io/TekAutomate",
   "dependencies": {
     "@blockly/plugin-cross-tab-copy-paste": "^8.0.7",
@@ -43,8 +42,6 @@
     "concurrently": "^9.2.1",
     "cross-env": "^7.0.3",
     "cross-fetch": "^4.1.0",
-    "electron": "^28.3.3",
-    "electron-builder": "^24.13.3",
     "execa": "^9.6.1",
     "jest-html-reporter": "^4.3.0",
     "jest-html-reporters": "^3.1.7",
@@ -88,51 +85,8 @@
     "test:ci": "npm test && npm run test:scpi && npm run test:e2e:fast",
     "build:tmdevices-corpus": "node scripts/buildTmDevicesCorpus.js",
     "build:rag": "npm --prefix mcp-server run build:rag",
-    "electron": "electron .",
-    "electron-dev": "concurrently \"npm start\" \"wait-on http://localhost:3001 && electron .\"",
-    "electron-build": "npm run build && electron-builder",
-    "electron-build-win": "set CSC_IDENTITY_AUTO_DISCOVERY=false && npm run build && electron-builder --win --x64",
     "mcp:start": "npm --prefix mcp-server run start",
     "mcp:dev": "npm --prefix mcp-server run dev"
-  },
-  "build": {
-    "appId": "com.tektronix.tekautomate",
-    "productName": "TekAutomate",
-    "files": [
-      "build/**/*",
-      "public/electron.js"
-    ],
-    "extraResources": [
-      {
-        "from": "public/commands",
-        "to": "public/commands"
-      },
-      {
-        "from": "public/templates",
-        "to": "public/templates"
-      },
-      {
-        "from": "public/manual",
-        "to": "public/manual"
-      },
-      {
-        "from": "public/mascot",
-        "to": "public/mascot"
-      }
-    ],
-    "directories": {
-      "buildResources": "public"
-    },
-    "win": {
-      "target": [
-        {
-          "target": "portable",
-          "arch": [
-            "x64"
-          ]
-        }
-      ]
-    }
   },
   "engines": {
     "node": ">=20.0.0"
