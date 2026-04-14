@@ -50,7 +50,7 @@ export function VncViewer({ wsUrl, title = 'Scope VNC Viewer' }: VncViewerProps)
     };
 
     const postToParent = (payload: Record<string, unknown>) => {
-      window.parent.postMessage({ source: 'tekautomate-vnc', ...payload }, '*');
+      window.parent.postMessage({ source: 'tekautomate-vnc', ...payload }, window.location.origin);
     };
 
     const showState = (next: ViewerState) => {
