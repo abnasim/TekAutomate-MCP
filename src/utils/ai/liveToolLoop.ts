@@ -943,11 +943,18 @@ async function runOpenAiLoop(params: LiveToolLoopParams): Promise<LiveToolLoopRe
               });
               continue;
             }
-            // Send screenshot for AI analysis
+            // Send screenshot for AI analysis — base64 inline fallback removed (token cost too high)
+            if (!visionFileId && !(wantsOpenAiImage && visionUrl)) {
+              toolResultsInput.push({
+                type: 'function_call_output',
+                call_id: callId,
+                output: 'Screenshot captured and displayed to user. Image analysis not available (no file_id or image URL — base64 inline transport is disabled).',
+              });
+            } else {
             toolResultsInput.push({
               type: 'function_call_output',
               call_id: callId,
-              output: `Screenshot captured. Analyze the image below. Vision transport: ${wantsOpenAiImage && visionUrl ? 'url' : visionFileId ? 'file_id' : 'base64'}.`,
+              output: `Screenshot captured. Analyze the image below. Vision transport: ${wantsOpenAiImage && visionUrl ? 'url' : 'file_id'}.`,
             });
             toolResultsInput.push({
               role: 'user',
@@ -958,20 +965,15 @@ async function runOpenAiLoop(params: LiveToolLoopParams): Promise<LiveToolLoopRe
                       image_url: visionUrl,
                       detail: 'auto',
                     } satisfies Record<string, unknown>]
-                  : visionFileId
-                  ? [{
-                      type: 'input_image',
-                      file_id: visionFileId,
-                      detail: 'auto',
-                    } satisfies Record<string, unknown>]
                   : [{
                       type: 'input_image',
-                      image_url: `data:${visionMimeType};base64,${visionBase64}`,
+                      file_id: visionFileId,
                       detail: 'auto',
                     } satisfies Record<string, unknown>]),
                 { type: 'input_text', text: 'Only mention what CHANGED or is relevant to the user\'s last request. Do NOT re-describe the entire display.' },
               ],
             });
+            }
           } else {
             // Strip verbose fields, truncate
             let lean = result;
