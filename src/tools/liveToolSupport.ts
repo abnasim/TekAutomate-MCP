@@ -13,9 +13,13 @@ export function withRuntimeInstrumentDefaults<T extends Record<string, unknown>>
     ? (input as any).__connectionSessionKey as string : null;
   const instrument = getInstrumentInfoState(connectionKey);
   // Env vars act as a hard override for local direct-executor mode (EXECUTOR_URL set in .env)
-  const envExecutorUrl = process.env.EXECUTOR_URL || '';
+  // In local mode (not Railway), fall back to localhost:8765 — the default executor port
+  const isHosted = Boolean(process.env.RAILWAY_ENVIRONMENT || process.env.RAILWAY_SERVICE_NAME);
+  const localFallback = isHosted ? '' : 'http://localhost:8765';
+  const envExecutorUrl = process.env.EXECUTOR_URL || instrument.executorUrl || localFallback;
   const envVisaResource = process.env.VISA_RESOURCE || '';
   return {
+    ...input,
     executorUrl:
       typeof input.executorUrl === 'string' && input.executorUrl
         ? input.executorUrl
@@ -32,7 +36,6 @@ export function withRuntimeInstrumentDefaults<T extends Record<string, unknown>>
       typeof input.liveMode === 'boolean'
         ? input.liveMode
         : instrument.liveMode || Boolean(envExecutorUrl),
-    ...input,
   } as T & RuntimeBackedEndpoint;
 }
 

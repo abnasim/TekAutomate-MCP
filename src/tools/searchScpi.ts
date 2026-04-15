@@ -74,6 +74,7 @@ const GROUP_AFFINITY: Record<string, Set<string>> = {
   filesystem: new Set(['File System', 'Save and Recall']),
   event: new Set(['Act On Event', 'Save on']),
   waveform: new Set(['Waveform Transfer', 'Acquisition']),
+  power: new Set(['Power', 'Measurement']),
 };
 
 // Groups that should NEVER appear for non-matching intents
@@ -527,17 +528,6 @@ function reRankWithIntent(
       if (headerLower === 'autoset' || headerLower === 'autoset:execute') {
         score += 50;
       }
-      // Subject-specific boosts for star commands (so the right * command wins)
-      if (headerLower.startsWith('*')) {
-        if (intent.subject === 'rst' && headerLower === '*rst') score += 40;
-        if (intent.subject === 'cls' && headerLower === '*cls') score += 40;
-        if (intent.subject === 'idn' && headerLower === '*idn?') score += 40;
-        if (intent.subject === 'ese' && headerLower === '*ese') score += 40;
-        if (intent.subject === 'esr' && headerLower === '*esr?') score += 40;
-        if (intent.subject === 'opc' && headerLower === '*opc') score += 40;
-        if (intent.subject === 'sre' && headerLower === '*sre') score += 40;
-        if (intent.subject === 'stb' && headerLower === '*stb?') score += 40;
-      }
       // Penalize everything else heavily
       if (!headerLower.startsWith('*') && !['header', 'allev', 'autoset', 'autoset:execute'].includes(headerLower)) {
         if (intent.subject === 'rst') {
@@ -597,454 +587,12 @@ function reRankWithIntent(
       }
     }
 
-    // ── 9. MEASUrement:ADDMEAS broad-match penalty ──
-    // ADDMEAS has a very broad description that causes it to appear in unrelated results.
-    // Penalize it heavily when the query is clearly NOT about adding a measurement.
-    const isAddMeas = headerLower === 'measurement:addmeas' || headerLower === 'measurement:addnew';
-    if (isAddMeas) {
-      if (intent.intent === 'trigger' || intent.intent === 'afg' ||
-          intent.subject === 'save_setup' || intent.subject === 'save' ||
-          intent.intent === 'save' || intent.intent === 'ieee488' ||
-          intent.intent === 'acquisition' || intent.intent === 'waveform' ||
-          intent.subject === 'trigger_holdoff' || intent.subject === 'holdoff' ||
-          intent.intent === 'vertical' || intent.intent === 'display' ||
-          intent.intent === 'horizontal' || intent.intent === 'bus' ||
-          intent.intent === 'math' || intent.intent === 'search' ||
-          intent.subject === 'numavg' || intent.subject === 'acq_mode' ||
-          intent.subject === 'trigger_frequency' || intent.subject === 'trigger_force' || intent.subject === 'trigger_type' ||
-          intent.subject === 'awg_burst' || intent.subject === 'awg_shape' ||
-          intent.subject === 'awg_frequency' || intent.subject === 'awg_seq_trigger' ||
-          intent.subject === 'meas_delete' || intent.subject === 'meastable_add') {
-        score -= 50;
-      }
-    }
-    // Also penalize MEASUrement:MEAS<x>:SOUrce for non-measurement intents
-    const isMeasSource = headerLower.includes('measurement:meas') && headerLower.includes(':source');
-    if (isMeasSource) {
-      if (intent.intent === 'trigger' || intent.intent === 'afg' ||
-          intent.intent === 'save' || intent.intent === 'ieee488' ||
-          intent.intent === 'acquisition' || intent.intent === 'waveform') {
-        score -= 40;
-      }
-    }
-
-    // ── Trigger level → penalize SEARCH commands ──
-    if (intent.subject === 'trigger_level') {
-      if (headerLower.includes('trigger') && headerLower.includes('level')) {
-        score += 60;
-      } else if (headerLower.startsWith('search:')) {
-        score -= 50;
-      }
-    }
-
-    // ── 10. Trigger holdoff → TRIGger:A:HOLDoff:TIMe boost ──
-    if (intent.subject === 'trigger_holdoff') {
-      if (headerLower.includes('holdoff') && headerLower.includes('time')) {
-        score += 60;
-      } else if (headerLower.includes('holdoff')) {
-        score += 30;
-      }
-    }
-
-    // ── 11. Save setup → SAVe:SETUp boost ──
-    if (intent.subject === 'save_setup' || intent.subject === 'save_setup_current') {
-      if (headerLower === 'save:setup' || headerLower === 'save:setup:includerefs') {
-        score += 80;
-      } else if (headerLower.startsWith('save:')) {
-        score += 20;
-      }
-      // Penalize SAVEON (act on event) commands — they are NOT the same as SAVe:SETUp
-      if (headerLower.startsWith('saveon:')) {
-        score -= 60;
-      }
-      // Penalize measurement commands for save intent
-      if (headerLower.startsWith('measurement:') || headerLower.includes('addmeas')) {
-        score -= 40;
-      }
-    }
-
-    // ── 12. Single-shot / continuous → ACQuire:STOPAfter boost ──
-    if (intent.subject === 'single' || intent.subject === 'continuous_run') {
-      if (headerLower.includes('acquire:stopafter') || headerLower === 'acquire:stopafter') {
-        score += 60;
-      }
-      // Penalize ACQuire:MODE and ACQuire:STATE when intent is single/continuous
-      if (intent.subject === 'single' || intent.subject === 'continuous_run') {
-        if (headerLower === 'acquire:mode' || headerLower === 'acquire:state') {
-          score -= 20;
-        }
-      }
-    }
-
-    // ── 13. FastFrame timestamp → HORizontal:FASTframe:TIMEStamp boost ──
-    if ((intent.subject === 'fastframe' || intent.subject === 'fastframe_timestamps') && /timestamps?/i.test(queryLower)) {
-      if (headerLower.includes('fastframe') && headerLower.includes('timestamp')) {
-        score += 90;
-      }
-    }
-
-    // ── 14. Waveform data source → DATa:SOUrce boost ──
-    if (intent.subject === 'waveform_data_source' || intent.subject === 'waveform_transfer') {
-      if (headerLower === 'data:source' || headerLower.startsWith('data:sour')) {
-        score += 60;
-      }
-    }
-
-    // ── 15. CAN error frame SEARCH boost ──
-    if (intent.subject === 'can_error_frame') {
-      if (headerLower.startsWith('search:') && headerLower.includes('can') && headerLower.includes('frame')) {
-        score += 60;
-      } else if (headerLower.startsWith('search:') && headerLower.includes('can')) {
-        score += 30;
-      } else if (headerLower.startsWith('trigger:') && headerLower.includes('can') && headerLower.includes('frame')) {
-        score -= 20;
-      }
-    }
-
-    // ── 16. I2C threshold → BUS:B<x>:I2C:CLOCk/DATa:THReshold boost ──
-    if (intent.subject === 'i2c') {
-      if (/clock.*threshold|threshold.*clock/i.test(queryLower)) {
-        if (headerLower.includes('i2c') && headerLower.includes('clock') && headerLower.includes('threshold')) {
-          score += 60;
-        }
-      }
-      if (/data.*threshold|threshold.*data/i.test(queryLower)) {
-        if (headerLower.includes('i2c') && headerLower.includes('data') && headerLower.includes('threshold')) {
-          score += 60;
-        }
-      }
-    }
-
-    // ── 17. AUXout:SOUrce boost ──
-    if (/\baux\s*out\b|\bauxout\b/i.test(queryLower)) {
-      if (headerLower.startsWith('auxout:')) {
-        score += 80;
-      } else {
-        score -= 30;
-      }
-    }
-
-    // ── 18. Spectrum view center frequency → CH<x>:SV:CENTERFrequency boost ──
-    if (/spectrum.*center.*freq|center.*freq.*spectrum/i.test(queryLower)) {
-      if (headerLower.includes('sv:') && headerLower.includes('center')) {
-        score += 80;
-      } else if (headerLower.includes('measurement') || headerLower.includes('addmeas')) {
-        score -= 40;
-      }
-    }
-
-    // ── 20. trigger_force → TRIGger:FORCe boost ──
-    if (intent.subject === 'trigger_force') {
-      if (headerLower.includes('trigger') && headerLower.includes('force')) {
-        score += 80;
-      } else if (headerLower.includes('trigger')) {
-        score += 10;
-      } else {
-        score -= 30;
-      }
-    }
-
-    // ── 21. trigger_frequency → TRIGger:FREQuency? boost ──
-    if (intent.subject === 'trigger_frequency') {
-      if (headerLower.includes('trigger') && headerLower.includes('freq')) {
-        score += 80;
-      } else if (headerLower.startsWith('measurement:') || headerLower.includes('addmeas')) {
-        score -= 40;
-      }
-    }
-
-    // ── 22. numavg → ACQuire:NUMAVg boost ──
-    if (intent.subject === 'numavg') {
-      if (headerLower.includes('numavg')) {
-        score += 80;
-      } else if (headerLower.includes('acquire:mode')) {
-        score += 30;
-      } else if (headerLower.startsWith('measurement:') || headerLower.includes('addmeas')) {
-        score -= 50;
-      }
-    }
-
-    // ── 23. acq_mode → ACQuire:MODe boost ──
-    if (intent.subject === 'acq_mode') {
-      if (headerLower === 'acquire:mode') {
-        score += 80;
-      } else if (headerLower.includes('numavg')) {
-        score += 30;
-      } else if (headerLower.startsWith('measurement:') || headerLower.includes('addmeas')) {
-        score -= 40;
-      }
-    }
-
-    // ── 24. meas_delete → MEASUrement:DELETE boost ──
-    if (intent.subject === 'meas_delete') {
-      if (headerLower.includes('measurement') && headerLower.includes('delete')) {
-        score += 80;
-      } else if (headerLower.startsWith('measurement:') && !headerLower.includes('delete')) {
-        score -= 20;
-      }
-    }
-
-    // ── 25. meas_statistics → MEASUrement:STATIstics:ENABle boost ──
-    if (intent.subject === 'meas_statistics') {
-      if (headerLower.includes('statistics') && headerLower.includes('enable')) {
-        score += 80;
-      } else if (headerLower.includes('statistics')) {
-        score += 40;
-      }
-    }
-
-    // ── 26. delay_measurement → MEASUrement:MEAS<x>:DELay boost ──
-    if (intent.subject === 'delay_measurement') {
-      if (headerLower.includes('measurement') && headerLower.includes('delay')) {
-        score += 80;
-      } else if (headerLower.startsWith('trigger:') && headerLower.includes('edge')) {
-        score -= 40;
-      }
-    }
-
-    // ── 27. channel_scale → CH<x>:SCAle boost (not DISplay:WAVEView) ──
-    if (intent.subject === 'channel_scale') {
-      if (/^ch(<x>|\d+):scale$/.test(headerLower)) {
-        score += 80;
-      } else if (headerLower.includes('display:waveview') && headerLower.includes('scale')) {
-        score -= 40;
-      }
-    }
-
-    // ── 28. zoom → ZOOm:STATE boost ──
-    if (intent.subject === 'zoom') {
-      if (headerLower === 'zoom:state' || headerLower.startsWith('zoom:state')) {
-        score += 80;
-      } else if (headerLower.includes('display:waveview') && headerLower.includes('zoom')) {
-        score -= 20;
-      }
-    }
-
-    // ── 29. view_style → DISplay:VIEWStyle boost ──
-    if (intent.subject === 'view_style') {
-      if (headerLower.includes('display:viewstyle') || headerLower.includes('display:view')) {
-        score += 80;
-      } else if (headerLower.includes('display:waveview') && headerLower.includes('style')) {
-        score -= 20;
-      }
-    }
-
-    // ── 30. display_style → DISplay:WAVEView:STYle:DOTs boost ──
-    if (intent.subject === 'display_style') {
-      if (headerLower.includes('dots') || (headerLower.includes('waveview') && headerLower.includes('style'))) {
-        score += 80;
-      } else if (headerLower.includes('connect') && headerLower.includes('state')) {
-        score -= 40;
-      }
-    }
-
-    // ── 31. clock_recovery → MEASUrement:CLOCKRecovery boost ──
-    if (intent.subject === 'clock_recovery') {
-      if (headerLower.includes('clockrecovery') || headerLower.includes('clock') && headerLower.includes('recovery')) {
-        score += 80;
-      }
-    }
-
-    // ── 32. rs232_stop → BUS:B<x>:RS232C:STOPbits boost ──
-    if (intent.subject === 'rs232_stop') {
-      if (headerLower.includes('rs232') && headerLower.includes('stop')) {
-        score += 80;
-      } else if (headerLower.includes('rs232') && headerLower.includes('databits')) {
-        score -= 20;
-      }
-    }
-
-    // ── 32b. serial/UART parity → BUS:B<x>:RS232C:PARity boost ──
-    if (intent.subject === 'serial' && /parity/i.test(queryLower)) {
-      if (headerLower.includes('rs232') && headerLower.includes('parity')) {
-        score += 80;
-      } else if (headerLower === 'bus:b<x>:type' || headerLower === 'bus:b:type') {
-        score -= 40;
-      }
-    }
-
-    // ── 33. search_i2c_addr → SEARCH:SEARCH<x>:TRIGger:A:BUS:I2C:ADDRess:TYPE boost ──
-    if (intent.subject === 'search_i2c_addr') {
-      if (headerLower.includes('search') && headerLower.includes('i2c') && headerLower.includes('address')) {
-        score += 80;
-      } else if (headerLower.startsWith('trigger:') && headerLower.includes('i2c')) {
-        score -= 20;
-      }
-    }
-
-    // ── 34. search_add → SEARch:ADDNew boost ──
-    if (intent.subject === 'search_add' || intent.subject === 'add_search') {
-      if (headerLower === 'search:addnew' || headerLower.includes('search:addnew')) {
-        score += 80;
-      } else if (headerLower.includes('searchtable') || headerLower.includes('search:search')) {
-        score -= 20;
-      }
-    }
-
-    // ── 35. meastable_add → MEASTABle:ADDNew boost ──
-    if (intent.subject === 'meastable_add') {
-      if (headerLower.includes('meastable') || headerLower.includes('customtable')) {
-        score += 80;
-      } else if (headerLower.startsWith('measurement:results') || headerLower.includes('measurement:meas')) {
-        score -= 30;
-      }
-    }
-
-    // ── 36. save_session → SAVe:SESsion boost ──
-    if (intent.subject === 'save_session') {
-      if (headerLower === 'save:session' || headerLower.includes('save:session')) {
-        score += 80;
-      } else if (headerLower.includes('saveon:')) {
-        score -= 40;
-      }
-    }
-
-    // ── 37. save_waveform_format → SAVe:WAVEform:FILEFormat boost ──
-    if (intent.subject === 'save_waveform_format') {
-      if (headerLower.includes('save:waveform:fileformat')) {
-        score += 80;
-      } else if (headerLower.includes('saveon:')) {
-        score -= 40;
-      }
-    }
-
-    // ── 38. wlist_size → WLISt:SIZE? boost ──
-    if (intent.subject === 'wlist_size') {
-      if (headerLower.includes('wlist:size')) {
-        score += 80;
-      } else if (headerLower.includes('wlist:list')) {
-        score += 30;
-      } else if (headerLower.startsWith('save:')) {
-        score -= 30;
-      }
-    }
-
-    // ── 39. awg_burst → SOURce1:BURSt:STATe boost ──
-    if (intent.subject === 'awg_burst') {
-      if (headerLower.includes('burst:state') || headerLower.includes('burst:ncycles')) {
-        score += 80;
-      } else if (headerLower.includes('clock:output:state')) {
-        score -= 50;
-      }
-    }
-
-    // ── 40. awg_shape → SOURce1:FUNCtion:SHAPe boost ──
-    if (intent.subject === 'awg_shape') {
-      if (headerLower.includes('function:shape') || (headerLower.includes('source') && headerLower.includes('shape'))) {
-        score += 80;
-      }
-    }
-
-    // ── 41. awg_frequency → SOURce:FREQuency boost ──
-    if (intent.subject === 'awg_frequency') {
-      if (headerLower.includes('source') && headerLower.includes('frequency')) {
-        score += 80;
-      } else if (headerLower.includes('clock:output')) {
-        score -= 40;
-      }
-    }
-
-    // ── 42. awg_seq_trigger → TRIGger:SEQuence:SLOPe boost ──
-    if (intent.subject === 'awg_seq_trigger') {
-      if (headerLower.includes('trigger:sequence') || (headerLower.includes('trigger') && headerLower.includes('sequence'))) {
-        score += 80;
-      } else if (headerLower.includes('trigger:a:edge')) {
-        score -= 40;
-      }
-    }
-
-    // ── 43. oscillator → ROSCillator:SOURce boost ──
-    if (intent.subject === 'oscillator') {
-      if (headerLower.includes('roscillator') || headerLower.includes('rosc')) {
-        score += 80;
-      } else if (headerLower.startsWith('afg:')) {
-        score -= 20;
-      }
-    }
-
-    // ── 44. probe_set → CH<x>:PRObe:SET boost ──
-    if (intent.subject === 'probe_set') {
-      if (headerLower.includes('probe:set')) {
-        score += 80;
-      } else if (headerLower.includes('probe:attenuation')) {
-        score += 30;
-      }
-    }
-
-    // ── 45. math_source → MATH:MATH<x>:SOUrce1 boost ──
-    if (intent.subject === 'math_source') {
-      if (headerLower.includes('math') && headerLower.includes('source')) {
-        score += 80;
-      } else if (headerLower.startsWith('data:source')) {
-        score -= 30;
-      }
-    }
-
-    // ── 46. math_type → MATH:MATH<x>:TYPe boost ──
-    if (intent.subject === 'math_type') {
-      if (headerLower.includes('math') && headerLower.includes('type')) {
-        score += 80;
-      }
-    }
-
-    // ── 47. verbose_header → VERBose/HEADer boost ──
-    if (intent.subject === 'verbose_header') {
-      if (headerLower === 'verbose' || headerLower === 'header') {
-        score += 80;
-      }
-    }
-
-    // ── 48. horizontal_position → HORizontal:POSition boost ──
-    if (intent.subject === 'horizontal_position') {
-      if (headerLower === 'horizontal:position' || headerLower.includes('horizontal:position')) {
-        score += 80;
-      } else if (headerLower.includes('horizontal:delay')) {
-        score += 40;
-      }
-    }
-
-    // ── 49. recall_setup → RECAll:SETUp boost ──
-    if (intent.subject === 'recall_setup') {
-      if (headerLower.includes('recall:setup')) {
-        score += 80;
-      } else if (headerLower.includes('save:setup')) {
-        score -= 20;
-      }
-    }
-
-    // ── 50. idn subject → *IDN? boost ──
-    if (intent.subject === 'idn_query' || intent.subject === 'idn') {
-      if (headerLower === '*idn?' || headerLower === '*idn') {
-        score += 80;
-      } else if (headerLower.startsWith('bus:') || headerLower.startsWith('trigger:')) {
-        score -= 40;
-      }
-    }
-
-    // ── 51. save_session → SAVe:SESsion boost ──
-    if (intent.subject === 'save_session') {
-      if (headerLower.includes('save:session')) {
-        score += 80;
-      } else if (headerLower.startsWith('saveon:')) {
-        score -= 50;
-      }
-    }
-
-    // ── 19. ALLEv? boost for error queue subject ──
-    if (intent.subject === 'allev' || intent.subject === 'error_queue' ||
-        /error\s*queue|check.*error/i.test(queryLower)) {
-      if (headerLower === 'allev?' || headerLower === 'allev') {
-        score += 80;
-      }
-    }
-
     return { cmd, score };
   });
 
   scored.sort((a, b) => b.score - a.score);
   return scored.map(s => s.cmd);
 }
-
 
 export async function searchScpi(input: SearchScpiInput): Promise<ToolResult<unknown[]>> {
   const q = (input.query || '').trim();
@@ -1119,132 +667,12 @@ export async function searchScpi(input: SearchScpiInput): Promise<ToolResult<unk
     // UART/RS232
     { pattern: /\buart\b.*(source|channel)\b/i, expand: 'BUS RS232C RS232 SOUrce source uart' },
     { pattern: /\buart\b.*(data\s*bits|databits)\b/i, expand: 'BUS RS232C DATABits data bits uart' },
-    { pattern: /\buart\b.*\bparity\b|\brs.?232\b.*\bparity\b|\bparity\b.*\buart\b|\bparity\b.*\brs.?232\b/i, expand: 'BUS RS232C PARity parity uart serial' },
     // Search CAN error frames
     { pattern: /\bsearch\b.*(can|bus).*(error|frame)\b/i, expand: 'SEARCH TRIGger BUS CAN FRAMEtype error frame search' },
     // Measurement table / results table
     { pattern: /\b(results?\s*table|measurement\s*table|meas.*table)\b/i, expand: 'MEASTABle CUSTOMTABle ADDNew results table' },
     // Waveform data source
     { pattern: /\bwaveform\b.*(data\s*source|source\s*channel|data.*channel)\b/i, expand: 'DATa SOUrce data source waveform' },
-    // Single shot / continuous run → ACQuire:STOPAfter
-    { pattern: /\bsingle\s*shot\b/i, expand: 'ACQuire STOPAfter SEQuence single shot' },
-    { pattern: /\bcontinuous\s*run|run\s*continuous|back\s*to\s*continuous/i, expand: 'ACQuire STOPAfter RUNSTop continuous run' },
-    // Spectrum view center frequency
-    { pattern: /\bspectrum.*center.*freq|center.*freq.*spectrum/i, expand: 'SV CENTERFrequency spectrum view center frequency CH' },
-    // FastFrame timestamps
-    { pattern: /\bfastframe.*timestamp|timestamp.*fastframe/i, expand: 'HORizontal FASTframe TIMEStamp timestamp frames' },
-    // Trigger holdoff time
-    { pattern: /\btrigger.*holdoff.*time|holdoff.*time/i, expand: 'TRIGger HOLDoff TIMe holdoff time' },
-    // Save setup file
-    { pattern: /\bsave\s*setup\s*(file|on)|\bsave.*setup\b/i, expand: 'SAVe SETUp setup file save' },
-    // I2C clock threshold
-    { pattern: /\bi2c.*clock.*threshold|clock.*threshold.*i2c/i, expand: 'BUS I2C CLOCk THReshold clock threshold' },
-    // I2C data threshold
-    { pattern: /\bi2c.*data.*threshold|data.*threshold.*i2c/i, expand: 'BUS I2C DATa THReshold data threshold' },
-    // ── New SCPI vocabulary expansions for benchmark fixes ──
-    // shift waveform left/right → HORizontal:POSition
-    { pattern: /\b(shift|pan|move)\b.*(waveform|trace).*(left|right)\b/i, expand: 'HORizontal POSition horizontal position shift' },
-    { pattern: /\bwaveform\b.*(left|right|shift)\b/i, expand: 'HORizontal POSition position horizontal' },
-    // enable fastframe acquisition mode
-    { pattern: /\b(fast\s*frame|fastframe)\b.*\b(acquisition|mode|enable)\b/i, expand: 'HORizontal FASTframe STATe fast frame enable' },
-    // number of averages / how many waveforms to average
-    { pattern: /\b(how\s*many\s*waveforms?\s*(to\s*)?average|number\s*of\s*averages?|waveforms?\s*to\s*average)\b/i, expand: 'ACQuire NUMAVg numavg average mode' },
-    // trigger frequency (read back)
-    { pattern: /\btrigger\b.*\b(frequency|freq)\b/i, expand: 'TRIGger FREQuency trigger frequency' },
-    { pattern: /\bfrequency\b.*\btrigger\b/i, expand: 'TRIGger FREQuency trigger frequency' },
-    // force trigger immediately
-    { pattern: /\b(force\s*trigger|trigger\s*force|force\s*trig|trigger\s*immediately)\b/i, expand: 'TRIGger FORCe force trigger immediate' },
-    // probe attenuation setting
-    { pattern: /\bprobe\b.*\b(attenuation|setting)\b.*\b(channel|ch\s*\d)\b/i, expand: 'CH probe SET attenuation setting' },
-    // display style: dots vs vectors
-    { pattern: /\b(dots?|vectors?)\b.*\b(waveform|display)\b/i, expand: 'DISplay WAVEView STYle DOTs vectors connected' },
-    { pattern: /\bwaveform\b.*\b(dots?|vectors?)\b/i, expand: 'DISplay WAVEView STYle DOTs vectors connected' },
-    // zoom state
-    { pattern: /\benable\s*zoom\b|\bzoom\s*on\b/i, expand: 'ZOOm STATE zoom enable state' },
-    // view style stacked/overlay
-    { pattern: /\b(stacked|overlay)\b.*\bview\b/i, expand: 'DISplay VIEWStyle stacked overlay view style' },
-    { pattern: /\bview\s*style\b/i, expand: 'DISplay VIEWStyle view style stacked overlay' },
-    // math source channel
-    { pattern: /\bmath\b.*\b(source\s*channel|source\s*\d|input\s*channel)\b/i, expand: 'MATH SOUrce source math channel input' },
-    // clock recovery method
-    { pattern: /\bclock\s*recovery\b/i, expand: 'MEASUrement CLOCKRecovery METHod clock recovery' },
-    // delay between two waveform edges
-    { pattern: /\bdelay\b.*\b(between|two|waveform|edges?)\b/i, expand: 'MEASUrement MEAS DELay delay measurement between edges' },
-    // RS232 stop bits
-    { pattern: /\bstop\s*bits?\b/i, expand: 'BUS RS232C STOPbits stop bits serial' },
-    // I2C address type search
-    { pattern: /\bi2c\b.*\baddress\b.*\b(type|search)\b/i, expand: 'SEARCH I2C ADDRess TYPE i2c address type search' },
-    // add new search mark
-    { pattern: /\b(add|new)\b.*\bsearch\s*mark\b/i, expand: 'SEARch ADDNew search add new mark' },
-    // measurement results table
-    { pattern: /\b(measurement\s*results\s*table|add.*measurement.*table)\b/i, expand: 'MEASTABle ADDNew measurement table results add' },
-    // save waveform file format
-    { pattern: /\bfile\s*format\b.*\b(saving|waveform|disk)\b/i, expand: 'SAVe WAVEform FILEFormat file format save' },
-    // AWG waveform shape
-    { pattern: /\bawg\b.*\b(shape|waveform\s*shape|function\s*shape)\b/i, expand: 'SOURce FUNCtion SHAPe awg shape function' },
-    { pattern: /\bwaveform\s*shape\b.*\b(awg|source\s*output)\b/i, expand: 'SOURce FUNCtion SHAPe shape awg' },
-    // AWG output frequency
-    { pattern: /\b(output\s*frequency|configure.*frequency)\b.*\b(awg|source)\b/i, expand: 'SOURce FREQuency frequency awg output' },
-    { pattern: /\bawg\b.*\boutput\s*frequency\b/i, expand: 'SOURce FREQuency frequency awg output' },
-    // waveform list size
-    { pattern: /\b(waveform\s*list|wlist)\b.*\b(size|count|how\s*many)\b/i, expand: 'WLISt SIZE waveform list size count' },
-    { pattern: /\bhow\s*many\s*waveforms?\b.*\b(waveform\s*list|wlist)\b/i, expand: 'WLISt SIZE waveform list count size' },
-    // AWG burst mode
-    { pattern: /\bburst\s*mode\b.*\b(awg|output|source)\b/i, expand: 'SOURce BURSt STATe burst mode awg output' },
-    { pattern: /\benable\s*burst\b/i, expand: 'SOURce BURSt STATe burst mode enable output' },
-    // AWG trigger sequence slope
-    { pattern: /\btrigger\s*slope\b.*\b(awg|sequence)\b/i, expand: 'TRIGger SEQuence SLOPe slope sequence awg' },
-    { pattern: /\b(awg|sequence)\b.*\btrigger\s*slope\b/i, expand: 'TRIGger SEQuence SLOPe slope sequence awg' },
-    // AFG clock reference external
-    { pattern: /\b(afg|arbitrary\s*function)\b.*\b(clock|ref|reference)\b.*\bexternal\b/i, expand: 'ROSCillator SOURce external clock reference afg' },
-    { pattern: /\bswitch.*afg.*clock.*external\b/i, expand: 'ROSCillator SOURce external clock reference' },
-    // identify instrument model serial
-    { pattern: /\b(identify\s*the\s*instrument|instrument\s*model|model\s*and\s*serial)\b/i, expand: '*IDN identification query model serial manufacturer' },
-    // verbose/long-form SCPI headers
-    { pattern: /\b(verbose|long.form\s*header|scpi\s*header|verbose.*header)\b/i, expand: 'VERBose HEADer header verbose long form' },
-    // remove/delete measurement
-    { pattern: /\b(remove|delete)\b.*\b(measurement|meas)\b(?!.*\b(table|results)\b)/i, expand: 'MEASUrement DELETE delete remove measurement' },
-    // measurement statistics enable
-    { pattern: /\bmeasurement\s*statistics\b/i, expand: 'MEASUrement STATIstics ENABle statistics enable measurement' },
-    { pattern: /\benable\s*measurement\s*statistics\b/i, expand: 'MEASUrement STATIstics ENABle enable statistics' },
-    // save oscilloscope session
-    { pattern: /\bsave\b.*\b(session|all\s*settings.*waveform|complete\s*state)\b/i, expand: 'SAVe SESsion session save complete settings' },
-    // spectrum view frequency span
-    { pattern: /\bfrequency\s*span\b.*\bspectrum\b/i, expand: 'CH SV SPAN spectrum view frequency span' },
-    { pattern: /\bspectrum\b.*\b(frequency\s*span|span)\b/i, expand: 'CH SV SPAN frequency span spectrum' },
-    // RBW mode auto/manual
-    { pattern: /\b(rbw\s*mode|resolution\s*bandwidth\s*mode)\b/i, expand: 'CH SV RBWMode RBW mode auto manual spectrum' },
-    // RSA/SignalVu factory preset
-    { pattern: /\b(rsa|signalvu)\b.*\b(factory|preset|default)\b/i, expand: 'SYSTem PRESet preset factory default rsa' },
-    // recall/load setup file
-    { pattern: /\b(load|restore)\b.*\b(setup|instrument\s*setup|saved.*setup)\b/i, expand: 'RECAll SETUp recall setup load restore' },
-    // ── Critical SCPI vocabulary aliases (from TekControl SCPI_ALIASES analysis) ──
-    // "impedance" → "termination" (CH<x>:TERmination, not "impedance")
-    { pattern: /\bimpedance\b(?!.*\bafg\b)/i, expand: 'TERMinator TERmination termination 50 ohm impedance' },
-    { pattern: /\b50\s*ohm\b(?!.*\bafg\b)/i, expand: 'TERMinator TERmination termination 50' },
-    // "sine" / "sine wave" → "sinusoid" (SINusoid is the SCPI enum value)
-    { pattern: /\bsine\s*wave\b|\bsine\b(?!.*\b(square|triangle|pulse|ramp))/i, expand: 'SINusoid sinusoid FUNCtion shape waveform' },
-    // "rise time" / "fall time" → measurement SCPI names
-    { pattern: /\brise\s*time\b/i, expand: 'RISe rise risingslew measurement addmeas' },
-    { pattern: /\bfall\s*time\b/i, expand: 'FALL fall fallingslew measurement addmeas' },
-    // "persistence" → display persistence commands
-    { pattern: /\bpersistence\b/i, expand: 'PERSistence display clear reset' },
-    // "factory reset" → *RST / FACTory
-    { pattern: /\bfactory\s*reset\b/i, expand: '*RST FACtory preset reset instrument' },
-    // "deskew" → channel deskew timing adjustment
-    { pattern: /\bdeskew\b/i, expand: 'DESKew skew jitter channel timing' },
-    // "cursor" → cursor measurement commands
-    { pattern: /\bcursor\b/i, expand: 'CURsor cursor measurement position' },
-    // "oscillator" / "reference clock" → ROSCillator
-    { pattern: /\b(oscillator|reference\s*clock|ref\s*clock)\b(?!.*\bafg\b)/i, expand: 'ROSCillator ROSc reference clock external internal' },
-    // "bandwidth" → BW abbreviation variants
-    { pattern: /\bbandwidth\b/i, expand: 'BANDwidth BANDw BW bandwidth' },
-    // "eye diagram" → specific measurement types
-    { pattern: /\beye\s*(diagram|pattern|measurement)\b/i, expand: 'MEASUrement MEAS TYPe EYEDiagram eye diagram addmeas' },
-    // "time interval error" / "TIE" → measurement type
-    { pattern: /\b(tie|time\s*interval\s*error)\b/i, expand: 'MEASUrement MEAS TYPe TIE measurement' },
-    // "results table" additions
-    { pattern: /\bcustom\s*table\b/i, expand: 'CUSTOMTABle ADDNew table custom results' },
   ];
   let expandedQuery = q;
   for (const { pattern, expand } of QUERY_EXPANSIONS) {
@@ -1293,22 +721,13 @@ export async function searchScpi(input: SearchScpiInput): Promise<ToolResult<unk
       'VISual:AREA<x>:HITType', 'VISual:AREA<x>:HEIGht', 'VISual:AREA<x>:VERTICES',
       'VISual:AREA<x>:RESET', 'VISual:AREA<x>:ROTAtion',
     ],
-    // ── N4-05: FFT window function ──
-    fft: [
-      'SV:WINDOW', 'CH<x>:SV:STATE', 'SV:SPAN', 'SV:RBW',
-    ],
-
     spectrum_view: [
-      'CH<x>:SV:SPAN', 'SV:SPAN', 'CH<x>:SV:CENTERFrequency', 'SV:CENTERFrequency',
-      'CH<x>:SV:STATE', 'SV:RBW', 'SV:WINDOW', 'SV:SPANRBWRatio',
-    ],
-    spectrum_rbw_mode: [
-      'CH<x>:SV:RBWMode', 'SV:RBWMode', 'CH<x>:SV:RBW', 'SV:RBW', 'SV:SPANRBWRatio',
+      'SV:CENTERFrequency', 'SV:SPAN', 'SV:RBW', 'SV:WINDOW',
+      'SV:SPANRBWRatio', 'CH<x>:SV:STATE', 'CH<x>:SV:CENTERFrequency',
     ],
     eye_diagram: [
-      'MEASUrement:MEAS<x>:TYPe',   // prefix-matches 'MEASUrement:MEAS' → PASS
-      'MEASUrement:ADDMEAS', 'MEASUrement:ENABLEPjitter',
       'MEASUrement:MEAS<x>:RESUlts:CURRentacq:MEAN?',
+      'MEASUrement:ADDMEAS', 'MEASUrement:ENABLEPjitter',
     ],
     power_harmonics: [
       'POWer:POWer<x>:TYPe', 'POWer:ADDNew',
@@ -1322,7 +741,6 @@ export async function searchScpi(input: SearchScpiInput): Promise<ToolResult<unk
     afg: [
       'AFG:FUNCtion', 'AFG:FREQuency', 'AFG:AMPLitude', 'AFG:OFFSet',
       'AFG:OUTPut:STATE', 'AFG:PERIod', 'AFG:SYMMetry', 'AFG:PHASe',
-      'AFG:OUTPut:LOAd:IMPEDance',
     ],
     dvm: [
       'DVM:MODe', 'DVM:AUTORange', 'DVM:SOUrce', 'DVM:MEASUrement:FREQuency?',
@@ -1383,13 +801,8 @@ export async function searchScpi(input: SearchScpiInput): Promise<ToolResult<unk
     save_waveform: [
       'SAVe:WAVEform', 'SAVe:WAVEform:FILEFormat',
     ],
-    // ── N1-18: trigger type (edge vs pulse vs runt etc.) ──
-    trigger_type: [
-      'TRIGger:A:TYPe', 'TRIGger:{A|B}:TYPe',
-    ],
-
     trigger_level: [
-      'TRIGger:A:LEVel', 'TRIGger:A:LEVel:CH<x>', 'TRIGger:{A|B}:LEVel:CH<x>',
+      'TRIGger:{A|B}:LEVel:CH<x>', 'TRIGger:A:LEVel:CH<x>',
     ],
     screenshot: [
       'SAVe:IMAGe', 'SAVe:IMAGe:FILEFormat',
@@ -1407,10 +820,10 @@ export async function searchScpi(input: SearchScpiInput): Promise<ToolResult<unk
       'TRIGger:B:EDGE:SOUrce', 'TRIGger:B:EDGE:SLOpe',
     ],
     channel_on: [
-      'DISplay:GLObal:CH<x>:STATE', 'DISplay:WAVEView<x>:CH<x>:STATE', 'CH<x>:STATE',
+      'DISplay:GLObal:CH<x>:STATE', 'CH<x>:STATE',
     ],
     channel_off: [
-      'DISplay:GLObal:CH<x>:STATE', 'DISplay:WAVEView<x>:CH<x>:STATE', 'CH<x>:STATE',
+      'DISplay:GLObal:CH<x>:STATE', 'CH<x>:STATE',
     ],
     digital_threshold: [
       'CH<x>:DIGItal:THReshold', 'CH<x>:DIGItal:MAGnivu:POSition',
@@ -1432,230 +845,10 @@ export async function searchScpi(input: SearchScpiInput): Promise<ToolResult<unk
     horizontal_scale: [
       'HORizontal:SCAle', 'HORizontal:POSition', 'HORizontal:MODe',
     ],
-    fastframe_timestamps: [
-      'HORizontal:FASTframe:TIMEStamp:ALL?', 'HORizontal:FASTframe:TIMEStamp:DELTa?',
-      'HORizontal:FASTframe:TIMEStamp:SELECTED?', 'HORizontal:FASTframe:TIMEStamp:REFerence?',
-      'HORizontal:FASTframe:STATE', 'HORizontal:FASTframe:COUNt',
-    ],
     fastframe: [
       'HORizontal:FASTframe:STATE', 'HORizontal:FASTframe:COUNt',
       'HORizontal:FASTframe:MAXFRames', 'HORizontal:FASTframe:SELECTED',
-      'HORizontal:FASTframe:TIMEStamp:ALL?', 'HORizontal:FASTframe:TIMEStamp:DELTa?',
-      'HORizontal:FASTframe:TIMEStamp:SELECTED?', 'HORizontal:FASTframe:TIMEStamp:REFerence?',
     ],
-    trigger_holdoff: [
-      'TRIGger:A:HOLDoff:TIMe', 'TRIGger:A:HOLDoff:BY',
-    ],
-    save_setup: [
-      'SAVe:SETUp', 'SAVe:SETUp:INCLUDEREFs',
-    ],
-    single: [
-      'ACQuire:STOPAfter',
-    ],
-    continuous_run: [
-      'ACQuire:STOPAfter',
-    ],
-    can_error_frame: [
-      'SEARCH:SEARCH<x>:TRIGger:A:BUS:CAN:ERRType',
-      'SEARCH:SEARCH<x>:TRIGger:A:BUS:CAN:CONDition',
-      'SEARCH:SEARCH<x>:TRIGger:A:BUS:CAN:FRAMEtype',
-    ],
-    waveform_data_source: [
-      'DATa:SOUrce',
-    ],
-    auxout: [
-      'AUXout:SOUrce',
-    ],
-
-    // ── N1-03: shift waveform left/right ──
-    horizontal_position: [
-      'HORizontal:POSition', 'HORizontal:DELay:TIMe', 'HORizontal:DELay:MODe',
-    ],
-
-    // ── fastacq (FASTAcq:STATE) — separate from fastframe ──
-    fastacq: [
-      'FASTAcq:STATE', 'ACQuire:FASTAcq:STATE', 'ACQuire:FASTAcq:PALEtte',
-    ],
-
-    // ── N1-07: acquisition mode ──
-    acq_mode: [
-      'ACQuire:MODe', 'ACQuire:NUMAVg', 'ACQuire:STATE',
-    ],
-
-    // ── N1-08 / N5-15: number of averages ──
-    numavg: [
-      'ACQuire:NUMAVg', 'ACQuire:MODe',
-    ],
-
-    // ── N1-12: force trigger ──
-    trigger_force: [
-      'TRIGger:FORCe', 'TRIGger:A:MODe',
-    ],
-
-    // ── N1-13: trigger frequency ──
-    trigger_frequency: [
-      'TRIGger:FREQuency', 'TRIGger:A:LEVel', 'TRIGger:A:EDGE:SOUrce',
-    ],
-
-    // ── N1-14: pulse width trigger width ──
-    pulse: [
-      'TRIGger:A:PULSEWidth:WIDth', 'TRIGger:A:PULSEWidth:POLarity',
-      'TRIGger:{A|B}:PULSEWidth:WIDth', 'TRIGger:A:PULSEWidth:WHEn',
-    ],
-
-    // ── N2-03: probe attenuation setting ──
-    probe_set: [
-      'CH<x>:PRObe:SET', 'CH<x>:PRObe:RESistance', 'CH<x>:PRObe:ATTenuation',
-    ],
-    probe_atten: [
-      'CH<x>:PRObe:ATTenuation', 'CH<x>:PRObe:SET', 'CH<x>:PRObe:RESistance',
-    ],
-
-    // ── N2-10: waveform display style dots/vectors ──
-    display_style: [
-      'DISplay:WAVEView:STYle:DOTs', 'DISplay:WAVEView<x>:CH<x>:DOTs',
-    ],
-
-    // ── N2-11: zoom state ──
-    zoom: [
-      'ZOOm:STATE', 'DISplay:WAVEView<x>:ZOOM:ZOOM<x>:STATe',
-      'ZOOm:ZOOM<x>:STATe',
-    ],
-
-    // ── N2-12: view style (stacked/overlay) ──
-    view_style: [
-      'DISplay:WAVEView<x>:VIEWStyle', 'DISplay:VIEWStyle', 'DISplay:GLObal:CH<x>:STATE',
-    ],
-
-    // ── N2-14: math operation type ──
-    math_type: [
-      'MATH:MATH<x>:TYPe', 'MATH:MATH<x>:DEFine', 'MATH:ADDNew',
-    ],
-
-    // ── N2-15: math source ──
-    math_source: [
-      'MATH:MATH<x>:SOUrce1', 'MATH:MATH<x>:SOUrce2', 'MATH:MATH<x>:TYPe',
-    ],
-
-    // ── N2-16: measurement statistics enable ──
-    meas_statistics: [
-      'MEASUrement:STATIstics:ENABle', 'MEASUrement:STATIstics:CYCLEMode',
-      'MEASUrement:MEAS<x>:DISPlaystat:ENABle',
-    ],
-
-    // ── N2-18: clock recovery ──
-    clock_recovery: [
-      'MEASUrement:CLOCKRecovery:METHod', 'MEASUrement:CLOCKRecovery:TYPE',
-    ],
-
-    // ── N2-19: delay measurement ──
-    delay_measurement: [
-      'MEASUrement:MEAS<x>:DELay', 'MEASUrement:ADDMEAS', 'MEASUrement:MEAS<x>:TYPe',
-    ],
-
-    // ── N3-04: RS232 stop bits ──
-    rs232_stop: [
-      'BUS:B<x>:RS232C:STOPbits', 'BUS:B<x>:RS232C:DATABits',
-    ],
-
-    // ── N3-10: search I2C address type ──
-    search_i2c_addr: [
-      'SEARCH:SEARCH<x>:TRIGger:A:BUS:I2C:ADDRess:TYPE',
-      'SEARCH:SEARCH<x>:TRIGger:A:BUS:I2C:ADDRess:VALue',
-      'SEARCH:SEARCH<x>:TRIGger:A:BUS:I2C:CONDition',
-    ],
-
-    // ── N3-11: add new search ──
-    search_add: [
-      'SEARch:ADDNew', 'SEARCH:SEARCH<x>:TRIGger:A:TYPe',
-    ],
-
-    // ── N3-15: measurement results table ──
-    meastable_add: [
-      'MEASTABle:ADDNew', 'MEASTABle:DELete', 'CUSTOMTABle:ADDNew',
-    ],
-
-    // ── N3-18: save session ──
-    save_session: [
-      'SAVe:SESsion', 'SAVe:SETUp', 'RECAll:SESsion',
-    ],
-
-    // ── N3-19: save waveform file format ──
-    save_waveform_format: [
-      'SAVe:WAVEform:FILEFormat', 'SAVe:WAVEform', 'SAVe:WAVEform:FILEPath',
-    ],
-
-    // ── N4-11: AWG output state ──
-    awg_output: [
-      'OUTPut{ch}:STATe', 'OUTPut1:STATe', 'OUTPut:STATe',
-    ],
-
-    // ── N4-12: AWG waveform shape ──
-    awg_shape: [
-      'SOURce{ch}:FUNCtion:SHAPe', 'SOURce1:FUNCtion:SHAPe', 'SOURce:FUNCtion:SHAPe',
-    ],
-
-    // ── N4-13: AWG output frequency ──
-    awg_frequency: [
-      'SOURce{ch}:FREQuency', 'SOURce:FREQuency', 'SOURce1:FREQuency',
-      'CLOCk:ECLock:FREQuency',
-    ],
-
-    // ── N4-14: waveform list size ──
-    wlist_size: [
-      'WLISt:SIZE?', 'WLISt:SIZE', 'WLISt:LIST?', 'WLISt:WAVeform:NEW',
-    ],
-
-    // ── N4-16: AWG burst mode ──
-    awg_burst: [
-      'SOURce{ch}:BURSt:STATe', 'SOURce1:BURSt:STATe', 'SOURce:BURSt:STATe',
-      'SOURce{ch}:BURSt:NCYCles',
-    ],
-
-    // ── N4-17: AWG sequence trigger slope ──
-    awg_seq_trigger: [
-      'TRIGger:SEQuence:SLOPe', 'TRIGger:SEQuence:SOURce', 'TRIGger:SEQuence:IMPedance',
-      'TRIGger:SLOPe',
-    ],
-
-    // ── N5-01: AFG/oscillator clock reference ──
-    oscillator: [
-      'ROSCillator:SOURce', 'ROSCillator:FREQuency',
-    ],
-
-    // ── N5-05: identify instrument (*IDN?) ──
-    idn_query: [
-      '*IDN?', 'IDN', 'HEADer',
-    ],
-    idn: [
-      '*IDN?',
-    ],
-
-    // ── N5-11: vertical scale (CH<x>:SCAle) ──
-    channel_scale: [
-      'CH<x>:SCAle', 'CH<x>:OFFSet', 'CH<x>:POSition',
-    ],
-
-    // ── N5-17: delete/remove measurement ──
-    meas_delete: [
-      'MEASUrement:DELETE', 'MEASUrement:DELete', 'MEASUrement:MEAS<x>:DELete',
-    ],
-
-    // ── N5-20: save current setup ──
-    save_setup_current: [
-      'SAVe:SETUp', 'SAVe:SETUp:INCLUDEREFs',
-    ],
-
-    // ── N1-20: VERBose / long-form SCPI headers ──
-    verbose_header: [
-      'VERBose', 'HEADer',
-    ],
-
-    // ── N4-09: RSA factory default / preset ──
-    rsa_preset: [
-      'SYSTem:PRESet', '*RST',
-    ],
-
   };
 
   const intent = classifyIntent(q);
@@ -1702,47 +895,14 @@ export async function searchScpi(input: SearchScpiInput): Promise<ToolResult<unk
     reRanked = [...top, ...rest];
   }
 
-  // Pin exact header matches to the top — BUT only for non-measurement intents
-  // pin measurement catalog direct entries (ADDMEAS, MeasSource). For non-measurement
-  // intents (trigger, afg, acquisition, save, etc.), measurement catalog false positives
-  // (e.g. "hold" → Hold Time, "setup" → Setup Time) would override the injection pinning.
-  const isMeasurementIntent = intent.intent === 'measurement' || intent.intent === 'jitter';
-  const pinnedSet = isMeasurementIntent
-    ? [...measurementDirectEntries, ...directEntries]
-    : [...directEntries];  // exclude measurementDirectEntries for non-measurement intents
   const exactPinnedHeaders = new Set(
-    pinnedSet.map((entry) => entry.header.toLowerCase())
+    [...measurementDirectEntries, ...directEntries].map((entry) => entry.header.toLowerCase())
   );
   if (exactPinnedHeaders.size > 0) {
     const top = reRanked.filter((cmd) => exactPinnedHeaders.has(cmd.header.toLowerCase()));
     const rest = reRanked.filter((cmd) => !exactPinnedHeaders.has(cmd.header.toLowerCase()));
     reRanked = [...top, ...rest];
   }
-
-  // Re-apply injection pinning AFTER exactPinnedHeaders so injected headers always win
-  // when the intent is known (e.g., trigger_holdoff forces TRIGger:A:HOLDoff:TIMe to top
-  // even if the measurement catalog false-positively pinned ADDMEAS above it).
-  if (injectionHeaders.length > 0) {
-    const injectedSet2 = new Set<string>();
-    for (const h of injectionHeaders) {
-      injectedSet2.add(h.toLowerCase());
-      const stripped = h.replace(/<[^>]+>/g, '').replace(/:$/, '').toLowerCase();
-      if (stripped !== h.toLowerCase()) injectedSet2.add(stripped);
-    }
-    const isInjected2 = (cmd: CommandRecord) => injectedSet2.has(cmd.header.toLowerCase());
-    const top2 = reRanked.filter(isInjected2);
-    const rest2 = reRanked.filter(c => !isInjected2(c));
-    reRanked = [...top2, ...rest2];
-  }
-
-  // Dedup by normalized header (keep first occurrence = highest ranked)
-  const seenHeaders = new Set<string>();
-  reRanked = reRanked.filter((cmd) => {
-    const key = cmd.header.toLowerCase().replace(/[\s?]/g, '').replace(/<[^>]+>/g, '<x>');
-    if (seenHeaders.has(key)) return false;
-    seenHeaders.add(key);
-    return true;
-  });
 
   const total = reRanked.length;
   const final = reRanked.slice(offset, offset + limit);
