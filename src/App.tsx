@@ -2449,7 +2449,7 @@ function AppInner() {
         type === 'set_and_query' ? { command: '', cmdParams: [], paramValues: {} } :
         type === 'save_waveform' ? { source: 'CH1', filename: 'waveform.bin', command: '', width: 1, encoding: 'RIBinary', start: 1, stop: null, format: 'bin', performance: 'fastest' } :
         type === 'save_screenshot' ? { filename: 'screenshot.png', scopeType: activeInstrumentConfig?.scopeGeneration || (/70[0-9]{3}/i.test(`${activeInstrumentConfig?.modelFamily || ''} ${activeInstrumentConfig?.deviceDriver || ''}`) ? 'export' : /dpo|mdo|tds/i.test(`${activeInstrumentConfig?.modelFamily || ''} ${activeInstrumentConfig?.deviceDriver || ''}`) ? 'legacy' : 'modern'), method: 'pc_transfer' } :
-        type === 'error_check' ? { command: 'ALLEV?' } :
+        type === 'error_check' ? { command: 'ESR+ALLEV' } :
         type === 'connect' ? { instrumentId: devices[0]?.id || '', instrumentIds: [], printIdn: false } :
         type === 'disconnect' ? { instrumentId: '', instrumentIds: [] } :
         type === 'tm_device_command' ? { code: '', model: '', description: '' } :
@@ -4966,11 +4966,11 @@ ${waveformHelper}
         } else if (s.type === 'error_check') {
           const deviceVar = getDeviceVar(s);
           const isTmDevice = isTmDevicesDevice(deviceVar);
-          const errCmd = s.params.command || 'ALLEV?';
           const devRef = isTmDevice ? `devices['${deviceVar}'].visa_resource` : `devices['${deviceVar}']`;
           out += `${indent}try:\n`;
-          out += `${indent}    _err = ${devRef}.query(${JSON.stringify(errCmd)}).strip()\n`;
-          out += `${indent}    print(f'  Error check (${errCmd}): {_err}')\n`;
+          out += `${indent}    _esr = ${devRef}.query('*ESR?').strip()\n`;
+          out += `${indent}    _err = ${devRef}.query('ALLEV?').strip()\n`;
+          out += `${indent}    print(f'  ESR: {_esr}  ALLEV: {_err}')\n`;
           out += `${indent}except Exception:\n`;
           out += `${indent}    pass\n`;
         }
@@ -5555,8 +5555,13 @@ def wait_opc(inst, timeout_ms=120000, poll_ms=250):
           continue;
         }
         if (s.type === 'error_check') {
-          const errCmd = s.params.command || 'ALLEV?';
-          out += `${ind}try:\n${ind}    err = instrument.ask("${errCmd}")\n${ind}    log_cmd("${errCmd}", err)\n${ind}except Exception: pass\n`;
+          out += `${ind}try:\n`;
+          out += `${ind}    _esr = instrument.ask("*ESR?").strip()\n`;
+          out += `${ind}    _err = instrument.ask("ALLEV?").strip()\n`;
+          out += `${ind}    log_cmd("ALLEV?", _err)\n`;
+          out += `${ind}    print(f"  ESR: {_esr}  ALLEV: {_err}")\n`;
+          out += `${ind}except Exception:\n`;
+          out += `${ind}    pass\n`;
           continue;
         }
         
@@ -5788,8 +5793,13 @@ def wait_opc(inst, timeout_ms=120000, poll_ms=250):
         }
         
         if (s.type === 'error_check') {
-          const errCmd = s.params.command || 'ALLEV?';
-          out += `${ind}try:\n${ind}    err = safe_query_text(scpi, "${errCmd}")\n${ind}    log_cmd("${errCmd}", err)\n${ind}except Exception: pass\n`;
+          out += `${ind}try:\n`;
+          out += `${ind}    _esr = safe_query_text(scpi, '*ESR?')\n`;
+          out += `${ind}    _err = safe_query_text(scpi, 'ALLEV?')\n`;
+          out += `${ind}    log_cmd('ALLEV?', _err)\n`;
+          out += `${ind}    print(f"  ESR: {_esr}  ALLEV: {_err}")\n`;
+          out += `${ind}except Exception:\n`;
+          out += `${ind}    pass\n`;
           continue;
         }
         

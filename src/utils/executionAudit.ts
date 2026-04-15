@@ -96,7 +96,7 @@ export function generateExecutionAudit(input: AuditInput): ExecutionAuditReport 
   }
 
   const errorCheckStepCount = flatSteps.filter((s) => s.type === 'error_check').length;
-  const errorPollCount = countOccurrences(code, 'ALLEV?') + countOccurrences(code, 'SYST:ERR?');
+  const errorPollCount = countOccurrences(code, 'ALLEV?') + countOccurrences(code, 'SYST:ERR?') + countOccurrences(code, '*ESR?');
   if (errorCheckStepCount > 0 && errorPollCount < errorCheckStepCount) {
     findings.push({
       id: 'missing_error_check_parity',
