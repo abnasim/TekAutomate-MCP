@@ -4963,6 +4963,16 @@ ${waveformHelper}
               out += `${indent}print("Recalled waveform to ${reference} from ${filePath}")\n`;
               break;
           }
+        } else if (s.type === 'error_check') {
+          const deviceVar = getDeviceVar(s);
+          const isTmDevice = isTmDevicesDevice(deviceVar);
+          const errCmd = s.params.command || 'ALLEV?';
+          const devRef = isTmDevice ? `devices['${deviceVar}'].visa_resource` : `devices['${deviceVar}']`;
+          out += `${indent}try:\n`;
+          out += `${indent}    _err = ${devRef}.query(${JSON.stringify(errCmd)}).strip()\n`;
+          out += `${indent}    print(f'  Error check (${errCmd}): {_err}')\n`;
+          out += `${indent}except Exception:\n`;
+          out += `${indent}    pass\n`;
         }
       }
       return out;
