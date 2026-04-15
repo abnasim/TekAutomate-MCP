@@ -1,6 +1,6 @@
 import { formatPythonSnippet, substituteSCPI, type CommandParam } from './appGenerator';
 
-type Backend = 'pyvisa' | 'tm_devices' | 'vxi11' | 'tekhsi' | 'hybrid';
+type Backend = 'pyvisa' | 'tm_devices' | 'vxi11' | 'tekhsi' | 'hybrid' | 'socket';
 type ConnectionType = 'tcpip' | 'socket' | 'usb' | 'gpib';
 
 export interface DeviceEntry {
@@ -87,7 +87,7 @@ function decodeEscapedNewlinesOutsideQuotes(code: string): string {
 }
 
 interface EmitContext {
-  mode: 'pyvisa' | 'tm_devices' | 'vxi11';
+  mode: 'pyvisa' | 'tm_devices' | 'vxi11' | 'socket';
   isRawSocket?: boolean;
   host?: string;
   port?: number;
@@ -95,11 +95,12 @@ interface EmitContext {
 
 function emitSteps(
   steps: StepLike[],
-  modeOrCtx: 'pyvisa' | 'tm_devices' | 'vxi11' | EmitContext,
+  modeOrCtx: 'pyvisa' | 'tm_devices' | 'vxi11' | 'socket' | EmitContext,
   indent = '    '
 ): string {
   const ctx: EmitContext = typeof modeOrCtx === 'string' ? { mode: modeOrCtx } : modeOrCtx;
   const { mode, isRawSocket = false, host = '127.0.0.1', port = 4000 } = ctx;
+  const isPureSocket = mode === 'socket';
   let out = '';
   const scpiVar = mode === 'vxi11' ? 'instrument' : mode === 'tm_devices' ? 'visa' : 'scpi';
 
@@ -148,10 +149,22 @@ function emitSteps(
       const scopeType = String(params.scopeType || 'modern').toLowerCase();
       out += `${indent}import os\n`;
       out += `${indent}os.makedirs('./screenshots', exist_ok=True)\n`;
-      if (isRawSocket) {
-        // Raw socket — reuse the existing scpi SocketInstr instance
-        out += `${indent}# Raw socket screenshot via SocketInstr.fetch_screen()\n`;
-        out += `${indent}_img_data = scpi.fetch_screen("C:/Temp/screenshot.png")\n`;
+      if (isPureSocket) {
+        // Pure socket backend — SocketInstr handles the full screenshot flow
+        out += `${indent}# Pure socket screenshot via SocketInstr.fetch_screen()\n`;
+        out += `${indent}_img_data = ${scpiVar}.fetch_screen("C:/Temp/screenshot.png")\n`;
+        out += `${indent}pathlib.Path(${JSON.stringify('./screenshots/' + filename)}).write_bytes(_img_data)\n`;
+        out += `${indent}print(f"  Screenshot saved: ./screenshots/${filename} ({len(_img_data):,} bytes)")\n`;
+      } else if (isRawSocket) {
+        // PyVISA socket connection: trigger SAVE:IMAGE via pyvisa, then use SocketInstr to read binary
+        out += `${indent}${scpiVar}.write('SAVE:IMAGE:COMPOSITION NORMAL')\n`;
+        out += `${indent}${scpiVar}.write('SAVE:IMAGE "C:/Temp/screenshot.png"')\n`;
+        out += `${indent}${scpiVar}.query('*OPC?')\n`;
+        out += `${indent}${scpiVar}.close()  # release TCP port for SocketInstr\n`;
+        out += `${indent}_sock = SocketInstr(${JSON.stringify(host)}, ${port})\n`;
+        out += `${indent}_img_data = _sock.fetch_screen("C:/Temp/screenshot.png")\n`;
+        out += `${indent}_sock.close()\n`;
+        out += `${indent}${scpiVar} = rm.open_resource(${JSON.stringify(`TCPIP::${host}::${port}::SOCKET`)})\n`;
         out += `${indent}pathlib.Path(${JSON.stringify('./screenshots/' + filename)}).write_bytes(_img_data)\n`;
         out += `${indent}print(f"  Screenshot saved: ./screenshots/${filename} ({len(_img_data):,} bytes)")\n`;
       } else if (scopeType === 'legacy') {
@@ -182,12 +195,10 @@ function emitSteps(
       const filename = String(params.filename || 'waveform.bin');
       out += `${indent}${scpiVar}.write("DATA:SOURCE ${source}")\n`;
       out += `${indent}${scpiVar}.write("DATA:ENCDG RIBinary")\n`;
-      if (isRawSocket) {
-        // SocketInstr: write CURVe? then read IEEE binary block
-        out += `${indent}${scpiVar}.write("CURVE?")\n`;
+      out += `${indent}${scpiVar}.write("CURVE?")\n`;
+      if (isPureSocket) {
         out += `${indent}data = ${scpiVar}.read_bin_wave()\n`;
       } else {
-        out += `${indent}${scpiVar}.write("CURVE?")\n`;
         out += `${indent}data = ${scpiVar}.read_raw()\n`;
       }
       out += `${indent}pathlib.Path(${JSON.stringify(filename)}).write_bytes(data)\n`;
@@ -299,6 +310,24 @@ export function generatePythonForSteps(stepsInput: unknown[], devicesInput: unkn
     );
   }
 
+  // Pure socket backend
+  if (backend === 'socket') {
+    const socketHost = primary.host || '127.0.0.1';
+    const socketPort = primary.port || 4000;
+    const body = emitSteps(steps, { mode: 'socket', host: socketHost, port: socketPort });
+    return (
+      header +
+      `import socket, re, sys\nfrom socket_instr import SocketInstr\n` +
+      `\n` +
+      `def log_cmd(cmd, resp):\n    pass\n\n` +
+      `def main():\n` +
+      `    scpi = SocketInstr(${JSON.stringify(socketHost)}, ${socketPort})\n` +
+      body +
+      `    scpi.close()\n` +
+      `\nif __name__ == "__main__":\n    main()\n`
+    );
+  }
+
   const isRawSocket = (primary.connectionType || '') === 'socket';
   const socketHost = primary.host || '127.0.0.1';
   const socketPort = primary.port || 4000;
@@ -310,26 +339,8 @@ export function generatePythonForSteps(stepsInput: unknown[], devicesInput: unkn
     port: socketPort,
   });
 
-  if (isRawSocket) {
-    // Pure raw socket — SocketInstr has .write() / .query() / .fetch_screen() / .read_bin_wave()
-    // No pyvisa needed at all.
-    const connectionBlock = `    scpi = SocketInstr(${JSON.stringify(socketHost)}, ${socketPort})\n`;
-    const closeBlock = `    scpi.close()\n`;
-    return (
-      header +
-      `import socket, re, sys\nfrom socket_instr import SocketInstr\n` +
-      `\n` +
-      `def log_cmd(cmd, resp):\n    pass\n\n` +
-      `def main():\n` +
-      connectionBlock +
-      body +
-      closeBlock +
-      `\nif __name__ == "__main__":\n    main()\n`
-    );
-  }
-
-  // PyVISA path
-  const pyImports = `import pyvisa\n`;
+  // PyVISA path (used for all connection types including socket)
+  const pyImports = `import pyvisa\n` + (isRawSocket ? `from socket_instr import SocketInstr\n` : '');
   let connectionBlock = `    rm = pyvisa.ResourceManager()\n`;
   const aliases = devices.length ? devices : [primary];
   aliases.forEach((d, idx) => {

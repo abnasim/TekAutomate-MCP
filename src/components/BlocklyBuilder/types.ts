@@ -5,7 +5,7 @@ export interface DeviceEntry {
   id: string;
   alias: string;
   deviceType: 'SCOPE' | 'AWG' | 'AFG' | 'PSU' | 'SMU' | 'DMM' | 'DAQ' | 'MT' | 'MF' | 'SS' | 'TEKSCOPE_PC';
-  backend: 'pyvisa' | 'tm_devices' | 'vxi11' | 'tekhsi' | 'hybrid';
+  backend: 'pyvisa' | 'tm_devices' | 'vxi11' | 'tekhsi' | 'hybrid' | 'socket';
   enabled: boolean;
   connectionType?: 'tcpip' | 'socket' | 'usb' | 'gpib';
   host?: string;

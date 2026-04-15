@@ -46,7 +46,7 @@ import { decodeStatusFromText } from './utils/statusDecoder';
 import { getDocstring, ensureDocstringsLoaded, areDocstringsLoaded } from './components/docstrings';
 
 /* ===================== Types ===================== */
-type Backend = 'pyvisa' | 'tm_devices' | 'vxi11' | 'tekhsi' | 'hybrid';
+type Backend = 'pyvisa' | 'tm_devices' | 'vxi11' | 'tekhsi' | 'hybrid' | 'socket';
 type StepType = 'connect' | 'disconnect' | 'query' | 'write' | 'set_and_query' | 'sleep' | 'comment' | 'python' | 'save_waveform' | 'save_screenshot' | 'error_check' | 'group' | 'tm_device_command' | 'recall';
 type ConnectionType = 'tcpip' | 'socket' | 'usb' | 'gpib';
 type AiProvider = 'openai' | 'anthropic';
@@ -552,6 +552,7 @@ const getBackendColor = (backend: Backend): string => {
     case 'hybrid': return '#1cb5d8'; // tek blue
     case 'pyvisa': return '#8b5cf6'; // purple
     case 'vxi11': return '#6366f1'; // indigo
+    case 'socket': return '#0ea5e9'; // sky blue
     default: return '#6b7280'; // gray
   }
 };
@@ -892,6 +893,7 @@ const _InstrumentLayoutCanvas: React.FC<InstrumentLayoutCanvasProps> = (props) =
       case 'tm_devices': return 'bg-orange-100 border-orange-400 text-orange-800';
       case 'hybrid': return 'bg-blue-100 border-blue-400 text-blue-800';
       case 'pyvisa': return 'bg-purple-100 border-purple-400 text-purple-800';
+      case 'socket': return 'bg-sky-100 border-sky-400 text-sky-800';
       default: return 'bg-gray-100 border-gray-400 text-gray-800';
     }
   };
@@ -1035,6 +1037,7 @@ const _SignalPathView: React.FC<SignalPathViewProps> = (props) => {
       case 'tm_devices': return 'bg-orange-200 border-orange-500';
       case 'hybrid': return 'bg-blue-200 border-blue-500';
       case 'pyvisa': return 'bg-purple-200 border-purple-500';
+      case 'socket': return 'bg-sky-200 border-sky-500';
       default: return 'bg-gray-200 border-gray-400';
     }
   };
@@ -4660,6 +4663,11 @@ ${waveformHelper}
       } else if (backend === 'tekhsi') {
         connectionCode += `    # TekHSI connection will be handled in context manager\n`;
         connectionCode += `    devices['${alias}_host'] = '${device.host}'\n\n`;
+      } else if (backend === 'socket') {
+        connectionCode += `    from socket_instr import SocketInstr\n`;
+        connectionCode += `    devices['${alias}'] = SocketInstr('${device.host || '127.0.0.1'}', ${device.port || 4000})\n`;
+        connectionCode += `    ${alias} = devices['${alias}']  # Alias for direct access\n`;
+        connectionCode += `    print(f"[OK] Connected ${alias} via raw socket")\n\n`;
       }
     });
 
@@ -4967,7 +4975,7 @@ ${waveformHelper}
         cleanupCode += `    rm_${alias}.close()\n`;
       } else if (device.backend === 'tm_devices') {
         cleanupCode += `    dm_${alias}.close()\n`;
-      } else if (device.backend === 'vxi11') {
+      } else if (device.backend === 'vxi11' || device.backend === 'socket') {
         cleanupCode += `    devices['${alias}'].close()\n`;
       }
     });
@@ -5001,6 +5009,7 @@ if __name__ == "__main__":
     const isPyVISA = effectiveConfig.backend === 'pyvisa';
     const isTmDevices = effectiveConfig.backend === 'tm_devices';
     const isVxi11 = effectiveConfig.backend === 'vxi11';
+    const isPureSocket = effectiveConfig.backend === 'socket';
     
     const hasTekExpress = steps.some(
       (s) => (s.type === 'query' || s.type === 'write') && s.params.command?.startsWith('TEKEXP:')
@@ -5692,7 +5701,14 @@ def wait_opc(inst, timeout_ms=120000, poll_ms=250):
           out += `${ind}import os\n`;
           out += `${ind}os.makedirs('./screenshots', exist_ok=True)\n`;
 
-          if (scopeType === 'legacy') {
+          if (isPureSocket) {
+            // Pure socket backend — SocketInstr.fetch_screen() handles the full flow
+            out += `${ind}# Pure socket screenshot — SocketInstr handles SAVE:IMAGE + binary read\n`;
+            out += `${ind}_img_data = scpi.fetch_screen("C:/Temp/screenshot.png")\n`;
+            out += `${ind}pathlib.Path(${JSON.stringify('./screenshots/')}).mkdir(parents=True, exist_ok=True)\n`;
+            out += `${ind}pathlib.Path(${JSON.stringify('./screenshots/')}).joinpath(${JSON.stringify(fn)}).write_bytes(_img_data)\n`;
+            out += `${ind}print(f"  Screenshot saved: ./screenshots/${fn} ({len(_img_data):,} bytes)")\n`;
+          } else if (scopeType === 'legacy') {
             out += `${ind}# Legacy 5k/7k/70k screenshot path via HARDCOPY\n`;
             out += `${ind}scpi.write('HARDCOPY:PORT FILE')\n`;
             out += `${ind}scpi.write('HARDCOPY:FORMAT PNG')\n`;
@@ -5729,7 +5745,9 @@ def wait_opc(inst, timeout_ms=120000, poll_ms=250):
             out += `${ind}scpi.write('FILESYSTEM:DELETE "C:/Temp/screenshot.png"')\n`;
             out += `${ind}scpi.query('*OPC?')\n`;
           }
-          out += `${ind}print("  Screenshot saved: ./screenshots/${fn}")\n`;
+          if (!isPureSocket) {
+            out += `${ind}print("  Screenshot saved: ./screenshots/${fn}")\n`;
+          }
           continue;
         }
 
@@ -6067,6 +6085,45 @@ if __name__ == "__main__":
 `
         );
       }
+    }
+
+    // Pure Socket (SocketInstr — no pyvisa, no VISA driver needed)
+    if (isPureSocket) {
+      const socketHost = effectiveConfig.host || '127.0.0.1';
+      const socketPort = effectiveConfig.port || 4000;
+      return (
+        header +
+        `
+import socket, re, sys, argparse, time, pathlib
+from socket_instr import SocketInstr
+
+` +
+        logBlock + '\n' +
+        measurementsBlock + '\n' +
+        `def main():
+    p = argparse.ArgumentParser()
+    p.add_argument("--host", default="${socketHost}")
+    p.add_argument("--port", type=int, default=${socketPort})
+    p.add_argument("--timeout", type=float, default=${effectiveConfig.timeout || 5.0})
+    args, _unknown = p.parse_known_args()
+
+    print(f"Connecting via raw socket to {args.host}:{args.port}...")
+    scpi = SocketInstr(args.host, args.port, timeout=int(args.timeout))
+    idn = scpi.query("*IDN?")
+    print(f"[OK] Connected: {idn}")
+
+` +
+        genStepsClassic(steps) +
+        (xopt.saveCsv ? '\n    logf.close()' : '') +
+        (xopt.exportMeasurements ? '\n    measurements_file.close()' : '') +
+        `
+    scpi.close()
+    print("[OK] Complete")
+
+if __name__ == "__main__":
+    main()
+`
+      );
     }
 
     // VXI-11 (standalone vxi11 package)
@@ -9120,24 +9177,30 @@ Keep under 120 words. No headings. Bullets only. Stay on this command. Do not de
                                           {/* Backend */}
                                           <div className="flex items-center gap-1">
                                             <label className="text-xs font-medium whitespace-nowrap text-gray-900 dark:text-zinc-100">Backend:</label>
-                                            <select 
-                                              value={device.backend} 
+                                            <select
+                                              value={device.backend}
                                               onChange={(e) => {
                                                 const newBackend = e.target.value as Backend;
                                                 if (newBackend === 'tm_devices' && device.connectionType === 'socket') {
                                                   updateDeviceField('backend', newBackend);
                                                   updateDeviceField('connectionType', 'tcpip');
+                                                } else if (newBackend === 'socket') {
+                                                  // Pure socket backend: force socket connection type and default port
+                                                  updateDeviceField('backend', newBackend);
+                                                  updateDeviceField('connectionType', 'socket');
+                                                  if (!device.port || device.port === 0) updateDeviceField('port', 4000);
                                                 } else {
                                                   updateDeviceField('backend', newBackend);
                                                 }
                                               }}
-                                              className="w-24 px-1 py-0.5 text-xs border border-gray-300 dark:border-zinc-600 rounded bg-white dark:bg-zinc-700 text-gray-900 dark:text-zinc-100"
+                                              className="w-28 px-1 py-0.5 text-xs border border-gray-300 dark:border-zinc-600 rounded bg-white dark:bg-zinc-700 text-gray-900 dark:text-zinc-100"
                                             >
                                               <option value="pyvisa">PyVISA</option>
                                               <option value="tm_devices">tm_devices</option>
                                               <option value="vxi11">VXI-11</option>
                                               <option value="tekhsi">TekHSI</option>
                                               <option value="hybrid">Hybrid</option>
+                                              <option value="socket">Pure Socket</option>
                                             </select>
                                           </div>
                                           
