@@ -219,6 +219,29 @@ export function resolveMcpHost(): string {
   return stored ? stored.replace(/\/+$/, '') : '';
 }
 
+/**
+ * Resolves the MCP host for ChatKit proposal staging.
+ * Always defaults to the production Railway MCP — never localhost —
+ * so ChatKit works out of the box for all users without requiring
+ * them to configure the Live tab MCP field.
+ *
+ * The Live tab MCP field is for the user's own instrument connection
+ * and is a completely separate concern.
+ */
+export function resolveChatKitMcpHost(): string {
+  // Respect an explicit user override stored under the chatkit-specific key
+  if (typeof window !== 'undefined') {
+    try {
+      const override = String(localStorage.getItem('tekautomate.chatkit.mcp.host') || '').trim();
+      if (override) return override.replace(/\/+$/, '');
+    } catch {
+      // ignore
+    }
+  }
+  // Always fall back to the production MCP — never the local dev server
+  return RAILWAY_MCP_HOST;
+}
+
 export async function buildMcpRequest(params: McpChatRequest): Promise<McpChatRequest> {
   const scpiContext = await searchScpiCommands(
     params.userMessage,

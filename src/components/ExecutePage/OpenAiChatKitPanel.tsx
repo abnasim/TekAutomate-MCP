@@ -15,7 +15,7 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { ChatKit, useChatKit, type ThemeOption } from '@openai/chatkit-react';
 import { parseAiActionResponse, type AiAction } from '../../utils/aiActions';
-import { resolveMcpHost, resolveMcpHostCandidates } from '../../utils/ai/mcpClient';
+import { resolveChatKitMcpHost, resolveMcpHost, resolveMcpHostCandidates } from '../../utils/ai/mcpClient';
 import { buildWorkflowContext, executeMcpTool } from '../../utils/ai/liveToolLoop';
 import type { StepPreview } from './StepsListPreview';
 
@@ -852,7 +852,7 @@ function OpenAiChatKitPanelInner({
     const chatKitHost = chatKitMcpHostRef.current;
     const hosts = chatKitHost
       ? [chatKitHost]
-      : Array.from(new Set(resolveMcpHostCandidates().map((host) => host.replace(/\/+$/, ''))));
+      : [resolveChatKitMcpHost()];
     if (!hosts.length) return false;
 
     // Include sessionKey so the public MCP can isolate proposals per user.
@@ -987,12 +987,10 @@ function OpenAiChatKitPanelInner({
       }
 
       try {
-        // Try MCP server first (if available — handles session creation server-side)
-        const mcpHost = resolveMcpHost();
-        // Capture which MCP host is used — proposals are always staged here (Agent Builder is hardwired to it).
-        // fetchLatestStagedProposal must always poll THIS host, not whatever local/custom MCP the user entered.
-        if (mcpHost) chatKitMcpHostRef.current = mcpHost.replace(/\/+$/, '');
-        const sessionUrl = `${mcpHost.replace(/\/$/, '')}/chatkit/session`;
+        // Always use the ChatKit production MCP — independent of the user's Live tab instrument MCP.
+        const mcpHost = resolveChatKitMcpHost();
+        chatKitMcpHostRef.current = mcpHost;
+        const sessionUrl = `${mcpHost}/chatkit/session`;
         console.log('[ChatKit] Creating session via:', sessionUrl);
         const res = await fetch(sessionUrl, {
           method: 'POST',
