@@ -922,7 +922,7 @@ function OpenAiChatKitPanelInner({
       return true;
     }
     return false;
-  }, [setStructuredProposal]);
+  }, [setStructuredProposal, userId, workflowId]);
 
   const handleWidgetAction = useCallback(async (
     action: { type: string; payload?: Record<string, unknown> },

@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
-import { Bot, KeyRound, Loader2, Paperclip, Send, Settings, Square, Terminal, X } from 'lucide-react';
+import { Bot, KeyRound, Loader2, Paperclip, Send, Square, Terminal, X } from 'lucide-react';
 import { normalizeAiActions, parseAiActionResponse, type AiAction } from '../../utils/aiActions';
 import type { ExecutionAuditReport } from '../../utils/executionAudit';
 import type { StepPreview } from './StepsListPreview';
@@ -232,6 +232,7 @@ export function AiChatPanel({
   const [panelWidth, setPanelWidth] = useState(560);
   const [mcpStatus, setMcpStatus] = useState<{ available: boolean; message?: string }>({ available: true });
   const [mcpHostInput, setMcpHostInput] = useState(() => getStoredMcpHost());
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
   const [mcpHostStatus, setMcpHostStatus] = useState<string | null>(null);
   const [instrumentOutputMode] = useState<'clean' | 'verbose'>(() => {
     if (typeof window === 'undefined') return 'verbose';
@@ -241,6 +242,7 @@ export function AiChatPanel({
       return 'verbose';
     }
   });
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
   const [openAiChatSurface, setOpenAiChatSurface] = useState<'chatkit' | 'native'>('chatkit');
   const [transientUiNow, setTransientUiNow] = useState(() => Date.now());
   const [desktopConfigCopied, setDesktopConfigCopied] = useState(false);
@@ -418,6 +420,7 @@ export function AiChatPanel({
     return trimmed.replace(/\/+$/, '');
   };
 
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
   const saveMcpHost = async () => {
     const normalized = normalizeMcpHost(mcpHostInput);
     setMcpHostStatus(null);
@@ -432,6 +435,7 @@ export function AiChatPanel({
     setMcpHostStatus(`Saved MCP URL: ${normalized}`);
   };
 
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
   const testMcpHostConnection = async () => {
     const normalized = normalizeMcpHost(mcpHostInput);
     const hosts = normalized ? [normalized] : resolveMcpHostCandidates();

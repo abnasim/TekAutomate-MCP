@@ -3329,7 +3329,7 @@ function AppInner() {
     setSelectedStep(newStep.id);
   };
 
-  const substituteSCPI = (scpi: string, paramDefs: CommandParam[] = [], paramValues: Record<string, any> = {}): string => {
+  const substituteSCPI = useCallback((scpi: string, paramDefs: CommandParam[] = [], paramValues: Record<string, any> = {}): string => {
     if (!scpi) return scpi;
     
     let result = scpi;
@@ -3964,7 +3964,8 @@ function AppInner() {
     }
 
     return result.trim();
-  };
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   const tekhsiPattern = (text?: string): boolean => {
     if (!text) return false;
@@ -6927,7 +6928,7 @@ if __name__ == "__main__":
 
   // Helper function to deduplicate parameters (used for UI display and preview generation)
   // Declared here so it's available to useCallbacks below (const is not hoisted).
-  const deduplicateParams = (params: CommandParam[], command: string): CommandParam[] => {
+  const deduplicateParams = useCallback((params: CommandParam[], command: string): CommandParam[] => {
     if (!Array.isArray(params) || params.length === 0) return params;
 
     // Only remove TRUE duplicates: same name appearing more than once.
@@ -6968,7 +6969,8 @@ if __name__ == "__main__":
     }
 
     return result.filter((_, i) => !indicesToRemove.has(i));
-  };
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   /**
    * Run a single selected step directly on the live instrument via the executor's send_scpi action.
