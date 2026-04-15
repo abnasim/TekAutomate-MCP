@@ -67,6 +67,55 @@ function extractScreenshotResult(value: unknown): {
 }
 
 const SERVER_DEFAULT_ASSISTANT_TOKEN = '__SERVER_DEFAULT_ASSISTANT__';
+
+/** Compact steps for AI context — strips large param blobs, truncates code/commands to save tokens. */
+function compactStepsForAi(steps: StepPreview[]): StepPreview[] {
+  const TRUNCATE_AT = 120;
+  return steps.map((s) => {
+    const p = s.params || {};
+    let compactParams: Record<string, unknown> | undefined;
+
+    if (s.type === 'python') {
+      const code = String(p.code || '');
+      compactParams = code.length > TRUNCATE_AT
+        ? { code: code.slice(0, TRUNCATE_AT) + '…', _truncated: true }
+        : { code };
+    } else if (s.type === 'write' || s.type === 'query' || s.type === 'set_and_query') {
+      const cmd = String(p.command || '');
+      compactParams = { command: cmd.length > TRUNCATE_AT ? cmd.slice(0, TRUNCATE_AT) + '…' : cmd };
+      if (p.saveAs) compactParams.saveAs = p.saveAs;
+    } else if (s.type === 'sleep') {
+      compactParams = { duration: p.duration };
+    } else if (s.type === 'comment') {
+      const text = String(p.text || '');
+      compactParams = { text: text.length > TRUNCATE_AT ? text.slice(0, TRUNCATE_AT) + '…' : text };
+    } else if (s.type === 'save_screenshot') {
+      compactParams = { filename: p.filename, scopeType: p.scopeType };
+    } else if (s.type === 'save_waveform') {
+      compactParams = { source: p.source, filename: p.filename, format: p.format };
+    } else if (s.type === 'sweep') {
+      compactParams = { variableName: p.variableName, start: p.start, stop: p.stop, step: p.step };
+    } else if (s.type === 'recall') {
+      compactParams = { recallType: p.recallType, filePath: p.filePath };
+    } else {
+      // For other types keep params but truncate any string value over limit
+      compactParams = Object.fromEntries(
+        Object.entries(p).map(([k, v]) => {
+          if (typeof v === 'string' && v.length > TRUNCATE_AT) return [k, v.slice(0, TRUNCATE_AT) + '…'];
+          return [k, v];
+        })
+      );
+    }
+
+    return {
+      id: s.id,
+      type: s.type,
+      label: s.label,
+      params: compactParams,
+      children: s.children ? compactStepsForAi(s.children) : undefined,
+    };
+  });
+}
 const SURPRISE_PROMPTS = [
   'Build a practical oscilloscope validation flow for the current model using only valid TekAutomate step types, and explain why you chose that sequence.',
   'Suggest one useful TekAutomate workflow for this scope that a test engineer would actually reuse, then build it using only valid TekAutomate step types.',
@@ -1085,7 +1134,8 @@ export function useAiChat(params: {
           host: params.flowContext?.host || '127.0.0.1',
           connectionType: params.flowContext?.connectionType || 'tcpip',
           modelFamily: params.flowContext?.modelFamily || 'unknown',
-          steps: effectiveSteps,
+          // Compact steps: keep type/label + short param summary to reduce token usage
+          steps: compactStepsForAi(effectiveSteps),
           selectedStepId,
           executionSource: params.executionSource,
           deviceType: params.flowContext?.deviceType,
@@ -1093,8 +1143,11 @@ export function useAiChat(params: {
           visaBackend: params.flowContext?.visaBackend,
           alias: params.flowContext?.alias,
           validationErrors: params.flowContext?.validationErrors,
-          selectedStep: params.flowContext?.selectedStep,
-          instrumentMap: params.flowContext?.instrumentMap,
+          // selectedStep omitted — AI can look it up by selectedStepId in steps array
+          // instrumentMap: only enabled instruments to save tokens
+          instrumentMap: params.flowContext?.instrumentMap?.filter(
+            (d: { alias: string; backend: string }) => d.alias
+          ),
         },
         runContext: {
           runStatus: params.runStatus,
