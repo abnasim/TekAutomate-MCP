@@ -11,8 +11,11 @@ echo  Scope executor  :  http://localhost:8765  (start separately)
 echo  MCP HTTP server :  http://localhost:8787
 echo  MCP endpoint    :  http://localhost:8787/mcp
 echo.
-echo  Claude Desktop / Claude Code config:
+echo  Claude Code CLI config  (~/.claude/settings.json or /mcp add):
 echo    { "url": "http://localhost:8787/mcp" }
+echo.
+echo  NOTE: Claude Desktop REJECTS http:// even for localhost.
+echo        For Claude Desktop use start-mcp-stdio.bat instead.
 echo.
 echo ========================================================
 echo.
