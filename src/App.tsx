@@ -6093,14 +6093,22 @@ if __name__ == "__main__":
       const socketPort = effectiveConfig.port || 4000;
       return (
         header +
-        `
-import socket, re, sys, argparse, time, pathlib
+        `import socket, re, sys
 from socket_instr import SocketInstr
 
-` +
-        logBlock + '\n' +
-        measurementsBlock + '\n' +
-        `def main():
+def safe_query_text(inst, cmd, timeout_ms=None):
+    return str(inst.query(cmd)).strip()
+
+def wait_opc(inst, timeout_ms=120000, poll_ms=250):
+    import time as _t
+    deadline = _t.time() + timeout_ms / 1000.0
+    while _t.time() < deadline:
+        if str(inst.query('*OPC?')).strip() == '1':
+            return True
+        _t.sleep(poll_ms / 1000.0)
+    raise TimeoutError(f"*OPC? timeout after {timeout_ms}ms")
+
+def main():
     p = argparse.ArgumentParser()
     p.add_argument("--host", default="${socketHost}")
     p.add_argument("--port", type=int, default=${socketPort})
@@ -6113,6 +6121,8 @@ from socket_instr import SocketInstr
     print(f"[OK] Connected: {idn}")
 
 ` +
+        logBlock +
+        measurementsBlock +
         genStepsClassic(steps) +
         (xopt.saveCsv ? '\n    logf.close()' : '') +
         (xopt.exportMeasurements ? '\n    measurements_file.close()' : '') +
