@@ -13,7 +13,8 @@ export function withRuntimeInstrumentDefaults<T extends Record<string, unknown>>
     ? (input as any).__connectionSessionKey as string : null;
   const instrument = getInstrumentInfoState(connectionKey);
   // Env vars act as a hard override for local direct-executor mode (EXECUTOR_URL set in .env)
-  const envExecutorUrl = process.env.EXECUTOR_URL || '';
+  // Fall back to localhost:8765 — the default executor port when running locally with no env config
+  const envExecutorUrl = process.env.EXECUTOR_URL || instrument.executorUrl || 'http://localhost:8765';
   const envVisaResource = process.env.VISA_RESOURCE || '';
   return {
     executorUrl:
