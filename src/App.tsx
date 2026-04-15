@@ -4468,13 +4468,17 @@ function AppInner() {
     };
     collectConnectTargets(steps);
 
-    const activeDevices = selectedConnectTargets.size > 0
+    const _rawActiveDevices = selectedConnectTargets.size > 0
       ? enabledDevices.filter(d =>
           selectedConnectTargets.has(String(d.id)) ||
           selectedConnectTargets.has(String(d.alias))
         )
       : enabledDevices;
-    
+    // Deduplicate by alias — same alias appearing twice means the same physical device
+    const activeDevices = _rawActiveDevices.filter(
+      (d, idx, arr) => arr.findIndex(x => x.alias === d.alias) === idx
+    );
+
     // Collect all backends used
     const backends = new Set(activeDevices.map(d => d.backend));
     const needsPyVISA = backends.has('pyvisa');
@@ -4724,34 +4728,34 @@ ${waveformHelper}
           if (isTmDevicesCommand) {
             // High-level tm_devices API - output directly
             out += `${indent}${varName} = ${cmd}\n`;
-            out += `${indent}print(f"  → ${cmd.replace(/'/g, "\\'")}  =  {${varName}}")\n`;
+            out += `${indent}print(f'  → ${cmd.replace(/'/g, "\\'")}  =  {${varName}}')\n`;
           } else if (isTmDevice) {
             // tm_devices with SCPI command - use visa_resource
-            out += `${indent}${varName} = devices['${deviceVar}'].visa_resource.query('${cmd}').strip()\n`;
-            out += `${indent}print(f"  → ${cmd}  =  {${varName}}")\n`;
+            out += `${indent}${varName} = devices['${deviceVar}'].visa_resource.query(${JSON.stringify(cmd)}).strip()\n`;
+            out += `${indent}print(f'  → ${cmd.replace(/'/g, "\\'")}  =  {${varName}}')\n`;
           } else {
             // PyVISA or VXI11
-            out += `${indent}${varName} = devices['${deviceVar}'].query('${cmd}').strip()\n`;
-            out += `${indent}print(f"  → ${cmd}  =  {${varName}}")\n`;
+            out += `${indent}${varName} = devices['${deviceVar}'].query(${JSON.stringify(cmd)}).strip()\n`;
+            out += `${indent}print(f'  → ${cmd.replace(/'/g, "\\'")}  =  {${varName}}')\n`;
           }
         } else if (s.type === 'write') {
           const cmd = s.params.command || '';
-          
+
           // Check if it's a tm_devices high-level command
           const isTmDevicesCommand = cmd.includes('.commands.') || cmd.includes('.add_') || cmd.includes('.save_') || cmd.includes('.turn_') || cmd.includes('.set_and_check');
-          
+
           if (isTmDevicesCommand) {
             // High-level tm_devices API - output directly
             out += `${indent}${cmd}\n`;
-            out += `${indent}print(f"  → ${cmd.replace(/'/g, "\\'")}  [OK]")\n`;
+            out += `${indent}print(f'  → ${cmd.replace(/'/g, "\\'")}  [OK]')\n`;
           } else if (isTmDevice) {
             // tm_devices with SCPI command - use visa_resource
-            out += `${indent}devices['${deviceVar}'].visa_resource.write('${cmd}')\n`;
-            out += `${indent}print(f"  → ${cmd}  [OK]")\n`;
+            out += `${indent}devices['${deviceVar}'].visa_resource.write(${JSON.stringify(cmd)})\n`;
+            out += `${indent}print(f'  → ${cmd.replace(/'/g, "\\'")}  [OK]')\n`;
           } else {
             // PyVISA or VXI11
-            out += `${indent}devices['${deviceVar}'].write('${cmd}')\n`;
-            out += `${indent}print(f"  → ${cmd}  [OK]")\n`;
+            out += `${indent}devices['${deviceVar}'].write(${JSON.stringify(cmd)})\n`;
+            out += `${indent}print(f'  → ${cmd.replace(/'/g, "\\'")}  [OK]')\n`;
           }
         } else if (s.type === 'python' && s.params?.code) {
           const code = s.params.code.replace(/\r\n/g, '\n').replace(/\r/g, '\n');
