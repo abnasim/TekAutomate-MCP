@@ -149,13 +149,10 @@ function emitSteps(
       out += `${indent}import os\n`;
       out += `${indent}os.makedirs('./screenshots', exist_ok=True)\n`;
       if (isRawSocket) {
-        // Raw socket — use socket_instr.py helper, no PyVISA binary issues
-        out += `${indent}# Raw socket screenshot (socket_instr.py)\n`;
-        out += `${indent}from socket_instr import SocketInstr\n`;
-        out += `${indent}_sock_ss = SocketInstr(${JSON.stringify(host)}, ${port}, timeout=30)\n`;
-        out += `${indent}_img_data = _sock_ss.fetch_screen("C:/Temp/screenshot.png")\n`;
+        // Raw socket — reuse the existing scpi SocketInstr instance
+        out += `${indent}# Raw socket screenshot via SocketInstr.fetch_screen()\n`;
+        out += `${indent}_img_data = scpi.fetch_screen("C:/Temp/screenshot.png")\n`;
         out += `${indent}pathlib.Path(${JSON.stringify('./screenshots/' + filename)}).write_bytes(_img_data)\n`;
-        out += `${indent}_sock_ss.close()\n`;
         out += `${indent}print(f"  Screenshot saved: ./screenshots/${filename} ({len(_img_data):,} bytes)")\n`;
       } else if (scopeType === 'legacy') {
         out += `${indent}${scpiVar}.write('HARDCopy:PORT FILE')\n`;
@@ -185,8 +182,14 @@ function emitSteps(
       const filename = String(params.filename || 'waveform.bin');
       out += `${indent}${scpiVar}.write("DATA:SOURCE ${source}")\n`;
       out += `${indent}${scpiVar}.write("DATA:ENCDG RIBinary")\n`;
-      out += `${indent}${scpiVar}.write("CURVE?")\n`;
-      out += `${indent}data = ${scpiVar}.read_raw()\n`;
+      if (isRawSocket) {
+        // SocketInstr: write CURVe? then read IEEE binary block
+        out += `${indent}${scpiVar}.write("CURVE?")\n`;
+        out += `${indent}data = ${scpiVar}.read_bin_wave()\n`;
+      } else {
+        out += `${indent}${scpiVar}.write("CURVE?")\n`;
+        out += `${indent}data = ${scpiVar}.read_raw()\n`;
+      }
       out += `${indent}pathlib.Path(${JSON.stringify(filename)}).write_bytes(data)\n`;
       continue;
     }
@@ -296,6 +299,36 @@ export function generatePythonForSteps(stepsInput: unknown[], devicesInput: unkn
     );
   }
 
+  const isRawSocket = (primary.connectionType || '') === 'socket';
+  const socketHost = primary.host || '127.0.0.1';
+  const socketPort = primary.port || 4000;
+
+  const body = emitSteps(steps, {
+    mode: 'pyvisa',
+    isRawSocket,
+    host: socketHost,
+    port: socketPort,
+  });
+
+  if (isRawSocket) {
+    // Pure raw socket — SocketInstr has .write() / .query() / .fetch_screen() / .read_bin_wave()
+    // No pyvisa needed at all.
+    const connectionBlock = `    scpi = SocketInstr(${JSON.stringify(socketHost)}, ${socketPort})\n`;
+    const closeBlock = `    scpi.close()\n`;
+    return (
+      header +
+      `import socket, re, sys\nfrom socket_instr import SocketInstr\n` +
+      `\n` +
+      `def log_cmd(cmd, resp):\n    pass\n\n` +
+      `def main():\n` +
+      connectionBlock +
+      body +
+      closeBlock +
+      `\nif __name__ == "__main__":\n    main()\n`
+    );
+  }
+
+  // PyVISA path
   const pyImports = `import pyvisa\n`;
   let connectionBlock = `    rm = pyvisa.ResourceManager()\n`;
   const aliases = devices.length ? devices : [primary];
@@ -309,14 +342,6 @@ export function generatePythonForSteps(stepsInput: unknown[], devicesInput: unkn
   if (hasTekExp) {
     connectionBlock += `    tek = rm.open_resource("TCPIP0::${primary.host || '127.0.0.1'}::5000::SOCKET")\n`;
   }
-
-  const isRawSocket = (primary.connectionType || '') === 'socket';
-  const body = emitSteps(steps, {
-    mode: 'pyvisa',
-    isRawSocket,
-    host: primary.host || '127.0.0.1',
-    port: primary.port || 4000,
-  });
   let closeBlock = '';
   aliases.forEach((d, idx) => {
     const alias = (d.alias || `scope${idx + 1}`).replace(/[^A-Za-z0-9_]/g, '_');
