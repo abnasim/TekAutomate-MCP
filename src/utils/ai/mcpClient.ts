@@ -165,7 +165,7 @@ export async function executeToolDirect(
   return res.json() as Promise<Record<string, unknown>>;
 }
 
-const RAILWAY_MCP_HOST = 'https://tekautomate-mcp-production.up.railway.app';
+const RAILWAY_MCP_HOST = 'https://tekautomatemcpv2.up.railway.app';
 const LOCAL_MCP_HOST = 'http://localhost:8787';
 
 function getDefaultMcpHost(): string {
