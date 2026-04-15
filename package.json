@@ -87,7 +87,8 @@
     "build:tmdevices-corpus": "node scripts/buildTmDevicesCorpus.js",
     "build:rag": "npm --prefix mcp-server run build:rag",
     "mcp:start": "npm --prefix mcp-server run start",
-    "mcp:dev": "npm --prefix mcp-server run dev"
+    "mcp:dev": "npm --prefix mcp-server run dev",
+    "mcp:stdio": "npm --prefix mcp-server run start:stdio"
   },
   "engines": {
     "node": ">=20.0.0"
