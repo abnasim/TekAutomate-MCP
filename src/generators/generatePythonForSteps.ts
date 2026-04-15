@@ -86,11 +86,20 @@ function decodeEscapedNewlinesOutsideQuotes(code: string): string {
   return out;
 }
 
+interface EmitContext {
+  mode: 'pyvisa' | 'tm_devices' | 'vxi11';
+  isRawSocket?: boolean;
+  host?: string;
+  port?: number;
+}
+
 function emitSteps(
   steps: StepLike[],
-  mode: 'pyvisa' | 'tm_devices' | 'vxi11',
+  modeOrCtx: 'pyvisa' | 'tm_devices' | 'vxi11' | EmitContext,
   indent = '    '
 ): string {
+  const ctx: EmitContext = typeof modeOrCtx === 'string' ? { mode: modeOrCtx } : modeOrCtx;
+  const { mode, isRawSocket = false, host = '127.0.0.1', port = 4000 } = ctx;
   let out = '';
   const scpiVar = mode === 'vxi11' ? 'instrument' : mode === 'tm_devices' ? 'visa' : 'scpi';
 
@@ -100,7 +109,7 @@ function emitSteps(
     if (s.type === 'connect' || s.type === 'disconnect') continue;
     if (s.type === 'group') {
       out += `${indent}# Group: ${s.label || 'Group'}\n`;
-      if (s.children?.length) out += emitSteps(s.children, mode, indent);
+      if (s.children?.length) out += emitSteps(s.children, ctx, indent);
       continue;
     }
     if (s.type === 'comment') {
@@ -130,22 +139,44 @@ function emitSteps(
       const step = Number(params.step ?? 1);
       out += `${indent}${varName} = ${start}\n`;
       out += `${indent}while ${varName} <= ${stop}:\n`;
-      if (s.children?.length) out += emitSteps(s.children, mode, `${indent}    `);
+      if (s.children?.length) out += emitSteps(s.children, ctx, `${indent}    `);
       out += `${indent}    ${varName} += ${step}\n`;
       continue;
     }
     if (s.type === 'save_screenshot') {
       const filename = String(params.filename || 'screenshot.png');
       const scopeType = String(params.scopeType || 'modern').toLowerCase();
-      if (scopeType === 'legacy') {
+      out += `${indent}import os\n`;
+      out += `${indent}os.makedirs('./screenshots', exist_ok=True)\n`;
+      if (isRawSocket) {
+        // Raw socket — use socket_instr.py helper, no PyVISA binary issues
+        out += `${indent}# Raw socket screenshot (socket_instr.py)\n`;
+        out += `${indent}from socket_instr import SocketInstr\n`;
+        out += `${indent}_sock_ss = SocketInstr(${JSON.stringify(host)}, ${port}, timeout=30)\n`;
+        out += `${indent}_img_data = _sock_ss.fetch_screen("C:/Temp/screenshot.png")\n`;
+        out += `${indent}pathlib.Path(${JSON.stringify('./screenshots/' + filename)}).write_bytes(_img_data)\n`;
+        out += `${indent}_sock_ss.close()\n`;
+        out += `${indent}print(f"  Screenshot saved: ./screenshots/${filename} ({len(_img_data):,} bytes)")\n`;
+      } else if (scopeType === 'legacy') {
         out += `${indent}${scpiVar}.write('HARDCopy:PORT FILE')\n`;
         out += `${indent}${scpiVar}.write('HARDCopy STARt')\n`;
       } else {
-        out += `${indent}${scpiVar}.write('SAVE:IMAGE "C:/Temp/screen.png"')\n`;
-        out += `${indent}${scpiVar}.query("*OPC?")\n`;
-        out += `${indent}${scpiVar}.write('FILESYSTEM:READFILE "C:/Temp/screen.png"')\n`;
-        out += `${indent}data = ${scpiVar}.read_raw()\n`;
-        out += `${indent}pathlib.Path(${JSON.stringify(filename)}).write_bytes(data)\n`;
+        out += `${indent}${scpiVar}.write('SAVE:IMAGE:COMPOSITION NORMAL')\n`;
+        out += `${indent}${scpiVar}.write('SAVE:IMAGE "C:/Temp/screenshot.png"')\n`;
+        out += `${indent}if str(${scpiVar}.query('*OPC?')).strip() != '1': raise RuntimeError('SAVE:IMAGE did not complete')\n`;
+        out += `${indent}_old_timeout = ${scpiVar}.timeout\n`;
+        out += `${indent}_old_rterm = ${scpiVar}.read_termination\n`;
+        out += `${indent}try:\n`;
+        out += `${indent}    ${scpiVar}.timeout = 30000\n`;
+        out += `${indent}    ${scpiVar}.read_termination = None\n`;
+        out += `${indent}    data = ${scpiVar}.query_binary_values('FILESYSTEM:READFILE "C:/Temp/screenshot.png"', datatype='B', container=bytes)\n`;
+        out += `${indent}finally:\n`;
+        out += `${indent}    ${scpiVar}.timeout = _old_timeout\n`;
+        out += `${indent}    ${scpiVar}.read_termination = _old_rterm\n`;
+        out += `${indent}pathlib.Path(${JSON.stringify('./screenshots/' + filename)}).write_bytes(data)\n`;
+        out += `${indent}${scpiVar}.write('FILESYSTEM:DELETE "C:/Temp/screenshot.png"')\n`;
+        out += `${indent}${scpiVar}.query('*OPC?')\n`;
+        out += `${indent}print(f"  Screenshot saved: ./screenshots/${filename}")\n`;
       }
       continue;
     }
@@ -279,7 +310,13 @@ export function generatePythonForSteps(stepsInput: unknown[], devicesInput: unkn
     connectionBlock += `    tek = rm.open_resource("TCPIP0::${primary.host || '127.0.0.1'}::5000::SOCKET")\n`;
   }
 
-  const body = emitSteps(steps, 'pyvisa');
+  const isRawSocket = (primary.connectionType || '') === 'socket';
+  const body = emitSteps(steps, {
+    mode: 'pyvisa',
+    isRawSocket,
+    host: primary.host || '127.0.0.1',
+    port: primary.port || 4000,
+  });
   let closeBlock = '';
   aliases.forEach((d, idx) => {
     const alias = (d.alias || `scope${idx + 1}`).replace(/[^A-Za-z0-9_]/g, '_');
