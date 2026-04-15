@@ -936,6 +936,15 @@ function filterTools(q) {
       return;
     }
 
+    // ── URL normalisation ─────────────────────────────────────────────────────
+    // Some clients store the MCP host as "<origin>/mcp" and append REST paths
+    // directly, producing "/mcp/live-actions/next", "/mcp/runtime-context" etc.
+    // Strip the "/mcp/" prefix from any path that is NOT the MCP JSON-RPC
+    // endpoint itself ("/mcp" or "/mcp?...") so all custom REST routes match.
+    if (req.url?.startsWith('/mcp/')) {
+      req.url = req.url.slice(4); // "/mcp/live-actions/next" → "/live-actions/next"
+    }
+
     if (req.method === 'GET' && req.url?.startsWith('/temp/vision/')) {
       const requestedId = decodeURIComponent(req.url.slice('/temp/vision/'.length));
       const id = requestedId.split('.')[0];
@@ -1187,6 +1196,8 @@ function filterTools(q) {
       return;
     }
 
+    // Accept /live-actions/next OR /mcp/live-actions/next (latter happens when
+    // the user stores the MCP host with a trailing /mcp path component).
     if (req.method === 'GET' && req.url?.startsWith('/live-actions/next')) {
       try {
         const requestUrl = new URL(req.url, `http://${req.headers.host || 'localhost'}`);

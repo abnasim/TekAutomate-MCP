@@ -66,7 +66,7 @@ interface ScreenshotPayload {
   imageUrl?: string;
 }
 
-type ScreenshotAnalysisTransport = 'auto' | 'url' | 'file_id' | 'base64' | 'openai_image' | 'claude_image';
+type ScreenshotAnalysisTransport = 'auto' | 'url' | 'base64' | 'openai_image' | 'claude_image';
 
 function guessImageExtension(mimeType: string): string {
   const lower = String(mimeType || '').toLowerCase();
@@ -919,22 +919,6 @@ async function runOpenAiLoop(params: LiveToolLoopParams): Promise<LiveToolLoopRe
             const analysisTransportRaw = String(toolArgs.analysisTransport || 'auto').toLowerCase() as ScreenshotAnalysisTransport;
             const analysisTransport = analysisTransportRaw === 'claude_image' ? 'base64' : analysisTransportRaw;
             const wantsOpenAiImage = analysisTransport === 'openai_image';
-            const visionFileId = analysisTransport === 'file_id'
-              ? (visionBase64 ? await uploadVisionImageToOpenAiFile(
-                  apiKey,
-                  visionBase64,
-                  visionMimeType,
-                  screenshotPayload.capturedAt,
-                ) : null)
-              : null;
-            if (analysisTransport === 'file_id' && !visionFileId) {
-              toolResultsInput.push({
-                type: 'function_call_output',
-                call_id: callId,
-                output: `Error: capture_screenshot requested analysisTransport=${analysisTransport}, but uploading the screenshot to OpenAI Files failed.`,
-              });
-              continue;
-            }
             if (analysisTransport === 'openai_image' && !visionUrl) {
               toolResultsInput.push({
                 type: 'function_call_output',
@@ -943,33 +927,27 @@ async function runOpenAiLoop(params: LiveToolLoopParams): Promise<LiveToolLoopRe
               });
               continue;
             }
-            // Send screenshot for AI analysis — base64 inline fallback removed (token cost too high)
-            if (!visionFileId && !(wantsOpenAiImage && visionUrl)) {
+            // Send screenshot for AI analysis — only openai_image (URL) transport supported
+            if (!(wantsOpenAiImage && visionUrl)) {
               toolResultsInput.push({
                 type: 'function_call_output',
                 call_id: callId,
-                output: 'Screenshot captured and displayed to user. Image analysis not available (no file_id or image URL — base64 inline transport is disabled).',
+                output: 'Screenshot captured and displayed to user. Image analysis not available (no image URL — use analysisTransport:"openai_image").',
               });
             } else {
             toolResultsInput.push({
               type: 'function_call_output',
               call_id: callId,
-              output: `Screenshot captured. Analyze the image below. Vision transport: ${wantsOpenAiImage && visionUrl ? 'url' : 'file_id'}.`,
+              output: 'Screenshot captured. Analyze the image below. Vision transport: url.',
             });
             toolResultsInput.push({
               role: 'user',
               content: [
-                ...(wantsOpenAiImage && visionUrl
-                  ? [{
-                      type: 'input_image',
-                      image_url: visionUrl,
-                      detail: 'auto',
-                    } satisfies Record<string, unknown>]
-                  : [{
-                      type: 'input_image',
-                      file_id: visionFileId,
-                      detail: 'auto',
-                    } satisfies Record<string, unknown>]),
+                {
+                  type: 'input_image',
+                  image_url: visionUrl,
+                  detail: 'auto',
+                } satisfies Record<string, unknown>,
                 { type: 'input_text', text: 'Only mention what CHANGED or is relevant to the user\'s last request. Do NOT re-describe the entire display.' },
               ],
             });

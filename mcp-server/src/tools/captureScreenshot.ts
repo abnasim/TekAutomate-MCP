@@ -34,7 +34,7 @@ interface Input extends Record<string, unknown> {
   modelFamily?: string;
   deviceDriver?: string;
   analyze?: boolean;
-  analysisTransport?: 'auto' | 'url' | 'file_id' | 'base64' | 'mcp_image' | 'openai_image' | 'claude_image';
+  analysisTransport?: 'auto' | 'url' | 'base64' | 'mcp_image' | 'openai_image' | 'claude_image';
   __mcpBaseUrl?: string;
 }
 

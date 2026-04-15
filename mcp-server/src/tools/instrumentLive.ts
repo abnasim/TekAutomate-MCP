@@ -1,5 +1,6 @@
 import { captureScreenshot } from './captureScreenshot';
 import { discoverScpi } from './discoverScpi';
+import { fetchWaveform } from './fetchWaveform';
 import { getInstrumentInfo } from './getInstrumentInfo';
 import { getVisaResources } from './getVisaResources';
 import { sendScpi } from './sendScpi';
@@ -8,7 +9,7 @@ interface InstrumentLiveInput extends Record<string, unknown> {
   action?: string;
   args?: Record<string, unknown>;
   analyze?: boolean;
-  analysisTransport?: 'auto' | 'url' | 'file_id' | 'base64' | 'mcp_image' | 'openai_image' | 'claude_image';
+  analysisTransport?: 'auto' | 'url' | 'base64' | 'mcp_image' | 'openai_image' | 'claude_image';
 }
 
 function mergeArgs(input: InstrumentLiveInput): Record<string, unknown> {
@@ -40,6 +41,8 @@ export async function instrumentLive(input: InstrumentLiveInput) {
       });
     case 'resources':
       return getVisaResources(args as any);
+    case 'waveform':
+      return fetchWaveform(args as any);
     default:
       return {
         ok: false,

@@ -19,6 +19,7 @@ export function withRuntimeInstrumentDefaults<T extends Record<string, unknown>>
   const envExecutorUrl = process.env.EXECUTOR_URL || instrument.executorUrl || localFallback;
   const envVisaResource = process.env.VISA_RESOURCE || '';
   return {
+    ...input,
     executorUrl:
       typeof input.executorUrl === 'string' && input.executorUrl
         ? input.executorUrl
@@ -35,7 +36,6 @@ export function withRuntimeInstrumentDefaults<T extends Record<string, unknown>>
       typeof input.liveMode === 'boolean'
         ? input.liveMode
         : instrument.liveMode || Boolean(envExecutorUrl),
-    ...input,
   } as T & RuntimeBackedEndpoint;
 }
 

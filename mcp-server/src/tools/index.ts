@@ -14,6 +14,7 @@ import { finalizeScpiCommands } from './finalizeScpiCommands';
 import { materializeTmDevicesCall } from './materializeTmDevicesCall';
 import { probeCommand } from './probeCommand';
 import { captureScreenshot } from './captureScreenshot';
+import { fetchWaveform } from './fetchWaveform';
 import { sendScpi } from './sendScpi';
 import { retrieveRagChunks } from './retrieveRagChunks';
 import { searchKnownFailures } from './searchKnownFailures';
@@ -127,6 +128,7 @@ export const TOOL_HANDLERS = {
   send_scpi: sendScpi,
   discover_scpi: discoverScpi,
   capture_screenshot: captureScreenshot,
+  fetch_waveform: fetchWaveform,
   get_visa_resources: getVisaResources,
   get_environment: getEnvironment,
 } as const;
@@ -139,13 +141,13 @@ export function getToolDefinitions() {
     ...(isLiveInstrumentEnabled() ? [{
       name: 'instrument_live',
       description:
-        'Live instrument gateway for TekAutomate. Use `context` for connection info, `send` for SCPI commands, `screenshot` for capture, `snapshot`/`diff`/`inspect` for *LRN?-based state discovery, and `resources` for VISA discovery when needed. For screenshots: call with action:"screenshot" and analyze:true — the response returns an MCP {type:"image"} content block containing the screenshot, rendered as vision by your client. Use as a verification tool after any action that changes the display (channel enable/disable, scale, decode, trigger), when measurements are unexpected, or as final task sign-off.',
+        'Live instrument gateway for TekAutomate. Use `context` for connection info, `send` for SCPI commands, `screenshot` for capture, `snapshot`/`diff`/`inspect` for *LRN?-based state discovery, `resources` for VISA discovery, and `waveform` for signal health check + data fetch. For screenshots: call with action:"screenshot" and analyze:true — the response returns an MCP {type:"image"} content block containing the screenshot, rendered as vision by your client. Use as a verification tool after any action that changes the display (channel enable/disable, scale, decode, trigger), when measurements are unexpected, or as final task sign-off. For waveform: action:"waveform" fetches raw ADC samples, computes stats (min/max/mean/std/Vpp), and automatically detects clipping — look for top-level "CLIPPING" key in the response. Pass saveLocal:true to save the full-resolution CSV to a local file and receive a localPath instead of inline data — use the Read tool to access it.',
       parameters: {
         type: 'object',
         properties: {
           action: {
             type: 'string',
-            enum: ['context', 'send', 'screenshot', 'snapshot', 'diff', 'inspect', 'resources'],
+            enum: ['context', 'send', 'screenshot', 'snapshot', 'diff', 'inspect', 'resources', 'waveform'],
             description: 'Live instrument operation to run.',
           },
           args: {
@@ -163,7 +165,7 @@ export function getToolDefinitions() {
           },
           analysisTransport: {
             type: 'string',
-            enum: ['claude_image', 'mcp_image', 'openai_image', 'url', 'file_id'],
+            enum: ['claude_image', 'mcp_image', 'openai_image', 'url'],
             description: 'Optional internal transport hint — leave unset. The server automatically selects the correct image format for your client.',
           },
           timeoutMs: {

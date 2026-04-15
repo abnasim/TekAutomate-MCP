@@ -1,3 +1,10 @@
+import fs from 'fs';
+import os from 'os';
+import path from 'path';
+import { fileURLToPath } from 'url';
+
+// Resolve project root relative to this file: mcp-server/src/core/ → up 3 dirs
+const _projectRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..', '..', '..');
 import type { InstrumentOutputMode, ToolResult } from './schemas';
 import { decodeCommandStatus, decodeStatusFromText } from './statusDecoder';
 
@@ -427,4 +434,230 @@ export async function captureScreenshotProxy(endpoint: Endpoint): Promise<ToolRe
       warnings: ['capture_screenshot returned invalid JSON payload'],
     };
   }
+}
+
+// ── Waveform fetch ────────────────────────────────────────────────────────────
+
+export interface WaveformParams {
+  channel:    string;
+  format:     'stats' | 'csv' | 'both';
+  downsample: number;
+  width:      1 | 2;
+  start:      number;
+  stop:       number;
+  timeoutMs:  number;
+  saveLocal?: boolean; // save full-res CSV to disk; strip csv from MCP response (AI uses Read tool on localPath)
+  scopeId?:   string;  // folder name under waveforms/ — derived from VISA resource (e.g. "192.168.1.138")
+}
+
+export function buildWaveformCommands(params: WaveformParams): string[] {
+  // stop=0 means "auto" — fetch full record. We query the record length first so
+  // we can set DATa:STOP correctly rather than guessing 1_000_000.
+  const autoStop = params.stop === 0;
+  const stopVal  = autoStop ? 1_000_000 : params.stop;
+  const cmds: string[] = [];
+  if (autoStop) {
+    // Query actual record length so we can cap DATa:STOP correctly
+    cmds.push('HORizontal:MODE:RECOrdlength?');
+  }
+  cmds.push(
+    `DATa:SOUrce ${params.channel}`,
+    'DATa:ENCdg ASCii',
+    `DATa:WIDth ${params.width}`,
+    `DATa:STARt ${params.start}`,
+    `DATa:STOP ${stopVal}`,
+    'DATa:STOP?',   // verify setting was accepted
+    '*OPC?',        // synchronisation barrier — scope processes all writes before responding
+    // Query individual preamble fields for reliable parsing (WFMOutpre? format varies by firmware)
+    'WFMOutpre:YMUlt?',
+    'WFMOutpre:YOFf?',
+    'WFMOutpre:YZEro?',
+    'WFMOutpre:XINcr?',
+    'WFMOutpre:XZEro?',
+    'WFMOutpre:NR_Pt?',
+    'CURVe?',
+  );
+  return cmds;
+}
+
+function parsePreamble(raw: string): Record<string, number> {
+  const out: Record<string, number> = {};
+  for (const part of raw.split(';')) {
+    const m = part.trim().match(/^(\w+)\s+(.+)$/);
+    if (!m) continue;
+    const v = parseFloat(m[2]);
+    if (!isNaN(v)) out[m[1].toUpperCase()] = v;
+  }
+  return out;
+}
+
+/** Largest-Triangle-Three-Buckets downsampling (shape-preserving). */
+function lttb(data: number[], threshold: number): number[] {
+  const n = data.length;
+  if (n <= threshold) return data;
+  const out: number[] = [data[0]];
+  const bSize = (n - 2) / (threshold - 2);
+  let a = 0;
+  for (let i = 0; i < threshold - 2; i++) {
+    const avgFrom = Math.floor((i + 1) * bSize) + 1;
+    const avgTo   = Math.min(Math.floor((i + 2) * bSize) + 1, n);
+    let avgY = 0;
+    for (let j = avgFrom; j < avgTo; j++) avgY += data[j];
+    avgY /= (avgTo - avgFrom);
+    const rFrom = Math.floor(i * bSize) + 1;
+    const rTo   = Math.min(Math.floor((i + 1) * bSize) + 1, n);
+    const aY    = out[out.length - 1];
+    let maxArea = -1, nextA = rFrom;
+    for (let j = rFrom; j < rTo; j++) {
+      const area = Math.abs((a - avgFrom) * (data[j] - aY) - (a - j) * (avgY - aY)) * 0.5;
+      if (area > maxArea) { maxArea = area; nextA = j; }
+    }
+    out.push(data[nextA]);
+    a = nextA;
+  }
+  out.push(data[n - 1]);
+  return out;
+}
+
+export function processWaveformScpiResponses(
+  responses: Array<{ command: string; response: string }>,
+  params: WaveformParams,
+): ToolResult<unknown> {
+  const get = (pattern: RegExp) => responses.find(r => pattern.test(r.command))?.response ?? '';
+  const curveRaw     = get(/^CURV/i);
+  const dataStopResp = get(/^DATa:STOP\?/i);
+  const verifiedStop = dataStopResp ? parseInt(dataStopResp, 10) : null;
+
+  if (!curveRaw) {
+    return {
+      ok: false,
+      data: {
+        error: 'NO_CURVE_DATA',
+        message: 'CURVe? returned no data.',
+        diagnostics: {
+          verifiedStop,
+          responses: responses.map(r => ({ cmd: r.command, resp: r.response?.slice(0, 80) })),
+        },
+      },
+      sourceMeta: [], warnings: ['No curve data'],
+    };
+  }
+
+  // Use individual preamble field queries for reliable parsing — WFMOutpre? format
+  // varies across firmware versions and may include quoted strings that break simple parsing.
+  const parseF = (pattern: RegExp, fallback: number) => {
+    const v = parseFloat(get(pattern));
+    return isNaN(v) ? fallback : v;
+  };
+  const ymult = parseF(/WFMOutpre:YMUlt/i,  1);
+  const yoff  = parseF(/WFMOutpre:YOFf/i,   0);
+  const yzero = parseF(/WFMOutpre:YZEro/i,  0);
+  const xincr = parseF(/WFMOutpre:XINcr/i,  1e-9);
+  const xzero = parseF(/WFMOutpre:XZEro/i,  0);
+
+  // Strip IEEE binary header if present: #<n><bytes><data>
+  let raw = curveRaw.trim();
+  if (raw.startsWith('#')) raw = raw.slice(2 + parseInt(raw[1], 10));
+
+  const samples = raw.split(',').map(Number).filter(v => !isNaN(v));
+  if (!samples.length) {
+    return { ok: false, data: { error: 'PARSE_FAILED', message: 'Could not parse CURVe? as ASCII integers.' }, sourceMeta: [], warnings: ['CURVe? parse failed'] };
+  }
+
+  // Convert ADC counts → volts
+  const volts = samples.map(s => (s - yoff) * ymult + yzero);
+
+  let min = Infinity, max = -Infinity, sum = 0;
+  for (const v of volts) { if (v < min) min = v; if (v > max) max = v; sum += v; }
+  const mean = sum / volts.length;
+  let variance = 0;
+  for (const v of volts) variance += (v - mean) ** 2;
+  const std = Math.sqrt(variance / volts.length);
+
+  const railLow  = params.width === 2 ? -32768 : -128;
+  const railHigh = params.width === 2 ?  32767 :  127;
+  const clipLow  = samples.filter(s => s <= railLow).length;
+  const clipHigh = samples.filter(s => s >= railHigh).length;
+  const clipPct  = (clipLow + clipHigh) / samples.length * 100;
+
+  const stats: Record<string, unknown> = {
+    channel:       params.channel,
+    nPoints:       volts.length,
+    min:           +min.toFixed(6),
+    max:           +max.toFixed(6),
+    mean:          +mean.toFixed(6),
+    std:           +std.toFixed(6),
+    vpp:           +(max - min).toFixed(6),
+    xincr,
+    xzero,
+    clipLowCount:  clipLow,
+    clipHighCount: clipHigh,
+    clipPct:       +clipPct.toFixed(2),
+    ...(verifiedStop !== null ? { verifiedDATaSTOP: verifiedStop } : {}),
+  };
+  if (clipPct >= 1) stats['CLIPPING'] = true;
+
+  // ── saveLocal: write full-res CSV to disk BEFORE any early returns ──────────
+  // Must run before the `format === 'stats'` guard — when saveLocal is true the
+  // caller wants the file regardless of the format they requested for the response.
+  if (params.saveLocal) {
+    const fullCsvLines = volts.map((v, i) => `${(xzero + i * xincr).toExponential(4)},${v.toFixed(6)}`);
+    const fullCsv = `time_s,voltage_v\n${fullCsvLines.join('\n')}`;
+
+    const scopeFolder = (params.scopeId || 'scope').replace(/[^a-zA-Z0-9._\-]/g, '_');
+    const waveDir     = path.join(_projectRoot, 'waveforms', scopeFolder);
+    const fileName    = `waveform_${params.channel}_${Date.now()}.csv`;
+    const filePath    = path.join(waveDir, fileName);
+
+    let localPath: string | null = null;
+    let saveError: string | null = null;
+    try {
+      fs.mkdirSync(waveDir, { recursive: true });
+      fs.writeFileSync(filePath, fullCsv, 'utf8');
+      localPath = filePath;
+    } catch (e) {
+      saveError = e instanceof Error ? e.message : String(e);
+    }
+
+    const result: Record<string, unknown> = {
+      ...stats,
+      totalPoints: volts.length,
+      ...(localPath
+        ? { localPath, _hint: 'Full-resolution waveform CSV saved. Use the Read tool to open it.' }
+        : { saveLocalError: saveError || 'Unknown write error', savePath: filePath }),
+    };
+    return {
+      ok: true,
+      data: result,
+      sourceMeta: [],
+      warnings: saveError ? [`saveLocal write failed: ${saveError}`] : [],
+    };
+  }
+
+  if (params.format === 'stats') {
+    return { ok: true, data: stats, sourceMeta: [], warnings: [] };
+  }
+
+  // Inline path: LTTB-downsample for response
+  const ds = lttb(volts, params.downsample);
+  const ratio = volts.length / ds.length;
+  const csvLines = ds.map((v, i) => `${(xzero + i * xincr * ratio).toExponential(4)},${v.toFixed(6)}`);
+  const result: Record<string, unknown> = { ...stats, downsampledPoints: ds.length, csv: `time_s,voltage_v\n${csvLines.join('\n')}` };
+
+  return { ok: true, data: result, sourceMeta: [], warnings: [] };
+}
+
+export async function fetchWaveformProxy(
+  endpoint: Endpoint,
+  params: WaveformParams,
+): Promise<ToolResult<unknown>> {
+  const commands = buildWaveformCommands(params);
+  const scpiResult = await sendScpiProxy(endpoint, commands, params.timeoutMs);
+  if (!scpiResult.ok) return scpiResult;
+
+  const responses = Array.isArray((scpiResult.data as Record<string, unknown>)?.responses)
+    ? (scpiResult.data as Record<string, unknown>).responses as Array<{ command: string; response: string }>
+    : [];
+
+  return processWaveformScpiResponses(responses, params);
 }
