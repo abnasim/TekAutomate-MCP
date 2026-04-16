@@ -93,7 +93,7 @@
       ]
     },
     "corpus": "templates",
-    "source": "mcp-server/rag/corpus/templates/templates_index.json"
+    "source": "rag/corpus/templates/templates_index.json"
   },
   {
     "id": "tpl_required_pattern",
@@ -109,7 +109,7 @@
     "title": "Required Pattern — Connect First, Disconnect Last",
     "body": "CRITICAL RULE: Every template MUST start with a 'connect' step and end with a 'disconnect' step. The connect step establishes instrument connections; use empty instrumentIds [] to connect all enabled devices. The disconnect step closes all connections. No template should omit these. For single-device templates, connect params can be empty {}. For multi-device, use instrumentIds: [] (empty = all) or specific aliases. Steps between connect and disconnect form the workflow. This is the most important structural rule for template validity.",
     "corpus": "templates",
-    "source": "mcp-server/rag/corpus/templates/templates_index.json"
+    "source": "rag/corpus/templates/templates_index.json"
   },
   {
     "id": "tpl_step_type_reference",
@@ -234,7 +234,7 @@
       }
     },
     "corpus": "templates",
-    "source": "mcp-server/rag/corpus/templates/templates_index.json"
+    "source": "rag/corpus/templates/templates_index.json"
   },
   {
     "id": "tpl_golden_all_step_types_flat",
@@ -417,7 +417,7 @@
       ]
     },
     "corpus": "templates",
-    "source": "mcp-server/rag/corpus/templates/templates_index.json"
+    "source": "rag/corpus/templates/templates_index.json"
   },
   {
     "id": "tpl_golden_all_types_grouped",
@@ -634,7 +634,7 @@
       ]
     },
     "corpus": "templates",
-    "source": "mcp-server/rag/corpus/templates/templates_index.json"
+    "source": "rag/corpus/templates/templates_index.json"
   },
   {
     "id": "tpl_golden_single_device",
@@ -776,7 +776,7 @@
       ]
     },
     "corpus": "templates",
-    "source": "mcp-server/rag/corpus/templates/templates_index.json"
+    "source": "rag/corpus/templates/templates_index.json"
   },
   {
     "id": "tpl_screenshot_modern",
@@ -824,7 +824,7 @@
       ]
     },
     "corpus": "templates",
-    "source": "mcp-server/rag/corpus/templates/templates_index.json"
+    "source": "rag/corpus/templates/templates_index.json"
   },
   {
     "id": "tpl_screenshot_legacy",
@@ -873,7 +873,7 @@
       ]
     },
     "corpus": "templates",
-    "source": "mcp-server/rag/corpus/templates/templates_index.json"
+    "source": "rag/corpus/templates/templates_index.json"
   },
   {
     "id": "tpl_screenshot_70k",
@@ -919,7 +919,7 @@
       ]
     },
     "corpus": "templates",
-    "source": "mcp-server/rag/corpus/templates/templates_index.json"
+    "source": "rag/corpus/templates/templates_index.json"
   },
   {
     "id": "tpl_scope_screenshot_commands",
@@ -935,7 +935,7 @@
     "title": "Scope Family Screenshot Command Summary",
     "body": "MSO 4/5/6 Series (MSO44/54/58/64/68B): Trigger=SAVE:IMAGe \"path.png\", format from extension, view=SAVE:IMAGe:VIEWTYpe FULLScreen, colors=SAVE:IMAGe:COMPosition NORMal, default path=C:/Temp. NOT SUPPORTED: SAVE:IMAGe:FILEFormat, SAVE:IMAGe:INKSaver, SAVE:IMAGe:LAYout, EXPort, HARDCopy. MSO/DPO 70000 Series (MSO73304DX etc): Trigger=EXPort START (case-sensitive!), EXPort:FILEName for path, EXPort:FORMat PNG, EXPort:VIEW FULLSCREEN, EXPort:PALEtte COLOR, default path=C:/TekScope. NOT SUPPORTED: SAVE:IMAGe, HARDCopy:DATA?. Both: FILESystem:READFile for transfer (raw binary, no IEEE header), FILESystem:DELEte for cleanup.",
     "corpus": "templates",
-    "source": "mcp-server/rag/corpus/templates/templates_index.json"
+    "source": "rag/corpus/templates/templates_index.json"
   },
   {
     "id": "tpl_recall_factory",
@@ -959,7 +959,7 @@
       }
     },
     "corpus": "templates",
-    "source": "mcp-server/rag/corpus/templates/templates_index.json"
+    "source": "rag/corpus/templates/templates_index.json"
   },
   {
     "id": "tpl_recall_setup",
@@ -983,7 +983,7 @@
       }
     },
     "corpus": "templates",
-    "source": "mcp-server/rag/corpus/templates/templates_index.json"
+    "source": "rag/corpus/templates/templates_index.json"
   },
   {
     "id": "tpl_recall_session",
@@ -1007,7 +1007,7 @@
       }
     },
     "corpus": "templates",
-    "source": "mcp-server/rag/corpus/templates/templates_index.json"
+    "source": "rag/corpus/templates/templates_index.json"
   },
   {
     "id": "tpl_recall_waveform",
@@ -1032,7 +1032,7 @@
       }
     },
     "corpus": "templates",
-    "source": "mcp-server/rag/corpus/templates/templates_index.json"
+    "source": "rag/corpus/templates/templates_index.json"
   },
   {
     "id": "tpl_save_waveform",
@@ -1061,7 +1061,7 @@
       }
     },
     "corpus": "templates",
-    "source": "mcp-server/rag/corpus/templates/templates_index.json"
+    "source": "rag/corpus/templates/templates_index.json"
   },
   {
     "id": "tpl_save_screenshot_step",
@@ -1085,7 +1085,7 @@
       }
     },
     "corpus": "templates",
-    "source": "mcp-server/rag/corpus/templates/templates_index.json"
+    "source": "rag/corpus/templates/templates_index.json"
   },
   {
     "id": "tpl_multi_device_pattern",
@@ -1222,7 +1222,7 @@
       ]
     },
     "corpus": "templates",
-    "source": "mcp-server/rag/corpus/templates/templates_index.json"
+    "source": "rag/corpus/templates/templates_index.json"
   },
   {
     "id": "tpl_tekexpress_pattern",
@@ -1330,7 +1330,7 @@
       ]
     },
     "corpus": "templates",
-    "source": "mcp-server/rag/corpus/templates/templates_index.json"
+    "source": "rag/corpus/templates/templates_index.json"
   },
   {
     "id": "tpl_groups_organization",
@@ -1533,7 +1533,7 @@
       ]
     },
     "corpus": "templates",
-    "source": "mcp-server/rag/corpus/templates/templates_index.json"
+    "source": "rag/corpus/templates/templates_index.json"
   },
   {
     "id": "tpl_measurement_sweep",
@@ -1677,7 +1677,7 @@
       ]
     },
     "corpus": "templates",
-    "source": "mcp-server/rag/corpus/templates/templates_index.json"
+    "source": "rag/corpus/templates/templates_index.json"
   },
   {
     "id": "tpl_session_recall_validate",
@@ -1772,7 +1772,7 @@
       ]
     },
     "corpus": "templates",
-    "source": "mcp-server/rag/corpus/templates/templates_index.json"
+    "source": "rag/corpus/templates/templates_index.json"
   },
   {
     "id": "tpl_tm_devices",
@@ -1830,7 +1830,7 @@
       ]
     },
     "corpus": "templates",
-    "source": "mcp-server/rag/corpus/templates/templates_index.json"
+    "source": "rag/corpus/templates/templates_index.json"
   },
   {
     "id": "tpl_sweep_pattern",
@@ -1911,7 +1911,7 @@
       ]
     },
     "corpus": "templates",
-    "source": "mcp-server/rag/corpus/templates/templates_index.json"
+    "source": "rag/corpus/templates/templates_index.json"
   },
   {
     "id": "tpl_validation_rules",
@@ -1926,7 +1926,7 @@
     "title": "Template Validation Rules — What Makes a Template Valid",
     "body": "VALID template requirements: 1) Has name and description, 2) Has non-empty steps array, 3) First step is type='connect', 4) Last step is type='disconnect', 5) Specifies backend (recommended), 6) Query steps have saveAs, 7) Multi-device steps have boundDeviceId, 8) Commands use full SCPI syntax (not abbreviations), 9) Labels are descriptive. INVALID patterns (common mistakes): Missing connect/disconnect, multi-device without boundDeviceId, tm_devices commands without backend:'tm_devices', query without saveAs, using *OPC? after FILESYSTEM:READFILE, using HARDCOPY on modern scopes or SAVE:IMAGE on legacy scopes, connect all but disconnect specific (inconsistent), sweep type used where group is needed.",
     "corpus": "templates",
-    "source": "mcp-server/rag/corpus/templates/templates_index.json"
+    "source": "rag/corpus/templates/templates_index.json"
   },
   {
     "id": "tpl_file_type_reference",
@@ -1943,7 +1943,7 @@
     "title": "File Type Reference — .SET, .TSS, .WFM Extensions",
     "body": ".SET = Settings only file. Contains: channel scales, trigger configuration, horizontal settings, display settings. Does NOT contain: waveform data, measurements, reference waveforms. Use recallType: 'SETUP' to load. .TSS = Full session file. Contains: ALL settings + waveform data + measurements + math channels + search + reference waveforms. Most complete recall type. Use recallType: 'SESSION'. Takes longer to load (add sleep 2.0). .WFM = Waveform data file. Contains: raw waveform sample data for one channel. Used with recallType: 'WAVEFORM' and reference: 'REF1'-'REF4' to load into reference channels. For saving: save_waveform step produces .bin, .wfm, or .csv depending on format param.",
     "corpus": "templates",
-    "source": "mcp-server/rag/corpus/templates/templates_index.json"
+    "source": "rag/corpus/templates/templates_index.json"
   },
   {
     "id": "tpl_backend_specification",
@@ -1959,7 +1959,7 @@
     "title": "Backend Specification in Templates",
     "body": "Always specify backend when template uses backend-specific features. PyVISA ('pyvisa'): Standard SCPI commands like 'CH1:SCALE 1.0'. tm_devices ('tm_devices'): High-level API like 'scope.commands.ch[1].scale.write(1.0)'. TekHSI ('tekhsi'): gRPC API like 'scope.ch[1].scale = 1.0'. Hybrid ('hybrid'): Mix SCPI (via PyVISA) for config and TekHSI for fast waveforms. IMPORTANT: tm_devices commands in a pyvisa template will fail. Backend determines how commands are interpreted and what code is generated.",
     "corpus": "templates",
-    "source": "mcp-server/rag/corpus/templates/templates_index.json"
+    "source": "rag/corpus/templates/templates_index.json"
   },
   {
     "id": "tpl_common_patterns",
@@ -1973,7 +1973,7 @@
     "title": "Common Template Patterns",
     "body": "Pattern 1 — Setup → Execute → Save: connect, *RST, sleep(1.0), configure channels, start acquisition, wait, stop, save data, disconnect. Pattern 2 — Group Organization: connect, group(Setup), group(Configure), group(Measure), group(Save), disconnect. Pattern 3 — Query and Process: connect, query to get value (saveAs), python block to process/validate, disconnect. Pattern 4 — Recall and Verify: connect, recall session/setup, sleep for load, query settings, python assert, disconnect. Pattern 5 — Multi-Step Screenshot: connect, python block with complete screenshot code, disconnect. Pattern 6 — Sweep: connect, setup instruments, sweep step with children, cleanup, disconnect.",
     "corpus": "templates",
-    "source": "mcp-server/rag/corpus/templates/templates_index.json"
+    "source": "rag/corpus/templates/templates_index.json"
   },
   {
     "id": "tpl_xml_basic_scope",
@@ -1990,7 +1990,7 @@
     "body": "Blockly XML for basic oscilloscope setup and waveform capture. Blocks: connect_scope, set_device_context, enable_channel (CH1), configure_channel (SCALE 1.0, OFFSET 0.0, COUPLING DC, TERMINATION ONEMEG), scpi_write (horizontal scale), acquisition_reset, single_acquisition, wait_for_opc, save_waveform (CSV), disconnect. Validated and fixed — configure_channel now includes TERMINATION field. Generates clean Python code.",
     "xml": "<block type=\"connect_scope\"><next><block type=\"set_device_context\"><next><block type=\"enable_channel\"><field name=\"CHANNEL\">CH1</field><field name=\"STATE\">ON</field><next><block type=\"configure_channel\"><field name=\"CHANNEL\">CH1</field><field name=\"SCALE\">1.0</field><field name=\"OFFSET\">0.0</field><field name=\"COUPLING\">DC</field><field name=\"TERMINATION\">ONEMEG</field><next><block type=\"scpi_write\"><field name=\"COMMAND\">HORizontal:SCAle 1e-6</field><next><block type=\"acquisition_reset\"><next><block type=\"single_acquisition\"><next><block type=\"wait_for_opc\"><next><block type=\"save_waveform\"><next><block type=\"disconnect\"/></next></block></next></block></next></block></next></block></next></block></next></block></next></block></next></block></next></block>",
     "corpus": "templates",
-    "source": "mcp-server/rag/corpus/templates/templates_index.json"
+    "source": "rag/corpus/templates/templates_index.json"
   },
   {
     "id": "tpl_xml_voltage_sweep",
@@ -2008,7 +2008,7 @@
     "body": "Blockly XML for multi-device voltage sweep. Uses tm_devices backend. Blocks: connect_scope x2 (scope + SMU), set_device_context (switch between devices), python_code (SMU output on, set voltage), controls_for loop (v = 1 to 5), acquisition_reset, single_acquisition, wait_for_opc, measurement_immediate (PK2PK), disconnect x2. Demonstrates device context switching and for loops in Blockly. Validated, no changes needed.",
     "xml": "<!-- Voltage sweep with SMU - uses tm_devices backend, connect_scope x2, controls_for loop v=1..5, measurement_immediate PK2PK -->",
     "corpus": "templates",
-    "source": "mcp-server/rag/corpus/templates/templates_index.json"
+    "source": "rag/corpus/templates/templates_index.json"
   },
   {
     "id": "tpl_xml_tekexpress",
@@ -2026,7 +2026,7 @@
     "body": "Blockly XML for TekExpress compliance testing (validated for USB, PCIe, DisplayPort). Blocks: connect_tekexpress, tekexp_write (multiple SCPI), tekexp_query, tekexp_select_device, tekexp_select_test, tekexp_set_value (DUTID), tekexp_run, tekexp_wait_state (COMPLETE with popup handling), tekexp_export_report, python_code, wait_seconds (uses <field> not <value> — was a bug fixed in TekExpress_USB.xml), disconnect. Key fix: wait_seconds uses FieldNumber (<field name=\"SECONDS\">2</field>), NOT <value> with shadow blocks.",
     "xml": "<!-- TekExpress workflow: connect_tekexpress → tekexp_set_acquire_mode LIVE → tekexp_select_device → tekexp_set_value DUTID → tekexp_select_test → tekexp_run → tekexp_wait_state COMPLETE → tekexp_export_report → disconnect -->",
     "corpus": "templates",
-    "source": "mcp-server/rag/corpus/templates/templates_index.json"
+    "source": "rag/corpus/templates/templates_index.json"
   },
   {
     "id": "tpl_xml_validation",
@@ -2041,7 +2041,7 @@
     "title": "XML/Blockly Validation Rules and Common Errors",
     "body": "XML validation rules: 1) All block types must be registered (connect_scope, scpi_write, tekexp_write, etc.), 2) Field names must match block definitions exactly, 3) wait_seconds uses <field name=\"SECONDS\">value</field> NOT <value> with shadow blocks (FieldNumber not value input), 4) configure_channel must include TERMINATION field, 5) All <next> tags must be properly closed, 6) Variable declarations must match usage, 7) Mutation tags present where needed. Common fix: TekExpress_USB.xml had 6 wait_seconds blocks using wrong format (value→field). Common fix: basic_setup_waveform.xml missing TERMINATION field.",
     "corpus": "templates",
-    "source": "mcp-server/rag/corpus/templates/templates_index.json"
+    "source": "rag/corpus/templates/templates_index.json"
   },
   {
     "id": "tpl_device_binding",
@@ -2056,7 +2056,7 @@
     "title": "Device Binding Rules — boundDeviceId Usage",
     "body": "Device binding determines which instrument receives each command. Rules: 1) boundDeviceId uses device ALIAS (not UUID), set by user in device configuration, 2) If boundDeviceId not specified, command goes to default (first enabled) device, 3) For single-device templates, binding is unnecessary, 4) Device selection priority: step boundDeviceId > parent group boundDeviceId > default device, 5) Connect and disconnect can use instrumentIds array for specific devices or empty [] for all, 6) Each device can have different backend (scope=tm_devices, smu=pyvisa), 7) Commands within groups inherit group's device unless overridden.",
     "corpus": "templates",
-    "source": "mcp-server/rag/corpus/templates/templates_index.json"
+    "source": "rag/corpus/templates/templates_index.json"
   },
   {
     "id": "tpl_creation_checklist",
@@ -2070,7 +2070,7 @@
     "title": "Template Creation Checklist",
     "body": "Before creating: Determine single vs multi-device, choose backend, identify device type(s), plan connection strategy. Structure checks: Has name and description, has non-empty steps array, starts with connect, ends with disconnect, specifies backend. Connection checks: Connect is first, disconnect is last, handles single/multi-device correctly, printIdn for verification. Multi-device checks: Uses boundDeviceId for device-specific commands, device aliases documented, all devices connected at start and disconnected at end. Command quality: Full SCPI syntax (not abbreviations), library commands when possible, query steps have saveAs, labels are descriptive. Code generation: Generates valid Python, no syntax errors, device references correct, backend-specific commands correct.",
     "corpus": "templates",
-    "source": "mcp-server/rag/corpus/templates/templates_index.json"
+    "source": "rag/corpus/templates/templates_index.json"
   },
   {
     "id": "tpl_common_pitfalls",
@@ -2085,7 +2085,7 @@
     "title": "Common Template Pitfalls to Avoid",
     "body": "Pitfall 1: Missing connect/disconnect — every template needs both. Pitfall 2: Multi-device without boundDeviceId — commands go to wrong device. Pitfall 3: Missing backend specification — tm_devices commands in pyvisa template fail. Pitfall 4: Inconsistent device handling — connect all but disconnect only one. Pitfall 5: Using *OPC? after FILESYSTEM:READFILE — causes UnicodeDecodeError from PNG binary data in buffer. Use time.sleep(1.0) instead. Pitfall 6: Using HARDCOPY on modern scopes (MSO5/6) — not supported, use SAVE:IMAGE. Pitfall 7: Using SAVE:IMAGE on legacy scopes (5k/7k/70k) — not supported, use HARDCOPY. Pitfall 8: HARDCOPY:FORMAT ${format} literal — was a generator bug, now fixed. Pitfall 9: Query without saveAs — result is lost.",
     "corpus": "templates",
-    "source": "mcp-server/rag/corpus/templates/templates_index.json"
+    "source": "rag/corpus/templates/templates_index.json"
   },
   {
     "id": "tpl_save_patterns",
@@ -2101,7 +2101,7 @@
     "title": "Save Operations — Setup, Session, Waveform, Image",
     "body": "Save SETUP: SAVE:SETUP \"filepath.set\" — saves instrument settings only. Save SESSION: SAVe:SESsion \"filepath.tss\" — saves full session with waveforms. Save WAVEFORM: Use save_waveform step type with source (CH1), filename, format (bin/wfm/csv). Internally configures DATa:SOUrce, DATa:ENCdg, DATa:WIDth, then CURVe? for data. Save IMAGE: Use save_screenshot step type OR python block. Modern: SAVE:IMAGE \"path.png\". Legacy: HARDCOPY:PORT FILE + HARDCOPY:FORMAT PNG + HARDCOPY:FILENAME + HARDCOPY START. Both transfer via FILESYSTEM:READFILE.",
     "corpus": "templates",
-    "source": "mcp-server/rag/corpus/templates/templates_index.json"
+    "source": "rag/corpus/templates/templates_index.json"
   },
   {
     "id": "tpl_scope_type_detection",
@@ -2117,6 +2117,6 @@
     "title": "Scope Type Detection for Template Selection",
     "body": "Detect scope series from *IDN? response to choose correct commands. MSO 4/5/6 series (model starts with MSO4, MSO5, MSO6, or contains TEKSCOPESW): Use SAVE:IMAGe, default path C:/Temp. MSO/DPO 70000 series (model starts with MSO7 or DPO7): Use EXPort commands, default path C:/TekScope. Legacy 5k/7k (DPO5000, DPO7000, MSO5000): Use HARDCOPY commands, default path C:/TekScope/Temp. Python detection: parse parts[1] from IDN string, check prefix (MSO7/DPO7 → mso70k, MSO4/5/6 → mso456).",
     "corpus": "templates",
-    "source": "mcp-server/rag/corpus/templates/templates_index.json"
+    "source": "rag/corpus/templates/templates_index.json"
   }
 ]

@@ -1,9 +1,10 @@
 import fs from 'fs';
 import path from 'path';
+import { fileURLToPath } from 'url';
 
-type RagCorpus = 'scpi' | 'tmdevices' | 'app_logic' | 'templates' | 'errors' | 'pyvisa_tekhsi';
+type RagCorpus = 'scpi' | 'tmdevices' | 'app_logic' | 'scope_logic' | 'templates' | 'errors' | 'pyvisa_tekhsi' | 'tek_docs';
 
-interface RagChunk {
+interface RagChunk extends Record<string, unknown> {
   id: string;
   corpus: RagCorpus;
   title: string;
@@ -20,13 +21,30 @@ interface RagManifest {
   counts: Partial<Record<RagCorpus, number>>;
 }
 
-const ROOT = path.resolve(__dirname, '..');
-const COMMANDS_DIR = path.join(ROOT, 'public', 'commands');
-const TEMPLATES_DIR = path.join(ROOT, 'public', 'templates');
-const AI_RAG_DIR = path.join(ROOT, 'AI_RAG');
-const AI_RAG_CORPUS_DIR = path.join(AI_RAG_DIR, 'corpus');
-const DOCS_DIR = path.join(ROOT, 'docs');
-const OUT_DIR = path.join(ROOT, 'public', 'rag');
+const SCRIPT_DIR = path.dirname(fileURLToPath(import.meta.url));
+const MCP_ROOT = path.resolve(SCRIPT_DIR, '..');
+
+// Mirror the hasRepoMarkers() logic from src/core/paths.ts exactly:
+// A true repo root has BOTH public/commands AND an mcp-server subdirectory.
+// When running from mcp-server/, MCP_ROOT has public/commands but NOT mcp-server/,
+// so we walk up one level to find the real root (TekAutomate/).
+// This ensures build writes to the same public/rag/ that the runtime reads from.
+function hasRepoMarkers(dir: string): boolean {
+  return (
+    fs.existsSync(path.join(dir, 'public', 'commands')) &&
+    fs.existsSync(path.join(dir, 'mcp-server'))
+  );
+}
+const REPO_ROOT = hasRepoMarkers(MCP_ROOT)
+  ? MCP_ROOT
+  : hasRepoMarkers(path.resolve(MCP_ROOT, '..'))
+    ? path.resolve(MCP_ROOT, '..')
+    : MCP_ROOT; // fallback: standalone deploy (Railway) where mcp-server IS the root
+
+const COMMANDS_DIR = path.join(REPO_ROOT, 'public', 'commands');
+const TEMPLATES_DIR = path.join(REPO_ROOT, 'public', 'templates');
+const RAG_CORPUS_DIR = path.join(MCP_ROOT, 'rag', 'corpus');
+const OUT_DIR = path.join(REPO_ROOT, 'public', 'rag');
 
 function readJson(filePath: string): unknown {
   return JSON.parse(fs.readFileSync(filePath, 'utf8'));
@@ -145,7 +163,7 @@ function parseMarkdownChunks(mdPath: string, corpus: RagCorpus, errorsCorpus = f
           title: heading.slice(0, 180),
           body: trimmed.slice(0, 2400),
           tags: [slugify(fileName)],
-          source: path.relative(ROOT, mdPath).replace(/\\/g, '/'),
+          source: path.relative(REPO_ROOT, mdPath).replace(/\\/g, '/'),
         });
         current = '';
       };
@@ -163,6 +181,7 @@ function inferCorpusFromPath(filePath: string, fallback: RagCorpus): RagCorpus {
   if (normalized.includes('/error_patterns/')) return 'errors';
   if (normalized.includes('/tmdevices/')) return 'tmdevices';
   if (normalized.includes('/scpi/')) return 'scpi';
+  if (normalized.includes('/scope_logic/')) return 'scope_logic';
   if (normalized.includes('/templates/')) return 'templates';
   if (normalized.includes('/pyvisa_tekhsi/')) return 'pyvisa_tekhsi';
   return fallback;
@@ -195,12 +214,13 @@ function buildChunksFromAiCorpusJson(filePath: string, defaultCorpus: RagCorpus)
       const typeTag = toText(obj.type);
       if (typeTag) tags.push(slugify(typeTag));
       return {
+        ...obj,
         id: slugify(toText(obj.id) || `${path.basename(filePath, '.json')}_${idx + 1}`),
         corpus: resolvedCorpus,
         title: title.slice(0, 180),
         body,
         tags,
-        source: path.relative(ROOT, filePath).replace(/\\/g, '/'),
+        source: path.relative(REPO_ROOT, filePath).replace(/\\/g, '/'),
       } as RagChunk;
     })
     .filter((c): c is RagChunk => Boolean(c));
@@ -239,6 +259,7 @@ function main(): void {
   const tmChunks: RagChunk[] = [];
   const templateChunks: RagChunk[] = [];
   const appLogicChunks: RagChunk[] = [];
+  const scopeLogicChunks: RagChunk[] = [];
   const errorChunks: RagChunk[] = [];
   const pyvisaTekhsiChunks: RagChunk[] = [];
 
@@ -263,19 +284,13 @@ function main(): void {
     });
   });
 
-  listFiles(AI_RAG_DIR, '.md').forEach((mdPath) => {
-    const chunks = parseMarkdownChunks(mdPath, 'app_logic');
-    chunks.forEach((chunk) => {
-      if (chunk.corpus === 'errors') errorChunks.push(chunk);
-      else appLogicChunks.push(chunk);
-    });
-  });
-
-  listFilesRecursive(AI_RAG_CORPUS_DIR, '.json').forEach((jsonPath) => {
-    const chunks = buildChunksFromAiCorpusJson(jsonPath, 'app_logic');
+  listFilesRecursive(RAG_CORPUS_DIR, '.md').forEach((mdPath) => {
+    const resolvedCorpus = inferCorpusFromPath(mdPath, 'app_logic');
+    const chunks = parseMarkdownChunks(mdPath, resolvedCorpus, resolvedCorpus === 'errors');
     chunks.forEach((chunk) => {
       if (chunk.corpus === 'scpi') scpiChunks.push(chunk);
       else if (chunk.corpus === 'tmdevices') tmChunks.push(chunk);
+      else if (chunk.corpus === 'scope_logic') scopeLogicChunks.push(chunk);
       else if (chunk.corpus === 'templates') templateChunks.push(chunk);
       else if (chunk.corpus === 'errors') errorChunks.push(chunk);
       else if (chunk.corpus === 'pyvisa_tekhsi') pyvisaTekhsiChunks.push(chunk);
@@ -283,26 +298,106 @@ function main(): void {
     });
   });
 
-  if (!appLogicChunks.length) {
-    const fallback = path.join(DOCS_DIR, 'CUSTOM_GPT_INSTRUCTIONS.txt');
-    if (fs.existsSync(fallback)) {
-      const raw = fs.readFileSync(fallback, 'utf8').replace(/\r\n/g, '\n');
-      appLogicChunks.push({
-        id: 'custom_gpt_instructions_1',
-        corpus: 'app_logic',
-        title: 'Custom GPT Instructions',
-        body: raw.slice(0, 5000),
-        source: 'docs/CUSTOM_GPT_INSTRUCTIONS.txt',
-      });
-    }
-  }
+  listFilesRecursive(RAG_CORPUS_DIR, '.json').forEach((jsonPath) => {
+    const chunks = buildChunksFromAiCorpusJson(jsonPath, 'app_logic');
+    chunks.forEach((chunk) => {
+      if (chunk.corpus === 'scpi') scpiChunks.push(chunk);
+      else if (chunk.corpus === 'tmdevices') tmChunks.push(chunk);
+      else if (chunk.corpus === 'scope_logic') scopeLogicChunks.push(chunk);
+      else if (chunk.corpus === 'templates') templateChunks.push(chunk);
+      else if (chunk.corpus === 'errors') errorChunks.push(chunk);
+      else if (chunk.corpus === 'pyvisa_tekhsi') pyvisaTekhsiChunks.push(chunk);
+      else appLogicChunks.push(chunk);
+    });
+  });
+
+  // ── tm_devices model-family tag injection ─────────────────────────────────
+  const TM_MODEL_FAMILY_MAP: Record<string, string> = {
+    MSO2: 'MSO2', MSO22: 'MSO2', MSO24: 'MSO2', MSO26: 'MSO2',
+    MSO4: 'MSO4', MSO44: 'MSO4', MSO46: 'MSO4', MSO4B: 'MSO4', MSO4K: 'MSO4', MSO4KB: 'MSO4',
+    MSO5: 'MSO5', MSO54: 'MSO5', MSO56: 'MSO5', MSO58: 'MSO5', MSO5B: 'MSO5', MSO5LP: 'MSO5', MSO5K: 'MSO5', MSO5KB: 'MSO5',
+    MSO6: 'MSO6', MSO64: 'MSO6', MSO66: 'MSO6', MSO68: 'MSO6', MSO6B: 'MSO6',
+    LPD6: 'LPD6',
+    MDO3: 'MDO3K', MDO3K: 'MDO3K',
+    MDO4K: 'MDO4K', MDO4KB: 'MDO4K', MDO4KC: 'MDO4K',
+    DPO4K: 'DPO4K', DPO4KB: 'DPO4K',
+    DPO5K: 'DPO5K', DPO5KB: 'DPO5K',
+    DPO7K: 'DPO7K', DPO7KC: 'DPO7K',
+    DPO70KC: 'DPO70K', DPO70KD: 'DPO70K', DPO70KDX: 'DPO70K', DPO70KSX: 'DPO70K',
+    DSA70KC: 'DPO70K', DSA70KD: 'DPO70K', MSO70KC: 'DPO70K', MSO70KDX: 'DPO70K',
+    AFG3K: 'AFG3K', AFG3KB: 'AFG3K', AFG3KC: 'AFG3K',
+    AWG5200: 'AWG5200', AWG5K: 'AWG5K', AWG5KC: 'AWG5K',
+    AWG7K: 'AWG7K', AWG7KC: 'AWG7K',
+    SMU2450: 'SMU', SMU2460: 'SMU', SMU2461: 'SMU', SMU2470: 'SMU',
+    RSA5K: 'RSA', RSA6K: 'RSA',
+  };
+  let tmFamilyTagsAdded = 0;
+  tmChunks.forEach((chunk) => {
+    const body = typeof chunk.body === 'string' ? chunk.body : '';
+    const modelsMatch = body.match(/^Models:\s*(.+)$/m);
+    if (!modelsMatch) return;
+    const modelNames = modelsMatch[1].split(/[\s,]+/).map((m) => m.trim().toUpperCase()).filter(Boolean);
+    const families = new Set<string>();
+    for (const m of modelNames) { const f = TM_MODEL_FAMILY_MAP[m]; if (f) families.add(f); }
+    if (families.size === 0) return;
+    const existingTags: string[] = Array.isArray(chunk.tags) ? chunk.tags as string[] : [];
+    const newTags = [...existingTags];
+    let added = false;
+    for (const f of families) { if (!newTags.includes(f)) { newTags.push(f); added = true; } }
+    if (added) { chunk.tags = newTags; tmFamilyTagsAdded++; }
+  });
+  if (tmFamilyTagsAdded > 0) console.log(`tmdevices hygiene: injected model-family tags into ${tmFamilyTagsAdded} chunk(s)`);
+  // ──────────────────────────────────────────────────────────────────────────
 
   writeShard('scpi_index.json', scpiChunks);
   writeShard('tmdevices_index.json', tmChunks);
   writeShard('templates_index.json', templateChunks);
   writeShard('app_logic_index.json', appLogicChunks);
+  writeShard('scope_logic_index.json', scopeLogicChunks);
   writeShard('errors_index.json', errorChunks);
   writeShard('pyvisa_tekhsi_index.json', pyvisaTekhsiChunks);
+
+  // Preserve externally-built corpora (e.g. tek_docs scraped from web/PDFs).
+  // These are committed to the repo and must survive rebuilds — do NOT overwrite them.
+  // We DO apply a lightweight data-hygiene pass every build so that stale build
+  // caches (e.g. NIXPACKS on Railway) can never serve corrupted tag data:
+  //   • Remove false 'faq' tags from non-FAQ chunks (body-text false-positives).
+  //   • Add 'faq' tag to any FAQ chunk whose tag was truncated by the old 12-tag limit.
+  // This is idempotent — clean data is unchanged; broken data is repaired.
+  const tekDocsFile = path.join(OUT_DIR, 'tek_docs_index.json');
+  let tekDocsCount = 0;
+  if (fs.existsSync(tekDocsFile)) {
+    try {
+      const existing = JSON.parse(fs.readFileSync(tekDocsFile, 'utf8')) as Array<Record<string, unknown>>;
+      if (Array.isArray(existing)) {
+        let patched = 0;
+        existing.forEach((chunk) => {
+          const title = typeof chunk.title === 'string' ? chunk.title : '';
+          const tags = Array.isArray(chunk.tags) ? (chunk.tags as string[]) : [];
+          const isFaqTitle = title.startsWith('FAQ:');
+          const hasFaqTag = tags.includes('faq');
+
+          if (isFaqTitle && !hasFaqTag) {
+            // faq tag was truncated — add it back
+            tags.push('faq');
+            tags.sort();
+            chunk.tags = tags;
+            patched++;
+          } else if (!isFaqTitle && hasFaqTag) {
+            // false positive — body text contained "FAQ" (e.g. sidebar nav links)
+            chunk.tags = tags.filter((t) => t !== 'faq');
+            patched++;
+          }
+        });
+        if (patched > 0) {
+          fs.writeFileSync(tekDocsFile, JSON.stringify(existing, null, 2));
+          // eslint-disable-next-line no-console
+          console.log(`tek_docs hygiene: repaired ${patched} chunk(s) with incorrect faq tag`);
+        }
+        tekDocsCount = existing.length;
+      }
+    } catch { /* malformed — skip */ }
+  }
 
   const manifest: RagManifest = {
     version: '1.0.0',
@@ -311,23 +406,27 @@ function main(): void {
       scpi: 'scpi_index.json',
       tmdevices: 'tmdevices_index.json',
       app_logic: 'app_logic_index.json',
+      scope_logic: 'scope_logic_index.json',
       templates: 'templates_index.json',
       errors: 'errors_index.json',
       pyvisa_tekhsi: 'pyvisa_tekhsi_index.json',
+      ...(tekDocsCount > 0 ? { tek_docs: 'tek_docs_index.json' } : {}),
     },
     counts: {
       scpi: scpiChunks.length,
       tmdevices: tmChunks.length,
       app_logic: appLogicChunks.length,
+      scope_logic: scopeLogicChunks.length,
       templates: templateChunks.length,
       errors: errorChunks.length,
       pyvisa_tekhsi: pyvisaTekhsiChunks.length,
+      ...(tekDocsCount > 0 ? { tek_docs: tekDocsCount } : {}),
     },
   };
   fs.writeFileSync(path.join(OUT_DIR, 'manifest.json'), JSON.stringify(manifest, null, 2));
 
   // eslint-disable-next-line no-console
-  console.log(`RAG shards generated in public/rag (scpi=${scpiChunks.length}, tmdevices=${tmChunks.length}, app_logic=${appLogicChunks.length}, templates=${templateChunks.length}, errors=${errorChunks.length}, pyvisa_tekhsi=${pyvisaTekhsiChunks.length})`);
+  console.log(`RAG shards generated in public/rag (scpi=${scpiChunks.length}, tmdevices=${tmChunks.length}, app_logic=${appLogicChunks.length}, scope_logic=${scopeLogicChunks.length}, templates=${templateChunks.length}, errors=${errorChunks.length}, pyvisa_tekhsi=${pyvisaTekhsiChunks.length}${tekDocsCount > 0 ? `, tek_docs=${tekDocsCount}` : ''})`);
 }
 
 main();

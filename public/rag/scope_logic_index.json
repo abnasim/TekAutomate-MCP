@@ -7,7 +7,7 @@
     "tags": [
       "anti_clipping_md"
     ],
-    "source": "mcp-server/rag/corpus/scope_logic/anti-clipping.md"
+    "source": "rag/corpus/scope_logic/anti-clipping.md"
   },
   {
     "id": "anti_clipping_md_2_p1",
@@ -17,7 +17,7 @@
     "tags": [
       "anti_clipping_md"
     ],
-    "source": "mcp-server/rag/corpus/scope_logic/anti-clipping.md"
+    "source": "rag/corpus/scope_logic/anti-clipping.md"
   },
   {
     "id": "anti_clipping_md_4_p1",
@@ -27,7 +27,7 @@
     "tags": [
       "anti_clipping_md"
     ],
-    "source": "mcp-server/rag/corpus/scope_logic/anti-clipping.md"
+    "source": "rag/corpus/scope_logic/anti-clipping.md"
   },
   {
     "id": "auto_setup_scope_md_1_p1",
@@ -37,7 +37,7 @@
     "tags": [
       "auto_setup_scope_md"
     ],
-    "source": "mcp-server/rag/corpus/scope_logic/auto-setup-scope.md"
+    "source": "rag/corpus/scope_logic/auto-setup-scope.md"
   },
   {
     "id": "auto_setup_scope_md_2_p1",
@@ -47,7 +47,7 @@
     "tags": [
       "auto_setup_scope_md"
     ],
-    "source": "mcp-server/rag/corpus/scope_logic/auto-setup-scope.md"
+    "source": "rag/corpus/scope_logic/auto-setup-scope.md"
   },
   {
     "id": "auto_setup_scope_md_3_p1",
@@ -57,7 +57,7 @@
     "tags": [
       "auto_setup_scope_md"
     ],
-    "source": "mcp-server/rag/corpus/scope_logic/auto-setup-scope.md"
+    "source": "rag/corpus/scope_logic/auto-setup-scope.md"
   },
   {
     "id": "autoset_first_md_1_p1",
@@ -67,7 +67,7 @@
     "tags": [
       "autoset_first_md"
     ],
-    "source": "mcp-server/rag/corpus/scope_logic/autoset-first.md"
+    "source": "rag/corpus/scope_logic/autoset-first.md"
   },
   {
     "id": "autoset_first_md_2_p1",
@@ -77,7 +77,7 @@
     "tags": [
       "autoset_first_md"
     ],
-    "source": "mcp-server/rag/corpus/scope_logic/autoset-first.md"
+    "source": "rag/corpus/scope_logic/autoset-first.md"
   },
   {
     "id": "autoset_first_md_3_p1",
@@ -87,7 +87,7 @@
     "tags": [
       "autoset_first_md"
     ],
-    "source": "mcp-server/rag/corpus/scope_logic/autoset-first.md"
+    "source": "rag/corpus/scope_logic/autoset-first.md"
   },
   {
     "id": "autoset_first_md_4_p1",
@@ -97,7 +97,7 @@
     "tags": [
       "autoset_first_md"
     ],
-    "source": "mcp-server/rag/corpus/scope_logic/autoset-first.md"
+    "source": "rag/corpus/scope_logic/autoset-first.md"
   },
   {
     "id": "decode_bringup_md_1_p1",
@@ -107,7 +107,7 @@
     "tags": [
       "decode_bringup_md"
     ],
-    "source": "mcp-server/rag/corpus/scope_logic/decode-bringup.md"
+    "source": "rag/corpus/scope_logic/decode-bringup.md"
   },
   {
     "id": "decode_bringup_md_2_p1",
@@ -117,7 +117,7 @@
     "tags": [
       "decode_bringup_md"
     ],
-    "source": "mcp-server/rag/corpus/scope_logic/decode-bringup.md"
+    "source": "rag/corpus/scope_logic/decode-bringup.md"
   },
   {
     "id": "decode_bringup_md_3_p1",
@@ -127,7 +127,7 @@
     "tags": [
       "decode_bringup_md"
     ],
-    "source": "mcp-server/rag/corpus/scope_logic/decode-bringup.md"
+    "source": "rag/corpus/scope_logic/decode-bringup.md"
   },
   {
     "id": "invalid_measurement_results_md_1_p1",
@@ -137,7 +137,7 @@
     "tags": [
       "invalid_measurement_results_md"
     ],
-    "source": "mcp-server/rag/corpus/scope_logic/invalid-measurement-results.md"
+    "source": "rag/corpus/scope_logic/invalid-measurement-results.md"
   },
   {
     "id": "invalid_measurement_results_md_2_p1",
@@ -147,7 +147,7 @@
     "tags": [
       "invalid_measurement_results_md"
     ],
-    "source": "mcp-server/rag/corpus/scope_logic/invalid-measurement-results.md"
+    "source": "rag/corpus/scope_logic/invalid-measurement-results.md"
   },
   {
     "id": "invalid_measurement_results_md_4_p1",
@@ -157,7 +157,7 @@
     "tags": [
       "invalid_measurement_results_md"
     ],
-    "source": "mcp-server/rag/corpus/scope_logic/invalid-measurement-results.md"
+    "source": "rag/corpus/scope_logic/invalid-measurement-results.md"
   },
   {
     "id": "opc_wai_busy_synchronization_md_1_p1",
@@ -167,7 +167,7 @@
     "tags": [
       "opc_wai_busy_synchronization_md"
     ],
-    "source": "mcp-server/rag/corpus/scope_logic/opc-wai-busy-synchronization.md"
+    "source": "rag/corpus/scope_logic/opc-wai-busy-synchronization.md"
   },
   {
     "id": "opc_wai_busy_synchronization_md_2_p1",
@@ -177,7 +177,7 @@
     "tags": [
       "opc_wai_busy_synchronization_md"
     ],
-    "source": "mcp-server/rag/corpus/scope_logic/opc-wai-busy-synchronization.md"
+    "source": "rag/corpus/scope_logic/opc-wai-busy-synchronization.md"
   },
   {
     "id": "opc_wai_busy_synchronization_md_3_p1",
@@ -187,7 +187,7 @@
     "tags": [
       "opc_wai_busy_synchronization_md"
     ],
-    "source": "mcp-server/rag/corpus/scope_logic/opc-wai-busy-synchronization.md"
+    "source": "rag/corpus/scope_logic/opc-wai-busy-synchronization.md"
   },
   {
     "id": "opc_wai_busy_synchronization_md_5_p1",
@@ -197,7 +197,7 @@
     "tags": [
       "opc_wai_busy_synchronization_md"
     ],
-    "source": "mcp-server/rag/corpus/scope_logic/opc-wai-busy-synchronization.md"
+    "source": "rag/corpus/scope_logic/opc-wai-busy-synchronization.md"
   },
   {
     "id": "opc_wai_busy_synchronization_md_6_p1",
@@ -207,7 +207,7 @@
     "tags": [
       "opc_wai_busy_synchronization_md"
     ],
-    "source": "mcp-server/rag/corpus/scope_logic/opc-wai-busy-synchronization.md"
+    "source": "rag/corpus/scope_logic/opc-wai-busy-synchronization.md"
   },
   {
     "id": "opc_wai_busy_synchronization_md_7_p1",
@@ -217,7 +217,7 @@
     "tags": [
       "opc_wai_busy_synchronization_md"
     ],
-    "source": "mcp-server/rag/corpus/scope_logic/opc-wai-busy-synchronization.md"
+    "source": "rag/corpus/scope_logic/opc-wai-busy-synchronization.md"
   },
   {
     "id": "opc_wai_busy_synchronization_md_8_p1",
@@ -227,7 +227,7 @@
     "tags": [
       "opc_wai_busy_synchronization_md"
     ],
-    "source": "mcp-server/rag/corpus/scope_logic/opc-wai-busy-synchronization.md"
+    "source": "rag/corpus/scope_logic/opc-wai-busy-synchronization.md"
   },
   {
     "id": "opc_wai_busy_synchronization_md_9_p1",
@@ -237,7 +237,7 @@
     "tags": [
       "opc_wai_busy_synchronization_md"
     ],
-    "source": "mcp-server/rag/corpus/scope_logic/opc-wai-busy-synchronization.md"
+    "source": "rag/corpus/scope_logic/opc-wai-busy-synchronization.md"
   },
   {
     "id": "probe_compensation_md_1_p1",
@@ -247,7 +247,7 @@
     "tags": [
       "probe_compensation_md"
     ],
-    "source": "mcp-server/rag/corpus/scope_logic/probe-compensation.md"
+    "source": "rag/corpus/scope_logic/probe-compensation.md"
   },
   {
     "id": "probe_compensation_md_2_p1",
@@ -257,7 +257,7 @@
     "tags": [
       "probe_compensation_md"
     ],
-    "source": "mcp-server/rag/corpus/scope_logic/probe-compensation.md"
+    "source": "rag/corpus/scope_logic/probe-compensation.md"
   },
   {
     "id": "probe_compensation_md_3_p1",
@@ -267,7 +267,7 @@
     "tags": [
       "probe_compensation_md"
     ],
-    "source": "mcp-server/rag/corpus/scope_logic/probe-compensation.md"
+    "source": "rag/corpus/scope_logic/probe-compensation.md"
   },
   {
     "id": "procedure_template_md_1_p1",
@@ -277,7 +277,7 @@
     "tags": [
       "procedure_template_md"
     ],
-    "source": "mcp-server/rag/corpus/scope_logic/procedure-template.md"
+    "source": "rag/corpus/scope_logic/procedure-template.md"
   },
   {
     "id": "procedure_template_md_3_p1",
@@ -287,7 +287,7 @@
     "tags": [
       "procedure_template_md"
     ],
-    "source": "mcp-server/rag/corpus/scope_logic/procedure-template.md"
+    "source": "rag/corpus/scope_logic/procedure-template.md"
   },
   {
     "id": "procedure_template_md_4_p1",
@@ -297,7 +297,7 @@
     "tags": [
       "procedure_template_md"
     ],
-    "source": "mcp-server/rag/corpus/scope_logic/procedure-template.md"
+    "source": "rag/corpus/scope_logic/procedure-template.md"
   },
   {
     "id": "signal_integrity_md_1_p1",
@@ -307,7 +307,7 @@
     "tags": [
       "signal_integrity_md"
     ],
-    "source": "mcp-server/rag/corpus/scope_logic/signal-integrity.md"
+    "source": "rag/corpus/scope_logic/signal-integrity.md"
   },
   {
     "id": "signal_integrity_md_2_p1",
@@ -317,7 +317,7 @@
     "tags": [
       "signal_integrity_md"
     ],
-    "source": "mcp-server/rag/corpus/scope_logic/signal-integrity.md"
+    "source": "rag/corpus/scope_logic/signal-integrity.md"
   },
   {
     "id": "signal_integrity_md_3_p1",
@@ -327,7 +327,7 @@
     "tags": [
       "signal_integrity_md"
     ],
-    "source": "mcp-server/rag/corpus/scope_logic/signal-integrity.md"
+    "source": "rag/corpus/scope_logic/signal-integrity.md"
   },
   {
     "id": "trigger_stabilization_md_1_p1",
@@ -337,7 +337,7 @@
     "tags": [
       "trigger_stabilization_md"
     ],
-    "source": "mcp-server/rag/corpus/scope_logic/trigger-stabilization.md"
+    "source": "rag/corpus/scope_logic/trigger-stabilization.md"
   },
   {
     "id": "trigger_stabilization_md_2_p1",
@@ -347,7 +347,7 @@
     "tags": [
       "trigger_stabilization_md"
     ],
-    "source": "mcp-server/rag/corpus/scope_logic/trigger-stabilization.md"
+    "source": "rag/corpus/scope_logic/trigger-stabilization.md"
   },
   {
     "id": "trigger_stabilization_md_3_p1",
@@ -357,7 +357,7 @@
     "tags": [
       "trigger_stabilization_md"
     ],
-    "source": "mcp-server/rag/corpus/scope_logic/trigger-stabilization.md"
+    "source": "rag/corpus/scope_logic/trigger-stabilization.md"
   },
   {
     "id": "trigger_stabilization_md_4_p1",
@@ -367,6 +367,6 @@
     "tags": [
       "trigger_stabilization_md"
     ],
-    "source": "mcp-server/rag/corpus/scope_logic/trigger-stabilization.md"
+    "source": "rag/corpus/scope_logic/trigger-stabilization.md"
   }
 ]

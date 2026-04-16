@@ -1,3 +1,0 @@
-# PyVISA only - use when tm_devices/libusb not available in offline_wheels.
-pyvisa>=1.11.0
-pyvisa-py>=0.5.0
