@@ -22,32 +22,59 @@ module.exports = {
       const path = require('path');
       const vendorNoVncPath = path.resolve(__dirname, 'src/vendor/novnc');
 
-      // Webpack 5: exclude test files from compilation so Node.js built-ins
-      // (path, fs, etc.) imported by test helpers never reach the browser bundle.
-      // Also set fallback: false as belt-and-suspenders to avoid the
-      // BREAKING CHANGE polyfill warning for any stray import.
-      const testFileRegex = /\.(test|spec)\.(ts|tsx|js|jsx)$/;
+      // Force React entry point — CRA resolves src/index by extension order
+      // (.ts before .tsx), so if src/index.ts (MCP server) exists locally it
+      // would be picked as the entry instead of src/index.tsx (React app).
+      const reactEntry = path.resolve(__dirname, 'src/index.tsx');
+      if (webpackConfig.entry) {
+        const fix = (v) => (typeof v === 'string' && v.endsWith('index.ts') && !v.endsWith('index.tsx') ? reactEntry : v);
+        if (Array.isArray(webpackConfig.entry)) {
+          webpackConfig.entry = webpackConfig.entry.map(fix);
+        } else if (typeof webpackConfig.entry === 'string') {
+          webpackConfig.entry = fix(webpackConfig.entry);
+        } else if (typeof webpackConfig.entry === 'object') {
+          for (const key of Object.keys(webpackConfig.entry)) {
+            const val = webpackConfig.entry[key];
+            webpackConfig.entry[key] = Array.isArray(val) ? val.map(fix) : fix(val);
+          }
+        }
+      }
+
+      // Exclude test files AND MCP server files from webpack compilation.
+      // Test files import Node.js built-ins (path, fs). MCP server files
+      // (src/core/, src/tools/, src/index.ts etc.) may exist locally as
+      // untracked files and also import Node.js built-ins.
+      const srcCoreDir = path.resolve(__dirname, 'src/core');
+      const srcToolsDir = path.resolve(__dirname, 'src/tools');
+      const mcpEntries = [
+        path.resolve(__dirname, 'src/index.ts'),
+        path.resolve(__dirname, 'src/server.ts'),
+        path.resolve(__dirname, 'src/stdio.ts'),
+        path.resolve(__dirname, 'src/loadEnv.ts'),
+      ];
+      const shouldExclude = (p) =>
+        /\.(test|spec)\.(ts|tsx|js|jsx)$/.test(p) ||
+        p.startsWith(srcCoreDir) ||
+        p.startsWith(srcToolsDir) ||
+        mcpEntries.includes(p);
+
       if (webpackConfig.module && webpackConfig.module.rules) {
-        const addTestExclusion = (rules) => {
+        const addExclusion = (rules) => {
           if (!Array.isArray(rules)) return;
           rules.forEach((rule) => {
-            if (rule.test && rule.loader && /babel-loader/.test(rule.loader)) {
-              rule.exclude = rule.exclude
-                ? Array.isArray(rule.exclude) ? [...rule.exclude, testFileRegex] : [rule.exclude, testFileRegex]
-                : testFileRegex;
+            const hasBabel =
+              (rule.loader && /babel-loader/.test(rule.loader)) ||
+              (Array.isArray(rule.use) && rule.use.some((u) => typeof u === 'object' && u.loader && /babel-loader/.test(u.loader)));
+            if (hasBabel) {
+              const prev = rule.exclude;
+              rule.exclude = prev
+                ? (p) => (Array.isArray(prev) ? prev.some((r) => (typeof r === 'function' ? r(p) : r.test ? r.test(p) : r === p)) : typeof prev === 'function' ? prev(p) : prev.test ? prev.test(p) : prev === p) || shouldExclude(p)
+                : shouldExclude;
             }
-            if (rule.use && Array.isArray(rule.use)) {
-              const hasBabel = rule.use.some((u) => typeof u === 'object' && u.loader && /babel-loader/.test(u.loader));
-              if (hasBabel) {
-                rule.exclude = rule.exclude
-                  ? Array.isArray(rule.exclude) ? [...rule.exclude, testFileRegex] : [rule.exclude, testFileRegex]
-                  : testFileRegex;
-              }
-            }
-            if (rule.oneOf) addTestExclusion(rule.oneOf);
+            if (rule.oneOf) addExclusion(rule.oneOf);
           });
         };
-        addTestExclusion(webpackConfig.module.rules);
+        addExclusion(webpackConfig.module.rules);
       }
 
       webpackConfig.resolve = webpackConfig.resolve || {};
@@ -56,9 +83,19 @@ module.exports = {
         path: false,
         fs:   false,
         os:   false,
+        url:  false,
         crypto: false,
         stream: false,
         buffer: false,
+        util:   false,
+        assert: false,
+        http:   false,
+        https:  false,
+        zlib:   false,
+        querystring: false,
+        net:    false,
+        tls:    false,
+        child_process: false,
       };
 
       // Suppress source map warnings by ignoring errors from source-map-loader
