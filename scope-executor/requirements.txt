@@ -1,0 +1,7 @@
+# All packages needed inside .venv for running generated scope scripts
+pyvisa>=1.11.0
+pyvisa-py>=0.5.0
+tm_devices>=0.15.0
+qrcode[pil]>=7.0
+Pillow>=9.0.0
+websockets>=16.0

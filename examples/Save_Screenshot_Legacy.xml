@@ -1,0 +1,34 @@
+<xml xmlns="https://developers.google.com/blockly/xml">
+  <block type="connect_scope" id="connect_scope_1" x="20" y="20">
+    <mutation show_advanced="false" current_backend="pyvisa" current_dev_type="SCOPE" current_conn_type="INSTR"></mutation>
+    <field name="DEVICE_NAME">scope</field>
+    <field name="BACKEND">pyvisa</field>
+    <data>deviceName</data>
+    <next>
+      <block type="set_device_context" id="ctx_scope">
+        <mutation device="scope"></mutation>
+        <field name="DEVICE">scope</field>
+        <next>
+          <block type="scpi_query" id="idn_query">
+            <field name="DEVICE_CONTEXT">(scope)</field>
+            <field name="COMMAND">*IDN?</field>
+            <field name="VARIABLE">idn</field>
+            <next>
+              <block type="save_screenshot" id="save_screenshot_1">
+                <mutation scope_type="LEGACY"></mutation>
+                <field name="DEVICE_CONTEXT">(scope)</field>
+                <field name="SCOPE_TYPE">LEGACY</field>
+                <field name="FILENAME">C:\Users\Public\Pictures\dpo5k_screenshot.png</field>
+                <field name="FORMAT">PNG</field>
+                <field name="LOCAL_FOLDER">./screenshots</field>
+                <next>
+                  <block type="disconnect" id="disconnect_1"></block>
+                </next>
+              </block>
+            </next>
+          </block>
+        </next>
+      </block>
+    </next>
+  </block>
+</xml>

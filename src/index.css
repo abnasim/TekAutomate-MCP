@@ -1,0 +1,162 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+html, body, #root {
+  width: 100%;
+  max-width: 100%;
+  overflow-x: hidden;
+  height: 100%;
+}
+
+/* Global thin scrollbars */
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+::-webkit-scrollbar-thumb {
+  background: #d1d5db;
+  border-radius: 3px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: #9ca3af;
+}
+
+.dark ::-webkit-scrollbar-thumb {
+  background: #4b5563;
+}
+.dark ::-webkit-scrollbar-thumb:hover {
+  background: #6b7280;
+}
+
+/* Firefox thin scrollbars */
+* {
+  scrollbar-width: thin;
+  scrollbar-color: #d1d5db transparent;
+}
+.dark * {
+  scrollbar-color: #4b5563 transparent;
+}
+
+/* Dark mode form controls - inputs and selects inherit in builder/config */
+.dark input:not([type="checkbox"]):not([type="radio"]),
+.dark select,
+.dark textarea {
+  background-color: #374151;
+  border-color: #4b5563;
+  color: #f3f4f6;
+}
+.dark input::placeholder,
+.dark textarea::placeholder {
+  color: #9ca3af;
+}
+
+/* Near-invisible scrollbar for horizontal-scroll toolbars (nav tabs, Blockly toolbar) */
+.nav-tabs-scroll {
+  overflow-x: auto;
+  overflow-y: visible;
+  -webkit-overflow-scrolling: touch;
+  scrollbar-width: none;
+  -ms-overflow-style: none;
+}
+.nav-tabs-scroll::-webkit-scrollbar {
+  display: none;
+}
+.nav-tabs-scroll::-webkit-scrollbar-track {
+  background: transparent;
+}
+.nav-tabs-scroll::-webkit-scrollbar-thumb {
+  background: rgba(0, 0, 0, 0.1);
+  border-radius: 1px;
+}
+
+/* Optimized Bouncing Circles Animation for Loading Screen */
+@keyframes bounce-smooth {
+  0%, 100% {
+    transform: translateY(0);
+    opacity: 1;
+  }
+  50% {
+    transform: translateY(-20px);
+    opacity: 0.8;
+  }
+}
+
+/* Trigger Mascot Fly-In Animation - Simple Smooth Approach */
+@keyframes triggerFlyIn {
+  0% {
+    /* Start off-screen top-left, small */
+    top: -100px;
+    left: -100px;
+    transform: scale(0.3);
+    opacity: 0;
+  }
+  20% {
+    /* Enter screen smoothly */
+    top: 10%;
+    left: 10%;
+    transform: scale(0.5);
+    opacity: 0.7;
+  }
+  40% {
+    /* Smooth arc across screen */
+    top: 30%;
+    left: 40%;
+    transform: scale(0.7);
+    opacity: 1;
+  }
+  60% {
+    /* Continue smooth approach */
+    top: 50%;
+    left: 65%;
+    transform: scale(0.85);
+    opacity: 1;
+  }
+  80% {
+    /* Smoothly approach final position - still using top/left */
+    top: 75%;
+    left: 85%;
+    transform: scale(0.95);
+    opacity: 1;
+  }
+  83% {
+    /* Reach final position smoothly */
+    bottom: 120px;
+    right: 185px;
+    top: auto;
+    left: auto;
+    transform: scale(0.97);
+    opacity: 1;
+  }
+  90% {
+    /* Hover slightly above landing position */
+    bottom: 125px;
+    right: 185px;
+    transform: scale(0.98);
+    opacity: 1;
+  }
+  100% {
+    /* Land at final position */
+    bottom: 120px;
+    right: 185px;
+    transform: scale(1);
+    opacity: 1;
+  }
+}/* Shimmer animation for progress bar */
+@keyframes shimmer {
+  0% {
+    transform: translateX(-100%);
+  }
+  100% {
+    transform: translateX(100%);
+  }
+}.animate-shimmer {
+  animation: shimmer 2s infinite;
+}
+

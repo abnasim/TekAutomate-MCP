@@ -1,0 +1,457 @@
+import fs from 'fs';
+import path from 'path';
+import { fileURLToPath } from 'url';
+
+type RagCorpus = 'scpi' | 'tmdevices' | 'app_logic' | 'scope_logic' | 'templates' | 'errors' | 'pyvisa_tekhsi' | 'tek_docs';
+
+interface RagChunk extends Record<string, unknown> {
+  id: string;
+  corpus: RagCorpus;
+  title: string;
+  body: string;
+  tags?: string[];
+  source?: string;
+  pathHint?: string;
+}
+
+interface RagManifest {
+  version: string;
+  generatedAt: string;
+  corpora: Partial<Record<RagCorpus, string>>;
+  counts: Partial<Record<RagCorpus, number>>;
+}
+
+const SCRIPT_DIR = path.dirname(fileURLToPath(import.meta.url));
+const MCP_ROOT = path.resolve(SCRIPT_DIR, '..');
+
+// Mirror the hasRepoMarkers() logic from src/core/paths.ts exactly:
+// A true repo root has BOTH public/commands AND an mcp-server subdirectory.
+// When running from mcp-server/, MCP_ROOT has public/commands but NOT mcp-server/,
+// so we walk up one level to find the real root (TekAutomate/).
+// This ensures build writes to the same public/rag/ that the runtime reads from.
+function hasRepoMarkers(dir: string): boolean {
+  return (
+    fs.existsSync(path.join(dir, 'public', 'commands')) &&
+    fs.existsSync(path.join(dir, 'mcp-server'))
+  );
+}
+const REPO_ROOT = hasRepoMarkers(MCP_ROOT)
+  ? MCP_ROOT
+  : hasRepoMarkers(path.resolve(MCP_ROOT, '..'))
+    ? path.resolve(MCP_ROOT, '..')
+    : MCP_ROOT; // fallback: standalone deploy (Railway) where mcp-server IS the root
+
+const COMMANDS_DIR = path.join(REPO_ROOT, 'public', 'commands');
+const TEMPLATES_DIR = path.join(REPO_ROOT, 'public', 'templates');
+const RAG_CORPUS_DIR = path.join(MCP_ROOT, 'rag', 'corpus');
+const OUT_DIR = path.join(REPO_ROOT, 'public', 'rag');
+
+function readJson(filePath: string): unknown {
+  return JSON.parse(fs.readFileSync(filePath, 'utf8'));
+}
+
+function slugify(input: string): string {
+  return input.toLowerCase().replace(/[^a-z0-9_]+/g, '_').replace(/^_+|_+$/g, '').slice(0, 64);
+}
+
+function ensureDir(dir: string): void {
+  if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
+}
+
+function toText(value: unknown): string {
+  if (typeof value === 'string') return value;
+  if (typeof value === 'number' || typeof value === 'boolean') return String(value);
+  if (Array.isArray(value)) return value.map(toText).filter(Boolean).join(' | ');
+  if (value && typeof value === 'object') return JSON.stringify(value);
+  return '';
+}
+
+function extractCommandLikeObjects(
+  root: unknown,
+  visitor: (obj: Record<string, unknown>, pathParts: string[]) => void,
+  pathParts: string[] = []
+): void {
+  if (Array.isArray(root)) {
+    root.forEach((item, idx) => extractCommandLikeObjects(item, visitor, [...pathParts, String(idx)]));
+    return;
+  }
+  if (!root || typeof root !== 'object') return;
+  const obj = root as Record<string, unknown>;
+  const keys = Object.keys(obj);
+  const looksCommandLike =
+    keys.some((k) => /command|scpi|syntax|query|set|description|example|parameter/i.test(k)) &&
+    (typeof obj.command === 'string' ||
+      typeof obj.scpi === 'string' ||
+      typeof obj.syntax === 'string' ||
+      typeof obj.queryCommand === 'string' ||
+      typeof obj.setCommand === 'string');
+
+  if (looksCommandLike) {
+    visitor(obj, pathParts);
+  }
+  keys.forEach((key) => extractCommandLikeObjects(obj[key], visitor, [...pathParts, key]));
+}
+
+function buildChunksFromCommandFile(filePath: string, corpus: RagCorpus): RagChunk[] {
+  const data = readJson(filePath);
+  const fileName = path.basename(filePath);
+  const out: RagChunk[] = [];
+  let idx = 0;
+  extractCommandLikeObjects(data, (obj, pathParts) => {
+    const title =
+      toText(obj.name) ||
+      toText(obj.title) ||
+      toText(obj.commandName) ||
+      toText(obj.command) ||
+      toText(obj.scpi) ||
+      pathParts[pathParts.length - 1] ||
+      fileName;
+    const syntax = [
+      toText(obj.scpi),
+      toText(obj.command),
+      toText(obj.syntax),
+      toText(obj.setCommand),
+      toText(obj.queryCommand),
+      toText(obj.example),
+      toText(obj.examples),
+    ]
+      .filter(Boolean)
+      .join('\n');
+    const description = toText(obj.description);
+    const params = toText(obj.parameters);
+    const body = [description, syntax, params]
+      .filter(Boolean)
+      .join('\n')
+      .slice(0, 2200);
+    if (!body.trim()) return;
+    out.push({
+      id: `${slugify(fileName)}_${idx += 1}`,
+      corpus,
+      title: title.slice(0, 180),
+      body,
+      tags: [fileName.replace(/\.json$/i, ''), ...pathParts.slice(-4)].map((t) => slugify(t)).filter(Boolean),
+      source: `public/commands/${fileName}`,
+      pathHint: pathParts.join('.'),
+    });
+  });
+  return out;
+}
+
+function parseMarkdownChunks(mdPath: string, corpus: RagCorpus, errorsCorpus = false): RagChunk[] {
+  const text = fs.readFileSync(mdPath, 'utf8');
+  const normalized = text.replace(/\r\n/g, '\n');
+  const sections = normalized.split(/\n(?=#+\s)/g);
+  const fileName = path.basename(mdPath);
+  const out: RagChunk[] = [];
+  sections.forEach((raw, idx) => {
+      const lines = raw.split('\n');
+      const heading = lines[0]?.match(/^#+\s+(.*)$/)?.[1]?.trim() || `${fileName} section ${idx + 1}`;
+      const body = lines.slice(lines[0]?.startsWith('#') ? 1 : 0).join('\n').trim();
+      if (!body) return;
+      const inferredCorpus: RagCorpus = errorsCorpus || /fail|error|bug|violation|traceback/i.test(`${heading}\n${body}`)
+        ? 'errors'
+        : corpus;
+      const paragraphs = body.split(/\n{2,}/g).map((p) => p.trim()).filter(Boolean);
+      let part = 1;
+      let current = '';
+      const flush = () => {
+        const trimmed = current.trim();
+        if (!trimmed) return;
+        out.push({
+          id: `${slugify(fileName)}_${idx + 1}_p${part++}`,
+          corpus: inferredCorpus,
+          title: heading.slice(0, 180),
+          body: trimmed.slice(0, 2400),
+          tags: [slugify(fileName)],
+          source: path.relative(REPO_ROOT, mdPath).replace(/\\/g, '/'),
+        });
+        current = '';
+      };
+      paragraphs.forEach((p) => {
+        if ((current + '\n\n' + p).length > 2200) flush();
+        current = current ? `${current}\n\n${p}` : p;
+      });
+      flush();
+    });
+  return out;
+}
+
+function inferCorpusFromPath(filePath: string, fallback: RagCorpus): RagCorpus {
+  const normalized = filePath.replace(/\\/g, '/').toLowerCase();
+  if (normalized.includes('/error_patterns/')) return 'errors';
+  if (normalized.includes('/tmdevices/')) return 'tmdevices';
+  if (normalized.includes('/scpi/')) return 'scpi';
+  if (normalized.includes('/scope_logic/')) return 'scope_logic';
+  if (normalized.includes('/templates/')) return 'templates';
+  if (normalized.includes('/pyvisa_tekhsi/')) return 'pyvisa_tekhsi';
+  return fallback;
+}
+
+function buildChunksFromAiCorpusJson(filePath: string, defaultCorpus: RagCorpus): RagChunk[] {
+  const data = readJson(filePath);
+  if (!Array.isArray(data)) return [];
+  const resolvedCorpus = inferCorpusFromPath(filePath, defaultCorpus);
+  return data
+    .map((item, idx) => {
+      if (!item || typeof item !== 'object') return null;
+      const obj = item as Record<string, unknown>;
+      const title = toText(obj.title || obj.name || obj.id || `chunk_${idx + 1}`);
+      const bodyParts = [
+        toText(obj.body),
+        toText(obj.symptom),
+        toText(obj.root_cause),
+        toText(obj.fix),
+        toText(obj.description),
+        toText(obj.code),
+        toText(obj.code_before),
+        toText(obj.code_after),
+      ].filter(Boolean);
+      const body = bodyParts.join('\n').slice(0, 3000);
+      if (!body) return null;
+      const tags = Array.isArray(obj.tags)
+        ? obj.tags.map((t) => slugify(String(t))).filter(Boolean)
+        : [];
+      const typeTag = toText(obj.type);
+      if (typeTag) tags.push(slugify(typeTag));
+      return {
+        ...obj,
+        id: slugify(toText(obj.id) || `${path.basename(filePath, '.json')}_${idx + 1}`),
+        corpus: resolvedCorpus,
+        title: title.slice(0, 180),
+        body,
+        tags,
+        source: path.relative(REPO_ROOT, filePath).replace(/\\/g, '/'),
+      } as RagChunk;
+    })
+    .filter((c): c is RagChunk => Boolean(c));
+}
+
+function listFiles(dir: string, ext: string): string[] {
+  if (!fs.existsSync(dir)) return [];
+  return fs
+    .readdirSync(dir)
+    .filter((name) => name.toLowerCase().endsWith(ext))
+    .map((name) => path.join(dir, name))
+    .sort();
+}
+
+function listFilesRecursive(dir: string, ext: string, out: string[] = []): string[] {
+  if (!fs.existsSync(dir)) return out;
+  fs.readdirSync(dir, { withFileTypes: true }).forEach((entry) => {
+    const full = path.join(dir, entry.name);
+    if (entry.isDirectory()) {
+      listFilesRecursive(full, ext, out);
+    } else if (entry.name.toLowerCase().endsWith(ext)) {
+      out.push(full);
+    }
+  });
+  return out.sort();
+}
+
+function writeShard(fileName: string, chunks: RagChunk[]): void {
+  fs.writeFileSync(path.join(OUT_DIR, fileName), JSON.stringify(chunks, null, 2));
+}
+
+function main(): void {
+  ensureDir(OUT_DIR);
+
+  const scpiChunks: RagChunk[] = [];
+  const tmChunks: RagChunk[] = [];
+  const templateChunks: RagChunk[] = [];
+  const appLogicChunks: RagChunk[] = [];
+  const scopeLogicChunks: RagChunk[] = [];
+  const errorChunks: RagChunk[] = [];
+  const pyvisaTekhsiChunks: RagChunk[] = [];
+
+  listFiles(COMMANDS_DIR, '.json').forEach((filePath) => {
+    const base = path.basename(filePath).toLowerCase();
+    if (base.includes('tm_devices')) {
+      tmChunks.push(...buildChunksFromCommandFile(filePath, 'tmdevices'));
+    } else {
+      scpiChunks.push(...buildChunksFromCommandFile(filePath, 'scpi'));
+    }
+  });
+
+  listFiles(TEMPLATES_DIR, '.json').forEach((filePath) => {
+    const json = readJson(filePath);
+    const body = JSON.stringify(json).slice(0, 2400);
+    templateChunks.push({
+      id: `${slugify(path.basename(filePath))}_1`,
+      corpus: 'templates',
+      title: path.basename(filePath, '.json'),
+      body,
+      source: `public/templates/${path.basename(filePath)}`,
+    });
+  });
+
+  listFilesRecursive(RAG_CORPUS_DIR, '.md').forEach((mdPath) => {
+    const resolvedCorpus = inferCorpusFromPath(mdPath, 'app_logic');
+    const chunks = parseMarkdownChunks(mdPath, resolvedCorpus, resolvedCorpus === 'errors');
+    chunks.forEach((chunk) => {
+      if (chunk.corpus === 'scpi') scpiChunks.push(chunk);
+      else if (chunk.corpus === 'tmdevices') tmChunks.push(chunk);
+      else if (chunk.corpus === 'scope_logic') scopeLogicChunks.push(chunk);
+      else if (chunk.corpus === 'templates') templateChunks.push(chunk);
+      else if (chunk.corpus === 'errors') errorChunks.push(chunk);
+      else if (chunk.corpus === 'pyvisa_tekhsi') pyvisaTekhsiChunks.push(chunk);
+      else appLogicChunks.push(chunk);
+    });
+  });
+
+  listFilesRecursive(RAG_CORPUS_DIR, '.json').forEach((jsonPath) => {
+    const chunks = buildChunksFromAiCorpusJson(jsonPath, 'app_logic');
+    chunks.forEach((chunk) => {
+      if (chunk.corpus === 'scpi') scpiChunks.push(chunk);
+      else if (chunk.corpus === 'tmdevices') tmChunks.push(chunk);
+      else if (chunk.corpus === 'scope_logic') scopeLogicChunks.push(chunk);
+      else if (chunk.corpus === 'templates') templateChunks.push(chunk);
+      else if (chunk.corpus === 'errors') errorChunks.push(chunk);
+      else if (chunk.corpus === 'pyvisa_tekhsi') pyvisaTekhsiChunks.push(chunk);
+      else appLogicChunks.push(chunk);
+    });
+  });
+
+  // ── tm_devices model-family tag injection ─────────────────────────────────
+  // Every tm_devices docstring chunk contains a "Models:" line in its body
+  // listing which device families support the command (e.g. "MSO2, MSO4B, MSO5").
+  // Parse that line and inject normalized family tags so the RAG scorer can
+  // hard-filter and soft-boost by modelFamily — same mechanism as tek_docs.
+  // This is idempotent: re-running always produces the same tag set.
+  const TM_MODEL_FAMILY_MAP: Record<string, string> = {
+    // 2 Series MSO
+    MSO2: 'MSO2', MSO22: 'MSO2', MSO24: 'MSO2', MSO26: 'MSO2',
+    // 4 Series MSO
+    MSO4: 'MSO4', MSO44: 'MSO4', MSO46: 'MSO4', MSO4B: 'MSO4', MSO4K: 'MSO4', MSO4KB: 'MSO4',
+    // 5 Series MSO
+    MSO5: 'MSO5', MSO54: 'MSO5', MSO56: 'MSO5', MSO58: 'MSO5', MSO5B: 'MSO5', MSO5LP: 'MSO5', MSO5K: 'MSO5', MSO5KB: 'MSO5',
+    // 6 Series MSO
+    MSO6: 'MSO6', MSO64: 'MSO6', MSO66: 'MSO6', MSO68: 'MSO6', MSO6B: 'MSO6',
+    // LPD6
+    LPD6: 'LPD6',
+    // MDO 3 / 4
+    MDO3: 'MDO3K', MDO3K: 'MDO3K',
+    MDO4K: 'MDO4K', MDO4KB: 'MDO4K', MDO4KC: 'MDO4K',
+    // DPO 4K / 5K / 7K / 70K
+    DPO4K: 'DPO4K', DPO4KB: 'DPO4K',
+    DPO5K: 'DPO5K', DPO5KB: 'DPO5K',
+    DPO7K: 'DPO7K', DPO7KC: 'DPO7K',
+    DPO70KC: 'DPO70K', DPO70KD: 'DPO70K', DPO70KDX: 'DPO70K', DPO70KSX: 'DPO70K',
+    DSA70KC: 'DPO70K', DSA70KD: 'DPO70K',
+    MSO70KC: 'DPO70K', MSO70KDX: 'DPO70K',
+    // AFG / AWG
+    AFG3K: 'AFG3K', AFG3KB: 'AFG3K', AFG3KC: 'AFG3K',
+    AWG5200: 'AWG5200',
+    AWG5K: 'AWG5K', AWG5KC: 'AWG5K',
+    AWG7K: 'AWG7K', AWG7KC: 'AWG7K',
+    // SMU / RSA
+    SMU2450: 'SMU', SMU2460: 'SMU', SMU2461: 'SMU', SMU2470: 'SMU',
+    RSA5K: 'RSA', RSA6K: 'RSA',
+  };
+
+  let tmFamilyTagsAdded = 0;
+  tmChunks.forEach((chunk) => {
+    const body = typeof chunk.body === 'string' ? chunk.body : '';
+    const modelsMatch = body.match(/^Models:\s*(.+)$/m);
+    if (!modelsMatch) return;
+    const modelNames = modelsMatch[1].split(/[\s,]+/).map((m) => m.trim().toUpperCase()).filter(Boolean);
+    const families = new Set<string>();
+    for (const m of modelNames) {
+      const family = TM_MODEL_FAMILY_MAP[m];
+      if (family) families.add(family);
+    }
+    if (families.size === 0) return;
+    const existingTags: string[] = Array.isArray(chunk.tags) ? chunk.tags as string[] : [];
+    const newTags = [...existingTags];
+    let added = false;
+    for (const f of families) {
+      if (!newTags.includes(f)) { newTags.push(f); added = true; }
+    }
+    if (added) { chunk.tags = newTags; tmFamilyTagsAdded++; }
+  });
+  if (tmFamilyTagsAdded > 0) {
+    // eslint-disable-next-line no-console
+    console.log(`tmdevices hygiene: injected model-family tags into ${tmFamilyTagsAdded} chunk(s)`);
+  }
+  // ──────────────────────────────────────────────────────────────────────────
+
+  writeShard('scpi_index.json', scpiChunks);
+  writeShard('tmdevices_index.json', tmChunks);
+  writeShard('templates_index.json', templateChunks);
+  writeShard('app_logic_index.json', appLogicChunks);
+  writeShard('scope_logic_index.json', scopeLogicChunks);
+  writeShard('errors_index.json', errorChunks);
+  writeShard('pyvisa_tekhsi_index.json', pyvisaTekhsiChunks);
+
+  // Preserve externally-built corpora (e.g. tek_docs scraped from web/PDFs).
+  // These are committed to the repo and must survive rebuilds — do NOT overwrite them.
+  // We DO apply a lightweight data-hygiene pass every build so that stale build
+  // caches (e.g. NIXPACKS on Railway) can never serve corrupted tag data:
+  //   • Remove false 'faq' tags from non-FAQ chunks (body-text false-positives).
+  //   • Add 'faq' tag to any FAQ chunk whose tag was truncated by the old 12-tag limit.
+  // This is idempotent — clean data is unchanged; broken data is repaired.
+  const tekDocsFile = path.join(OUT_DIR, 'tek_docs_index.json');
+  let tekDocsCount = 0;
+  if (fs.existsSync(tekDocsFile)) {
+    try {
+      const existing = JSON.parse(fs.readFileSync(tekDocsFile, 'utf8')) as Array<Record<string, unknown>>;
+      if (Array.isArray(existing)) {
+        let patched = 0;
+        existing.forEach((chunk) => {
+          const title = typeof chunk.title === 'string' ? chunk.title : '';
+          const tags = Array.isArray(chunk.tags) ? (chunk.tags as string[]) : [];
+          const isFaqTitle = title.startsWith('FAQ:');
+          const hasFaqTag = tags.includes('faq');
+
+          if (isFaqTitle && !hasFaqTag) {
+            // faq tag was truncated — add it back
+            tags.push('faq');
+            tags.sort();
+            chunk.tags = tags;
+            patched++;
+          } else if (!isFaqTitle && hasFaqTag) {
+            // false positive — body text contained "FAQ" (e.g. sidebar nav links)
+            chunk.tags = tags.filter((t) => t !== 'faq');
+            patched++;
+          }
+        });
+        if (patched > 0) {
+          fs.writeFileSync(tekDocsFile, JSON.stringify(existing, null, 2));
+          // eslint-disable-next-line no-console
+          console.log(`tek_docs hygiene: repaired ${patched} chunk(s) with incorrect faq tag`);
+        }
+        tekDocsCount = existing.length;
+      }
+    } catch { /* malformed — skip */ }
+  }
+
+  const manifest: RagManifest = {
+    version: '1.0.0',
+    generatedAt: new Date().toISOString(),
+    corpora: {
+      scpi: 'scpi_index.json',
+      tmdevices: 'tmdevices_index.json',
+      app_logic: 'app_logic_index.json',
+      scope_logic: 'scope_logic_index.json',
+      templates: 'templates_index.json',
+      errors: 'errors_index.json',
+      pyvisa_tekhsi: 'pyvisa_tekhsi_index.json',
+      ...(tekDocsCount > 0 ? { tek_docs: 'tek_docs_index.json' } : {}),
+    },
+    counts: {
+      scpi: scpiChunks.length,
+      tmdevices: tmChunks.length,
+      app_logic: appLogicChunks.length,
+      scope_logic: scopeLogicChunks.length,
+      templates: templateChunks.length,
+      errors: errorChunks.length,
+      pyvisa_tekhsi: pyvisaTekhsiChunks.length,
+      ...(tekDocsCount > 0 ? { tek_docs: tekDocsCount } : {}),
+    },
+  };
+  fs.writeFileSync(path.join(OUT_DIR, 'manifest.json'), JSON.stringify(manifest, null, 2));
+
+  // eslint-disable-next-line no-console
+  console.log(`RAG shards generated in public/rag (scpi=${scpiChunks.length}, tmdevices=${tmChunks.length}, app_logic=${appLogicChunks.length}, scope_logic=${scopeLogicChunks.length}, templates=${templateChunks.length}, errors=${errorChunks.length}, pyvisa_tekhsi=${pyvisaTekhsiChunks.length}${tekDocsCount > 0 ? `, tek_docs=${tekDocsCount}` : ''})`);
+}
+
+main();

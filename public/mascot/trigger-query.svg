@@ -1,0 +1,436 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="-25 -20 300 270" width="300" height="270">
+  <defs>
+    <clipPath id="screenClip">
+      <rect x="18" y="38" width="158" height="88" rx="2"/>
+    </clipPath>
+    <filter id="glow">
+      <feGaussianBlur stdDeviation="1.5" result="coloredBlur"/>
+      <feMerge>
+        <feMergeNode in="coloredBlur"/>
+        <feMergeNode in="SourceGraphic"/>
+      </feMerge>
+    </filter>
+    <linearGradient id="metal-grad" x1="0%" y1="0%" x2="0%" y2="100%">
+      <stop offset="0%" stop-color="#fff"/>
+      <stop offset="100%" stop-color="#ccc"/>
+    </linearGradient>
+    <linearGradient id="fire-grad" x1="0%" y1="0%" x2="0%" y2="100%">
+      <stop offset="0%" stop-color="#ffff00"/> 
+      <stop offset="100%" stop-color="#ff8800" stop-opacity="0"/>
+    </linearGradient>
+  </defs>
+
+  <style>
+    /* Active writing hover */
+    .hover-body { animation: hoverWrite 2s ease-in-out infinite; }
+    @keyframes hoverWrite {
+      0%, 100% { transform: translateY(0px); } 
+      50% { transform: translateY(-4px); }
+    }
+
+    /* More active thrusters - pushing data out */
+    .flame { animation: thrustWrite 0.4s ease-in-out infinite alternate; transform-origin: center top; }
+    @keyframes thrustWrite {
+      0% { transform: scaleY(0.9); opacity: 0.4; }
+      100% { transform: scaleY(1.3); opacity: 0.9; }
+    }
+
+    .handle { 
+      animation: handleBreathe 2s ease-in-out infinite; 
+      transform-origin: 120px 28px;
+    }
+    @keyframes handleBreathe {
+      0%, 100% { transform: translateY(0); }
+      50% { transform: translateY(1px); }
+    }
+
+    /* Left arm - typing motion */
+    .left-arm-assembly { 
+      animation: typeMotion 0.8s ease-in-out infinite; 
+      transform-origin: 0px 70px;
+    }
+    @keyframes typeMotion {
+      0%, 100% { transform: rotate(-5deg); }
+      30% { transform: rotate(-12deg); }
+      60% { transform: rotate(-3deg); }
+    }
+
+    /* Right arm - holding steady for transmission */
+    .right-arm-assembly { 
+      animation: transmitArm 1.5s ease-in-out infinite; 
+      transform-origin: 37px 146px;
+    }
+    @keyframes transmitArm {
+      0%, 100% { transform: translate(37px, 146px) rotate(-2deg); }
+      50% { transform: translate(37px, 146px) rotate(-4deg); }
+    }
+
+    /* Left claws - typing tap */
+    .left-claw-L, .left-claw-R {
+      animation: clawType 0.4s ease-in-out infinite;
+      transform-origin: center;
+    }
+    .left-claw-R { animation-delay: 0.1s; }
+    @keyframes clawType {
+      0%, 100% { transform: translateY(0); }
+      50% { transform: translateY(3px); }
+    }
+
+    .right-claw-L, .right-claw-R {
+      animation: clawSoft 3s ease-in-out infinite;
+      transform-origin: center;
+    }
+    @keyframes clawSoft {
+      0%, 100% { transform: translateY(0); }
+      50% { transform: translateY(1px); }
+    }
+
+    .grid-line {
+      stroke: #1a2510;
+      stroke-width: 0.7;
+      opacity: 0.35;
+    }
+
+    /* Determined focused eyes */
+    .write-eye {
+      fill: #ffcc00;
+      filter: url(#glow);
+    }
+    .eye-group {
+      animation: eyeDetermined 1s ease-in-out infinite;
+    }
+    @keyframes eyeDetermined {
+      0%, 100% { transform: scale(1); }
+      50% { transform: scale(0.95); }
+    }
+
+    /* Determined eyebrows */
+    .write-brow {
+      fill: none;
+      stroke: #ffaa00;
+      stroke-width: 2;
+      stroke-linecap: round;
+      filter: url(#glow);
+    }
+
+    /* Command being typed */
+    .cmd-box {
+      fill: rgba(30, 25, 0, 0.9);
+      stroke: #ffaa00;
+      stroke-width: 1;
+      filter: url(#glow);
+    }
+    .cmd-text {
+      font-family: "Courier New", monospace;
+      font-size: 6px;
+      fill: #ffdd44;
+    }
+    .cmd-typing {
+      animation: typeText 2s steps(20) infinite;
+    }
+    @keyframes typeText {
+      0% { opacity: 0; }
+      5% { opacity: 1; }
+    }
+
+    /* Cursor blinking */
+    .write-cursor {
+      fill: #ffcc00;
+      animation: cursorBlink 0.5s steps(1) infinite;
+    }
+    @keyframes cursorBlink {
+      0%, 50% { opacity: 1; }
+      51%, 100% { opacity: 0; }
+    }
+
+    /* Outgoing arrow indicator */
+    .send-arrow {
+      fill: #ffaa00;
+      filter: url(#glow);
+      animation: sendPulse 0.6s ease-in-out infinite;
+    }
+    @keyframes sendPulse {
+      0%, 100% { transform: translateX(0); opacity: 0.6; }
+      50% { transform: translateX(5px); opacity: 1; }
+    }
+
+    /* Data packets going FROM CH1 outward */
+    .data-packet-out {
+      fill: #ffdd00;
+      filter: url(#glow);
+    }
+    .pkt-out1 { animation: packetOut 1s ease-in-out infinite; }
+    .pkt-out2 { animation: packetOut 1s ease-in-out infinite 0.25s; }
+    .pkt-out3 { animation: packetOut 1s ease-in-out infinite 0.5s; }
+    @keyframes packetOut {
+      0% { offset-distance: 100%; opacity: 0; }
+      10% { opacity: 1; }
+      90% { opacity: 1; }
+      100% { offset-distance: 0%; opacity: 0; }
+    }
+
+    /* CH1 transmitting indicator */
+    .ch1-transmit {
+      animation: ch1TX 0.4s ease-in-out infinite;
+    }
+    @keyframes ch1TX {
+      0%, 100% { stroke: #ffaa00; fill: #222; }
+      50% { stroke: #ffff44; fill: #332200; }
+    }
+
+    /* Status text */
+    .status-text {
+      font-family: "Courier New", monospace;
+      font-size: 5px;
+      fill: #aa8800;
+      opacity: 0.8;
+    }
+
+    /* Progress bar */
+    .progress-bg {
+      fill: rgba(50, 40, 0, 0.5);
+      stroke: #aa8800;
+      stroke-width: 1;
+    }
+    .progress-fill {
+      fill: #ffaa00;
+      animation: progressAnim 2s ease-in-out infinite;
+    }
+    @keyframes progressAnim {
+      0% { width: 0; }
+      80% { width: 80; }
+      100% { width: 0; }
+    }
+
+    .probe-wire {
+      fill: none;
+      stroke: #222;
+      stroke-width: 3;
+      stroke-linecap: round;
+    }
+
+    /* Wire glow - yellow for write */
+    .wire-glow-write {
+      fill: none;
+      stroke: #ffaa00;
+      stroke-width: 5;
+      stroke-linecap: round;
+      opacity: 0;
+      animation: wireWrite 1s ease-in-out infinite;
+    }
+    @keyframes wireWrite {
+      0%, 100% { opacity: 0; }
+      50% { opacity: 0.4; }
+    }
+
+    /* Handle bar - warm color for write mode */
+    .handle-bar-write {
+      fill: #00b8d4;
+      animation: handleWrite 1s ease-in-out infinite;
+    }
+    @keyframes handleWrite {
+      0%, 100% { fill: #00b8d4; }
+      50% { fill: #00ddff; }
+    }
+  </style>
+
+  <g class="hover-body">
+    <!-- Thruster flames - more active, yellowish -->
+    <path class="flame" d="M 38 168 L 52 168 L 45 195 Z" fill="url(#fire-grad)"/>
+    <path class="flame" d="M 188 168 L 202 168 L 195 195 Z" fill="url(#fire-grad)"/>
+
+    <!-- HANDLE -->
+    <g class="handle">
+      <path d="M 12 28 L 12 5 Q 12 -2 19 -2 L 30 -2" fill="none" stroke="#b0b0b0" stroke-width="5" stroke-linecap="round"/>
+      <path d="M 228 28 L 228 5 Q 228 -2 221 -2 L 210 -2" fill="none" stroke="#b0b0b0" stroke-width="5" stroke-linecap="round"/>
+      <rect class="handle-bar-code" x="30" y="-5" width="180" height="7" rx="3.5"/>
+    </g>
+    
+    <!-- Main body -->
+    <rect x="8" y="28" width="224" height="120" rx="5" fill="#f8f8f8" stroke="#c0c0c0" stroke-width="1"/>
+
+    <!-- Black bezel -->
+    <rect x="12" y="32" width="180" height="104" rx="3" fill="#1a1a1a"/>
+    
+    <!-- Tektronix branding -->
+    <text x="16" y="36" font-family="Arial" font-size="5" font-weight="bold" fill="#777" letter-spacing="0.5">Tektronix</text>
+    <text x="140" y="36" font-family="Arial" font-size="3.5" fill="#ffaa00">WRITE MODE</text>
+    
+    <!-- Screen frame -->
+    <rect x="18" y="38" width="158" height="88" rx="2" fill="#0a0a05"/>
+
+    <!-- Screen content -->
+    <g clip-path="url(#screenClip)">
+      <!-- Grid - yellow tint -->
+      <g>
+        <line class="grid-line" x1="18" y1="58" x2="176" y2="58"/>
+        <line class="grid-line" x1="18" y1="78" x2="176" y2="78"/>
+        <line class="grid-line" x1="18" y1="98" x2="176" y2="98"/>
+        <line class="grid-line" x1="18" y1="118" x2="176" y2="118"/>
+        <line class="grid-line" x1="46" y1="38" x2="46" y2="126"/>
+        <line class="grid-line" x1="74" y1="38" x2="74" y2="126"/>
+        <line class="grid-line" x1="102" y1="38" x2="102" y2="126"/>
+        <line class="grid-line" x1="130" y1="38" x2="130" y2="126"/>
+        <line class="grid-line" x1="158" y1="38" x2="158" y2="126"/>
+      </g>
+
+      <!-- Determined eyes -->
+      <g class="eye-group" transform="translate(0, 2)">
+        <ellipse class="write-eye" cx="72" cy="60" rx="9" ry="10"/>
+        <ellipse class="write-eye" cx="122" cy="60" rx="9" ry="10"/>
+        <!-- Pupils - slightly narrowed, determined -->
+        <ellipse cx="72" cy="60" rx="4" ry="3.5" fill="#0a0a05"/>
+        <ellipse cx="122" cy="60" rx="4" ry="3.5" fill="#0a0a05"/>
+        <!-- Highlights -->
+        <circle cx="70" cy="58" r="1.5" fill="#fff" opacity="0.5"/>
+        <circle cx="120" cy="58" r="1.5" fill="#fff" opacity="0.5"/>
+        
+        <!-- Determined eyebrows - angled down toward center -->
+        <path class="write-brow" d="M 60 52 L 84 55"/>
+        <path class="write-brow" d="M 134 52 L 110 55"/>
+      </g>
+
+      <!-- Command box -->
+      <rect class="cmd-box" x="28" y="76" width="138" height="16" rx="2"/>
+      <text x="32" y="87" class="cmd-text cmd-typing">CH1:SCALE 2.0E-3</text>
+      <rect class="write-cursor" x="118" y="79" width="6" height="10"/>
+      
+      <!-- Send arrow -->
+      <polygon class="send-arrow" points="168,84 160,80 160,88"/>
+
+      <!-- Progress bar -->
+      <rect class="progress-bg" x="28" y="96" width="100" height="6" rx="2"/>
+      <rect class="progress-fill" x="29" y="97" height="4" rx="1">
+        <animate attributeName="width" values="0;80;0" dur="2s" repeatCount="indefinite"/>
+      </rect>
+
+      <!-- Status -->
+      <text x="28" y="112" class="status-text">TX: 156 bytes | BUFFER: OK</text>
+      <text x="130" y="106" class="status-text">SENDING...</text>
+    </g>
+
+    <!-- Right side control panel -->
+    <rect x="194" y="32" width="36" height="104" rx="3" fill="#f0f0f0" stroke="#ccc" stroke-width="1"/>
+    
+    <!-- TRIGGER section -->
+    <rect x="197" y="35" width="30" height="7" rx="1" fill="#333"/>
+    <text x="212" y="40" font-family="Arial" font-size="4" fill="#0f0" text-anchor="middle">TRIGGER</text>
+    
+    <!-- Top knob -->
+    <text x="212" y="48" font-family="Arial" font-size="3" fill="#555" text-anchor="middle">Level</text>
+    <circle cx="212" cy="56" r="7" fill="#e0e0e0" stroke="#999" stroke-width="1"/>
+    <circle cx="212" cy="56" r="2.5" fill="#888"/>
+    
+    <!-- VERTICAL section -->
+    <rect x="197" y="66" width="30" height="6" rx="1" fill="#444"/>
+    <text x="212" y="70.5" font-family="Arial" font-size="3.5" fill="#fff" text-anchor="middle">VERTICAL</text>
+    
+    <!-- Channel buttons -->
+    <circle cx="203" cy="80" r="4" fill="#222" stroke="#f4b400" stroke-width="2"/> 
+    <circle cx="221" cy="80" r="4" fill="#222" stroke="#00c8c8" stroke-width="2"/> 
+    <circle cx="203" cy="92" r="4" fill="#222" stroke="#e06666" stroke-width="2"/> 
+    <circle cx="221" cy="92" r="4" fill="#222" stroke="#8e7cc3" stroke-width="2"/>
+    
+    <!-- HORIZONTAL section -->
+    <rect x="197" y="100" width="30" height="6" rx="1" fill="#444"/>
+    <text x="212" y="104.5" font-family="Arial" font-size="3" fill="#fff" text-anchor="middle">HORIZONTAL</text>
+    
+    <!-- Bottom knob -->
+    <text x="212" y="112" font-family="Arial" font-size="3" fill="#555" text-anchor="middle">Scale</text>
+    <circle cx="212" cy="120" r="8" fill="#e0e0e0" stroke="#999" stroke-width="1"/>
+    <circle cx="212" cy="120" r="3" fill="#888"/>
+    
+    <!-- Function buttons -->
+    <rect x="197" y="130" width="14" height="5" rx="1" fill="#4a4"/>
+    <rect x="213" y="130" width="14" height="5" rx="1" fill="#48f"/>
+    
+    <!-- Bottom channel inputs bar -->
+    <rect x="8" y="138" width="224" height="16" rx="2" fill="#e8e8e8"/>
+    
+    <!-- CH1 - transmitting -->
+    <g id="ch1-input" transform="translate(25, 140)">
+      <rect x="0" y="0" width="24" height="12" rx="2" fill="#3a3a3a"/>
+      <circle class="ch1-transmit" cx="12" cy="6" r="5" fill="#222" stroke="#f4b400" stroke-width="2"/>
+    </g>
+    <!-- CH2 -->
+    <g transform="translate(60, 140)">
+      <rect x="0" y="0" width="24" height="12" rx="2" fill="#3a3a3a"/>
+      <circle cx="12" cy="6" r="5" fill="#222" stroke="#00c8c8" stroke-width="2"/>
+    </g>
+    <!-- CH3 -->
+    <g transform="translate(95, 140)">
+      <rect x="0" y="0" width="24" height="12" rx="2" fill="#3a3a3a"/>
+      <circle cx="12" cy="6" r="5" fill="#222" stroke="#e06666" stroke-width="2"/>
+    </g>
+    <!-- CH4 -->
+    <g transform="translate(130, 140)">
+      <rect x="0" y="0" width="24" height="12" rx="2" fill="#3a3a3a"/>
+      <circle cx="12" cy="6" r="5" fill="#222" stroke="#8e7cc3" stroke-width="2"/>
+    </g>
+    
+    <!-- Aux In -->
+    <circle cx="190" cy="146" r="4" fill="#222" stroke="#666" stroke-width="1"/>
+
+    <!-- Feet -->
+    <rect x="35" y="154" width="24" height="14" rx="3" fill="#f0f0f0" stroke="#c0c0c0" stroke-width="1"/>
+    <rect x="181" y="154" width="24" height="14" rx="3" fill="#f0f0f0" stroke="#c0c0c0" stroke-width="1"/>
+
+    <!-- Right arm assembly (wire + arm) -->
+    <g class="right-arm-assembly">
+      <!-- Wire glow effect - yellow -->
+      <path class="wire-glow-write" d="M 0 0 Q 53 4 113 19 Q 173 32 205 8" />
+      <!-- probe wire -->
+      <path class="probe-wire" d="M 0 0 Q 53 4 113 19 Q 173 32 205 8" />
+      
+      <!-- Data packets going FROM probe TO CH1 (reversed direction) -->
+      <circle class="data-packet-out pkt-out1" r="4">
+        <animateMotion dur="1s" repeatCount="indefinite" keyPoints="1;0" keyTimes="0;1" path="M 0 0 Q 53 4 113 19 Q 173 32 205 8"/>
+      </circle>
+      <circle class="data-packet-out pkt-out2" r="3">
+        <animateMotion dur="1s" repeatCount="indefinite" begin="0.25s" keyPoints="1;0" keyTimes="0;1" path="M 0 0 Q 53 4 113 19 Q 173 32 205 8"/>
+      </circle>
+      <circle class="data-packet-out pkt-out3" r="3">
+        <animateMotion dur="1s" repeatCount="indefinite" begin="0.5s" keyPoints="1;0" keyTimes="0;1" path="M 0 0 Q 53 4 113 19 Q 173 32 205 8"/>
+      </circle>
+
+      <!-- right arm in local coords -->
+      <g class="right-arm">
+        <circle cx="203" cy="-76" r="10" fill="#00aad2" stroke="#0088aa" stroke-width="1"/>
+        <rect x="195" y="-74" width="16" height="24" rx="4" fill="url(#metal-grad)" stroke="#999" stroke-width="1" transform="rotate(-15 203 -62)"/>
+        <rect x="197" y="-52" width="14" height="20" rx="3" fill="#fff" stroke="#999" stroke-width="1" transform="rotate(8 204 -42)"/>
+        <ellipse cx="205" cy="-30" rx="8" ry="5" fill="#e8e8e8" stroke="#999" stroke-width="1"/>
+        
+        <g class="right-claw-L">
+          <path d="M 199 -30 Q 192 -20 195 -10" fill="none" stroke="#e0e0e0" stroke-width="5" stroke-linecap="round"/>
+          <circle cx="195" cy="-10" r="4" fill="#2d5a5a"/>
+        </g>
+        <g class="right-claw-R">
+          <path d="M 211 -30 Q 218 -20 215 -10" fill="none" stroke="#e0e0e0" stroke-width="5" stroke-linecap="round"/>
+          <circle cx="215" cy="-10" r="4" fill="#2d5a5a"/>
+        </g>
+        
+        <!-- Probe body -->
+        <rect x="200" y="-26" width="10" height="30" rx="2" fill="#555"/>
+        <rect x="202" y="2" width="6" height="6" rx="1" fill="#333"/>
+        <line x1="205" y1="8" x2="205" y2="19" stroke="#aaa" stroke-width="2" stroke-linecap="round"/>
+      </g>
+    </g>
+
+    <!-- LEFT ARM - typing motion -->
+    <g class="left-arm-assembly">
+      <circle cx="0" cy="70" r="10" fill="#00aad2" stroke="#0088aa" stroke-width="1"/>
+      <rect x="-8" y="72" width="16" height="24" rx="4" fill="url(#metal-grad)" stroke="#999" stroke-width="1" transform="rotate(18 0 75)"/>
+      <rect x="-10" y="94" width="14" height="20" rx="3" fill="#fff" stroke="#999" stroke-width="1" transform="rotate(-10 -3 100)"/>
+      <ellipse cx="-2" cy="116" rx="8" ry="5" fill="#e8e8e8" stroke="#999" stroke-width="1"/>
+      
+      <g class="left-claw-L">
+        <path d="M -8 116 Q -15 126 -12 136" fill="none" stroke="#e0e0e0" stroke-width="5" stroke-linecap="round"/>
+        <circle cx="-12" cy="136" r="4" fill="#2d5a5a"/>
+      </g>
+      <g class="left-claw-R">
+        <path d="M 4 116 Q 11 126 8 136" fill="none" stroke="#e0e0e0" stroke-width="5" stroke-linecap="round"/>
+        <circle cx="8" cy="136" r="4" fill="#2d5a5a"/>
+      </g>
+    </g>
+  </g>
+</svg>

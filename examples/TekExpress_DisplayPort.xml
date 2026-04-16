@@ -1,0 +1,239 @@
+<xml xmlns="https://developers.google.com/blockly/xml">
+  <block type="connect_tekexpress" id="connect_1" collapsed="true" x="20" y="20">
+    <field name="DEVICE_NAME">tekexp</field>
+    <field name="HOST">localhost</field>
+    <field name="PORT">5000</field>
+    <field name="TIMEOUT">30000</field>
+    <data>tekexp</data>
+    <next>
+      <block type="tekexp_write" id="set_mode_1" collapsed="true">
+        <field name="COMMAND">TEKEXP:ACQUIRE_MODE LIVE</field>
+        <next>
+          <block type="tekexp_select_device" id="select_dev_1" collapsed="true">
+            <field name="DEVICE_NAME">Device</field>
+            <next>
+              <block type="wait_seconds" id="wait_1" collapsed="true">
+                <field name="SECONDS">2</field>
+                <next>
+                  <block type="tekexp_query" id="query_dev_1" collapsed="true">
+                    <field name="COMMAND">TEKEXP:SELECT? DEVICE</field>
+                    <field name="VARIABLE">device_status</field>
+                    <next>
+                      <block type="python_code" id="print_dev" collapsed="true">
+                        <field name="CODE">print(f"The selected device is: {device_status}")</field>
+                        <next>
+                          <block type="python_code" id="print_general" collapsed="true">
+                            <field name="CODE">print("Started GENERAL parameters")</field>
+                            <next>
+                              <block type="tekexp_set_value" id="set_dutid" collapsed="true">
+                                <field name="CATEGORY">GENERAL</field>
+                                <field name="PARAMETER">DUTID</field>
+                                <field name="VALUE">DemoDUTID</field>
+                                <next>
+                                  <block type="tekexp_query" id="query_dutid">
+                                    <field name="COMMAND">TEKEXP:VALUE? DUTID</field>
+                                    <field name="VARIABLE">dutid_status</field>
+                                    <next>
+                                      <block type="python_code" id="print_dutid" collapsed="true">
+                                        <field name="CODE">print(f"After setting the DUTid: {dutid_status}")</field>
+                                        <next>
+                                          <block type="tekexp_write" id="set_gen_ver" collapsed="true">
+                                            <field name="COMMAND">TEKEXP:VALUE GENERAL,"Generation Version","USB3.1 Gen1"</field>
+                                            <next>
+                                              <block type="wait_seconds" id="wait_2" collapsed="true">
+                                                <field name="SECONDS">2</field>
+                                                <next>
+                                                  <block type="tekexp_query" id="query_gen_ver" collapsed="true">
+                                                    <field name="COMMAND">TEKEXP:VALUE? GENERAL,"Generation Version"</field>
+                                                    <field name="VARIABLE">gen_version</field>
+                                                    <next>
+                                                      <block type="python_code" id="print_gen_ver" collapsed="true">
+                                                        <field name="CODE">print(f"After selecting the Generation Version: {gen_version}")</field>
+                                                        <next>
+                                                          <block type="tekexp_write" id="deselect_all" collapsed="true">
+                                                            <field name="COMMAND">TEKEXP:SELECT TEST,ALL,FALSE</field>
+                                                            <next>
+                                                              <block type="python_code" id="print_select" collapsed="true">
+                                                                <field name="CODE">print("Select Measurement: UI-Unit Interval")</field>
+                                                                <next>
+                                                                  <block type="tekexp_select_test" id="select_test_1" collapsed="true">
+                                                                    <field name="TEST_NAME">UI-Unit Interval</field>
+                                                                    <field name="ENABLED">TRUE</field>
+                                                                    <next>
+                                                                      <block type="python_code" id="print_selected" collapsed="true">
+                                                                        <field name="CODE">print("The selected Measurement is: UI-Unit Interval")</field>
+                                                                        <next>
+                                                                          <block type="tekexp_write" id="set_user_mode" collapsed="true">
+                                                                            <field name="COMMAND">TEKEXP:MODE USER-DEFINED</field>
+                                                                            <next>
+                                                                              <block type="tekexp_query" id="query_mode" collapsed="true">
+                                                                                <field name="COMMAND">TEKEXP:MODE?</field>
+                                                                                <field name="VARIABLE">mode_status</field>
+                                                                                <next>
+                                                                                  <block type="python_code" id="print_mode" collapsed="true">
+                                                                                    <field name="CODE">print(f"Configuration mode is set to {mode_status}")</field>
+                                                                                    <next>
+                                                                                      <block type="wait_seconds" id="wait_3" collapsed="true">
+                                                                                        <field name="SECONDS">2</field>
+                                                                                        <next>
+                                                                                          <block type="python_code" id="print_start" collapsed="true">
+                                                                                            <field name="CODE">print("Starting Run")</field>
+                                                                                            <next>
+                                                                                              <block type="tekexp_run" id="run_test" collapsed="true">
+                                                                                                <next>
+                                                                                                  <block type="python_code" id="print_clicked" collapsed="true">
+                                                                                                    <field name="CODE">print("Clicked start button.")</field>
+                                                                                                    <next>
+                                                                                                      <block type="wait_seconds" id="wait_4" collapsed="true">
+                                                                                                        <field name="SECONDS">10</field>
+                                                                                                        <next>
+                                                                                                          <block type="tekexp_write" id="popup_ok_1" collapsed="true">
+                                                                                                            <field name="COMMAND">TEKEXP:POPUP "OK"</field>
+                                                                                                            <next>
+                                                                                                              <block type="wait_seconds" id="wait_5" collapsed="true">
+                                                                                                                <field name="SECONDS">10</field>
+                                                                                                                <next>
+                                                                                                                  <block type="tekexp_write" id="popup_ok_2" collapsed="true">
+                                                                                                                    <field name="COMMAND">TEKEXP:POPUP "OK"</field>
+                                                                                                                    <next>
+                                                                                                                      <block type="wait_seconds" id="wait_6" collapsed="true">
+                                                                                                                        <field name="SECONDS">10</field>
+                                                                                                                        <next>
+                                                                                                                          <block type="tekexp_write" id="popup_ok_3" collapsed="true">
+                                                                                                                            <field name="COMMAND">TEKEXP:POPUP "OK"</field>
+                                                                                                                            <next>
+                                                                                                                              <block type="wait_seconds" id="wait_7" collapsed="true">
+                                                                                                                                <field name="SECONDS">10</field>
+                                                                                                                                <next>
+                                                                                                                                  <block type="tekexp_wait_state" id="wait_complete" collapsed="true">
+                                                                                                                                    <field name="EXPECTED">COMPLETE</field>
+                                                                                                                                    <field name="POLL_INTERVAL">2</field>
+                                                                                                                                    <field name="TIMEOUT">600</field>
+                                                                                                                                    <field name="HANDLE_POPUP">TRUE</field>
+                                                                                                                                    <next>
+                                                                                                                                      <block type="python_code" id="print_done" collapsed="true">
+                                                                                                                                        <field name="CODE">print("Measurement execution completed.")</field>
+                                                                                                                                        <next>
+                                                                                                                                          <block type="python_code" id="print_report" collapsed="true">
+                                                                                                                                            <field name="CODE">print("Getting the info of Report file...")</field>
+                                                                                                                                            <next>
+                                                                                                                                              <block type="tekexp_query" id="query_report" collapsed="true">
+                                                                                                                                                <field name="COMMAND">TEKEXP:INFO? REPORT</field>
+                                                                                                                                                <field name="VARIABLE">report_info</field>
+                                                                                                                                                <next>
+                                                                                                                                                  <block type="python_code" id="print_report_info" collapsed="true">
+                                                                                                                                                    <field name="CODE">print(f"ReportFile Info: {report_info}")</field>
+                                                                                                                                                    <next>
+                                                                                                                                                      <block type="tekexp_export_report" id="export_report" collapsed="true">
+                                                                                                                                                        <field name="REPORT_TYPE">REPORT</field>
+                                                                                                                                                        <field name="FILENAME">PI_Report</field>
+                                                                                                                                                        <next>
+                                                                                                                                                          <block type="wait_seconds" id="wait_8" collapsed="true">
+                                                                                                                                                            <field name="SECONDS">15</field>
+                                                                                                                                                            <next>
+                                                                                                                                                              <block type="tekexp_write" id="save_session" collapsed="true">
+                                                                                                                                                                <field name="COMMAND">TEKEXP:SETUP SAVE,PI_Session1</field>
+                                                                                                                                                                <next>
+                                                                                                                                                                  <block type="wait_seconds" id="wait_9" collapsed="true">
+                                                                                                                                                                    <field name="SECONDS">3</field>
+                                                                                                                                                                    <next>
+                                                                                                                                                                      <block type="python_code" id="print_querying" collapsed="true">
+                                                                                                                                                                        <field name="CODE">print("Querying the result of UI-Unit Interval...")</field>
+                                                                                                                                                                        <next>
+                                                                                                                                                                          <block type="tekexp_query" id="query_result" collapsed="true">
+                                                                                                                                                                            <field name="COMMAND">TEKEXP:RESULT? "UI-Unit Interval"</field>
+                                                                                                                                                                            <field name="VARIABLE">result</field>
+                                                                                                                                                                            <next>
+                                                                                                                                                                              <block type="python_code" id="print_result" collapsed="true">
+                                                                                                                                                                                <field name="CODE">print(f"The result of UI-Unit Interval is {result}")</field>
+                                                                                                                                                                                <next>
+                                                                                                                                                                                  <block type="disconnect" id="disconnect_1" collapsed="true"></block>
+                                                                                                                                                                                </next>
+                                                                                                                                                                              </block>
+                                                                                                                                                                            </next>
+                                                                                                                                                                          </block>
+                                                                                                                                                                        </next>
+                                                                                                                                                                      </block>
+                                                                                                                                                                    </next>
+                                                                                                                                                                  </block>
+                                                                                                                                                                </next>
+                                                                                                                                                              </block>
+                                                                                                                                                            </next>
+                                                                                                                                                          </block>
+                                                                                                                                                        </next>
+                                                                                                                                                      </block>
+                                                                                                                                                    </next>
+                                                                                                                                                  </block>
+                                                                                                                                                </next>
+                                                                                                                                              </block>
+                                                                                                                                            </next>
+                                                                                                                                          </block>
+                                                                                                                                        </next>
+                                                                                                                                      </block>
+                                                                                                                                    </next>
+                                                                                                                                  </block>
+                                                                                                                                </next>
+                                                                                                                              </block>
+                                                                                                                            </next>
+                                                                                                                          </block>
+                                                                                                                        </next>
+                                                                                                                      </block>
+                                                                                                                    </next>
+                                                                                                                  </block>
+                                                                                                                </next>
+                                                                                                              </block>
+                                                                                                            </next>
+                                                                                                          </block>
+                                                                                                        </next>
+                                                                                                      </block>
+                                                                                                    </next>
+                                                                                                  </block>
+                                                                                                </next>
+                                                                                              </block>
+                                                                                            </next>
+                                                                                          </block>
+                                                                                        </next>
+                                                                                      </block>
+                                                                                    </next>
+                                                                                  </block>
+                                                                                </next>
+                                                                              </block>
+                                                                            </next>
+                                                                          </block>
+                                                                        </next>
+                                                                      </block>
+                                                                    </next>
+                                                                  </block>
+                                                                </next>
+                                                              </block>
+                                                            </next>
+                                                          </block>
+                                                        </next>
+                                                      </block>
+                                                    </next>
+                                                  </block>
+                                                </next>
+                                              </block>
+                                            </next>
+                                          </block>
+                                        </next>
+                                      </block>
+                                    </next>
+                                  </block>
+                                </next>
+                              </block>
+                            </next>
+                          </block>
+                        </next>
+                      </block>
+                    </next>
+                  </block>
+                </next>
+              </block>
+            </next>
+          </block>
+        </next>
+      </block>
+    </next>
+  </block>
+</xml>

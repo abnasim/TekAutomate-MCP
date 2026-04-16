@@ -1,0 +1,414 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="-25 -20 300 270" width="300" height="270">
+  <defs>
+    <clipPath id="screenClip">
+      <rect x="18" y="38" width="158" height="88" rx="2"/>
+    </clipPath>
+    <filter id="glow">
+      <feGaussianBlur stdDeviation="1.5" result="coloredBlur"/>
+      <feMerge>
+        <feMergeNode in="coloredBlur"/>
+        <feMergeNode in="SourceGraphic"/>
+      </feMerge>
+    </filter>
+    <linearGradient id="metal-grad" x1="0%" y1="0%" x2="0%" y2="100%">
+      <stop offset="0%" stop-color="#fff"/>
+      <stop offset="100%" stop-color="#ccc"/>
+    </linearGradient>
+    <linearGradient id="fire-grad" x1="0%" y1="0%" x2="0%" y2="100%">
+      <stop offset="0%" stop-color="#00ffff"/> 
+      <stop offset="100%" stop-color="#0099dd" stop-opacity="0"/>
+    </linearGradient>
+    <linearGradient id="save-grad" x1="0%" y1="0%" x2="0%" y2="100%">
+      <stop offset="0%" stop-color="#00ddff"/>
+      <stop offset="100%" stop-color="#0088aa"/>
+    </linearGradient>
+  </defs>
+
+  <style>
+    /* Gentle hover for save */
+    .hover-body { animation: hoverSave 2.5s ease-in-out infinite; }
+    @keyframes hoverSave {
+      0%, 100% { transform: translateY(0px); } 
+      50% { transform: translateY(-3px); }
+    }
+
+    /* Steady thrusters */
+    .flame { animation: thrust 0.6s ease-in-out infinite alternate; transform-origin: center top; }
+    @keyframes thrust {
+      0% { transform: scaleY(0.7); opacity: 0.3; }
+      100% { transform: scaleY(1.0); opacity: 0.7; }
+    }
+
+    .handle { 
+      animation: handleBreathe 2.5s ease-in-out infinite; 
+      transform-origin: 120px 28px;
+    }
+    @keyframes handleBreathe {
+      0%, 100% { transform: translateY(0); }
+      50% { transform: translateY(1px); }
+    }
+
+    /* Left arm - raised up celebrating/presenting save */
+    .left-arm-assembly { 
+      animation: armSaveLeft 2.5s ease-in-out infinite; 
+      transform-origin: 0px 70px;
+    }
+    @keyframes armSaveLeft {
+      0%, 100% { transform: rotate(-25deg); }
+      50% { transform: rotate(-30deg); }
+    }
+
+    /* Right arm assembly - raised symmetrically */
+    .right-arm-assembly { 
+      animation: armSaveRight 2.5s ease-in-out infinite; 
+      transform-origin: 37px 146px;
+    }
+    @keyframes armSaveRight {
+      0%, 100% { transform: translate(37px, 146px) rotate(-8deg); }
+      50% { transform: translate(37px, 146px) rotate(-12deg); }
+    }
+
+    /* Claws waving */
+    .left-claw-L, .left-claw-R {
+      animation: clawWave 1.2s ease-in-out infinite;
+      transform-origin: center;
+    }
+    .left-claw-R { animation-delay: 0.15s; }
+    @keyframes clawWave {
+      0%, 100% { transform: rotate(0deg); }
+      50% { transform: rotate(-5deg); }
+    }
+
+    .right-claw-L, .right-claw-R {
+      animation: clawWaveR 1.2s ease-in-out infinite;
+      transform-origin: center;
+    }
+    .right-claw-R { animation-delay: 0.15s; }
+    @keyframes clawWaveR {
+      0%, 100% { transform: rotate(0deg); }
+      50% { transform: rotate(5deg); }
+    }
+
+    .grid-line {
+      stroke: #082520;
+      stroke-width: 0.7;
+      opacity: 0.3;
+    }
+
+    /* Happy confident eyes */
+    .save-eye {
+      fill: #00ffcc;
+      filter: url(#glow);
+    }
+    .eye-group {
+      animation: eyeHappy 2.5s ease-in-out infinite;
+    }
+    @keyframes eyeHappy {
+      0%, 100% { transform: scaleY(1); }
+      50% { transform: scaleY(0.9); }
+    }
+
+    /* Floppy disk icon */
+    .floppy-body {
+      fill: #00bbdd;
+      stroke: #00aacc;
+      stroke-width: 1;
+      filter: url(#glow);
+    }
+    .floppy-label {
+      fill: #e8e8e8;
+    }
+    .floppy-notch {
+      fill: #007799;
+    }
+    .floppy-group {
+      animation: floppyBounce 1.5s ease-in-out infinite;
+      transform-origin: 97px 65px;
+    }
+    @keyframes floppyBounce {
+      0%, 100% { transform: translateY(0) scale(1); }
+      50% { transform: translateY(-4px) scale(1.05); }
+    }
+
+    /* Save arrow going into floppy */
+    .save-arrow {
+      fill: #00ffdd;
+      filter: url(#glow);
+      animation: arrowDown 1s ease-in-out infinite;
+    }
+    @keyframes arrowDown {
+      0%, 100% { transform: translateY(-8px); opacity: 0.4; }
+      50% { transform: translateY(0); opacity: 1; }
+    }
+
+    /* Progress bar */
+    .progress-bg {
+      fill: rgba(0, 40, 40, 0.8);
+      stroke: #00aaaa;
+      stroke-width: 1;
+      rx: 3;
+    }
+    .progress-fill {
+      fill: url(#save-grad);
+      rx: 2;
+      animation: progressSave 2s ease-in-out infinite;
+    }
+    @keyframes progressSave {
+      0%, 100% { width: 10; }
+      50% { width: 90; }
+    }
+
+    /* Save text */
+    .save-text {
+      font-family: "Courier New", monospace;
+      font-size: 7px;
+      fill: #00ddcc;
+      opacity: 0.9;
+    }
+
+    /* Checkmark appearing */
+    .checkmark {
+      fill: none;
+      stroke: #00ff88;
+      stroke-width: 3;
+      stroke-linecap: round;
+      stroke-linejoin: round;
+      filter: url(#glow);
+      stroke-dasharray: 30;
+      stroke-dashoffset: 30;
+      animation: checkDraw 2s ease-in-out infinite;
+    }
+    @keyframes checkDraw {
+      0%, 30% { stroke-dashoffset: 30; opacity: 0; }
+      60% { stroke-dashoffset: 0; opacity: 1; }
+      100% { stroke-dashoffset: 0; opacity: 0.5; }
+    }
+
+    /* Data blocks being saved */
+    .data-block {
+      fill: #00ddaa;
+      filter: url(#glow);
+      opacity: 0;
+    }
+    .block1 { animation: blockSave 2s ease-in-out infinite; }
+    .block2 { animation: blockSave 2s ease-in-out infinite 0.3s; }
+    .block3 { animation: blockSave 2s ease-in-out infinite 0.6s; }
+    @keyframes blockSave {
+      0% { transform: translateY(-20px); opacity: 0; }
+      30% { transform: translateY(-10px); opacity: 1; }
+      60% { transform: translateY(0); opacity: 0.8; }
+      100% { transform: translateY(10px); opacity: 0; }
+    }
+
+    /* CH1 steady glow */
+    .ch1-save {
+      animation: ch1Glow 2s ease-in-out infinite;
+    }
+    @keyframes ch1Glow {
+      0%, 100% { stroke: #f4b400; fill: #222; }
+      50% { stroke: #ffcc44; fill: #2a2200; }
+    }
+
+    .probe-wire {
+      fill: none;
+      stroke: #222;
+      stroke-width: 3;
+      stroke-linecap: round;
+    }
+
+    /* Handle bar pulse */
+    .handle-bar-save {
+      animation: handlePulse 2s ease-in-out infinite;
+    }
+    @keyframes handlePulse {
+      0%, 100% { fill: #00b8d4; }
+      50% { fill: #00ddff; }
+    }
+  </style>
+
+  <g class="hover-body">
+    <!-- Thruster flames -->
+    <path class="flame" d="M 38 168 L 52 168 L 45 192 Z" fill="url(#fire-grad)"/>
+    <path class="flame" d="M 188 168 L 202 168 L 195 192 Z" fill="url(#fire-grad)"/>
+
+    <!-- HANDLE -->
+    <g class="handle">
+      <path d="M 12 28 L 12 5 Q 12 -2 19 -2 L 30 -2" fill="none" stroke="#b0b0b0" stroke-width="5" stroke-linecap="round"/>
+      <path d="M 228 28 L 228 5 Q 228 -2 221 -2 L 210 -2" fill="none" stroke="#b0b0b0" stroke-width="5" stroke-linecap="round"/>
+      <rect class="handle-bar-code" x="30" y="-5" width="180" height="7" rx="3.5"/>
+    </g>
+    
+    <!-- Main body -->
+    <rect x="8" y="28" width="224" height="120" rx="5" fill="#f8f8f8" stroke="#c0c0c0" stroke-width="1"/>
+
+    <!-- Black bezel -->
+    <rect x="12" y="32" width="180" height="104" rx="3" fill="#1a1a1a"/>
+    
+    <!-- Tektronix branding -->
+    <text x="16" y="36" font-family="Arial" font-size="5" font-weight="bold" fill="#777" letter-spacing="0.5">Tektronix</text>
+    <text x="140" y="36" font-family="Arial" font-size="3.5" fill="#00ddcc">SAVING...</text>
+    
+    <!-- Screen frame -->
+    <rect x="18" y="38" width="158" height="88" rx="2" fill="#050a0a"/>
+
+    <!-- Screen content -->
+    <g clip-path="url(#screenClip)">
+      <!-- Grid -->
+      <g>
+        <line class="grid-line" x1="18" y1="58" x2="176" y2="58"/>
+        <line class="grid-line" x1="18" y1="78" x2="176" y2="78"/>
+        <line class="grid-line" x1="18" y1="98" x2="176" y2="98"/>
+        <line class="grid-line" x1="18" y1="118" x2="176" y2="118"/>
+        <line class="grid-line" x1="46" y1="38" x2="46" y2="126"/>
+        <line class="grid-line" x1="74" y1="38" x2="74" y2="126"/>
+        <line class="grid-line" x1="102" y1="38" x2="102" y2="126"/>
+        <line class="grid-line" x1="130" y1="38" x2="130" y2="126"/>
+        <line class="grid-line" x1="158" y1="38" x2="158" y2="126"/>
+      </g>
+
+      <!-- Floppy disk icon -->
+      <g class="floppy-group">
+        <!-- Main body -->
+        <rect class="floppy-body" x="77" y="52" width="40" height="38" rx="3"/>
+        <!-- Label area -->
+        <rect class="floppy-label" x="82" y="72" width="30" height="14" rx="1"/>
+        <!-- Metal slider -->
+        <rect class="floppy-notch" x="88" y="52" width="18" height="10" rx="1"/>
+        <rect x="92" y="54" width="10" height="6" rx="1" fill="#0a1a1a"/>
+        <!-- Corner notch -->
+        <polygon points="107,52 117,52 117,62" fill="#007799"/>
+      </g>
+
+      <!-- Save arrow -->
+      <polygon class="save-arrow" points="97,42 92,48 95,48 95,52 99,52 99,48 102,48"/>
+
+      <!-- Data blocks being saved -->
+      <rect class="data-block block1" x="55" y="70" width="8" height="8" rx="1"/>
+      <rect class="data-block block2" x="135" y="65" width="8" height="8" rx="1"/>
+      <rect class="data-block block3" x="145" y="80" width="8" height="8" rx="1"/>
+
+      <!-- Progress bar -->
+      <rect class="progress-bg" x="48" y="98" width="98" height="10"/>
+      <rect class="progress-fill" x="50" y="100" height="6">
+        <animate attributeName="width" values="10;90;10" dur="2s" repeatCount="indefinite"/>
+      </rect>
+
+      <!-- Checkmark -->
+      <path class="checkmark" d="M 140 100 L 146 108 L 160 92" transform="translate(0, 0)"/>
+
+      <!-- Save text -->
+      <text x="60" y="120" class="save-text">SAVING DATA...</text>
+    </g>
+
+    <!-- Right side control panel -->
+    <rect x="194" y="32" width="36" height="104" rx="3" fill="#f0f0f0" stroke="#ccc" stroke-width="1"/>
+    
+    <!-- TRIGGER section -->
+    <rect x="197" y="35" width="30" height="7" rx="1" fill="#333"/>
+    <text x="212" y="40" font-family="Arial" font-size="4" fill="#0f0" text-anchor="middle">TRIGGER</text>
+    
+    <!-- Top knob -->
+    <text x="212" y="48" font-family="Arial" font-size="3" fill="#555" text-anchor="middle">Level</text>
+    <circle cx="212" cy="56" r="7" fill="#e0e0e0" stroke="#999" stroke-width="1"/>
+    <circle cx="212" cy="56" r="2.5" fill="#888"/>
+    
+    <!-- VERTICAL section -->
+    <rect x="197" y="66" width="30" height="6" rx="1" fill="#444"/>
+    <text x="212" y="70.5" font-family="Arial" font-size="3.5" fill="#fff" text-anchor="middle">VERTICAL</text>
+    
+    <!-- Channel buttons -->
+    <circle cx="203" cy="80" r="4" fill="#222" stroke="#f4b400" stroke-width="2"/> 
+    <circle cx="221" cy="80" r="4" fill="#222" stroke="#00c8c8" stroke-width="2"/> 
+    <circle cx="203" cy="92" r="4" fill="#222" stroke="#e06666" stroke-width="2"/> 
+    <circle cx="221" cy="92" r="4" fill="#222" stroke="#8e7cc3" stroke-width="2"/>
+    
+    <!-- HORIZONTAL section -->
+    <rect x="197" y="100" width="30" height="6" rx="1" fill="#444"/>
+    <text x="212" y="104.5" font-family="Arial" font-size="3" fill="#fff" text-anchor="middle">HORIZONTAL</text>
+    
+    <!-- Bottom knob -->
+    <text x="212" y="112" font-family="Arial" font-size="3" fill="#555" text-anchor="middle">Scale</text>
+    <circle cx="212" cy="120" r="8" fill="#e0e0e0" stroke="#999" stroke-width="1"/>
+    <circle cx="212" cy="120" r="3" fill="#888"/>
+    
+    <!-- Function buttons -->
+    <rect x="197" y="130" width="14" height="5" rx="1" fill="#4a4"/>
+    <rect x="213" y="130" width="14" height="5" rx="1" fill="#48f"/>
+    
+    <!-- Bottom channel inputs bar -->
+    <rect x="8" y="138" width="224" height="16" rx="2" fill="#e8e8e8"/>
+    
+    <!-- CH1 -->
+    <g id="ch1-input" transform="translate(25, 140)">
+      <rect x="0" y="0" width="24" height="12" rx="2" fill="#3a3a3a"/>
+      <circle class="ch1-save" cx="12" cy="6" r="5" fill="#222" stroke="#f4b400" stroke-width="2"/>
+    </g>
+    <!-- CH2 -->
+    <g transform="translate(60, 140)">
+      <rect x="0" y="0" width="24" height="12" rx="2" fill="#3a3a3a"/>
+      <circle cx="12" cy="6" r="5" fill="#222" stroke="#00c8c8" stroke-width="2"/>
+    </g>
+    <!-- CH3 -->
+    <g transform="translate(95, 140)">
+      <rect x="0" y="0" width="24" height="12" rx="2" fill="#3a3a3a"/>
+      <circle cx="12" cy="6" r="5" fill="#222" stroke="#e06666" stroke-width="2"/>
+    </g>
+    <!-- CH4 -->
+    <g transform="translate(130, 140)">
+      <rect x="0" y="0" width="24" height="12" rx="2" fill="#3a3a3a"/>
+      <circle cx="12" cy="6" r="5" fill="#222" stroke="#8e7cc3" stroke-width="2"/>
+    </g>
+    
+    <!-- Aux In -->
+    <circle cx="190" cy="146" r="4" fill="#222" stroke="#666" stroke-width="1"/>
+
+    <!-- Feet -->
+    <rect x="35" y="154" width="24" height="14" rx="3" fill="#f0f0f0" stroke="#c0c0c0" stroke-width="1"/>
+    <rect x="181" y="154" width="24" height="14" rx="3" fill="#f0f0f0" stroke="#c0c0c0" stroke-width="1"/>
+
+    <!-- Right arm assembly (wire + arm) - raised -->
+    <g class="right-arm-assembly">
+      <!-- probe wire from CH1 (0,0 in local coords) to probe tip -->
+      <path class="probe-wire" d="M 0 0 Q 53 4 113 19 Q 173 32 205 8" />
+
+      <!-- right arm in local coords -->
+      <g class="right-arm">
+        <circle cx="203" cy="-76" r="10" fill="#00aad2" stroke="#0088aa" stroke-width="1"/>
+        <rect x="195" y="-74" width="16" height="24" rx="4" fill="url(#metal-grad)" stroke="#999" stroke-width="1" transform="rotate(-20 203 -62)"/>
+        <rect x="197" y="-52" width="14" height="20" rx="3" fill="#fff" stroke="#999" stroke-width="1" transform="rotate(5 204 -42)"/>
+        <ellipse cx="205" cy="-30" rx="8" ry="5" fill="#e8e8e8" stroke="#999" stroke-width="1"/>
+        
+        <g class="right-claw-L">
+          <path d="M 199 -30 Q 192 -20 195 -10" fill="none" stroke="#e0e0e0" stroke-width="5" stroke-linecap="round"/>
+          <circle cx="195" cy="-10" r="4" fill="#2d5a5a"/>
+        </g>
+        <g class="right-claw-R">
+          <path d="M 211 -30 Q 218 -20 215 -10" fill="none" stroke="#e0e0e0" stroke-width="5" stroke-linecap="round"/>
+          <circle cx="215" cy="-10" r="4" fill="#2d5a5a"/>
+        </g>
+        
+        <!-- Probe body -->
+        <rect x="200" y="-26" width="10" height="30" rx="2" fill="#555"/>
+        <rect x="202" y="2" width="6" height="6" rx="1" fill="#333"/>
+        <line x1="205" y1="8" x2="205" y2="19" stroke="#aaa" stroke-width="2" stroke-linecap="round"/>
+      </g>
+    </g>
+
+    <!-- LEFT ARM - raised celebrating -->
+    <g class="left-arm-assembly">
+      <circle cx="0" cy="70" r="10" fill="#00aad2" stroke="#0088aa" stroke-width="1"/>
+      <rect x="-8" y="72" width="16" height="24" rx="4" fill="url(#metal-grad)" stroke="#999" stroke-width="1" transform="rotate(22 0 75)"/>
+      <rect x="-10" y="94" width="14" height="20" rx="3" fill="#fff" stroke="#999" stroke-width="1" transform="rotate(-12 -3 100)"/>
+      <ellipse cx="-2" cy="116" rx="8" ry="5" fill="#e8e8e8" stroke="#999" stroke-width="1"/>
+      
+      <g class="left-claw-L">
+        <path d="M -8 116 Q -15 126 -12 136" fill="none" stroke="#e0e0e0" stroke-width="5" stroke-linecap="round"/>
+        <circle cx="-12" cy="136" r="4" fill="#2d5a5a"/>
+      </g>
+      <g class="left-claw-R">
+        <path d="M 4 116 Q 11 126 8 136" fill="none" stroke="#e0e0e0" stroke-width="5" stroke-linecap="round"/>
+        <circle cx="8" cy="136" r="4" fill="#2d5a5a"/>
+      </g>
+    </g>
+  </g>
+</svg>

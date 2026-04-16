@@ -1,0 +1,348 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="-25 -20 300 270" width="300" height="270">
+  <defs>
+    <clipPath id="screenClip">
+      <rect x="18" y="38" width="158" height="88" rx="2"/>
+    </clipPath>
+    <filter id="glow">
+      <feGaussianBlur stdDeviation="1.5" result="coloredBlur"/>
+      <feMerge>
+        <feMergeNode in="coloredBlur"/>
+        <feMergeNode in="SourceGraphic"/>
+      </feMerge>
+    </filter>
+    <linearGradient id="metal-grad" x1="0%" y1="0%" x2="0%" y2="100%">
+      <stop offset="0%" stop-color="#fff"/>
+      <stop offset="100%" stop-color="#ccc"/>
+    </linearGradient>
+    <linearGradient id="fire-grad" x1="0%" y1="0%" x2="0%" y2="100%">
+      <stop offset="0%" stop-color="#00ffff"/> 
+      <stop offset="100%" stop-color="#0099dd" stop-opacity="0"/>
+    </linearGradient>
+  </defs>
+
+  <style>
+    /* Gentle hover - thinking pose */
+    .hover-body { animation: hoverThink 4s ease-in-out infinite; }
+    @keyframes hoverThink {
+      0%, 100% { transform: translateY(0px); } 
+      50% { transform: translateY(-3px); }
+    }
+
+    /* Subtle thrusters */
+    .flame { animation: thrust 0.8s ease-in-out infinite alternate; transform-origin: center top; }
+    @keyframes thrust {
+      0% { transform: scaleY(0.6); opacity: 0.2; }
+      100% { transform: scaleY(0.9); opacity: 0.5; }
+    }
+
+    .handle { 
+      animation: handleBreathe 4s ease-in-out infinite; 
+      transform-origin: 120px 28px;
+    }
+    @keyframes handleBreathe {
+      0%, 100% { transform: translateY(0); }
+      50% { transform: translateY(1px); }
+    }
+
+    /* Left arm raised to "chin" - pondering pose */
+    .left-arm-assembly { 
+      animation: thinkPose 4s ease-in-out infinite; 
+      transform-origin: 0px 70px;
+    }
+    @keyframes thinkPose {
+      0%, 100% { transform: rotate(-35deg); }
+      50% { transform: rotate(-38deg); }
+    }
+
+    /* Right arm gentle sway with probe */
+    .right-arm-assembly { 
+      animation: armSwayRight 4s ease-in-out infinite; 
+      transform-origin: 37px 146px;
+    }
+    @keyframes armSwayRight {
+      0%, 100% { transform: translate(37px, 146px) rotate(0deg); }
+      50% { transform: translate(37px, 146px) rotate(-2deg); }
+    }
+
+    /* Thinking claw - tapping motion */
+    .left-claw-L, .left-claw-R {
+      animation: thinkTap 1.2s ease-in-out infinite;
+      transform-origin: center;
+    }
+    .left-claw-R { animation-delay: 0.15s; }
+    @keyframes thinkTap {
+      0%, 100% { transform: translateY(0); }
+      50% { transform: translateY(2px); }
+    }
+
+    .right-claw-L, .right-claw-R {
+      animation: clawSoft 4s ease-in-out infinite;
+      transform-origin: center;
+    }
+    @keyframes clawSoft {
+      0%, 100% { transform: translateY(0); }
+      50% { transform: translateY(1px); }
+    }
+
+    .grid-line {
+      stroke: #0d2520;
+      stroke-width: 0.7;
+      opacity: 0.3;
+    }
+
+    /* Thinking eyes - looking up/to side */
+    .think-eye {
+      fill: #00ff88;
+      filter: url(#glow);
+      animation: eyeLookAround 3s ease-in-out infinite;
+    }
+    @keyframes eyeLookAround {
+      0%, 100% { transform: translate(0, 0); }
+      25% { transform: translate(2px, -2px); }
+      50% { transform: translate(-1px, -1px); }
+      75% { transform: translate(1px, 0); }
+    }
+
+    /* Thought bubbles rising */
+    .thought-bubble {
+      fill: none;
+      stroke: #00ddaa;
+      stroke-width: 1.5;
+      filter: url(#glow);
+      opacity: 0;
+    }
+    .bubble1 { animation: bubbleRise 3s ease-out infinite; }
+    .bubble2 { animation: bubbleRise 3s ease-out infinite 1s; }
+    .bubble3 { animation: bubbleRise 3s ease-out infinite 2s; }
+    @keyframes bubbleRise {
+      0% { transform: translateY(0) scale(0.5); opacity: 0; }
+      20% { opacity: 0.8; }
+      80% { transform: translateY(-25px) scale(1.1); opacity: 0.6; }
+      100% { transform: translateY(-35px) scale(1.2); opacity: 0; }
+    }
+
+    /* Question marks floating */
+    .question-mark {
+      font-family: "Courier New", monospace;
+      font-size: 12px;
+      fill: #00ffaa;
+      filter: url(#glow);
+      opacity: 0;
+    }
+    .q1 { animation: questionFloat 4s ease-in-out infinite; }
+    .q2 { animation: questionFloat 4s ease-in-out infinite 1.5s; }
+    @keyframes questionFloat {
+      0%, 100% { transform: translateY(0); opacity: 0; }
+      20% { opacity: 0.9; }
+      50% { transform: translateY(-8px); opacity: 0.7; }
+      80% { transform: translateY(-4px); opacity: 0.4; }
+    }
+
+    /* Processing dots */
+    .think-dot {
+      fill: #00ffdd;
+      filter: url(#glow);
+    }
+    .dot1 { animation: dotPulse 1.5s ease-in-out infinite; }
+    .dot2 { animation: dotPulse 1.5s ease-in-out infinite 0.3s; }
+    .dot3 { animation: dotPulse 1.5s ease-in-out infinite 0.6s; }
+    @keyframes dotPulse {
+      0%, 100% { opacity: 0.3; transform: scale(0.8); }
+      50% { opacity: 1; transform: scale(1.2); }
+    }
+
+    .think-text {
+      font-family: "Courier New", monospace;
+      font-size: 7px;
+      fill: #00ddaa;
+      opacity: 0.7;
+    }
+
+    .probe-wire {
+      fill: none;
+      stroke: #222;
+      stroke-width: 3;
+      stroke-linecap: round;
+    }
+  </style>
+
+  <g class="hover-body">
+    <!-- Thruster flames -->
+    <path class="flame" d="M 38 168 L 52 168 L 45 192 Z" fill="url(#fire-grad)"/>
+    <path class="flame" d="M 188 168 L 202 168 L 195 192 Z" fill="url(#fire-grad)"/>
+
+    <!-- HANDLE -->
+    <g class="handle">
+      <path d="M 12 28 L 12 5 Q 12 -2 19 -2 L 30 -2" fill="none" stroke="#b0b0b0" stroke-width="5" stroke-linecap="round"/>
+      <path d="M 228 28 L 228 5 Q 228 -2 221 -2 L 210 -2" fill="none" stroke="#b0b0b0" stroke-width="5" stroke-linecap="round"/>
+      <rect x="30" y="-5" width="180" height="7" rx="3.5" fill="#00b8d4"/>
+    </g>
+    
+    <!-- Main body -->
+    <rect x="8" y="28" width="224" height="120" rx="5" fill="#f8f8f8" stroke="#c0c0c0" stroke-width="1"/>
+
+    <!-- Black bezel -->
+    <rect x="12" y="32" width="180" height="104" rx="3" fill="#1a1a1a"/>
+    
+    <!-- Tektronix branding -->
+    <text x="16" y="36" font-family="Arial" font-size="5" font-weight="bold" fill="#777" letter-spacing="0.5">Tektronix</text>
+    <text x="140" y="36" font-family="Arial" font-size="3.5" fill="#555">4 SERIES MSO</text>
+    
+    <!-- Screen frame -->
+    <rect x="18" y="38" width="158" height="88" rx="2" fill="#0a1210"/>
+
+    <!-- Screen content -->
+    <g clip-path="url(#screenClip)">
+      <!-- Grid -->
+      <g>
+        <line class="grid-line" x1="18" y1="58" x2="176" y2="58"/>
+        <line class="grid-line" x1="18" y1="78" x2="176" y2="78"/>
+        <line class="grid-line" x1="18" y1="98" x2="176" y2="98"/>
+        <line class="grid-line" x1="18" y1="118" x2="176" y2="118"/>
+        <line class="grid-line" x1="46" y1="38" x2="46" y2="126"/>
+        <line class="grid-line" x1="74" y1="38" x2="74" y2="126"/>
+        <line class="grid-line" x1="102" y1="38" x2="102" y2="126"/>
+        <line class="grid-line" x1="130" y1="38" x2="130" y2="126"/>
+        <line class="grid-line" x1="158" y1="38" x2="158" y2="126"/>
+      </g>
+
+      <!-- Thinking eyes - looking up and to the right -->
+      <g transform="translate(0, 5)">
+        <ellipse class="think-eye" cx="72" cy="72" rx="10" ry="12"/>
+        <ellipse class="think-eye" cx="122" cy="72" rx="10" ry="12"/>
+        <!-- Pupils looking up-right -->
+        <circle cx="75" cy="69" r="4" fill="#0a1210"/>
+        <circle cx="125" cy="69" r="4" fill="#0a1210"/>
+        <!-- Highlight -->
+        <circle cx="76" cy="67" r="1.5" fill="#fff" opacity="0.7"/>
+        <circle cx="126" cy="67" r="1.5" fill="#fff" opacity="0.7"/>
+      </g>
+
+      <!-- Thought bubbles -->
+      <circle class="thought-bubble bubble1" cx="145" cy="85" r="5"/>
+      <circle class="thought-bubble bubble2" cx="150" cy="75" r="7"/>
+      <circle class="thought-bubble bubble3" cx="158" cy="60" r="9"/>
+
+      <!-- Question marks -->
+      <text class="question-mark q1" x="152" y="55">?</text>
+      <text class="question-mark q2" x="140" y="48">?</text>
+
+      <!-- Processing indicator -->
+      <text x="50" y="108" class="think-text">ANALYZING</text>
+      <circle class="think-dot dot1" cx="105" cy="105" r="2.5"/>
+      <circle class="think-dot dot2" cx="115" cy="105" r="2.5"/>
+      <circle class="think-dot dot3" cx="125" cy="105" r="2.5"/>
+    </g>
+
+    <!-- Right side control panel -->
+    <rect x="194" y="32" width="36" height="104" rx="3" fill="#f0f0f0" stroke="#ccc" stroke-width="1"/>
+    
+    <!-- TRIGGER section -->
+    <rect x="197" y="35" width="30" height="7" rx="1" fill="#333"/>
+    <text x="212" y="40" font-family="Arial" font-size="4" fill="#0f0" text-anchor="middle">TRIGGER</text>
+    
+    <!-- Top knob -->
+    <text x="212" y="48" font-family="Arial" font-size="3" fill="#555" text-anchor="middle">Level</text>
+    <circle cx="212" cy="56" r="7" fill="#e0e0e0" stroke="#999" stroke-width="1"/>
+    <circle cx="212" cy="56" r="2.5" fill="#888"/>
+    
+    <!-- VERTICAL section -->
+    <rect x="197" y="66" width="30" height="6" rx="1" fill="#444"/>
+    <text x="212" y="70.5" font-family="Arial" font-size="3.5" fill="#fff" text-anchor="middle">VERTICAL</text>
+    
+    <!-- Channel buttons -->
+    <circle cx="203" cy="80" r="4" fill="#222" stroke="#f4b400" stroke-width="2"/> 
+    <circle cx="221" cy="80" r="4" fill="#222" stroke="#00c8c8" stroke-width="2"/> 
+    <circle cx="203" cy="92" r="4" fill="#222" stroke="#e06666" stroke-width="2"/> 
+    <circle cx="221" cy="92" r="4" fill="#222" stroke="#8e7cc3" stroke-width="2"/>
+    
+    <!-- HORIZONTAL section -->
+    <rect x="197" y="100" width="30" height="6" rx="1" fill="#444"/>
+    <text x="212" y="104.5" font-family="Arial" font-size="3" fill="#fff" text-anchor="middle">HORIZONTAL</text>
+    
+    <!-- Bottom knob -->
+    <text x="212" y="112" font-family="Arial" font-size="3" fill="#555" text-anchor="middle">Scale</text>
+    <circle cx="212" cy="120" r="8" fill="#e0e0e0" stroke="#999" stroke-width="1"/>
+    <circle cx="212" cy="120" r="3" fill="#888"/>
+    
+    <!-- Function buttons -->
+    <rect x="197" y="130" width="14" height="5" rx="1" fill="#4a4"/>
+    <rect x="213" y="130" width="14" height="5" rx="1" fill="#48f"/>
+    
+    <!-- Bottom channel inputs bar -->
+    <rect x="8" y="138" width="224" height="16" rx="2" fill="#e8e8e8"/>
+    
+    <!-- CH1 -->
+    <g id="ch1-input" transform="translate(25, 140)">
+      <rect x="0" y="0" width="24" height="12" rx="2" fill="#3a3a3a"/>
+      <circle cx="12" cy="6" r="5" fill="#222" stroke="#f4b400" stroke-width="2"/>
+    </g>
+    <!-- CH2 -->
+    <g transform="translate(60, 140)">
+      <rect x="0" y="0" width="24" height="12" rx="2" fill="#3a3a3a"/>
+      <circle cx="12" cy="6" r="5" fill="#222" stroke="#00c8c8" stroke-width="2"/>
+    </g>
+    <!-- CH3 -->
+    <g transform="translate(95, 140)">
+      <rect x="0" y="0" width="24" height="12" rx="2" fill="#3a3a3a"/>
+      <circle cx="12" cy="6" r="5" fill="#222" stroke="#e06666" stroke-width="2"/>
+    </g>
+    <!-- CH4 -->
+    <g transform="translate(130, 140)">
+      <rect x="0" y="0" width="24" height="12" rx="2" fill="#3a3a3a"/>
+      <circle cx="12" cy="6" r="5" fill="#222" stroke="#8e7cc3" stroke-width="2"/>
+    </g>
+    
+    <!-- Aux In -->
+    <circle cx="190" cy="146" r="4" fill="#222" stroke="#666" stroke-width="1"/>
+
+    <!-- Feet -->
+    <rect x="35" y="154" width="24" height="14" rx="3" fill="#f0f0f0" stroke="#c0c0c0" stroke-width="1"/>
+    <rect x="181" y="154" width="24" height="14" rx="3" fill="#f0f0f0" stroke="#c0c0c0" stroke-width="1"/>
+
+    <!-- Right arm assembly (wire + arm) - rotates around CH1 -->
+    <g class="right-arm-assembly">
+      <!-- probe wire from CH1 (0,0 in local coords) to probe tip -->
+      <path class="probe-wire" d="M 0 0 Q 53 4 113 19 Q 173 32 205 8" />
+
+      <!-- right arm in local coords (global minus 37,146) -->
+      <g class="right-arm">
+        <circle cx="203" cy="-76" r="10" fill="#00aad2" stroke="#0088aa" stroke-width="1"/>
+        <rect x="195" y="-74" width="16" height="24" rx="4" fill="url(#metal-grad)" stroke="#999" stroke-width="1" transform="rotate(-15 203 -62)"/>
+        <rect x="197" y="-52" width="14" height="20" rx="3" fill="#fff" stroke="#999" stroke-width="1" transform="rotate(8 204 -42)"/>
+        <ellipse cx="205" cy="-30" rx="8" ry="5" fill="#e8e8e8" stroke="#999" stroke-width="1"/>
+        
+        <g class="right-claw-L">
+          <path d="M 199 -30 Q 192 -20 195 -10" fill="none" stroke="#e0e0e0" stroke-width="5" stroke-linecap="round"/>
+          <circle cx="195" cy="-10" r="4" fill="#2d5a5a"/>
+        </g>
+        <g class="right-claw-R">
+          <path d="M 211 -30 Q 218 -20 215 -10" fill="none" stroke="#e0e0e0" stroke-width="5" stroke-linecap="round"/>
+          <circle cx="215" cy="-10" r="4" fill="#2d5a5a"/>
+        </g>
+        
+        <!-- Probe body -->
+        <rect x="200" y="-26" width="10" height="30" rx="2" fill="#555"/>
+        <rect x="202" y="2" width="6" height="6" rx="1" fill="#333"/>
+        <line x1="205" y1="8" x2="205" y2="19" stroke="#aaa" stroke-width="2" stroke-linecap="round"/>
+      </g>
+    </g>
+
+    <!-- LEFT ARM - raised to "chin" thinking pose -->
+    <g class="left-arm-assembly">
+      <circle cx="0" cy="70" r="10" fill="#00aad2" stroke="#0088aa" stroke-width="1"/>
+      <rect x="-8" y="72" width="16" height="24" rx="4" fill="url(#metal-grad)" stroke="#999" stroke-width="1" transform="rotate(25 0 75)"/>
+      <rect x="-10" y="94" width="14" height="20" rx="3" fill="#fff" stroke="#999" stroke-width="1" transform="rotate(-15 -3 100)"/>
+      <ellipse cx="-2" cy="116" rx="8" ry="5" fill="#e8e8e8" stroke="#999" stroke-width="1"/>
+      
+      <g class="left-claw-L">
+        <path d="M -8 116 Q -15 126 -12 136" fill="none" stroke="#e0e0e0" stroke-width="5" stroke-linecap="round"/>
+        <circle cx="-12" cy="136" r="4" fill="#2d5a5a"/>
+      </g>
+      <g class="left-claw-R">
+        <path d="M 4 116 Q 11 126 8 136" fill="none" stroke="#e0e0e0" stroke-width="5" stroke-linecap="round"/>
+        <circle cx="8" cy="136" r="4" fill="#2d5a5a"/>
+      </g>
+    </g>
+  </g>
+</svg>

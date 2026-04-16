@@ -1,0 +1,10 @@
+{
+    "testId":  "TC03",
+    "prompt":  "Add frequency and amplitude measurements on CH1, save results to variables",
+    "source":  "custom_gpt",
+    "timestamp":  "2026-03-14",
+    "steps":  [
+
+              ],
+    "notes":  ""
+}

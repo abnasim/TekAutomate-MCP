@@ -1,0 +1,423 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="-50 -20 320 270" width="320" height="270">
+  <defs>
+    <clipPath id="screenClip">
+      <rect x="18" y="38" width="158" height="88" rx="2"/>
+    </clipPath>
+    <filter id="glow">
+      <feGaussianBlur stdDeviation="1.5" result="coloredBlur"/>
+      <feMerge>
+        <feMergeNode in="coloredBlur"/>
+        <feMergeNode in="SourceGraphic"/>
+      </feMerge>
+    </filter>
+    <linearGradient id="metal-grad" x1="0%" y1="0%" x2="0%" y2="100%">
+      <stop offset="0%" stop-color="#fff"/>
+      <stop offset="100%" stop-color="#ccc"/>
+    </linearGradient>
+    <linearGradient id="fire-grad" x1="0%" y1="0%" x2="0%" y2="100%">
+      <stop offset="0%" stop-color="#00ffff"/> 
+      <stop offset="100%" stop-color="#0099dd" stop-opacity="0"/>
+    </linearGradient>
+    <linearGradient id="flag-grad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#00ddff"/>
+      <stop offset="50%" stop-color="#0099cc"/>
+      <stop offset="100%" stop-color="#00bbee"/>
+    </linearGradient>
+  </defs>
+
+  <style>
+    /* Gentle bouncy hover - reduced vertical movement */
+    .hover-body { animation: hoverTour 2s ease-in-out infinite; }
+    @keyframes hoverTour {
+      0%, 100% { transform: translateY(0px); } 
+      50% { transform: translateY(-3px); }
+    }
+
+    /* Active happy thrusters */
+    .flame { animation: thrustTour 0.5s ease-in-out infinite alternate; transform-origin: center top; }
+    @keyframes thrustTour {
+      0% { transform: scaleY(0.8); opacity: 0.4; }
+      100% { transform: scaleY(1.1); opacity: 0.8; }
+    }
+
+    .handle { 
+      animation: handleBounce 2s ease-in-out infinite; 
+      transform-origin: 120px 28px;
+    }
+    @keyframes handleBounce {
+      0%, 100% { transform: translateY(0); }
+      50% { transform: translateY(1px); }
+    }
+
+    /* Left arm - raised holding flag */
+    .left-arm-assembly { 
+      animation: flagWave 1.5s ease-in-out infinite; 
+      transform-origin: 0px 70px;
+    }
+    @keyframes flagWave {
+      0%, 100% { transform: rotate(-45deg); }
+      50% { transform: rotate(-40deg); }
+    }
+
+    /* Right arm - pointing outward */
+    .right-arm-tour { 
+      animation: pointGesture 2s ease-in-out infinite; 
+      transform-origin: 240px 70px;
+    }
+    @keyframes pointGesture {
+      0%, 100% { transform: rotate(10deg); }
+      50% { transform: rotate(15deg); }
+    }
+
+    /* Left claws - gripping flag pole */
+    .left-claw-L, .left-claw-R {
+      animation: clawGrip 1.5s ease-in-out infinite;
+      transform-origin: center;
+    }
+    @keyframes clawGrip {
+      0%, 100% { transform: translateX(1px); }
+      50% { transform: translateX(-1px); }
+    }
+
+    /* Right claws - pointing gesture */
+    .right-claw-point {
+      animation: clawPoint 2s ease-in-out infinite;
+      transform-origin: center top;
+    }
+    @keyframes clawPoint {
+      0%, 100% { transform: rotate(0deg); }
+      50% { transform: rotate(3deg); }
+    }
+
+    .grid-line {
+      stroke: #0d2520;
+      stroke-width: 0.7;
+      opacity: 0.3;
+    }
+
+    /* Welcoming happy eyes */
+    .tour-eye {
+      fill: #00ffaa;
+      filter: url(#glow);
+    }
+    .eye-group {
+      animation: eyeWelcome 2s ease-in-out infinite;
+    }
+    @keyframes eyeWelcome {
+      0%, 100% { transform: scale(1); }
+      50% { transform: scale(1.05); }
+    }
+
+    /* Happy eyebrows - raised */
+    .happy-brow {
+      fill: none;
+      stroke: #00ffcc;
+      stroke-width: 2;
+      stroke-linecap: round;
+      filter: url(#glow);
+      animation: browRaise 2s ease-in-out infinite;
+    }
+    @keyframes browRaise {
+      0%, 100% { transform: translateY(0); }
+      50% { transform: translateY(-2px); }
+    }
+
+    /* Welcome text */
+    .welcome-text {
+      font-family: "Arial", sans-serif;
+      font-size: 12px;
+      font-weight: bold;
+      fill: #00ffdd;
+      filter: url(#glow);
+      animation: textPulse 2s ease-in-out infinite;
+    }
+    @keyframes textPulse {
+      0%, 100% { opacity: 0.8; }
+      50% { opacity: 1; }
+    }
+
+    /* Subtitle */
+    .tour-subtitle {
+      font-family: "Courier New", monospace;
+      font-size: 6px;
+      fill: #00aa88;
+      opacity: 0.8;
+    }
+
+    /* Sparkles around */
+    .sparkle {
+      fill: #00ffdd;
+      filter: url(#glow);
+      opacity: 0;
+    }
+    .spark1 { animation: sparkle 2s ease-in-out infinite; }
+    .spark2 { animation: sparkle 2s ease-in-out infinite 0.4s; }
+    .spark3 { animation: sparkle 2s ease-in-out infinite 0.8s; }
+    .spark4 { animation: sparkle 2s ease-in-out infinite 1.2s; }
+    @keyframes sparkle {
+      0%, 100% { opacity: 0; transform: scale(0.5); }
+      50% { opacity: 1; transform: scale(1.2); }
+    }
+
+    /* Arrow indicators */
+    .tour-arrow {
+      fill: none;
+      stroke: #00ddaa;
+      stroke-width: 2;
+      stroke-linecap: round;
+      stroke-linejoin: round;
+      filter: url(#glow);
+      opacity: 0;
+    }
+    .arrow1 { animation: arrowPoint 3s ease-in-out infinite; }
+    .arrow2 { animation: arrowPoint 3s ease-in-out infinite 1s; }
+    .arrow3 { animation: arrowPoint 3s ease-in-out infinite 2s; }
+    @keyframes arrowPoint {
+      0%, 100% { opacity: 0; transform: translateX(-5px); }
+      50% { opacity: 0.8; transform: translateX(0); }
+    }
+
+    /* Flag waving */
+    .flag-fabric {
+      fill: url(#flag-grad);
+      animation: flagFlutter 0.8s ease-in-out infinite;
+      transform-origin: left center;
+    }
+    @keyframes flagFlutter {
+      0%, 100% { transform: skewY(0deg) scaleX(1); }
+      25% { transform: skewY(2deg) scaleX(0.97); }
+      50% { transform: skewY(-1deg) scaleX(1.01); }
+      75% { transform: skewY(1deg) scaleX(0.98); }
+    }
+
+    .flag-pole {
+      stroke: #aa8844;
+      stroke-width: 3;
+      stroke-linecap: round;
+    }
+
+    .flag-text {
+      font-family: "Arial", sans-serif;
+      font-size: 8px;
+      font-weight: bold;
+      fill: #fff;
+    }
+
+    /* Handle bar happy color */
+    .handle-bar-tour {
+      animation: handleColor 2s ease-in-out infinite;
+    }
+    @keyframes handleColor {
+      0%, 100% { fill: #00b8d4; }
+      50% { fill: #00ddff; }
+    }
+
+    /* Smile on screen */
+    .smile {
+      fill: none;
+      stroke: #00ffaa;
+      stroke-width: 3;
+      stroke-linecap: round;
+      filter: url(#glow);
+    }
+  </style>
+
+  <!-- Sparkles outside body -->
+  <polygon class="sparkle spark1" points="255,50 258,45 261,50 258,55"/>
+  <polygon class="sparkle spark2" points="265,90 268,85 271,90 268,95"/>
+  <polygon class="sparkle spark3" points="-20,45 -17,40 -14,45 -17,50"/>
+  <polygon class="sparkle spark4" points="-30,80 -27,75 -24,80 -27,85"/>
+
+  <g class="hover-body">
+    <!-- Thruster flames - shortened -->
+    <path class="flame" d="M 38 168 L 52 168 L 45 188 Z" fill="url(#fire-grad)"/>
+    <path class="flame" d="M 188 168 L 202 168 L 195 188 Z" fill="url(#fire-grad)"/>
+
+    <!-- HANDLE -->
+    <g class="handle">
+      <path d="M 12 28 L 12 5 Q 12 -2 19 -2 L 30 -2" fill="none" stroke="#b0b0b0" stroke-width="5" stroke-linecap="round"/>
+      <path d="M 228 28 L 228 5 Q 228 -2 221 -2 L 210 -2" fill="none" stroke="#b0b0b0" stroke-width="5" stroke-linecap="round"/>
+      <rect class="handle-bar-code" x="30" y="-5" width="180" height="7" rx="3.5" fill="#00b8d4"/>
+    </g>
+    
+    <!-- Main body -->
+    <rect x="8" y="28" width="224" height="120" rx="5" fill="#f8f8f8" stroke="#c0c0c0" stroke-width="1"/>
+
+    <!-- Black bezel -->
+    <rect x="12" y="32" width="180" height="104" rx="3" fill="#1a1a1a"/>
+    
+    <!-- Tektronix branding -->
+    <text x="16" y="36" font-family="Arial" font-size="5" font-weight="bold" fill="#777" letter-spacing="0.5">Tektronix</text>
+    <text x="140" y="36" font-family="Arial" font-size="3.5" fill="#00ffaa">TOUR MODE</text>
+    
+    <!-- Screen frame -->
+    <rect x="18" y="38" width="158" height="88" rx="2" fill="#0a1210"/>
+
+    <!-- Screen content -->
+    <g clip-path="url(#screenClip)">
+      <!-- Grid -->
+      <g>
+        <line class="grid-line" x1="18" y1="58" x2="176" y2="58"/>
+        <line class="grid-line" x1="18" y1="78" x2="176" y2="78"/>
+        <line class="grid-line" x1="18" y1="98" x2="176" y2="98"/>
+        <line class="grid-line" x1="18" y1="118" x2="176" y2="118"/>
+        <line class="grid-line" x1="46" y1="38" x2="46" y2="126"/>
+        <line class="grid-line" x1="74" y1="38" x2="74" y2="126"/>
+        <line class="grid-line" x1="102" y1="38" x2="102" y2="126"/>
+        <line class="grid-line" x1="130" y1="38" x2="130" y2="126"/>
+        <line class="grid-line" x1="158" y1="38" x2="158" y2="126"/>
+      </g>
+
+      <!-- Welcoming eyes -->
+      <g class="eye-group" transform="translate(0, 5)">
+        <ellipse class="tour-eye" cx="72" cy="62" rx="10" ry="12"/>
+        <ellipse class="tour-eye" cx="122" cy="62" rx="10" ry="12"/>
+        <!-- Pupils -->
+        <circle cx="72" cy="62" r="4" fill="#0a1210"/>
+        <circle cx="122" cy="62" r="4" fill="#0a1210"/>
+        <!-- Big highlights -->
+        <circle cx="69" cy="59" r="3" fill="#fff" opacity="0.7"/>
+        <circle cx="119" cy="59" r="3" fill="#fff" opacity="0.7"/>
+        <circle cx="75" cy="65" r="1.5" fill="#fff" opacity="0.4"/>
+        <circle cx="125" cy="65" r="1.5" fill="#fff" opacity="0.4"/>
+        
+        <!-- Happy raised eyebrows -->
+        <path class="happy-brow" d="M 58 50 Q 72 45 86 50"/>
+        <path class="happy-brow" d="M 108 50 Q 122 45 136 50"/>
+      </g>
+
+      <!-- Smile -->
+      <path class="smile" d="M 70 88 Q 97 100 124 88"/>
+
+      <!-- Welcome text -->
+      <text x="97" y="115" class="welcome-text" text-anchor="middle">WELCOME!</text>
+      <text x="97" y="122" class="tour-subtitle" text-anchor="middle">Let me show you around</text>
+
+      <!-- Tour arrows -->
+      <path class="tour-arrow arrow1" d="M 30 55 L 40 55 L 36 51 M 40 55 L 36 59"/>
+      <path class="tour-arrow arrow2" d="M 160 70 L 170 70 L 166 66 M 170 70 L 166 74"/>
+      <path class="tour-arrow arrow3" d="M 30 95 L 40 95 L 36 91 M 40 95 L 36 99"/>
+    </g>
+
+    <!-- Right side control panel -->
+    <rect x="194" y="32" width="36" height="104" rx="3" fill="#f0f0f0" stroke="#ccc" stroke-width="1"/>
+    
+    <!-- TRIGGER section -->
+    <rect x="197" y="35" width="30" height="7" rx="1" fill="#333"/>
+    <text x="212" y="40" font-family="Arial" font-size="4" fill="#0f0" text-anchor="middle">TRIGGER</text>
+    
+    <!-- Top knob -->
+    <text x="212" y="48" font-family="Arial" font-size="3" fill="#555" text-anchor="middle">Level</text>
+    <circle cx="212" cy="56" r="7" fill="#e0e0e0" stroke="#999" stroke-width="1"/>
+    <circle cx="212" cy="56" r="2.5" fill="#888"/>
+    
+    <!-- VERTICAL section -->
+    <rect x="197" y="66" width="30" height="6" rx="1" fill="#444"/>
+    <text x="212" y="70.5" font-family="Arial" font-size="3.5" fill="#fff" text-anchor="middle">VERTICAL</text>
+    
+    <!-- Channel buttons -->
+    <circle cx="203" cy="80" r="4" fill="#222" stroke="#f4b400" stroke-width="2"/> 
+    <circle cx="221" cy="80" r="4" fill="#222" stroke="#00c8c8" stroke-width="2"/> 
+    <circle cx="203" cy="92" r="4" fill="#222" stroke="#e06666" stroke-width="2"/> 
+    <circle cx="221" cy="92" r="4" fill="#222" stroke="#8e7cc3" stroke-width="2"/>
+    
+    <!-- HORIZONTAL section -->
+    <rect x="197" y="100" width="30" height="6" rx="1" fill="#444"/>
+    <text x="212" y="104.5" font-family="Arial" font-size="3" fill="#fff" text-anchor="middle">HORIZONTAL</text>
+    
+    <!-- Bottom knob -->
+    <text x="212" y="112" font-family="Arial" font-size="3" fill="#555" text-anchor="middle">Scale</text>
+    <circle cx="212" cy="120" r="8" fill="#e0e0e0" stroke="#999" stroke-width="1"/>
+    <circle cx="212" cy="120" r="3" fill="#888"/>
+    
+    <!-- Function buttons -->
+    <rect x="197" y="130" width="14" height="5" rx="1" fill="#4a4"/>
+    <rect x="213" y="130" width="14" height="5" rx="1" fill="#48f"/>
+    
+    <!-- Bottom channel inputs bar -->
+    <rect x="8" y="138" width="224" height="16" rx="2" fill="#e8e8e8"/>
+    
+    <!-- CH1 -->
+    <g id="ch1-input" transform="translate(25, 140)">
+      <rect x="0" y="0" width="24" height="12" rx="2" fill="#3a3a3a"/>
+      <circle cx="12" cy="6" r="5" fill="#222" stroke="#f4b400" stroke-width="2"/>
+    </g>
+    <!-- CH2 -->
+    <g transform="translate(60, 140)">
+      <rect x="0" y="0" width="24" height="12" rx="2" fill="#3a3a3a"/>
+      <circle cx="12" cy="6" r="5" fill="#222" stroke="#00c8c8" stroke-width="2"/>
+    </g>
+    <!-- CH3 -->
+    <g transform="translate(95, 140)">
+      <rect x="0" y="0" width="24" height="12" rx="2" fill="#3a3a3a"/>
+      <circle cx="12" cy="6" r="5" fill="#222" stroke="#e06666" stroke-width="2"/>
+    </g>
+    <!-- CH4 -->
+    <g transform="translate(130, 140)">
+      <rect x="0" y="0" width="24" height="12" rx="2" fill="#3a3a3a"/>
+      <circle cx="12" cy="6" r="5" fill="#222" stroke="#8e7cc3" stroke-width="2"/>
+    </g>
+    
+    <!-- Aux In -->
+    <circle cx="190" cy="146" r="4" fill="#222" stroke="#666" stroke-width="1"/>
+
+    <!-- Feet -->
+    <rect x="35" y="154" width="24" height="14" rx="3" fill="#f0f0f0" stroke="#c0c0c0" stroke-width="1"/>
+    <rect x="181" y="154" width="24" height="14" rx="3" fill="#f0f0f0" stroke="#c0c0c0" stroke-width="1"/>
+
+    <!-- NO WIRE FOR TOUR - TRIGGER is not holding probe -->
+
+    <!-- RIGHT ARM - POINTING outward (no probe) -->
+    <g class="right-arm-tour">
+      <!-- Shoulder joint -->
+      <circle cx="240" cy="70" r="10" fill="#00aad2" stroke="#0088aa" stroke-width="1"/>
+      <!-- Upper arm -->
+      <rect x="232" y="72" width="16" height="24" rx="4" fill="url(#metal-grad)" stroke="#999" stroke-width="1" transform="rotate(-15 240 84)"/>
+      <!-- Forearm -->
+      <rect x="234" y="94" width="14" height="20" rx="3" fill="#fff" stroke="#999" stroke-width="1" transform="rotate(8 241 104)"/>
+      <!-- Wrist -->
+      <ellipse cx="242" cy="116" rx="8" ry="5" fill="#e8e8e8" stroke="#999" stroke-width="1"/>
+      
+      <!-- POINTING CLAW - index extended outward -->
+      <g class="right-claw-point">
+        <path d="M 248 116 Q 262 112 272 108" fill="none" stroke="#e0e0e0" stroke-width="5" stroke-linecap="round"/>
+        <circle cx="272" cy="108" r="4" fill="#2d5a5a"/>
+      </g>
+      <!-- Other claw relaxed -->
+      <g>
+        <path d="M 236 116 Q 230 124 232 134" fill="none" stroke="#e0e0e0" stroke-width="4" stroke-linecap="round"/>
+        <circle cx="232" cy="134" r="3" fill="#2d5a5a"/>
+      </g>
+    </g>
+
+    <!-- LEFT ARM - holding FLAG -->
+    <g class="left-arm-assembly">
+      <circle cx="0" cy="70" r="10" fill="#00aad2" stroke="#0088aa" stroke-width="1"/>
+      <rect x="-8" y="72" width="16" height="24" rx="4" fill="url(#metal-grad)" stroke="#999" stroke-width="1" transform="rotate(25 0 84)"/>
+      <rect x="-10" y="94" width="14" height="20" rx="3" fill="#fff" stroke="#999" stroke-width="1" transform="rotate(-5 -3 104)"/>
+      <ellipse cx="-2" cy="116" rx="8" ry="5" fill="#e8e8e8" stroke="#999" stroke-width="1"/>
+      
+      <!-- Claws gripping flag pole -->
+      <g class="left-claw-L">
+        <path d="M -8 116 Q -10 122 -8 128" fill="none" stroke="#e0e0e0" stroke-width="5" stroke-linecap="round"/>
+        <circle cx="-8" cy="128" r="4" fill="#2d5a5a"/>
+      </g>
+      <g class="left-claw-R">
+        <path d="M 4 116 Q 2 122 4 128" fill="none" stroke="#e0e0e0" stroke-width="5" stroke-linecap="round"/>
+        <circle cx="4" cy="128" r="4" fill="#2d5a5a"/>
+      </g>
+      
+      <!-- FLAG POLE - goes UP from hand -->
+      <line class="flag-pole" x1="-2" y1="128" x2="-2" y2="50" fill="none"/>
+      <!-- Flag ball top -->
+      <circle cx="-2" cy="48" r="3" fill="#ddaa44"/>
+      
+      <!-- FLAG FABRIC - positioned higher and to the left -->
+      <g class="flag-fabric" transform="translate(0, -5)">
+        <path d="M -2 50 L -2 80 L -42 75 L -42 55 Z" fill="url(#flag-grad)" stroke="#0088aa" stroke-width="1"/>
+        <!-- Flag text -->
+        <text x="-24" y="70" class="flag-text" text-anchor="middle">TOUR</text>
+      </g>
+    </g>
+  </g>
+</svg>

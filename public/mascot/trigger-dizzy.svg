@@ -1,0 +1,358 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="-25 -20 300 270" width="300" height="270">
+  <defs>
+    <clipPath id="screenClip">
+      <rect x="18" y="38" width="158" height="88" rx="2"/>
+    </clipPath>
+    <filter id="glow">
+      <feGaussianBlur stdDeviation="1.5" result="coloredBlur"/>
+      <feMerge>
+        <feMergeNode in="coloredBlur"/>
+        <feMergeNode in="SourceGraphic"/>
+      </feMerge>
+    </filter>
+    <linearGradient id="metal-grad" x1="0%" y1="0%" x2="0%" y2="100%">
+      <stop offset="0%" stop-color="#fff"/>
+      <stop offset="100%" stop-color="#ccc"/>
+    </linearGradient>
+    <linearGradient id="fire-grad" x1="0%" y1="0%" x2="0%" y2="100%">
+      <stop offset="0%" stop-color="#ffaa00"/> 
+      <stop offset="100%" stop-color="#ff5500" stop-opacity="0"/>
+    </linearGradient>
+  </defs>
+
+  <style>
+    /* Wobbly dizzy hover */
+    .hover-body { animation: hoverDizzy 1s ease-in-out infinite; }
+    @keyframes hoverDizzy {
+      0%, 100% { transform: translateY(0px) rotate(-2deg); } 
+      25% { transform: translateY(-3px) rotate(2deg); }
+      50% { transform: translateY(-1px) rotate(-1deg); }
+      75% { transform: translateY(-4px) rotate(1deg); }
+    }
+
+    /* Erratic thrusters */
+    .flame { animation: thrustDizzy 0.3s ease-in-out infinite; transform-origin: center top; }
+    .flame-left { animation-delay: 0.1s; }
+    @keyframes thrustDizzy {
+      0% { transform: scaleY(0.6) skewX(-5deg); opacity: 0.4; }
+      50% { transform: scaleY(1.2) skewX(5deg); opacity: 0.8; }
+      100% { transform: scaleY(0.8) skewX(-3deg); opacity: 0.5; }
+    }
+
+    .handle { 
+      animation: handleWobble 1s ease-in-out infinite; 
+    }
+    @keyframes handleWobble {
+      0%, 100% { transform: rotate(-1deg); }
+      50% { transform: rotate(1deg); }
+    }
+
+    /* Arms flailing */
+    .left-arm-assembly { 
+      animation: armFlailL 0.8s ease-in-out infinite; 
+      transform-origin: 0px 70px;
+    }
+    @keyframes armFlailL {
+      0%, 100% { transform: rotate(10deg); }
+      50% { transform: rotate(-20deg); }
+    }
+
+    .right-arm-assembly { 
+      animation: armFlailR 0.8s ease-in-out infinite 0.2s; 
+      transform-origin: 37px 146px;
+    }
+    @keyframes armFlailR {
+      0%, 100% { transform: translate(37px, 146px) rotate(-5deg); }
+      50% { transform: translate(37px, 146px) rotate(15deg); }
+    }
+
+    .left-claw-L, .left-claw-R, .right-claw-L, .right-claw-R {
+      animation: clawFlail 0.4s ease-in-out infinite;
+    }
+    @keyframes clawFlail {
+      0%, 100% { transform: rotate(-10deg); }
+      50% { transform: rotate(10deg); }
+    }
+
+    .grid-line {
+      stroke: #302020;
+      stroke-width: 0.7;
+      opacity: 0.3;
+    }
+
+    /* Spiral eyes */
+    .spiral-eye {
+      fill: none;
+      stroke: #ffaa00;
+      stroke-width: 2;
+      filter: url(#glow);
+      animation: spiralSpin 1s linear infinite;
+      transform-origin: center;
+    }
+    .spiral-eye-r { animation-direction: reverse; }
+    @keyframes spiralSpin {
+      0% { transform: rotate(0deg); }
+      100% { transform: rotate(360deg); }
+    }
+
+    /* Stars circling head */
+    .orbit-star {
+      fill: #ffdd00;
+      filter: url(#glow);
+    }
+    .orbit-group {
+      animation: orbitSpin 2s linear infinite;
+      transform-origin: 97px 30px;
+    }
+    @keyframes orbitSpin {
+      0% { transform: rotate(0deg); }
+      100% { transform: rotate(360deg); }
+    }
+
+    /* Dizzy text */
+    .dizzy-text {
+      font-family: "Arial", sans-serif;
+      font-size: 10px;
+      font-weight: bold;
+      fill: #ffaa00;
+      filter: url(#glow);
+      animation: dizzyPulse 0.5s ease-in-out infinite;
+    }
+    @keyframes dizzyPulse {
+      0%, 100% { transform: scale(1) rotate(-3deg); }
+      50% { transform: scale(1.1) rotate(3deg); }
+    }
+
+    /* Question marks floating */
+    .question {
+      font-family: "Arial", sans-serif;
+      font-size: 12px;
+      fill: #ff8800;
+      filter: url(#glow);
+      opacity: 0;
+    }
+    .q1 { animation: questionFloat 2s ease-in-out infinite; }
+    .q2 { animation: questionFloat 2s ease-in-out infinite 0.5s; }
+    .q3 { animation: questionFloat 2s ease-in-out infinite 1s; }
+    @keyframes questionFloat {
+      0%, 100% { transform: translateY(0) rotate(-10deg); opacity: 0; }
+      50% { transform: translateY(-15px) rotate(10deg); opacity: 0.8; }
+    }
+
+    /* Wobbly mouth */
+    .dizzy-mouth {
+      fill: none;
+      stroke: #ffaa00;
+      stroke-width: 2;
+      stroke-linecap: round;
+      filter: url(#glow);
+      animation: mouthWobble 0.5s ease-in-out infinite;
+    }
+    @keyframes mouthWobble {
+      0%, 100% { d: path("M 70 90 Q 97 85 124 90"); }
+      50% { d: path("M 70 88 Q 97 95 124 88"); }
+    }
+
+    .probe-wire {
+      fill: none;
+      stroke: #222;
+      stroke-width: 3;
+      stroke-linecap: round;
+    }
+
+    /* Handle bar flickering */
+    .handle-bar-dizzy {
+      animation: barFlicker 0.3s ease-in-out infinite;
+    }
+    @keyframes barFlicker {
+      0%, 100% { fill: #00b8d4; }
+      25% { fill: #ffaa00; }
+      50% { fill: #00ddff; }
+      75% { fill: #ff8800; }
+    }
+
+    /* Screen static */
+    .static-line {
+      stroke: #ffaa00;
+      stroke-width: 1;
+      opacity: 0;
+      animation: staticFlash 0.2s steps(1) infinite;
+    }
+    .s1 { animation-delay: 0s; }
+    .s2 { animation-delay: 0.05s; }
+    .s3 { animation-delay: 0.1s; }
+    @keyframes staticFlash {
+      0%, 50% { opacity: 0; }
+      25%, 75% { opacity: 0.3; }
+    }
+  </style>
+
+  <!-- Stars orbiting around head -->
+  <g class="orbit-group">
+    <polygon class="orbit-star" points="97,-15 99,-10 104,-10 100,-6 102,-1 97,-4 92,-1 94,-6 90,-10 95,-10" transform="translate(-40, 0)"/>
+    <polygon class="orbit-star" points="97,-15 99,-10 104,-10 100,-6 102,-1 97,-4 92,-1 94,-6 90,-10 95,-10" transform="translate(40, 0)"/>
+    <polygon class="orbit-star" points="97,-15 99,-10 104,-10 100,-6 102,-1 97,-4 92,-1 94,-6 90,-10 95,-10" transform="translate(0, -40)"/>
+  </g>
+
+  <g class="hover-body">
+    <!-- Thruster flames - erratic -->
+    <path class="flame flame-left" d="M 38 168 L 52 168 L 45 190 Z" fill="url(#fire-grad)"/>
+    <path class="flame" d="M 188 168 L 202 168 L 195 190 Z" fill="url(#fire-grad)"/>
+
+    <!-- HANDLE -->
+    <g class="handle">
+      <path d="M 12 28 L 12 5 Q 12 -2 19 -2 L 30 -2" fill="none" stroke="#b0b0b0" stroke-width="5" stroke-linecap="round"/>
+      <path d="M 228 28 L 228 5 Q 228 -2 221 -2 L 210 -2" fill="none" stroke="#b0b0b0" stroke-width="5" stroke-linecap="round"/>
+      <rect class="handle-bar-code" x="30" y="-5" width="180" height="7" rx="3.5" fill="#00b8d4"/>
+    </g>
+    
+    <!-- Main body -->
+    <rect x="8" y="28" width="224" height="120" rx="5" fill="#f8f8f8" stroke="#c0c0c0" stroke-width="1"/>
+
+    <!-- Black bezel -->
+    <rect x="12" y="32" width="180" height="104" rx="3" fill="#1a1a1a"/>
+    
+    <!-- Tektronix branding -->
+    <text x="16" y="36" font-family="Arial" font-size="5" font-weight="bold" fill="#777" letter-spacing="0.5">Tektronix</text>
+    <text x="140" y="36" font-family="Arial" font-size="3.5" fill="#ffaa00">⚠ OVERLOAD</text>
+    
+    <!-- Screen frame -->
+    <rect x="18" y="38" width="158" height="88" rx="2" fill="#1a1008"/>
+
+    <!-- Screen content -->
+    <g clip-path="url(#screenClip)">
+      <!-- Grid -->
+      <g>
+        <line class="grid-line" x1="18" y1="58" x2="176" y2="58"/>
+        <line class="grid-line" x1="18" y1="78" x2="176" y2="78"/>
+        <line class="grid-line" x1="18" y1="98" x2="176" y2="98"/>
+        <line class="grid-line" x1="18" y1="118" x2="176" y2="118"/>
+        <line class="grid-line" x1="46" y1="38" x2="46" y2="126"/>
+        <line class="grid-line" x1="74" y1="38" x2="74" y2="126"/>
+        <line class="grid-line" x1="102" y1="38" x2="102" y2="126"/>
+        <line class="grid-line" x1="130" y1="38" x2="130" y2="126"/>
+        <line class="grid-line" x1="158" y1="38" x2="158" y2="126"/>
+      </g>
+
+      <!-- Static lines -->
+      <line class="static-line s1" x1="20" y1="50" x2="170" y2="50"/>
+      <line class="static-line s2" x1="20" y1="80" x2="170" y2="80"/>
+      <line class="static-line s3" x1="20" y1="110" x2="170" y2="110"/>
+
+      <!-- Spiral eyes -->
+      <g transform="translate(0, 5)">
+        <!-- Left spiral eye -->
+        <g class="spiral-eye" transform="translate(72, 65)">
+          <path d="M 0,-10 A 10,10 0 0,1 10,0 A 8,8 0 0,1 0,8 A 6,6 0 0,1 -6,0 A 4,4 0 0,1 0,-4 A 2,2 0 0,1 2,0"/>
+        </g>
+        <!-- Right spiral eye -->
+        <g class="spiral-eye spiral-eye-r" transform="translate(122, 65)">
+          <path d="M 0,-10 A 10,10 0 0,1 10,0 A 8,8 0 0,1 0,8 A 6,6 0 0,1 -6,0 A 4,4 0 0,1 0,-4 A 2,2 0 0,1 2,0"/>
+        </g>
+      </g>
+
+      <!-- Wobbly confused mouth -->
+      <path class="dizzy-mouth" d="M 70 90 Q 97 85 124 90">
+        <animate attributeName="d" values="M 70 90 Q 97 85 124 90;M 70 88 Q 97 95 124 88;M 70 90 Q 97 85 124 90" dur="0.5s" repeatCount="indefinite"/>
+      </path>
+
+      <!-- Question marks -->
+      <text class="question q1" x="40" y="55">?</text>
+      <text class="question q2" x="150" y="50">?</text>
+      <text class="question q3" x="95" y="115">?</text>
+
+      <!-- DIZZY text -->
+      <text class="dizzy-text" x="97" y="115" text-anchor="middle">DIZZY!</text>
+    </g>
+
+    <!-- Right side control panel -->
+    <rect x="194" y="32" width="36" height="104" rx="3" fill="#f0f0f0" stroke="#ccc" stroke-width="1"/>
+    
+    <rect x="197" y="35" width="30" height="7" rx="1" fill="#333"/>
+    <text x="212" y="40" font-family="Arial" font-size="4" fill="#0f0" text-anchor="middle">TRIGGER</text>
+    
+    <text x="212" y="48" font-family="Arial" font-size="3" fill="#555" text-anchor="middle">Level</text>
+    <circle cx="212" cy="56" r="7" fill="#e0e0e0" stroke="#999" stroke-width="1"/>
+    <circle cx="212" cy="56" r="2.5" fill="#888"/>
+    
+    <rect x="197" y="66" width="30" height="6" rx="1" fill="#444"/>
+    <text x="212" y="70.5" font-family="Arial" font-size="3.5" fill="#fff" text-anchor="middle">VERTICAL</text>
+    
+    <circle cx="203" cy="80" r="4" fill="#222" stroke="#f4b400" stroke-width="2"/> 
+    <circle cx="221" cy="80" r="4" fill="#222" stroke="#00c8c8" stroke-width="2"/> 
+    <circle cx="203" cy="92" r="4" fill="#222" stroke="#e06666" stroke-width="2"/> 
+    <circle cx="221" cy="92" r="4" fill="#222" stroke="#8e7cc3" stroke-width="2"/>
+    
+    <rect x="197" y="100" width="30" height="6" rx="1" fill="#444"/>
+    <text x="212" y="104.5" font-family="Arial" font-size="3" fill="#fff" text-anchor="middle">HORIZONTAL</text>
+    
+    <text x="212" y="112" font-family="Arial" font-size="3" fill="#555" text-anchor="middle">Scale</text>
+    <circle cx="212" cy="120" r="8" fill="#e0e0e0" stroke="#999" stroke-width="1"/>
+    <circle cx="212" cy="120" r="3" fill="#888"/>
+    
+    <rect x="197" y="130" width="14" height="5" rx="1" fill="#4a4"/>
+    <rect x="213" y="130" width="14" height="5" rx="1" fill="#48f"/>
+    
+    <!-- Bottom bar -->
+    <rect x="8" y="138" width="224" height="16" rx="2" fill="#e8e8e8"/>
+    <g transform="translate(25, 140)">
+      <rect x="0" y="0" width="24" height="12" rx="2" fill="#3a3a3a"/>
+      <circle cx="12" cy="6" r="5" fill="#222" stroke="#f4b400" stroke-width="2"/>
+    </g>
+    <g transform="translate(60, 140)">
+      <rect x="0" y="0" width="24" height="12" rx="2" fill="#3a3a3a"/>
+      <circle cx="12" cy="6" r="5" fill="#222" stroke="#00c8c8" stroke-width="2"/>
+    </g>
+    <g transform="translate(95, 140)">
+      <rect x="0" y="0" width="24" height="12" rx="2" fill="#3a3a3a"/>
+      <circle cx="12" cy="6" r="5" fill="#222" stroke="#e06666" stroke-width="2"/>
+    </g>
+    <g transform="translate(130, 140)">
+      <rect x="0" y="0" width="24" height="12" rx="2" fill="#3a3a3a"/>
+      <circle cx="12" cy="6" r="5" fill="#222" stroke="#8e7cc3" stroke-width="2"/>
+    </g>
+    <circle cx="190" cy="146" r="4" fill="#222" stroke="#666" stroke-width="1"/>
+
+    <!-- Feet -->
+    <rect x="35" y="154" width="24" height="14" rx="3" fill="#f0f0f0" stroke="#c0c0c0" stroke-width="1"/>
+    <rect x="181" y="154" width="24" height="14" rx="3" fill="#f0f0f0" stroke="#c0c0c0" stroke-width="1"/>
+
+    <!-- Right arm - flailing -->
+    <g class="right-arm-assembly">
+      <path class="probe-wire" d="M 0 0 Q 53 4 113 19 Q 173 32 205 8" />
+      <g>
+        <circle cx="203" cy="-76" r="10" fill="#00aad2" stroke="#0088aa" stroke-width="1"/>
+        <rect x="195" y="-74" width="16" height="24" rx="4" fill="url(#metal-grad)" stroke="#999" stroke-width="1" transform="rotate(-15 203 -62)"/>
+        <rect x="197" y="-52" width="14" height="20" rx="3" fill="#fff" stroke="#999" stroke-width="1" transform="rotate(8 204 -42)"/>
+        <ellipse cx="205" cy="-30" rx="8" ry="5" fill="#e8e8e8" stroke="#999" stroke-width="1"/>
+        <g class="right-claw-L">
+          <path d="M 199 -30 Q 192 -20 195 -10" fill="none" stroke="#e0e0e0" stroke-width="5" stroke-linecap="round"/>
+          <circle cx="195" cy="-10" r="4" fill="#2d5a5a"/>
+        </g>
+        <g class="right-claw-R">
+          <path d="M 211 -30 Q 218 -20 215 -10" fill="none" stroke="#e0e0e0" stroke-width="5" stroke-linecap="round"/>
+          <circle cx="215" cy="-10" r="4" fill="#2d5a5a"/>
+        </g>
+        <rect x="200" y="-26" width="10" height="30" rx="2" fill="#555"/>
+        <rect x="202" y="2" width="6" height="6" rx="1" fill="#333"/>
+        <line x1="205" y1="8" x2="205" y2="19" stroke="#aaa" stroke-width="2" stroke-linecap="round"/>
+      </g>
+    </g>
+
+    <!-- LEFT ARM - flailing -->
+    <g class="left-arm-assembly">
+      <circle cx="0" cy="70" r="10" fill="#00aad2" stroke="#0088aa" stroke-width="1"/>
+      <rect x="-8" y="72" width="16" height="24" rx="4" fill="url(#metal-grad)" stroke="#999" stroke-width="1" transform="rotate(15 0 84)"/>
+      <rect x="-10" y="94" width="14" height="20" rx="3" fill="#fff" stroke="#999" stroke-width="1" transform="rotate(-8 -3 104)"/>
+      <ellipse cx="-2" cy="116" rx="8" ry="5" fill="#e8e8e8" stroke="#999" stroke-width="1"/>
+      <g class="left-claw-L">
+        <path d="M -8 116 Q -15 126 -12 136" fill="none" stroke="#e0e0e0" stroke-width="5" stroke-linecap="round"/>
+        <circle cx="-12" cy="136" r="4" fill="#2d5a5a"/>
+      </g>
+      <g class="left-claw-R">
+        <path d="M 4 116 Q 11 126 8 136" fill="none" stroke="#e0e0e0" stroke-width="5" stroke-linecap="round"/>
+        <circle cx="8" cy="136" r="4" fill="#2d5a5a"/>
+      </g>
+    </g>
+  </g>
+</svg>

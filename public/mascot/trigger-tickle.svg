@@ -1,0 +1,370 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="-25 -20 300 270" width="300" height="270">
+  <defs>
+    <clipPath id="screenClip">
+      <rect x="18" y="38" width="158" height="88" rx="2"/>
+    </clipPath>
+    <filter id="glow">
+      <feGaussianBlur stdDeviation="1.5" result="coloredBlur"/>
+      <feMerge>
+        <feMergeNode in="coloredBlur"/>
+        <feMergeNode in="SourceGraphic"/>
+      </feMerge>
+    </filter>
+    <linearGradient id="metal-grad" x1="0%" y1="0%" x2="0%" y2="100%">
+      <stop offset="0%" stop-color="#fff"/>
+      <stop offset="100%" stop-color="#ccc"/>
+    </linearGradient>
+    <linearGradient id="fire-grad-tickle" x1="0%" y1="0%" x2="0%" y2="100%">
+      <stop offset="0%" stop-color="#ffdd00"/> 
+      <stop offset="50%" stop-color="#ff88bb"/>
+      <stop offset="100%" stop-color="#ff66aa" stop-opacity="0"/>
+    </linearGradient>
+  </defs>
+
+  <style>
+    /* Gentle giggling - small wiggles, minimal hover */
+    .hover-body { animation: tickleGiggle 0.4s ease-in-out infinite; }
+    @keyframes tickleGiggle {
+      0%, 100% { transform: translateX(-0.5px) translateY(-1px); }
+      50% { transform: translateX(0.5px) translateY(-2px); }
+    }
+
+    /* Slightly bouncy thrusters */
+    .flame { animation: thrustTickle 0.3s ease-in-out infinite alternate; transform-origin: center top; }
+    @keyframes thrustTickle {
+      0% { transform: scaleY(0.85); opacity: 0.5; }
+      100% { transform: scaleY(1.1); opacity: 0.75; }
+    }
+
+    .handle { 
+      animation: handleWiggle 0.4s ease-in-out infinite; 
+    }
+    @keyframes handleWiggle {
+      0%, 100% { transform: translateX(-0.3px); }
+      50% { transform: translateX(0.3px); }
+    }
+
+    /* Arms gently trying to block tickles */
+    .left-arm { 
+      animation: armBlockL 0.5s ease-in-out infinite; 
+      transform-origin: 0px 70px;
+    }
+    @keyframes armBlockL {
+      0%, 100% { transform: rotate(5deg); }
+      50% { transform: rotate(-3deg); }
+    }
+
+    .right-arm-assembly { 
+      animation: armBlockR 0.5s ease-in-out infinite 0.15s; 
+      transform-origin: 37px 146px;
+    }
+    @keyframes armBlockR {
+      0%, 100% { transform: rotate(-2deg); }
+      50% { transform: rotate(4deg); }
+    }
+
+    /* Gentle claw wiggle */
+    .left-claw-L, .left-claw-R, .right-claw-L, .right-claw-R {
+      animation: clawWiggle 0.4s ease-in-out infinite;
+    }
+    @keyframes clawWiggle {
+      0%, 100% { transform: rotate(-3deg); }
+      50% { transform: rotate(3deg); }
+    }
+
+    .grid-line {
+      stroke: #201520;
+      stroke-width: 0.7;
+      opacity: 0.3;
+    }
+
+    /* Happy squinting eyes - gentle */
+    .tickle-eye {
+      fill: #ffcc44;
+      filter: url(#glow);
+      animation: eyeGiggle 0.5s ease-in-out infinite;
+    }
+    @keyframes eyeGiggle {
+      0%, 100% { transform: scaleY(0.5); }
+      50% { transform: scaleY(0.7); }
+    }
+
+    /* Small tear of joy */
+    .tear {
+      fill: #88ddff;
+      filter: url(#glow);
+      animation: tearDrop 1.5s ease-in infinite;
+    }
+    .tear2 { animation-delay: 0.75s; }
+    @keyframes tearDrop {
+      0% { transform: translateY(0); opacity: 0.8; }
+      100% { transform: translateY(15px); opacity: 0; }
+    }
+
+    /* Gentle smiling/giggling mouth */
+    .giggle-mouth {
+      fill: #ff88aa;
+      filter: url(#glow);
+      animation: mouthGiggle 0.4s ease-in-out infinite;
+    }
+    @keyframes mouthGiggle {
+      0%, 100% { transform: scaleY(0.9); }
+      50% { transform: scaleY(1.1); }
+    }
+
+    /* Hehe text - gentle float */
+    .hehe-text {
+      font-family: "Arial", sans-serif;
+      font-size: 8px;
+      font-weight: bold;
+      fill: #ff88aa;
+      filter: url(#glow);
+      opacity: 0;
+    }
+    .he1 { animation: heheFloat 2s ease-out infinite; }
+    .he2 { animation: heheFloat 2s ease-out infinite 0.7s; }
+    .he3 { animation: heheFloat 2s ease-out infinite 1.4s; }
+    @keyframes heheFloat {
+      0% { transform: translateY(0); opacity: 0; }
+      20% { opacity: 0.8; }
+      100% { transform: translateY(-20px); opacity: 0; }
+    }
+
+    /* Soft tickle marks */
+    .tickle-mark {
+      stroke: #ffaa66;
+      stroke-width: 1.5;
+      stroke-linecap: round;
+      fill: none;
+      opacity: 0;
+    }
+    .tm1 { animation: ticklePulse 1s ease-in-out infinite; }
+    .tm2 { animation: ticklePulse 1s ease-in-out infinite 0.33s; }
+    .tm3 { animation: ticklePulse 1s ease-in-out infinite 0.66s; }
+    @keyframes ticklePulse {
+      0%, 100% { opacity: 0; }
+      50% { opacity: 0.7; }
+    }
+
+    /* Soft blush */
+    .blush {
+      fill: #ffaaaa;
+      opacity: 0.5;
+      animation: blushSoft 1s ease-in-out infinite;
+    }
+    @keyframes blushSoft {
+      0%, 100% { opacity: 0.4; }
+      50% { opacity: 0.6; }
+    }
+
+    .probe-wire {
+      fill: none;
+      stroke: #222;
+      stroke-width: 3;
+      stroke-linecap: round;
+    }
+
+    /* Handle bar soft pink tint */
+    .handle-bar-tickle {
+      animation: barBlush 1s ease-in-out infinite;
+    }
+    @keyframes barBlush {
+      0%, 100% { fill: #00b8d4; }
+      50% { fill: #ddaacc; }
+    }
+
+    /* Cute closed happy eyes (arcs) */
+    .eye-arc {
+      fill: none;
+      stroke: #ffcc44;
+      stroke-width: 3;
+      stroke-linecap: round;
+      filter: url(#glow);
+    }
+  </style>
+
+  <!-- Soft tickle marks near body -->
+  <path class="tickle-mark tm1" d="M -8 70 Q -12 65 -8 60"/>
+  <path class="tickle-mark tm2" d="M 248 75 Q 252 70 248 65"/>
+  <path class="tickle-mark tm3" d="M -6 100 Q -10 95 -6 90"/>
+
+  <!-- Hehe floating up gently -->
+  <text class="hehe-text he1" x="60" y="15">hehe</text>
+  <text class="hehe-text he2" x="120" y="10">hehe</text>
+  <text class="hehe-text he3" x="175" y="15">hehe</text>
+
+  <g class="hover-body">
+    <!-- Thruster flames -->
+    <path class="flame" d="M 38 168 L 52 168 L 45 188 Z" fill="url(#fire-grad-tickle)"/>
+    <path class="flame" d="M 188 168 L 202 168 L 195 188 Z" fill="url(#fire-grad-tickle)"/>
+
+    <!-- HANDLE -->
+    <g class="handle">
+      <path d="M 12 28 L 12 5 Q 12 -2 19 -2 L 30 -2" fill="none" stroke="#b0b0b0" stroke-width="5" stroke-linecap="round"/>
+      <path d="M 228 28 L 228 5 Q 228 -2 221 -2 L 210 -2" fill="none" stroke="#b0b0b0" stroke-width="5" stroke-linecap="round"/>
+      <rect class="handle-bar-tickle" x="30" y="-5" width="180" height="7" rx="3.5"/>
+    </g>
+    
+    <!-- Main body -->
+    <rect x="8" y="28" width="224" height="120" rx="5" fill="#f8f8f8" stroke="#c0c0c0" stroke-width="1"/>
+
+    <!-- Black bezel -->
+    <rect x="12" y="32" width="180" height="104" rx="3" fill="#1a1a1a"/>
+    
+    <!-- Tektronix branding -->
+    <text x="16" y="36" font-family="Arial" font-size="5" font-weight="bold" fill="#777" letter-spacing="0.5">Tektronix</text>
+    <text x="135" y="36" font-family="Arial" font-size="3.5" fill="#ff99aa">~ ticklish ~</text>
+    
+    <!-- Screen frame -->
+    <rect x="18" y="38" width="158" height="88" rx="2" fill="#120a0f"/>
+
+    <!-- Screen content -->
+    <g clip-path="url(#screenClip)">
+      <!-- Grid -->
+      <g>
+        <line class="grid-line" x1="18" y1="58" x2="176" y2="58"/>
+        <line class="grid-line" x1="18" y1="78" x2="176" y2="78"/>
+        <line class="grid-line" x1="18" y1="98" x2="176" y2="98"/>
+        <line class="grid-line" x1="18" y1="118" x2="176" y2="118"/>
+        <line class="grid-line" x1="46" y1="38" x2="46" y2="126"/>
+        <line class="grid-line" x1="74" y1="38" x2="74" y2="126"/>
+        <line class="grid-line" x1="102" y1="38" x2="102" y2="126"/>
+        <line class="grid-line" x1="130" y1="38" x2="130" y2="126"/>
+        <line class="grid-line" x1="158" y1="38" x2="158" y2="126"/>
+      </g>
+
+      <!-- Happy closed eyes (curved arcs like ^_^) -->
+      <g transform="translate(0, 8)">
+        <!-- Left eye - happy arc -->
+        <path class="eye-arc" d="M 62 68 Q 72 58 82 68"/>
+        <!-- Right eye - happy arc -->
+        <path class="eye-arc" d="M 112 68 Q 122 58 132 68"/>
+
+        <!-- Small tears of joy -->
+        <ellipse class="tear" cx="60" cy="72" rx="2" ry="3"/>
+        <ellipse class="tear tear2" cx="134" cy="72" rx="2" ry="3"/>
+
+        <!-- Soft blush marks -->
+        <ellipse class="blush" cx="55" cy="78" rx="8" ry="5"/>
+        <ellipse class="blush" cx="139" cy="78" rx="8" ry="5"/>
+      </g>
+
+      <!-- Cute giggling mouth -->
+      <ellipse class="giggle-mouth" cx="97" cy="92" rx="15" ry="8"/>
+      <!-- Little tongue peeking -->
+      <ellipse cx="97" cy="96" rx="5" ry="3" fill="#ff6699"/>
+
+      <!-- Teehee text -->
+      <text x="97" y="115" text-anchor="middle" font-family="Arial" font-size="7" fill="#ffaa88" filter="url(#glow)">
+        teehee~
+      </text>
+    </g>
+
+    <!-- Right side control panel -->
+    <rect x="194" y="32" width="36" height="104" rx="3" fill="#f0f0f0" stroke="#ccc" stroke-width="1"/>
+    
+    <!-- TRIGGER section -->
+    <rect x="197" y="35" width="30" height="7" rx="1" fill="#333"/>
+    <text x="212" y="40" font-family="Arial" font-size="4" fill="#0f0" text-anchor="middle">TRIGGER</text>
+    
+    <!-- Top knob -->
+    <text x="212" y="48" font-family="Arial" font-size="3" fill="#555" text-anchor="middle">Level</text>
+    <circle cx="212" cy="56" r="7" fill="#e0e0e0" stroke="#999" stroke-width="1"/>
+    <circle cx="212" cy="56" r="2.5" fill="#888"/>
+    
+    <!-- VERTICAL section -->
+    <rect x="197" y="66" width="30" height="6" rx="1" fill="#444"/>
+    <text x="212" y="70.5" font-family="Arial" font-size="3.5" fill="#fff" text-anchor="middle">VERTICAL</text>
+    
+    <!-- Channel buttons -->
+    <circle cx="203" cy="80" r="4" fill="#222" stroke="#f4b400" stroke-width="2"/> 
+    <circle cx="221" cy="80" r="4" fill="#222" stroke="#00c8c8" stroke-width="2"/> 
+    <circle cx="203" cy="92" r="4" fill="#222" stroke="#e06666" stroke-width="2"/> 
+    <circle cx="221" cy="92" r="4" fill="#222" stroke="#8e7cc3" stroke-width="2"/>
+    
+    <!-- HORIZONTAL section -->
+    <rect x="197" y="100" width="30" height="6" rx="1" fill="#444"/>
+    <text x="212" y="104.5" font-family="Arial" font-size="3" fill="#fff" text-anchor="middle">HORIZONTAL</text>
+    
+    <!-- Bottom knob -->
+    <text x="212" y="112" font-family="Arial" font-size="3" fill="#555" text-anchor="middle">Scale</text>
+    <circle cx="212" cy="120" r="8" fill="#e0e0e0" stroke="#999" stroke-width="1"/>
+    <circle cx="212" cy="120" r="3" fill="#888"/>
+    
+    <!-- Function buttons -->
+    <rect x="197" y="130" width="14" height="5" rx="1" fill="#4a4"/>
+    <rect x="213" y="130" width="14" height="5" rx="1" fill="#48f"/>
+    
+    <!-- Bottom channel inputs bar -->
+    <rect x="8" y="138" width="224" height="16" rx="2" fill="#e8e8e8"/>
+    
+    <!-- CH1-4 -->
+    <g transform="translate(25, 140)">
+      <rect x="0" y="0" width="24" height="12" rx="2" fill="#3a3a3a"/>
+      <circle cx="12" cy="6" r="5" fill="#222" stroke="#f4b400" stroke-width="2"/>
+    </g>
+    <g transform="translate(60, 140)">
+      <rect x="0" y="0" width="24" height="12" rx="2" fill="#3a3a3a"/>
+      <circle cx="12" cy="6" r="5" fill="#222" stroke="#00c8c8" stroke-width="2"/>
+    </g>
+    <g transform="translate(95, 140)">
+      <rect x="0" y="0" width="24" height="12" rx="2" fill="#3a3a3a"/>
+      <circle cx="12" cy="6" r="5" fill="#222" stroke="#e06666" stroke-width="2"/>
+    </g>
+    <g transform="translate(130, 140)">
+      <rect x="0" y="0" width="24" height="12" rx="2" fill="#3a3a3a"/>
+      <circle cx="12" cy="6" r="5" fill="#222" stroke="#8e7cc3" stroke-width="2"/>
+    </g>
+    
+    <!-- Aux In -->
+    <circle cx="190" cy="146" r="4" fill="#222" stroke="#666" stroke-width="1"/>
+
+    <!-- Feet -->
+    <rect x="35" y="154" width="24" height="14" rx="3" fill="#f0f0f0" stroke="#c0c0c0" stroke-width="1"/>
+    <rect x="181" y="154" width="24" height="14" rx="3" fill="#f0f0f0" stroke="#c0c0c0" stroke-width="1"/>
+
+    <!-- RIGHT ARM -->
+    <g class="right-arm-assembly">
+      <!-- Probe wire from CH1 -->
+      <path class="probe-wire" d="M 37 146 Q 90 150 150 165 Q 210 178 242 154" />
+
+      <!-- Right arm -->
+      <g class="right-arm">
+        <circle cx="240" cy="70" r="10" fill="#00aad2" stroke="#0088aa" stroke-width="1"/>
+        <rect x="232" y="72" width="16" height="24" rx="4" fill="url(#metal-grad)" stroke="#999" stroke-width="1" transform="rotate(-15 240 75)"/>
+        <rect x="234" y="94" width="14" height="20" rx="3" fill="#fff" stroke="#999" stroke-width="1" transform="rotate(8 243 100)"/>
+        <ellipse cx="242" cy="116" rx="8" ry="5" fill="#e8e8e8" stroke="#999" stroke-width="1"/>
+        
+        <g class="right-claw-L">
+          <path d="M 236 116 Q 229 126 232 136" fill="none" stroke="#e0e0e0" stroke-width="5" stroke-linecap="round"/>
+          <circle cx="232" cy="136" r="4" fill="#2d5a5a"/>
+        </g>
+        <g class="right-claw-R">
+          <path d="M 248 116 Q 255 126 252 136" fill="none" stroke="#e0e0e0" stroke-width="5" stroke-linecap="round"/>
+          <circle cx="252" cy="136" r="4" fill="#2d5a5a"/>
+        </g>
+        
+        <!-- Probe body -->
+        <rect x="237" y="120" width="10" height="30" rx="2" fill="#555"/>
+        <rect x="239" y="148" width="6" height="6" rx="1" fill="#333"/>
+        <line x1="242" y1="154" x2="242" y2="165" stroke="#aaa" stroke-width="2" stroke-linecap="round"/>
+      </g>
+    </g>
+
+    <!-- LEFT ARM -->
+    <g class="left-arm">
+      <circle cx="0" cy="70" r="10" fill="#00aad2" stroke="#0088aa" stroke-width="1"/>
+      <rect x="-8" y="72" width="16" height="24" rx="4" fill="url(#metal-grad)" stroke="#999" stroke-width="1" transform="rotate(15 0 75)"/>
+      <rect x="-10" y="94" width="14" height="20" rx="3" fill="#fff" stroke="#999" stroke-width="1" transform="rotate(-8 -3 100)"/>
+      <ellipse cx="-2" cy="116" rx="8" ry="5" fill="#e8e8e8" stroke="#999" stroke-width="1"/>
+      <g class="left-claw-L">
+        <path d="M -8 116 Q -15 126 -12 136" fill="none" stroke="#e0e0e0" stroke-width="5" stroke-linecap="round"/>
+        <circle cx="-12" cy="136" r="4" fill="#2d5a5a"/>
+      </g>
+      <g class="left-claw-R">
+        <path d="M 4 116 Q 11 126 8 136" fill="none" stroke="#e0e0e0" stroke-width="5" stroke-linecap="round"/>
+        <circle cx="8" cy="136" r="4" fill="#2d5a5a"/>
+      </g>
+    </g>
+  </g>
+</svg>

@@ -1,0 +1,187 @@
+<xml xmlns="https://developers.google.com/blockly/xml">
+  <variables>
+    <variable>appStatus</variable>
+    <variable>resultValue</variable>
+    <variable>popup_msg</variable>
+  </variables>
+
+  <block type="connect_tekexpress" id="tx_conn_1" x="20" y="20">
+    <field name="DEVICE_NAME">tekexp</field>
+    <field name="HOST">localhost</field>
+    <field name="PORT">5000</field>
+    <next>
+      <block type="tekexp_write" id="tx_w_1">
+        <field name="COMMAND">TEKEXP:ACQUIRE_MODE LIVE</field>
+        <next>
+          <block type="tekexp_write" id="tx_w_2">
+            <field name="COMMAND">TEKEXP:SELECT DEVICE,"Host"</field>
+            <next>
+              <block type="wait_seconds" id="tx_wait_1">
+                <field name="SECONDS">2</field>
+                <next>
+                  <block type="tekexp_write" id="tx_w_3">
+                    <field name="COMMAND">TEKEXP:VALUE DUTID,DemoDUTID</field>
+                    <next>
+                      <block type="tekexp_write" id="tx_w_4">
+                        <field name="COMMAND">TEKEXP:VALUE GENERAL,"Low Speed","False"</field>
+                        <next>
+                          <block type="wait_seconds" id="tx_wait_2">
+                            <field name="SECONDS">2</field>
+                            <next>
+                              <block type="tekexp_write" id="tx_w_5">
+                                <field name="COMMAND">TEKEXP:VALUE GENERAL,"Full Speed","False"</field>
+                                <next>
+                                  <block type="wait_seconds" id="tx_wait_3">
+                                    <field name="SECONDS">2</field>
+                                    <next>
+                                      <block type="tekexp_write" id="tx_w_6">
+                                        <field name="COMMAND">TEKEXP:SELECT TEST,ALL,FALSE</field>
+                                        <next>
+                                          <block type="tekexp_write" id="tx_w_7">
+                                            <field name="COMMAND">TEKEXP:SELECT TEST,"HS_EyeDiagram",TRUE</field>
+                                            <next>
+                                              <block type="tekexp_write" id="tx_w_8">
+                                                <field name="COMMAND">TEKEXP:MODE USER-DEFINED</field>
+                                                <next>
+                                                  <block type="tekexp_write" id="tx_w_9">
+                                                    <field name="COMMAND">TEKEXP:STATE RUN</field>
+                                                    <next>
+                                                      <block type="wait_seconds" id="tx_wait_4">
+                                                        <field name="SECONDS">2</field>
+                                                        <next>
+                                                          <block type="tekexp_query" id="tx_q_1">
+                                                            <field name="COMMAND">TEKEXP:STATE?</field>
+                                                            <field name="VARIABLE">appStatus</field>
+                                                            <next>
+                                                              <block type="controls_whileUntil" id="tx_while_1">
+                                                                <field name="MODE">WHILE</field>
+                                                                <value name="BOOL">
+                                                                  <block type="logic_compare" id="cmp_not_complete_1">
+                                                                    <field name="OP">NEQ</field>
+                                                                    <value name="A">
+                                                                      <block type="variables_get" id="get_appStatus_1">
+                                                                        <field name="VAR">appStatus</field>
+                                                                      </block>
+                                                                    </value>
+                                                                    <value name="B">
+                                                                      <shadow type="text" id="txt_complete_1">
+                                                                        <field name="TEXT">COMPLETE</field>
+                                                                      </shadow>
+                                                                    </value>
+                                                                  </block>
+                                                                </value>
+                                                                <statement name="DO">
+                                                                  <block type="controls_if" id="tx_if_1">
+                                                                    <value name="IF0">
+                                                                      <block type="logic_compare" id="cmp_wait_1">
+                                                                        <field name="OP">EQ</field>
+                                                                        <value name="A">
+                                                                          <block type="variables_get" id="get_appStatus_2">
+                                                                            <field name="VAR">appStatus</field>
+                                                                          </block>
+                                                                        </value>
+                                                                        <value name="B">
+                                                                          <shadow type="text" id="txt_wait_1">
+                                                                            <field name="TEXT">WAIT</field>
+                                                                          </shadow>
+                                                                        </value>
+                                                                      </block>
+                                                                    </value>
+                                                                    <statement name="DO0">
+                                                                      <block type="tekexp_popup" id="tx_popup_1">
+                                                                        <field name="RESPONSE">OK</field>
+                                                                        <field name="VARIABLE">popup_msg</field>
+                                                                      </block>
+                                                                    </statement>
+                                                                    <value name="IF1">
+                                                                      <block type="logic_compare" id="cmp_error_1">
+                                                                        <field name="OP">EQ</field>
+                                                                        <value name="A">
+                                                                          <block type="variables_get" id="get_appStatus_3">
+                                                                            <field name="VAR">appStatus</field>
+                                                                          </block>
+                                                                        </value>
+                                                                        <value name="B">
+                                                                          <shadow type="text" id="txt_error_1">
+                                                                            <field name="TEXT">ERROR</field>
+                                                                          </shadow>
+                                                                        </value>
+                                                                      </block>
+                                                                    </value>
+                                                                    <statement name="DO1">
+                                                                      <block type="tekexp_popup" id="tx_popup_2">
+                                                                        <field name="RESPONSE">OK</field>
+                                                                        <field name="VARIABLE">popup_msg</field>
+                                                                      </block>
+                                                                    </statement>
+                                                                    <next>
+                                                                      <block type="wait_seconds" id="tx_wait_loop_1">
+                                                                        <field name="SECONDS">2</field>
+                                                                        <next>
+                                                                          <block type="tekexp_query" id="tx_q_loop_1">
+                                                                            <field name="COMMAND">TEKEXP:STATE?</field>
+                                                                            <field name="VARIABLE">appStatus</field>
+                                                                          </block>
+                                                                        </next>
+                                                                      </block>
+                                                                    </next>
+                                                                  </block>
+                                                                </statement>
+                                                                <next>
+                                                                  <block type="tekexp_write" id="tx_w_10">
+                                                                    <field name="COMMAND">TEKEXP:SETUP SAVE,SCPI_Session1</field>
+                                                                    <next>
+                                                                  <block type="wait_seconds" id="tx_wait_5">
+                                                                    <field name="SECONDS">3</field>
+                                                                    <next>
+                                                                          <block type="tekexp_query" id="tx_q_2">
+                                                                            <field name="COMMAND">TEKEXP:RESULT? "HS_EyeDiagram"</field>
+                                                                            <field name="VARIABLE">resultValue</field>
+                                                                            <next>
+                                                                              <block type="tekexp_export_report" id="tx_export_1">
+                                                                                <field name="REPORT_TYPE">REPORT</field>
+                                                                                <field name="FILENAME">USB_Test_Report</field>
+                                                                                <next>
+                                                                                  <block type="disconnect" id="tx_disc_1">
+                                                                                  </block>
+                                                                                </next>
+                                                                              </block>
+                                                                            </next>
+                                                                          </block>
+                                                                        </next>
+                                                                      </block>
+                                                                    </next>
+                                                                  </block>
+                                                                </next>
+                                                              </block>
+                                                            </next>
+                                                          </block>
+                                                        </next>
+                                                      </block>
+                                                    </next>
+                                                  </block>
+                                                </next>
+                                              </block>
+                                            </next>
+                                          </block>
+                                        </next>
+                                      </block>
+                                    </next>
+                                  </block>
+                                </next>
+                              </block>
+                            </next>
+                          </block>
+                        </next>
+                      </block>
+                    </next>
+                  </block>
+                </next>
+              </block>
+            </next>
+          </block>
+        </next>
+      </block>
+    </next>
+  </block>
+</xml>

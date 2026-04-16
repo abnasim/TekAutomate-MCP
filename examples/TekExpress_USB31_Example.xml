@@ -1,0 +1,127 @@
+<xml xmlns="https://developers.google.com/blockly/xml">
+  <variables>
+    <variable>popup_log</variable>
+    <variable>test_result</variable>
+  </variables>
+  
+  <block type="connect_tekexpress" id="connect_tekexp" x="50" y="50">
+    <field name="DEVICE_NAME">tekexp</field>
+    <field name="IP_ADDRESS">localhost</field>
+    <field name="PORT">5000</field>
+    <next>
+
+      <!-- Set Acquire Mode to LIVE -->
+      <block type="tekexp_set_acquire_mode" id="set_acquire_mode">
+        <field name="ACQUIRE_MODE">LIVE</field>
+        <next>
+
+          <!-- Select Device -->
+          <block type="tekexp_select_device" id="select_device">
+            <field name="DEVICE_NAME">Device</field>
+            <next>
+
+              <!-- Set DUT ID -->
+              <block type="tekexp_set_value" id="set_dutid">
+                <field name="CATEGORY">DUT</field>
+                <field name="PARAMETER">DUTID</field>
+                <field name="VALUE">DemoDUTID</field>
+                <next>
+
+                  <!-- Set Generation Version -->
+                  <block type="tekexp_select_version" id="set_gen_version">
+                    <field name="VERSION_NAME">USB3.1 Gen1</field>
+                    <next>
+
+                      <!-- Deselect All Tests -->
+                      <block type="tekexp_select_test" id="deselect_all">
+                        <field name="TEST_NAME">ALL</field>
+                        <field name="ENABLED">FALSE</field>
+                        <next>
+
+                          <!-- Select UI-Unit Interval Test -->
+                          <block type="tekexp_select_test" id="select_ui_test">
+                            <field name="TEST_NAME">UI-Unit Interval</field>
+                            <field name="ENABLED">TRUE</field>
+                            <next>
+
+                              <!-- Set User-Defined Mode -->
+                              <block type="tekexp_set_mode" id="set_mode">
+                                <field name="MODE">USER-DEFINED</field>
+                                <next>
+
+                                  <!-- Run TekExpress -->
+                                  <block type="tekexp_run" id="run_test">
+                                    <next>
+
+                                      <!-- Wait for completion with popup handling -->
+                                      <block type="tekexp_wait_state" id="wait_complete">
+                                        <field name="EXPECTED">COMPLETE</field>
+                                        <field name="POLL_INTERVAL">2</field>
+                                        <field name="TIMEOUT">3600</field>
+                                        <field name="HANDLE_POPUP">TRUE</field>
+                                        <field name="POPUP_RESPONSE">OK</field>
+                                        <field name="LOG_VARIABLE">popup_log</field>
+                                        <next>
+
+                                          <!-- Generate Report -->
+                                          <block type="tekexp_export_report" id="export_report">
+                                            <field name="GENERATE_REPORT">TRUE</field>
+                                            <field name="COPY_IMAGES">FALSE</field>
+                                            <field name="DESTINATION"></field>
+                                            <next>
+
+                                              <!-- Save Session -->
+                                              <block type="tekexp_save_session" id="save_session">
+                                                <field name="SESSION_NAME">PI_Session1</field>
+                                                <next>
+
+                                                  <!-- Query Result -->
+                                                  <block type="tekexp_query_result" id="query_result">
+                                                    <field name="TEST_NAME">UI-Unit Interval</field>
+                                                    <field name="VARIABLE">test_result</field>
+                                                    <next>
+
+                                                      <!-- Disconnect -->
+                                                      <block type="disconnect" id="disconnect_tekexp">
+                                                        <field name="DEVICE_NAME">tekexp</field>
+                                                      </block>
+
+                                                    </next>
+                                                  </block>
+
+                                                </next>
+                                              </block>
+
+                                            </next>
+                                          </block>
+
+                                        </next>
+                                      </block>
+
+                                    </next>
+                                  </block>
+
+                                </next>
+                              </block>
+
+                            </next>
+                          </block>
+
+                        </next>
+                      </block>
+
+                    </next>
+                  </block>
+
+                </next>
+              </block>
+
+            </next>
+          </block>
+
+        </next>
+      </block>
+
+    </next>
+  </block>
+</xml>

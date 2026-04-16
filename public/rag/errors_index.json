@@ -7,7 +7,7 @@
     "tags": [
       "command_groups_academy_md"
     ],
-    "source": "rag/corpus/app_logic/COMMAND_GROUPS_ACADEMY.md"
+    "source": "mcp-server/rag/corpus/app_logic/COMMAND_GROUPS_ACADEMY.md"
   },
   {
     "id": "screenshot_methods_complete_md_19_p1",
@@ -17,7 +17,7 @@
     "tags": [
       "screenshot_methods_complete_md"
     ],
-    "source": "rag/corpus/app_logic/SCREENSHOT_METHODS_COMPLETE.md"
+    "source": "mcp-server/rag/corpus/app_logic/SCREENSHOT_METHODS_COMPLETE.md"
   },
   {
     "id": "screenshot_methods_complete_md_31_p1",
@@ -27,7 +27,7 @@
     "tags": [
       "screenshot_methods_complete_md"
     ],
-    "source": "rag/corpus/app_logic/SCREENSHOT_METHODS_COMPLETE.md"
+    "source": "mcp-server/rag/corpus/app_logic/SCREENSHOT_METHODS_COMPLETE.md"
   },
   {
     "id": "screenshot_methods_complete_md_32_p1",
@@ -37,7 +37,7 @@
     "tags": [
       "screenshot_methods_complete_md"
     ],
-    "source": "rag/corpus/app_logic/SCREENSHOT_METHODS_COMPLETE.md"
+    "source": "mcp-server/rag/corpus/app_logic/SCREENSHOT_METHODS_COMPLETE.md"
   },
   {
     "id": "screenshot_methods_complete_md_33_p1",
@@ -47,7 +47,7 @@
     "tags": [
       "screenshot_methods_complete_md"
     ],
-    "source": "rag/corpus/app_logic/SCREENSHOT_METHODS_COMPLETE.md"
+    "source": "mcp-server/rag/corpus/app_logic/SCREENSHOT_METHODS_COMPLETE.md"
   },
   {
     "id": "screenshot_methods_complete_md_34_p1",
@@ -57,7 +57,7 @@
     "tags": [
       "screenshot_methods_complete_md"
     ],
-    "source": "rag/corpus/app_logic/SCREENSHOT_METHODS_COMPLETE.md"
+    "source": "mcp-server/rag/corpus/app_logic/SCREENSHOT_METHODS_COMPLETE.md"
   },
   {
     "id": "screenshot_methods_complete_md_40_p1",
@@ -67,7 +67,7 @@
     "tags": [
       "screenshot_methods_complete_md"
     ],
-    "source": "rag/corpus/app_logic/SCREENSHOT_METHODS_COMPLETE.md"
+    "source": "mcp-server/rag/corpus/app_logic/SCREENSHOT_METHODS_COMPLETE.md"
   },
   {
     "id": "tekexpress_integration_md_20_p1",
@@ -77,7 +77,7 @@
     "tags": [
       "tekexpress_integration_md"
     ],
-    "source": "rag/corpus/app_logic/TEKEXPRESS_INTEGRATION.md"
+    "source": "mcp-server/rag/corpus/app_logic/TEKEXPRESS_INTEGRATION.md"
   },
   {
     "id": "tekexpress_integration_md_27_p1",
@@ -87,7 +87,7 @@
     "tags": [
       "tekexpress_integration_md"
     ],
-    "source": "rag/corpus/app_logic/TEKEXPRESS_INTEGRATION.md"
+    "source": "mcp-server/rag/corpus/app_logic/TEKEXPRESS_INTEGRATION.md"
   },
   {
     "id": "tekexpress_integration_md_34_p1",
@@ -97,7 +97,7 @@
     "tags": [
       "tekexpress_integration_md"
     ],
-    "source": "rag/corpus/app_logic/TEKEXPRESS_INTEGRATION.md"
+    "source": "mcp-server/rag/corpus/app_logic/TEKEXPRESS_INTEGRATION.md"
   },
   {
     "id": "tekexpress_integration_md_40_p1",
@@ -107,7 +107,7 @@
     "tags": [
       "tekexpress_integration_md"
     ],
-    "source": "rag/corpus/app_logic/TEKEXPRESS_INTEGRATION.md"
+    "source": "mcp-server/rag/corpus/app_logic/TEKEXPRESS_INTEGRATION.md"
   },
   {
     "id": "anti_clipping_md_3_p1",
@@ -117,7 +117,7 @@
     "tags": [
       "anti_clipping_md"
     ],
-    "source": "rag/corpus/scope_logic/anti-clipping.md"
+    "source": "mcp-server/rag/corpus/scope_logic/anti-clipping.md"
   },
   {
     "id": "decode_bringup_md_4_p1",
@@ -127,7 +127,7 @@
     "tags": [
       "decode_bringup_md"
     ],
-    "source": "rag/corpus/scope_logic/decode-bringup.md"
+    "source": "mcp-server/rag/corpus/scope_logic/decode-bringup.md"
   },
   {
     "id": "invalid_measurement_results_md_3_p1",
@@ -137,7 +137,7 @@
     "tags": [
       "invalid_measurement_results_md"
     ],
-    "source": "rag/corpus/scope_logic/invalid-measurement-results.md"
+    "source": "mcp-server/rag/corpus/scope_logic/invalid-measurement-results.md"
   },
   {
     "id": "procedure_template_md_2_p1",
@@ -147,7 +147,7 @@
     "tags": [
       "procedure_template_md"
     ],
-    "source": "rag/corpus/scope_logic/procedure-template.md"
+    "source": "mcp-server/rag/corpus/scope_logic/procedure-template.md"
   },
   {
     "id": "scpi_hard_knowledge_md_38_p1",
@@ -157,7 +157,7 @@
     "tags": [
       "scpi_hard_knowledge_md"
     ],
-    "source": "rag/corpus/scpi/SCPI_HARD_KNOWLEDGE.md"
+    "source": "mcp-server/rag/corpus/scpi/SCPI_HARD_KNOWLEDGE.md"
   },
   {
     "id": "scpi_hard_knowledge_md_57_p1",
@@ -167,7 +167,7 @@
     "tags": [
       "scpi_hard_knowledge_md"
     ],
-    "source": "rag/corpus/scpi/SCPI_HARD_KNOWLEDGE.md"
+    "source": "mcp-server/rag/corpus/scpi/SCPI_HARD_KNOWLEDGE.md"
   },
   {
     "id": "tm_devices_ai_ingestion_spec_md_3_p1",
@@ -177,7 +177,7 @@
     "tags": [
       "tm_devices_ai_ingestion_spec_md"
     ],
-    "source": "rag/corpus/tmdevices/TM_DEVICES_AI_INGESTION_SPEC.md"
+    "source": "mcp-server/rag/corpus/tmdevices/TM_DEVICES_AI_INGESTION_SPEC.md"
   },
   {
     "id": "tm_devices_ai_ingestion_spec_md_6_p1",
@@ -187,7 +187,7 @@
     "tags": [
       "tm_devices_ai_ingestion_spec_md"
     ],
-    "source": "rag/corpus/tmdevices/TM_DEVICES_AI_INGESTION_SPEC.md"
+    "source": "mcp-server/rag/corpus/tmdevices/TM_DEVICES_AI_INGESTION_SPEC.md"
   },
   {
     "id": "tm_devices_argument_handling_md_5_p1",
@@ -197,7 +197,7 @@
     "tags": [
       "tm_devices_argument_handling_md"
     ],
-    "source": "rag/corpus/tmdevices/TM_DEVICES_ARGUMENT_HANDLING.md"
+    "source": "mcp-server/rag/corpus/tmdevices/TM_DEVICES_ARGUMENT_HANDLING.md"
   },
   {
     "id": "tm_devices_command_browser_md_47_p1",
@@ -207,7 +207,7 @@
     "tags": [
       "tm_devices_command_browser_md"
     ],
-    "source": "rag/corpus/tmdevices/TM_DEVICES_COMMAND_BROWSER.md"
+    "source": "mcp-server/rag/corpus/tmdevices/TM_DEVICES_COMMAND_BROWSER.md"
   },
   {
     "id": "tm_devices_command_browser_md_55_p1",
@@ -217,7 +217,7 @@
     "tags": [
       "tm_devices_command_browser_md"
     ],
-    "source": "rag/corpus/tmdevices/TM_DEVICES_COMMAND_BROWSER.md"
+    "source": "mcp-server/rag/corpus/tmdevices/TM_DEVICES_COMMAND_BROWSER.md"
   },
   {
     "id": "tm_devices_rag_context_md_2_p1",
@@ -227,7 +227,7 @@
     "tags": [
       "tm_devices_rag_context_md"
     ],
-    "source": "rag/corpus/tmdevices/TM_DEVICES_RAG_CONTEXT.md"
+    "source": "mcp-server/rag/corpus/tmdevices/TM_DEVICES_RAG_CONTEXT.md"
   },
   {
     "id": "tm_devices_usage_patterns_md_21_p1",
@@ -237,7 +237,7 @@
     "tags": [
       "tm_devices_usage_patterns_md"
     ],
-    "source": "rag/corpus/tmdevices/TM_DEVICES_USAGE_PATTERNS.md"
+    "source": "mcp-server/rag/corpus/tmdevices/TM_DEVICES_USAGE_PATTERNS.md"
   },
   {
     "id": "tm_devices_usage_patterns_md_48_p1",
@@ -247,7 +247,7 @@
     "tags": [
       "tm_devices_usage_patterns_md"
     ],
-    "source": "rag/corpus/tmdevices/TM_DEVICES_USAGE_PATTERNS.md"
+    "source": "mcp-server/rag/corpus/tmdevices/TM_DEVICES_USAGE_PATTERNS.md"
   },
   {
     "id": "tm_devices_usage_patterns_md_59_p1",
@@ -257,7 +257,7 @@
     "tags": [
       "tm_devices_usage_patterns_md"
     ],
-    "source": "rag/corpus/tmdevices/TM_DEVICES_USAGE_PATTERNS.md"
+    "source": "mcp-server/rag/corpus/tmdevices/TM_DEVICES_USAGE_PATTERNS.md"
   },
   {
     "id": "tm_devices_usage_patterns_md_60_p1",
@@ -267,7 +267,7 @@
     "tags": [
       "tm_devices_usage_patterns_md"
     ],
-    "source": "rag/corpus/tmdevices/TM_DEVICES_USAGE_PATTERNS.md"
+    "source": "mcp-server/rag/corpus/tmdevices/TM_DEVICES_USAGE_PATTERNS.md"
   },
   {
     "id": "err_unicode_decode_opc_after_readfile",
@@ -301,7 +301,7 @@
       "SAVE:IMAGE"
     ],
     "corpus": "errors",
-    "source": "rag/corpus/error_patterns/error_patterns_index.json"
+    "source": "mcp-server/rag/corpus/error_patterns/error_patterns_index.json"
   },
   {
     "id": "err_variable_name_corruption_blockly_id",
@@ -327,7 +327,7 @@
     ],
     "related_commands": [],
     "corpus": "errors",
-    "source": "rag/corpus/error_patterns/error_patterns_index.json"
+    "source": "mcp-server/rag/corpus/error_patterns/error_patterns_index.json"
   },
   {
     "id": "err_literal_newline_in_python_code",
@@ -353,7 +353,7 @@
     ],
     "related_commands": [],
     "corpus": "errors",
-    "source": "rag/corpus/error_patterns/error_patterns_index.json"
+    "source": "mcp-server/rag/corpus/error_patterns/error_patterns_index.json"
   },
   {
     "id": "err_float_loop_range",
@@ -379,7 +379,7 @@
     ],
     "related_commands": [],
     "corpus": "errors",
-    "source": "rag/corpus/error_patterns/error_patterns_index.json"
+    "source": "mcp-server/rag/corpus/error_patterns/error_patterns_index.json"
   },
   {
     "id": "err_device_context_loop_confusion",
@@ -405,7 +405,7 @@
     ],
     "related_commands": [],
     "corpus": "errors",
-    "source": "rag/corpus/error_patterns/error_patterns_index.json"
+    "source": "mcp-server/rag/corpus/error_patterns/error_patterns_index.json"
   },
   {
     "id": "err_sweep_params_mismatch",
@@ -431,7 +431,7 @@
     ],
     "related_commands": [],
     "corpus": "errors",
-    "source": "rag/corpus/error_patterns/error_patterns_index.json"
+    "source": "mcp-server/rag/corpus/error_patterns/error_patterns_index.json"
   },
   {
     "id": "err_set_and_query_roundtrip_degradation",
@@ -464,7 +464,7 @@
       "CH1:COUPling"
     ],
     "corpus": "errors",
-    "source": "rag/corpus/error_patterns/error_patterns_index.json"
+    "source": "mcp-server/rag/corpus/error_patterns/error_patterns_index.json"
   },
   {
     "id": "err_hardcopy_format_template_literal",
@@ -494,7 +494,7 @@
       "HARDCOPY:PORT"
     ],
     "corpus": "errors",
-    "source": "rag/corpus/error_patterns/error_patterns_index.json"
+    "source": "mcp-server/rag/corpus/error_patterns/error_patterns_index.json"
   },
   {
     "id": "err_opc_query_return_type",
@@ -521,7 +521,7 @@
       "*OPC?"
     ],
     "corpus": "errors",
-    "source": "rag/corpus/error_patterns/error_patterns_index.json"
+    "source": "mcp-server/rag/corpus/error_patterns/error_patterns_index.json"
   },
   {
     "id": "err_variables_initialized_to_none",
@@ -547,7 +547,7 @@
     ],
     "related_commands": [],
     "corpus": "errors",
-    "source": "rag/corpus/error_patterns/error_patterns_index.json"
+    "source": "mcp-server/rag/corpus/error_patterns/error_patterns_index.json"
   },
   {
     "id": "err_missing_cleanup_section",
@@ -572,7 +572,7 @@
     ],
     "related_commands": [],
     "corpus": "errors",
-    "source": "rag/corpus/error_patterns/error_patterns_index.json"
+    "source": "mcp-server/rag/corpus/error_patterns/error_patterns_index.json"
   },
   {
     "id": "err_backend_selection_not_preserved",
@@ -599,7 +599,7 @@
     ],
     "related_commands": [],
     "corpus": "errors",
-    "source": "rag/corpus/error_patterns/error_patterns_index.json"
+    "source": "mcp-server/rag/corpus/error_patterns/error_patterns_index.json"
   },
   {
     "id": "err_gpt_device_context_confusion",
@@ -629,7 +629,7 @@
       ":SOURce:VOLTage:LEVel"
     ],
     "corpus": "errors",
-    "source": "rag/corpus/error_patterns/error_patterns_index.json"
+    "source": "mcp-server/rag/corpus/error_patterns/error_patterns_index.json"
   },
   {
     "id": "err_ip_conflict_detection_no_ui_warning",
@@ -655,7 +655,7 @@
     ],
     "related_commands": [],
     "corpus": "errors",
-    "source": "rag/corpus/error_patterns/error_patterns_index.json"
+    "source": "mcp-server/rag/corpus/error_patterns/error_patterns_index.json"
   },
   {
     "id": "err_socket_daemon_state_machine",
@@ -691,7 +691,7 @@
       "FILESystem:CWD?"
     ],
     "corpus": "errors",
-    "source": "rag/corpus/error_patterns/error_patterns_index.json"
+    "source": "mcp-server/rag/corpus/error_patterns/error_patterns_index.json"
   },
   {
     "id": "err_screenshot_template_wrong_structure",
@@ -723,7 +723,7 @@
       "FILESYSTEM:DELETE"
     ],
     "corpus": "errors",
-    "source": "rag/corpus/error_patterns/error_patterns_index.json"
+    "source": "mcp-server/rag/corpus/error_patterns/error_patterns_index.json"
   },
   {
     "id": "err_setup_bat_stops_after_nodejs",
@@ -749,7 +749,7 @@
     ],
     "related_commands": [],
     "corpus": "errors",
-    "source": "rag/corpus/error_patterns/error_patterns_index.json"
+    "source": "mcp-server/rag/corpus/error_patterns/error_patterns_index.json"
   },
   {
     "id": "err_zip_missing_commands_templates",
@@ -776,7 +776,7 @@
     ],
     "related_commands": [],
     "corpus": "errors",
-    "source": "rag/corpus/error_patterns/error_patterns_index.json"
+    "source": "mcp-server/rag/corpus/error_patterns/error_patterns_index.json"
   },
   {
     "id": "err_electron_loading_error",
@@ -800,7 +800,7 @@
     "affected_files": [],
     "related_commands": [],
     "corpus": "errors",
-    "source": "rag/corpus/error_patterns/error_patterns_index.json"
+    "source": "mcp-server/rag/corpus/error_patterns/error_patterns_index.json"
   },
   {
     "id": "err_windows_defender_blocking",
@@ -824,7 +824,7 @@
     "affected_files": [],
     "related_commands": [],
     "corpus": "errors",
-    "source": "rag/corpus/error_patterns/error_patterns_index.json"
+    "source": "mcp-server/rag/corpus/error_patterns/error_patterns_index.json"
   },
   {
     "id": "err_undefined_variables_steps_export",
@@ -850,7 +850,7 @@
     ],
     "related_commands": [],
     "corpus": "errors",
-    "source": "rag/corpus/error_patterns/error_patterns_index.json"
+    "source": "mcp-server/rag/corpus/error_patterns/error_patterns_index.json"
   },
   {
     "id": "err_wrong_loop_structure_sweep",
@@ -876,7 +876,7 @@
     ],
     "related_commands": [],
     "corpus": "errors",
-    "source": "rag/corpus/error_patterns/error_patterns_index.json"
+    "source": "mcp-server/rag/corpus/error_patterns/error_patterns_index.json"
   },
   {
     "id": "err_missing_device_connections_export",
@@ -903,7 +903,7 @@
     ],
     "related_commands": [],
     "corpus": "errors",
-    "source": "rag/corpus/error_patterns/error_patterns_index.json"
+    "source": "mcp-server/rag/corpus/error_patterns/error_patterns_index.json"
   },
   {
     "id": "err_redundant_imports",
@@ -928,7 +928,7 @@
     ],
     "related_commands": [],
     "corpus": "errors",
-    "source": "rag/corpus/error_patterns/error_patterns_index.json"
+    "source": "mcp-server/rag/corpus/error_patterns/error_patterns_index.json"
   },
   {
     "id": "err_acquire_stopafter_enum_case",
@@ -957,7 +957,7 @@
       "ACQuire:STOPAfter"
     ],
     "corpus": "errors",
-    "source": "rag/corpus/error_patterns/error_patterns_index.json"
+    "source": "mcp-server/rag/corpus/error_patterns/error_patterns_index.json"
   },
   {
     "id": "err_verbose_opc_polling_pattern",
@@ -985,7 +985,7 @@
       "*OPC?"
     ],
     "corpus": "errors",
-    "source": "rag/corpus/error_patterns/error_patterns_index.json"
+    "source": "mcp-server/rag/corpus/error_patterns/error_patterns_index.json"
   },
   {
     "id": "err_missing_type_hints_tm_devices",
@@ -1010,7 +1010,7 @@
     ],
     "related_commands": [],
     "corpus": "errors",
-    "source": "rag/corpus/error_patterns/error_patterns_index.json"
+    "source": "mcp-server/rag/corpus/error_patterns/error_patterns_index.json"
   },
   {
     "id": "err_opc_dedup_multiple_waits",
@@ -1039,7 +1039,7 @@
       "*OPC?"
     ],
     "corpus": "errors",
-    "source": "rag/corpus/error_patterns/error_patterns_index.json"
+    "source": "mcp-server/rag/corpus/error_patterns/error_patterns_index.json"
   },
   {
     "id": "err_gpt_xml_missing_connection_details",
@@ -1064,7 +1064,7 @@
     ],
     "related_commands": [],
     "corpus": "errors",
-    "source": "rag/corpus/error_patterns/error_patterns_index.json"
+    "source": "mcp-server/rag/corpus/error_patterns/error_patterns_index.json"
   },
   {
     "id": "err_gpt_variable_substitution_syntax",
@@ -1092,7 +1092,7 @@
       ":SOURce:VOLTage:LEVel"
     ],
     "corpus": "errors",
-    "source": "rag/corpus/error_patterns/error_patterns_index.json"
+    "source": "mcp-server/rag/corpus/error_patterns/error_patterns_index.json"
   },
   {
     "id": "err_backend_compatibility_forbidden",
@@ -1119,7 +1119,7 @@
     ],
     "related_commands": [],
     "corpus": "errors",
-    "source": "rag/corpus/error_patterns/error_patterns_index.json"
+    "source": "mcp-server/rag/corpus/error_patterns/error_patterns_index.json"
   },
   {
     "id": "err_loop_index_not_available",
@@ -1143,7 +1143,7 @@
     "affected_files": [],
     "related_commands": [],
     "corpus": "errors",
-    "source": "rag/corpus/error_patterns/error_patterns_index.json"
+    "source": "mcp-server/rag/corpus/error_patterns/error_patterns_index.json"
   },
   {
     "id": "err_file_overwriting_in_loop",
@@ -1169,7 +1169,7 @@
       "SAVE:WAVEFORM"
     ],
     "corpus": "errors",
-    "source": "rag/corpus/error_patterns/error_patterns_index.json"
+    "source": "mcp-server/rag/corpus/error_patterns/error_patterns_index.json"
   },
   {
     "id": "err_comment_vs_code_confusion",
@@ -1192,7 +1192,7 @@
     "affected_files": [],
     "related_commands": [],
     "corpus": "errors",
-    "source": "rag/corpus/error_patterns/error_patterns_index.json"
+    "source": "mcp-server/rag/corpus/error_patterns/error_patterns_index.json"
   },
   {
     "id": "err_export_filename_ugly",
@@ -1217,7 +1217,7 @@
     ],
     "related_commands": [],
     "corpus": "errors",
-    "source": "rag/corpus/error_patterns/error_patterns_index.json"
+    "source": "mcp-server/rag/corpus/error_patterns/error_patterns_index.json"
   },
   {
     "id": "err_scpi_corpus_validation",
@@ -1244,7 +1244,7 @@
     ],
     "related_commands": [],
     "corpus": "errors",
-    "source": "rag/corpus/error_patterns/error_patterns_index.json"
+    "source": "mcp-server/rag/corpus/error_patterns/error_patterns_index.json"
   },
   {
     "id": "err_parameter_pipeline_validation",
@@ -1271,7 +1271,7 @@
     ],
     "related_commands": [],
     "corpus": "errors",
-    "source": "rag/corpus/error_patterns/error_patterns_index.json"
+    "source": "mcp-server/rag/corpus/error_patterns/error_patterns_index.json"
   },
   {
     "id": "err_e2e_coverage_matrix",
@@ -1301,7 +1301,7 @@
     ],
     "related_commands": [],
     "corpus": "errors",
-    "source": "rag/corpus/error_patterns/error_patterns_index.json"
+    "source": "mcp-server/rag/corpus/error_patterns/error_patterns_index.json"
   },
   {
     "id": "err_snapshot_regression_tests",
@@ -1328,7 +1328,7 @@
     ],
     "related_commands": [],
     "corpus": "errors",
-    "source": "rag/corpus/error_patterns/error_patterns_index.json"
+    "source": "mcp-server/rag/corpus/error_patterns/error_patterns_index.json"
   },
   {
     "id": "err_regression_scpi_string_integrity",
@@ -1361,7 +1361,7 @@
       "INITIATE:CONTINUOUS"
     ],
     "corpus": "errors",
-    "source": "rag/corpus/error_patterns/error_patterns_index.json"
+    "source": "mcp-server/rag/corpus/error_patterns/error_patterns_index.json"
   },
   {
     "id": "err_regression_set_and_query_roundtrip",
@@ -1392,7 +1392,7 @@
       "CH2:SCAle"
     ],
     "corpus": "errors",
-    "source": "rag/corpus/error_patterns/error_patterns_index.json"
+    "source": "mcp-server/rag/corpus/error_patterns/error_patterns_index.json"
   },
   {
     "id": "err_regression_import_template_load",
@@ -1422,7 +1422,7 @@
       "*OPT?"
     ],
     "corpus": "errors",
-    "source": "rag/corpus/error_patterns/error_patterns_index.json"
+    "source": "mcp-server/rag/corpus/error_patterns/error_patterns_index.json"
   },
   {
     "id": "err_xml_wait_seconds_value_vs_field",
@@ -1448,7 +1448,7 @@
     ],
     "related_commands": [],
     "corpus": "errors",
-    "source": "rag/corpus/error_patterns/error_patterns_index.json"
+    "source": "mcp-server/rag/corpus/error_patterns/error_patterns_index.json"
   },
   {
     "id": "err_xml_missing_termination_field",
@@ -1476,7 +1476,7 @@
       "CH1:TERMINATION"
     ],
     "corpus": "errors",
-    "source": "rag/corpus/error_patterns/error_patterns_index.json"
+    "source": "mcp-server/rag/corpus/error_patterns/error_patterns_index.json"
   },
   {
     "id": "err_transport_selection_rule",
@@ -1508,7 +1508,7 @@
       "CURVE?"
     ],
     "corpus": "errors",
-    "source": "rag/corpus/error_patterns/error_patterns_index.json"
+    "source": "mcp-server/rag/corpus/error_patterns/error_patterns_index.json"
   },
   {
     "id": "err_python_runtime_validation",
@@ -1534,7 +1534,7 @@
     ],
     "related_commands": [],
     "corpus": "errors",
-    "source": "rag/corpus/error_patterns/error_patterns_index.json"
+    "source": "mcp-server/rag/corpus/error_patterns/error_patterns_index.json"
   },
   {
     "id": "err_gpt_loop_mutation_missing",
@@ -1560,7 +1560,7 @@
     ],
     "related_commands": [],
     "corpus": "errors",
-    "source": "rag/corpus/error_patterns/error_patterns_index.json"
+    "source": "mcp-server/rag/corpus/error_patterns/error_patterns_index.json"
   },
   {
     "id": "error_code_table",
@@ -1606,6 +1606,6 @@
       "DESE"
     ],
     "corpus": "errors",
-    "source": "rag/corpus/error_patterns/error_patterns_index.json"
+    "source": "mcp-server/rag/corpus/error_patterns/error_patterns_index.json"
   }
 ]

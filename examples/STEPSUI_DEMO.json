@@ -1,0 +1,194 @@
+{
+  "name": "Golden Reference - All Step Types",
+  "description": "Complete reference showing every step type with correct params",
+  "backend": "pyvisa",
+  "deviceType": "SCOPE",
+  "steps": [
+    {
+      "id": "1",
+      "type": "connect",
+      "label": "Connect to Scope",
+      "params": {
+        "instrumentIds": [],
+        "printIdn": true
+      }
+    },
+    {
+      "id": "g1",
+      "type": "group",
+      "label": "SCPI Commands",
+      "params": {},
+      "collapsed": false,
+      "children": [
+        {
+          "id": "2",
+          "type": "write",
+          "label": "Write Command",
+          "params": {
+            "command": "CH1:SCALE 1.0"
+          }
+        },
+        {
+          "id": "3",
+          "type": "query",
+          "label": "Query with Variable",
+          "params": {
+            "command": "*IDN?",
+            "saveAs": "idn"
+          }
+        },
+        {
+          "id": "4",
+          "type": "set_and_query",
+          "label": "Set and Verify",
+          "params": {
+            "command": "CH1:SCALE",
+            "cmdParams": [],
+            "paramValues": {}
+          }
+        }
+      ]
+    },
+    {
+      "id": "g2",
+      "type": "group",
+      "label": "Recall Types",
+      "params": {},
+      "collapsed": false,
+      "children": [
+        {
+          "id": "5",
+          "type": "recall",
+          "label": "Factory Reset",
+          "params": {
+            "recallType": "FACTORY",
+            "filePath": "",
+            "reference": "REF1"
+          }
+        },
+        {
+          "id": "6",
+          "type": "recall",
+          "label": "Recall Session (.tss)",
+          "params": {
+            "recallType": "SESSION",
+            "filePath": "C:/TekScope/test.tss",
+            "reference": "REF1"
+          }
+        },
+        {
+          "id": "7",
+          "type": "recall",
+          "label": "Recall Settings (.set)",
+          "params": {
+            "recallType": "SETUP",
+            "filePath": "C:/TekScope/config.set",
+            "reference": "REF1"
+          }
+        },
+        {
+          "id": "8",
+          "type": "recall",
+          "label": "Recall Waveform (.wfm)",
+          "params": {
+            "recallType": "WAVEFORM",
+            "filePath": "C:/TekScope/golden.wfm",
+            "reference": "REF1"
+          }
+        }
+      ]
+    },
+    {
+      "id": "g3",
+      "type": "group",
+      "label": "Save Operations",
+      "params": {},
+      "collapsed": false,
+      "children": [
+        {
+          "id": "9",
+          "type": "save_screenshot",
+          "label": "Screenshot (Modern MSO5/6)",
+          "params": {
+            "filename": "screen_modern.png",
+            "scopeType": "modern",
+            "method": "pc_transfer"
+          }
+        },
+        {
+          "id": "10",
+          "type": "save_screenshot",
+          "label": "Screenshot (Legacy 5k/7k/70k)",
+          "params": {
+            "filename": "screen_legacy.png",
+            "scopeType": "legacy",
+            "method": "pc_transfer"
+          }
+        },
+        {
+          "id": "11",
+          "type": "save_waveform",
+          "label": "Save Waveform Data",
+          "params": {
+            "source": "CH1",
+            "filename": "waveform.bin",
+            "format": "bin",
+            "width": 1,
+            "encoding": "RIBinary",
+            "start": 1,
+            "stop": null
+          }
+        }
+      ]
+    },
+    {
+      "id": "g4",
+      "type": "group",
+      "label": "Utility Steps",
+      "params": {},
+      "collapsed": false,
+      "children": [
+        {
+          "id": "12",
+          "type": "sleep",
+          "label": "Wait 500ms",
+          "params": {
+            "duration": 0.5
+          }
+        },
+        {
+          "id": "13",
+          "type": "error_check",
+          "label": "Check Errors",
+          "params": {
+            "command": "ALLEV?"
+          }
+        },
+        {
+          "id": "14",
+          "type": "comment",
+          "label": "Comment (not executed)",
+          "params": {
+            "text": "This is documentation only"
+          }
+        },
+        {
+          "id": "15",
+          "type": "python",
+          "label": "Custom Python",
+          "params": {
+            "code": "print(f'IDN: {idn}')\nresult = idn.split(',')[0]"
+          }
+        }
+      ]
+    },
+    {
+      "id": "16",
+      "type": "disconnect",
+      "label": "Disconnect",
+      "params": {
+        "instrumentIds": []
+      }
+    }
+  ]
+}

@@ -1,0 +1,456 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="-25 -35 300 285" width="300" height="285">
+  <defs>
+    <clipPath id="screenClip">
+      <rect x="18" y="38" width="158" height="88" rx="2"/>
+    </clipPath>
+    <filter id="glow">
+      <feGaussianBlur stdDeviation="1.5" result="coloredBlur"/>
+      <feMerge>
+        <feMergeNode in="coloredBlur"/>
+        <feMergeNode in="SourceGraphic"/>
+      </feMerge>
+    </filter>
+    <linearGradient id="metal-grad" x1="0%" y1="0%" x2="0%" y2="100%">
+      <stop offset="0%" stop-color="#fff"/>
+      <stop offset="100%" stop-color="#ccc"/>
+    </linearGradient>
+    <linearGradient id="fire-grad" x1="0%" y1="0%" x2="0%" y2="100%">
+      <stop offset="0%" stop-color="#00ddff"/> 
+      <stop offset="100%" stop-color="#0066aa" stop-opacity="0"/>
+    </linearGradient>
+    <linearGradient id="cap-grad" x1="0%" y1="0%" x2="0%" y2="100%">
+      <stop offset="0%" stop-color="#1a1a2e"/>
+      <stop offset="100%" stop-color="#0f0f1a"/>
+    </linearGradient>
+  </defs>
+
+  <style>
+    /* Gentle scholarly hover */
+    .hover-body { animation: hoverGeek 3s ease-in-out infinite; }
+    @keyframes hoverGeek {
+      0%, 100% { transform: translateY(0px); } 
+      50% { transform: translateY(-3px); }
+    }
+
+    /* Calm thrusters */
+    .flame { animation: thrustGeek 0.6s ease-in-out infinite alternate; transform-origin: center top; }
+    @keyframes thrustGeek {
+      0% { transform: scaleY(0.7); opacity: 0.3; }
+      100% { transform: scaleY(1.0); opacity: 0.6; }
+    }
+
+    .handle { 
+      animation: handleBreathe 3s ease-in-out infinite; 
+    }
+    @keyframes handleBreathe {
+      0%, 100% { transform: translateY(0); }
+      50% { transform: translateY(1px); }
+    }
+
+    /* Left arm - holding book */
+    .left-arm { 
+      animation: armHoldBook 3s ease-in-out infinite; 
+      transform-origin: 0px 70px;
+    }
+    @keyframes armHoldBook {
+      0%, 100% { transform: rotate(-20deg); }
+      50% { transform: rotate(-18deg); }
+    }
+
+    /* Right arm with probe - gentle sway */
+    .right-arm-assembly { 
+      animation: armSwayRight 3s ease-in-out infinite; 
+      transform-origin: 37px 146px;
+    }
+    @keyframes armSwayRight {
+      0%, 100% { transform: rotate(0deg); }
+      50% { transform: rotate(-2deg); }
+    }
+
+    .left-claw-L, .left-claw-R, .right-claw-L, .right-claw-R {
+      animation: clawSoft 3s ease-in-out infinite;
+    }
+    @keyframes clawSoft {
+      0%, 100% { transform: translateY(0); }
+      50% { transform: translateY(1px); }
+    }
+
+    .grid-line {
+      stroke: #0d2030;
+      stroke-width: 0.7;
+      opacity: 0.3;
+    }
+
+    /* Smart attentive eyes */
+    .geek-eye {
+      fill: #00ddff;
+      filter: url(#glow);
+    }
+
+    /* Glasses frames */
+    .glasses-frame {
+      fill: none;
+      stroke: #333;
+      stroke-width: 2;
+    }
+    .glasses-lens {
+      fill: rgba(200, 230, 255, 0.15);
+      stroke: #444;
+      stroke-width: 1.5;
+    }
+    .glasses-shine {
+      fill: rgba(255, 255, 255, 0.3);
+    }
+
+    /* Graduation cap */
+    .cap-top {
+      fill: url(#cap-grad);
+      stroke: #000;
+      stroke-width: 1;
+    }
+    .cap-button {
+      fill: #ffd700;
+      stroke: #cc9900;
+      stroke-width: 0.5;
+    }
+    .tassel {
+      stroke: #ffd700;
+      stroke-width: 2;
+      stroke-linecap: round;
+      fill: none;
+      animation: tasselSway 2s ease-in-out infinite;
+    }
+    @keyframes tasselSway {
+      0%, 100% { transform: rotate(-5deg); }
+      50% { transform: rotate(5deg); }
+    }
+    .tassel-end {
+      fill: #ffd700;
+      animation: tasselEndSway 2s ease-in-out infinite;
+    }
+    @keyframes tasselEndSway {
+      0%, 100% { transform: translateX(-3px); }
+      50% { transform: translateX(3px); }
+    }
+
+    /* Floating equations */
+    .equation {
+      font-family: "Times New Roman", serif;
+      font-style: italic;
+      fill: #00aacc;
+      filter: url(#glow);
+      opacity: 0;
+    }
+    .eq1 { animation: eqFloat 4s ease-in-out infinite; font-size: 8px; }
+    .eq2 { animation: eqFloat 4s ease-in-out infinite 1s; font-size: 7px; }
+    .eq3 { animation: eqFloat 4s ease-in-out infinite 2s; font-size: 6px; }
+    .eq4 { animation: eqFloat 4s ease-in-out infinite 3s; font-size: 7px; }
+    @keyframes eqFloat {
+      0%, 100% { opacity: 0; transform: translateY(10px); }
+      20%, 80% { opacity: 0.7; transform: translateY(0); }
+    }
+
+    /* Book in hand */
+    .book-cover {
+      fill: #2255aa;
+      stroke: #1a4488;
+      stroke-width: 1;
+    }
+    .book-pages {
+      fill: #f5f5dc;
+      stroke: #ddd;
+      stroke-width: 0.5;
+    }
+    .book-spine {
+      fill: #1a4488;
+    }
+
+    /* Screen equations/formulas */
+    .screen-formula {
+      font-family: "Courier New", monospace;
+      font-size: 5px;
+      fill: #00ddaa;
+      filter: url(#glow);
+    }
+    .formula-highlight {
+      fill: #00ffcc;
+    }
+
+    /* Lightbulb idea moments */
+    .idea-bulb {
+      fill: #ffdd00;
+      filter: url(#glow);
+      opacity: 0;
+      animation: ideaFlash 5s ease-in-out infinite;
+    }
+    @keyframes ideaFlash {
+      0%, 85%, 100% { opacity: 0; transform: scale(0.8); }
+      90%, 95% { opacity: 1; transform: scale(1.1); }
+    }
+
+    .probe-wire {
+      fill: none;
+      stroke: #222;
+      stroke-width: 3;
+      stroke-linecap: round;
+    }
+
+    /* Handle bar - scholarly blue */
+    .handle-bar-geek {
+      animation: barGeek 3s ease-in-out infinite;
+    }
+    @keyframes barGeek {
+      0%, 100% { fill: #00b8d4; }
+      50% { fill: #0088cc; }
+    }
+
+    /* Stars/sparkles for intelligence */
+    .smart-star {
+      fill: #ffdd44;
+      filter: url(#glow);
+      opacity: 0;
+    }
+    .star1 { animation: starTwinkle 3s ease-in-out infinite; }
+    .star2 { animation: starTwinkle 3s ease-in-out infinite 1s; }
+    .star3 { animation: starTwinkle 3s ease-in-out infinite 2s; }
+    @keyframes starTwinkle {
+      0%, 100% { opacity: 0; transform: scale(0.5); }
+      50% { opacity: 1; transform: scale(1); }
+    }
+  </style>
+
+  <!-- Floating equations around the character -->
+  <text class="equation eq1" x="-15" y="50">E=mc²</text>
+  <text class="equation eq2" x="245" y="45">∫f(x)dx</text>
+  <text class="equation eq3" x="250" y="100">Σn²</text>
+  <text class="equation eq4" x="-10" y="110">V=IR</text>
+
+  <!-- Smart stars -->
+  <polygon class="smart-star star1" points="260,30 262,35 267,35 263,38 265,43 260,40 255,43 257,38 253,35 258,35"/>
+  <polygon class="smart-star star2" points="-5,80 -3,85 2,85 -2,88 0,93 -5,90 -10,93 -8,88 -12,85 -7,85"/>
+  <polygon class="smart-star star3" points="255,130 257,133 261,133 258,136 259,140 255,137 251,140 252,136 249,133 253,133"/>
+
+  <!-- Lightbulb idea -->
+  <g class="idea-bulb" transform="translate(200, -5)">
+    <ellipse cx="0" cy="0" rx="8" ry="10" fill="#ffdd00"/>
+    <rect x="-4" y="8" width="8" height="4" rx="1" fill="#888"/>
+    <line x1="-6" y1="-15" x2="-10" y2="-22" stroke="#ffdd00" stroke-width="2" stroke-linecap="round"/>
+    <line x1="0" y1="-12" x2="0" y2="-20" stroke="#ffdd00" stroke-width="2" stroke-linecap="round"/>
+    <line x1="6" y1="-15" x2="10" y2="-22" stroke="#ffdd00" stroke-width="2" stroke-linecap="round"/>
+  </g>
+
+  <g class="hover-body">
+    <!-- GRADUATION CAP - on top of handle -->
+    <g transform="translate(120, -8)">
+      <!-- Cap base (mortarboard) -->
+      <polygon class="cap-top" points="-50,0 0,-12 50,0 0,12" transform="rotate(-5)"/>
+      <!-- Cap crown/skull part -->
+      <ellipse cx="0" cy="8" rx="25" ry="8" fill="#1a1a2e" stroke="#000" stroke-width="1"/>
+      <!-- Button on top -->
+      <circle class="cap-button" cx="0" cy="-2" r="4"/>
+      <!-- Tassel -->
+      <g transform="translate(0, -2)">
+        <path class="tassel" d="M 0 0 Q 25 5 35 25 Q 38 35 35 45" transform-origin="0 0"/>
+        <circle class="tassel-end" cx="35" cy="47" r="5"/>
+      </g>
+    </g>
+
+    <!-- Thruster flames -->
+    <path class="flame" d="M 38 168 L 52 168 L 45 188 Z" fill="url(#fire-grad)"/>
+    <path class="flame" d="M 188 168 L 202 168 L 195 188 Z" fill="url(#fire-grad)"/>
+
+    <!-- HANDLE -->
+    <g class="handle">
+      <path d="M 12 28 L 12 5 Q 12 -2 19 -2 L 30 -2" fill="none" stroke="#b0b0b0" stroke-width="5" stroke-linecap="round"/>
+      <path d="M 228 28 L 228 5 Q 228 -2 221 -2 L 210 -2" fill="none" stroke="#b0b0b0" stroke-width="5" stroke-linecap="round"/>
+      <rect class="handle-bar-code" x="30" y="-5" width="180" height="7" rx="3.5" fill="#00b8d4"/>
+    </g>
+    
+    <!-- Main body -->
+    <rect x="8" y="28" width="224" height="120" rx="5" fill="#f8f8f8" stroke="#c0c0c0" stroke-width="1"/>
+
+    <!-- Black bezel -->
+    <rect x="12" y="32" width="180" height="104" rx="3" fill="#1a1a1a"/>
+    
+    <!-- Tektronix branding -->
+    <text x="16" y="36" font-family="Arial" font-size="5" font-weight="bold" fill="#777" letter-spacing="0.5">Tektronix</text>
+    <text x="130" y="36" font-family="Arial" font-size="3.5" fill="#00ddff">📚 LEARN MODE</text>
+    
+    <!-- Screen frame -->
+    <rect x="18" y="38" width="158" height="88" rx="2" fill="#0a1520"/>
+
+    <!-- Screen content -->
+    <g clip-path="url(#screenClip)">
+      <!-- Grid -->
+      <g>
+        <line class="grid-line" x1="18" y1="58" x2="176" y2="58"/>
+        <line class="grid-line" x1="18" y1="78" x2="176" y2="78"/>
+        <line class="grid-line" x1="18" y1="98" x2="176" y2="98"/>
+        <line class="grid-line" x1="18" y1="118" x2="176" y2="118"/>
+        <line class="grid-line" x1="46" y1="38" x2="46" y2="126"/>
+        <line class="grid-line" x1="74" y1="38" x2="74" y2="126"/>
+        <line class="grid-line" x1="102" y1="38" x2="102" y2="126"/>
+        <line class="grid-line" x1="130" y1="38" x2="130" y2="126"/>
+        <line class="grid-line" x1="158" y1="38" x2="158" y2="126"/>
+      </g>
+
+      <!-- Smart eyes with glasses -->
+      <g transform="translate(0, 5)">
+        <!-- Eyes -->
+        <ellipse class="geek-eye" cx="72" cy="68" rx="10" ry="11"/>
+        <ellipse class="geek-eye" cx="122" cy="68" rx="10" ry="11"/>
+        
+        <!-- Pupils - looking slightly up (thinking) -->
+        <circle cx="72" cy="66" r="4" fill="#0a1520"/>
+        <circle cx="122" cy="66" r="4" fill="#0a1520"/>
+        
+        <!-- Highlights -->
+        <circle cx="69" cy="64" r="2" fill="#fff" opacity="0.7"/>
+        <circle cx="119" cy="64" r="2" fill="#fff" opacity="0.7"/>
+
+        <!-- GLASSES -->
+        <!-- Left lens -->
+        <rect class="glasses-lens" x="58" y="56" width="28" height="24" rx="4"/>
+        <ellipse class="glasses-shine" cx="65" cy="62" rx="5" ry="3"/>
+        <!-- Right lens -->
+        <rect class="glasses-lens" x="108" y="56" width="28" height="24" rx="4"/>
+        <ellipse class="glasses-shine" cx="115" cy="62" rx="5" ry="3"/>
+        <!-- Bridge -->
+        <path class="glasses-frame" d="M 86 68 Q 97 64 108 68"/>
+        <!-- Temple arms (sides) -->
+        <line class="glasses-frame" x1="58" y1="62" x2="48" y2="60"/>
+        <line class="glasses-frame" x1="136" y1="62" x2="146" y2="60"/>
+      </g>
+
+      <!-- Formulas on screen -->
+      <text class="screen-formula" x="25" y="100">Bandwidth = 0.35/Rise_Time</text>
+      <text class="screen-formula" x="25" y="110">Sample_Rate ≥ 2 × f_max</text>
+      <text class="screen-formula formula-highlight" x="25" y="120">Nyquist: fs > 2B ✓</text>
+    </g>
+
+    <!-- Right side control panel -->
+    <rect x="194" y="32" width="36" height="104" rx="3" fill="#f0f0f0" stroke="#ccc" stroke-width="1"/>
+    
+    <!-- TRIGGER section -->
+    <rect x="197" y="35" width="30" height="7" rx="1" fill="#333"/>
+    <text x="212" y="40" font-family="Arial" font-size="4" fill="#0f0" text-anchor="middle">TRIGGER</text>
+    
+    <!-- Top knob -->
+    <text x="212" y="48" font-family="Arial" font-size="3" fill="#555" text-anchor="middle">Level</text>
+    <circle cx="212" cy="56" r="7" fill="#e0e0e0" stroke="#999" stroke-width="1"/>
+    <circle cx="212" cy="56" r="2.5" fill="#888"/>
+    
+    <!-- VERTICAL section -->
+    <rect x="197" y="66" width="30" height="6" rx="1" fill="#444"/>
+    <text x="212" y="70.5" font-family="Arial" font-size="3.5" fill="#fff" text-anchor="middle">VERTICAL</text>
+    
+    <!-- Channel buttons -->
+    <circle cx="203" cy="80" r="4" fill="#222" stroke="#f4b400" stroke-width="2"/> 
+    <circle cx="221" cy="80" r="4" fill="#222" stroke="#00c8c8" stroke-width="2"/> 
+    <circle cx="203" cy="92" r="4" fill="#222" stroke="#e06666" stroke-width="2"/> 
+    <circle cx="221" cy="92" r="4" fill="#222" stroke="#8e7cc3" stroke-width="2"/>
+    
+    <!-- HORIZONTAL section -->
+    <rect x="197" y="100" width="30" height="6" rx="1" fill="#444"/>
+    <text x="212" y="104.5" font-family="Arial" font-size="3" fill="#fff" text-anchor="middle">HORIZONTAL</text>
+    
+    <!-- Bottom knob -->
+    <text x="212" y="112" font-family="Arial" font-size="3" fill="#555" text-anchor="middle">Scale</text>
+    <circle cx="212" cy="120" r="8" fill="#e0e0e0" stroke="#999" stroke-width="1"/>
+    <circle cx="212" cy="120" r="3" fill="#888"/>
+    
+    <!-- Function buttons -->
+    <rect x="197" y="130" width="14" height="5" rx="1" fill="#4a4"/>
+    <rect x="213" y="130" width="14" height="5" rx="1" fill="#48f"/>
+    
+    <!-- Bottom channel inputs bar -->
+    <rect x="8" y="138" width="224" height="16" rx="2" fill="#e8e8e8"/>
+    
+    <!-- CH1-4 -->
+    <g transform="translate(25, 140)">
+      <rect x="0" y="0" width="24" height="12" rx="2" fill="#3a3a3a"/>
+      <circle cx="12" cy="6" r="5" fill="#222" stroke="#f4b400" stroke-width="2"/>
+    </g>
+    <g transform="translate(60, 140)">
+      <rect x="0" y="0" width="24" height="12" rx="2" fill="#3a3a3a"/>
+      <circle cx="12" cy="6" r="5" fill="#222" stroke="#00c8c8" stroke-width="2"/>
+    </g>
+    <g transform="translate(95, 140)">
+      <rect x="0" y="0" width="24" height="12" rx="2" fill="#3a3a3a"/>
+      <circle cx="12" cy="6" r="5" fill="#222" stroke="#e06666" stroke-width="2"/>
+    </g>
+    <g transform="translate(130, 140)">
+      <rect x="0" y="0" width="24" height="12" rx="2" fill="#3a3a3a"/>
+      <circle cx="12" cy="6" r="5" fill="#222" stroke="#8e7cc3" stroke-width="2"/>
+    </g>
+    
+    <!-- Aux In -->
+    <circle cx="190" cy="146" r="4" fill="#222" stroke="#666" stroke-width="1"/>
+
+    <!-- Feet -->
+    <rect x="35" y="154" width="24" height="14" rx="3" fill="#f0f0f0" stroke="#c0c0c0" stroke-width="1"/>
+    <rect x="181" y="154" width="24" height="14" rx="3" fill="#f0f0f0" stroke="#c0c0c0" stroke-width="1"/>
+
+    <!-- RIGHT ARM ASSEMBLY -->
+    <g class="right-arm-assembly">
+      <!-- Probe wire from CH1 -->
+      <path class="probe-wire" d="M 37 146 Q 90 150 150 165 Q 210 178 242 154" />
+
+      <!-- Right arm -->
+      <g class="right-arm">
+        <circle cx="240" cy="70" r="10" fill="#00aad2" stroke="#0088aa" stroke-width="1"/>
+        <rect x="232" y="72" width="16" height="24" rx="4" fill="url(#metal-grad)" stroke="#999" stroke-width="1" transform="rotate(-15 240 75)"/>
+        <rect x="234" y="94" width="14" height="20" rx="3" fill="#fff" stroke="#999" stroke-width="1" transform="rotate(8 243 100)"/>
+        <ellipse cx="242" cy="116" rx="8" ry="5" fill="#e8e8e8" stroke="#999" stroke-width="1"/>
+        
+        <g class="right-claw-L">
+          <path d="M 236 116 Q 229 126 232 136" fill="none" stroke="#e0e0e0" stroke-width="5" stroke-linecap="round"/>
+          <circle cx="232" cy="136" r="4" fill="#2d5a5a"/>
+        </g>
+        <g class="right-claw-R">
+          <path d="M 248 116 Q 255 126 252 136" fill="none" stroke="#e0e0e0" stroke-width="5" stroke-linecap="round"/>
+          <circle cx="252" cy="136" r="4" fill="#2d5a5a"/>
+        </g>
+        
+        <!-- Probe body -->
+        <rect x="237" y="120" width="10" height="30" rx="2" fill="#555"/>
+        <rect x="239" y="148" width="6" height="6" rx="1" fill="#333"/>
+        <line x1="242" y1="154" x2="242" y2="165" stroke="#aaa" stroke-width="2" stroke-linecap="round"/>
+      </g>
+    </g>
+
+    <!-- LEFT ARM - holding book -->
+    <g class="left-arm">
+      <circle cx="0" cy="70" r="10" fill="#00aad2" stroke="#0088aa" stroke-width="1"/>
+      <rect x="-8" y="72" width="16" height="24" rx="4" fill="url(#metal-grad)" stroke="#999" stroke-width="1" transform="rotate(18 0 75)"/>
+      <rect x="-10" y="94" width="14" height="20" rx="3" fill="#fff" stroke="#999" stroke-width="1" transform="rotate(-10 -3 100)"/>
+      <ellipse cx="-2" cy="116" rx="8" ry="5" fill="#e8e8e8" stroke="#999" stroke-width="1"/>
+      
+      <!-- Claws holding book -->
+      <g class="left-claw-L">
+        <path d="M -8 116 Q -14 124 -10 132" fill="none" stroke="#e0e0e0" stroke-width="5" stroke-linecap="round"/>
+        <circle cx="-10" cy="132" r="4" fill="#2d5a5a"/>
+      </g>
+      <g class="left-claw-R">
+        <path d="M 4 116 Q -2 124 2 132" fill="none" stroke="#e0e0e0" stroke-width="5" stroke-linecap="round"/>
+        <circle cx="2" cy="132" r="4" fill="#2d5a5a"/>
+      </g>
+      
+      <!-- BOOK held in claws -->
+      <g transform="translate(-8, 118) rotate(-15)">
+        <!-- Book spine -->
+        <rect class="book-spine" x="0" y="0" width="4" height="30" rx="1"/>
+        <!-- Book cover -->
+        <rect class="book-cover" x="4" y="0" width="20" height="30" rx="1"/>
+        <!-- Pages -->
+        <rect class="book-pages" x="6" y="2" width="16" height="26" rx="1"/>
+        <!-- Title lines -->
+        <line x1="8" y1="8" x2="20" y2="8" stroke="#1a4488" stroke-width="1"/>
+        <line x1="8" y1="12" x2="18" y2="12" stroke="#1a4488" stroke-width="0.5"/>
+        <!-- Oscilloscope icon on cover -->
+        <rect x="10" y="16" width="8" height="6" fill="#1a4488" rx="1"/>
+        <path d="M 11 19 Q 13 17 14 19 T 17 19" fill="none" stroke="#fff" stroke-width="0.5"/>
+      </g>
+    </g>
+  </g>
+</svg>

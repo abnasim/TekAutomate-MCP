@@ -1,0 +1,102 @@
+<xml xmlns="https://developers.google.com/blockly/xml">
+  <variables>
+    <variable>pk2pk</variable>
+  </variables>
+
+  <block type="connect_scope" id="c1" x="20" y="20">
+    <mutation show_advanced="false" current_backend="tm_devices" current_dev_type="SCOPE" current_conn_type="INSTR"></mutation>
+    <field name="DEVICE_NAME">scope</field>
+    <field name="BACKEND">tm_devices</field>
+    <next>
+      <block type="connect_scope" id="c2">
+        <mutation show_advanced="false" current_backend="tm_devices" current_dev_type="SMU" current_conn_type="INSTR"></mutation>
+        <field name="DEVICE_NAME">smu</field>
+        <field name="BACKEND">tm_devices</field>
+        <next>
+          <block type="set_device_context" id="ctx_smu1">
+            <mutation device="smu"></mutation>
+            <field name="DEVICE">smu</field>
+            <next>
+              <block type="python_code" id="smu_out_on">
+                <field name="CODE">smu.write("OUTPut ON")</field>
+                <next>
+                  <block type="controls_for" id="for_v">
+                    <mutation>
+                      <variable>v</variable>
+                    </mutation>
+                    <field name="VAR">v</field>
+                    <value name="FROM">
+                      <shadow type="math_number" id="n_from">
+                        <field name="NUM">1</field>
+                      </shadow>
+                    </value>
+                    <value name="TO">
+                      <shadow type="math_number" id="n_to">
+                        <field name="NUM">5</field>
+                      </shadow>
+                    </value>
+                    <value name="BY">
+                      <shadow type="math_number" id="n_by">
+                        <field name="NUM">1</field>
+                      </shadow>
+                    </value>
+                    <statement name="DO">
+                      <block type="set_device_context" id="ctx_smu2">
+                        <mutation device="smu"></mutation>
+                        <field name="DEVICE">smu</field>
+                        <next>
+                          <block type="python_code" id="smu_set_v">
+                            <field name="CODE">smu.write(f":SOURce:VOLTage {v}")</field>
+                            <next>
+                              <block type="set_device_context" id="ctx_scope1">
+                                <mutation device="scope"></mutation>
+                                <field name="DEVICE">scope</field>
+                                <next>
+                                  <block type="acquisition_reset" id="acq_rst">
+                                    <field name="DEVICE_CONTEXT">(scope)</field>
+                                    <next>
+                                      <block type="single_acquisition" id="acq_single">
+                                        <next>
+                                          <block type="wait_for_opc" id="opc1">
+                                            <field name="DEVICE_CONTEXT">(scope)</field>
+                                            <field name="TIMEOUT">10</field>
+                                            <next>
+                                              <block type="measurement_immediate" id="meas_pk2pk">
+                                                <field name="DEVICE_CONTEXT">(scope)</field>
+                                                <field name="TYPE">PK2PK</field>
+                                                <field name="SOURCE">CH1</field>
+                                                <field name="VARIABLE">pk2pk</field>
+                                              </block>
+                                            </next>
+                                          </block>
+                                        </next>
+                                      </block>
+                                    </next>
+                                  </block>
+                                </next>
+                              </block>
+                            </next>
+                          </block>
+                        </next>
+                      </block>
+                    </statement>
+                    <next>
+                      <block type="disconnect" id="disc_smu">
+                        <field name="DEVICE_CONTEXT">(smu)</field>
+                        <next>
+                          <block type="disconnect" id="disc_scope">
+                            <field name="DEVICE_CONTEXT">(scope)</field>
+                          </block>
+                        </next>
+                      </block>
+                    </next>
+                  </block>
+                </next>
+              </block>
+            </next>
+          </block>
+        </next>
+      </block>
+    </next>
+  </block>
+</xml>
