@@ -162,6 +162,7 @@ def parse_commands(pages: list[str]) -> list[dict]:
             # ── No active command yet: only look for a command header ──────────
             if is_cmd_header(line):
                 hdr_clean = re.sub(r'\s*\([^)]+\)\s*$', '', line).strip()
+                hdr_clean = re.sub(r'[,\s]+\d+-\d+\s*$', '', hdr_clean).strip()
                 current_cmd = {
                     'scpi': hdr_clean,
                     'name': hdr_clean,
@@ -213,6 +214,7 @@ def parse_commands(pages: list[str]) -> list[dict]:
             flush_cmd()
 
             hdr_clean = re.sub(r'\s*\([^)]+\)\s*$', '', line).strip()
+            hdr_clean = re.sub(r'[,\s]+\d+-\d+\s*$', '', hdr_clean).strip()
             current_cmd = {
                 'scpi': hdr_clean,
                 'name': hdr_clean,
@@ -456,6 +458,32 @@ def main():
 
     print(f"\nMerging with existing {OUTPUT_JSON} ...")
     merged = merge_with_existing(pdf_data, OUTPUT_JSON)
+
+    # ── Post-process: strip any residual page-number suffixes from SCPI/name fields ──
+    # e.g. "ACQuire:STATE,2-80" → "ACQuire:STATE"
+    _pg_re = re.compile(r'[,\s]+\d+-\d+\s*$')
+    seen_scpi: set = set()
+    deduped_groups: dict = {}
+    for gname, grp in merged['groups'].items():
+        clean_cmds = []
+        for cmd in grp['commands']:
+            for field in ('scpi', 'name'):
+                if cmd.get(field):
+                    cmd[field] = _pg_re.sub('', cmd[field]).strip()
+            me = cmd.get('_manualEntry')
+            if me and me.get('header'):
+                me['header'] = _pg_re.sub('', me['header']).strip()
+            key = cmd.get('scpi', '')
+            if key and key in seen_scpi:
+                continue   # drop duplicate after normalisation
+            if key:
+                seen_scpi.add(key)
+            clean_cmds.append(cmd)
+        if clean_cmds:
+            deduped_groups[gname] = {**grp, 'commands': clean_cmds}
+    merged['groups'] = deduped_groups
+    merged['metadata']['total_commands'] = sum(len(g['commands']) for g in deduped_groups.values())
+    merged['metadata']['total_groups'] = len(deduped_groups)
 
     with open(OUTPUT_JSON, 'w', encoding='utf-8') as f:
         json.dump(merged, f, indent=2, ensure_ascii=False)

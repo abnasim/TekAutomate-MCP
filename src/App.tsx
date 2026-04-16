@@ -2318,26 +2318,30 @@ function AppInner() {
         
         const newCommands: CommandLibraryItem[] = [];
         const newColors: Record<string, string> = {};
-        const existingIds = new Set(commandLibrary.map(cmd => normalizeCommandHeader(cmd.scpi)));
-        
+        // Family-specific files (e.g. mso2.json) intentionally share commands with the
+        // base file (mso_4_5_6_7.json). Do NOT dedup cross-file — each family file must
+        // load its full command set so the family filter works correctly.
+        // Only dedup within the file being loaded (seenInThisFile).
+        const seenInThisFile = new Set<string>();
+
         if (data.groups && typeof data.groups === 'object') {
           Object.entries(data.groups).forEach(([groupName, groupData]: [string, any]) => {
             if (!groupData || !Array.isArray(groupData.commands)) return;
-            
+
             const rawCategoryName = groupName || 'miscellaneous';
             const categoryName = normalizeCategoryName(rawCategoryName);
-            
+
             if (!newColors[categoryName] && !categoryColors[categoryName]) {
               newColors[categoryName] = groupData.color || DEFAULT_CATEGORY_COLORS[categoryName.toLowerCase()] || DEFAULT_CATEGORY_COLORS['miscellaneous'];
             }
-            
+
             groupData.commands.forEach((cmd: any) => {
               const scpiCmd = cmd.scpi || cmd.header;
               if (!scpiCmd) return;
-              
+
               const normalized = normalizeCommandHeader(scpiCmd);
-              if (existingIds.has(normalized)) return; // Skip duplicates
-              existingIds.add(normalized);
+              if (seenInThisFile.has(normalized)) return; // Skip within-file duplicates only
+              seenInThisFile.add(normalized);
               
               const parsed = scpiCmd ? parseSCPI(scpiCmd) : undefined;
               const editableParams = parsed ? detectEditableParameters(parsed) : undefined;
