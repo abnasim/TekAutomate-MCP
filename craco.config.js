@@ -22,6 +22,45 @@ module.exports = {
       const path = require('path');
       const vendorNoVncPath = path.resolve(__dirname, 'src/vendor/novnc');
 
+      // Webpack 5: exclude test files from compilation so Node.js built-ins
+      // (path, fs, etc.) imported by test helpers never reach the browser bundle.
+      // Also set fallback: false as belt-and-suspenders to avoid the
+      // BREAKING CHANGE polyfill warning for any stray import.
+      const testFileRegex = /\.(test|spec)\.(ts|tsx|js|jsx)$/;
+      if (webpackConfig.module && webpackConfig.module.rules) {
+        const addTestExclusion = (rules) => {
+          if (!Array.isArray(rules)) return;
+          rules.forEach((rule) => {
+            if (rule.test && rule.loader && /babel-loader/.test(rule.loader)) {
+              rule.exclude = rule.exclude
+                ? Array.isArray(rule.exclude) ? [...rule.exclude, testFileRegex] : [rule.exclude, testFileRegex]
+                : testFileRegex;
+            }
+            if (rule.use && Array.isArray(rule.use)) {
+              const hasBabel = rule.use.some((u) => typeof u === 'object' && u.loader && /babel-loader/.test(u.loader));
+              if (hasBabel) {
+                rule.exclude = rule.exclude
+                  ? Array.isArray(rule.exclude) ? [...rule.exclude, testFileRegex] : [rule.exclude, testFileRegex]
+                  : testFileRegex;
+              }
+            }
+            if (rule.oneOf) addTestExclusion(rule.oneOf);
+          });
+        };
+        addTestExclusion(webpackConfig.module.rules);
+      }
+
+      webpackConfig.resolve = webpackConfig.resolve || {};
+      webpackConfig.resolve.fallback = {
+        ...(webpackConfig.resolve.fallback || {}),
+        path: false,
+        fs:   false,
+        os:   false,
+        crypto: false,
+        stream: false,
+        buffer: false,
+      };
+
       // Suppress source map warnings by ignoring errors from source-map-loader
       const originalIgnoreWarnings = webpackConfig.ignoreWarnings || [];
       

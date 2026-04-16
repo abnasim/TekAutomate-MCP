@@ -2,12 +2,26 @@
  * SCPI command JSON validation for CI.
  * Validates command JSON files in public/commands and extracts expected SCPI
  * examples so generated code can be verified against them.
+ *
+ * NOTE: Node.js built-ins (fs/path) are loaded via eval-based require inside
+ * functions so that webpack's static analyser never tries to resolve them.
+ * These helpers are only ever called in Jest/CI, never in the browser bundle.
  */
 
-import * as fs from 'fs';
-import * as path from 'path';
+/* eslint-disable @typescript-eslint/no-explicit-any */
+// webpack ignores require() calls that are not statically resolvable
+// (i.e. not a string literal). We use an alias so the bundler skips them.
+// eslint-disable-next-line no-new-func
+const _req = new Function('m', 'return require(m)') as (m: string) => any;
+/* eslint-enable @typescript-eslint/no-explicit-any */
 
-export const COMMANDS_DIR = path.join(process.cwd(), 'public', 'commands');
+export const COMMANDS_DIR: string = (() => {
+  try {
+    return _req('path').join(process.cwd(), 'public', 'commands');
+  } catch {
+    return 'public/commands';
+  }
+})();
 
 /** Files to validate (exclude non-command formats). */
 export const COMMAND_JSON_FILES = [
@@ -159,13 +173,15 @@ export function validateAndGetExamples(
  * Load and validate a single command JSON file.
  */
 export function loadAndValidateCommandFile(filename: string): ValidationResult & { data?: unknown; examples?: { scpi: string; source: string }[] } {
-  const filePath = path.join(COMMANDS_DIR, filename);
-  if (!fs.existsSync(filePath)) {
+  const nodePath = _req('path');
+  const nodeFs   = _req('fs');
+  const filePath = nodePath.join(COMMANDS_DIR, filename);
+  if (!nodeFs.existsSync(filePath)) {
     return { valid: false, errors: [`File not found: ${filePath}`], file: filename };
   }
   let data: unknown;
   try {
-    const raw = fs.readFileSync(filePath, 'utf-8');
+    const raw = nodeFs.readFileSync(filePath, 'utf-8');
     data = JSON.parse(raw);
   } catch (e) {
     return {
