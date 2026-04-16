@@ -440,7 +440,8 @@ interface SignalBlock {
 
 // All command files - loaded on startup (prioritize MSO files first for full parsing)
 const QUICK_LOAD_FILES = [
-  'mso_2_4_5_6_7.json', // MSO 4/5/6/5B/6B Series - full parsing required
+  'mso2.json',           // MSO22/MSO24 (2 Series MSO) - dedicated command set
+  'mso_4_5_6_7.json',   // MSO 4/5/6/7/5B/6B Series - full parsing required
   'MSO_DPO_5k_7k_70K.json', // DPO/MSO 5K/7K Series - full parsing required
   'pi_only.json', // PI-only commands (no GUI equivalent)
   'tekexpress.json', // TekExpress compliance test automation commands
@@ -451,7 +452,7 @@ const QUICK_LOAD_FILES = [
 ];
 
 // Initial load: only this file is loaded before showing the app (fast time-to-interactive)
-const INITIAL_LOAD_FILE = 'mso_2_4_5_6_7.json';
+const INITIAL_LOAD_FILE = 'mso_4_5_6_7.json';
 // Remaining quick-load files (for future progressive loading)
 // eslint-disable-next-line @typescript-eslint/no-unused-vars
 const _REMAINING_QUICK_LOAD_FILES = QUICK_LOAD_FILES.filter(f => f !== INITIAL_LOAD_FILE);
@@ -467,7 +468,8 @@ const _LAZY_LOAD_FILES: string[] = [
 
 // Mapping of JSON files to device families
 const FILE_TO_DEVICE_FAMILY: Record<string, { id: string; label: string; icon: string; description: string; tooltip?: string }> = {
-  'mso_2_4_5_6_7.json': { id: '4/5/6 Series', label: '4/5/6 Series', icon: '', description: '4/5/6 Series MSO' },
+  'mso2.json':          { id: '2 Series', label: '2 Series', icon: '', description: 'MSO22/MSO24 (2 Series MSO)', tooltip: 'MSO22, MSO24 — 2 Series Mixed Signal Oscilloscope' },
+  'mso_4_5_6_7.json':  { id: '4/5/6 Series', label: '4/5/6 Series', icon: '', description: '4/5/6 Series MSO' },
   'MSO_DPO_5k_7k_70K.json': { id: 'DPO/MSO 5k_7k_70K', label: 'DPO/MSO 5k_7k_70K', icon: '', description: 'DPO/MSO 5000/7000', tooltip: 'MSO/DPO5000/B, DPO7000/C, DPO70000/B/C/D/DX/SX, DSA70000/B/C/D, and MSO70000/C/DX Series' },
   'tekexpress.json': { id: 'TekExpress', label: 'TekExpress Compliance', icon: '', description: 'Compliance test automation' },
   'dpojet.json': { id: 'DPOJET', label: 'DPOJET Analysis', icon: '', description: 'Jitter and eye diagram analysis' },

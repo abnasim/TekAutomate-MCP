@@ -208,7 +208,8 @@ export const BlocklyBuilder = forwardRef<BlocklyBuilderHandle, BlocklyBuilderPro
       
       // For other device families, check sourceFile mapping
       const familyToFile: Record<string, string> = {
-        '4/5/6 Series': 'mso_2_4_5_6_7.json',
+        '2 Series': 'mso2.json',
+        '4/5/6 Series': 'mso_4_5_6_7.json',
         'DPO/MSO 5k_7k_70K': 'MSO_DPO_5k_7k_70K.json',
         'DPOJET': 'dpojet.json',
         'AFG': 'afg.json',

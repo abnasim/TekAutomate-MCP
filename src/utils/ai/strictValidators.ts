@@ -1,7 +1,8 @@
 import { publicAssetUrl } from '../publicUrl';
 
 const COMMAND_LIBRARY_FILES = [
-  'mso_2_4_5_6_7.json',
+  'mso2.json',
+  'mso_4_5_6_7.json',
   'MSO_DPO_5k_7k_70K.json',
   'afg.json',
   'awg.json',

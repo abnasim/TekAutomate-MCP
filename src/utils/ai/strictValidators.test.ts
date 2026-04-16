@@ -33,15 +33,15 @@ function makeTmDevicesIndex(paths: string[]): TmDevicesIndex {
 describe('verifyScpiCommands', () => {
   it('verifies known SCPI command from source-of-truth index', async () => {
     const library = makeCommandLibrary({
-      '*IDN?': [{ commandId: '*IDN?', sourceFile: 'mso_2_4_5_6_7.json' }],
-      '*IDN': [{ commandId: '*IDN?', sourceFile: 'mso_2_4_5_6_7.json' }],
+      '*IDN?': [{ commandId: '*IDN?', sourceFile: 'mso_4_5_6_7.json' }],
+      '*IDN': [{ commandId: '*IDN?', sourceFile: 'mso_4_5_6_7.json' }],
     });
     const result = await verifyScpiCommands(
       [{ command: '*IDN?', mode: 'scpi' }],
       { commandLibrary: library, tmDevices: makeTmDevicesIndex([]) }
     );
     expect(result.valid).toBe(true);
-    expect(result.items[0].references[0].sourceFile).toBe('mso_2_4_5_6_7.json');
+    expect(result.items[0].references[0].sourceFile).toBe('mso_4_5_6_7.json');
   });
 
   it('rejects unknown SCPI command', async () => {
@@ -70,8 +70,8 @@ describe('verifyScpiCommands', () => {
 describe('validateStepsJson', () => {
   it('passes valid minimal flow', async () => {
     const library = makeCommandLibrary({
-      '*IDN?': [{ commandId: '*IDN?', sourceFile: 'mso_2_4_5_6_7.json' }],
-      '*IDN': [{ commandId: '*IDN?', sourceFile: 'mso_2_4_5_6_7.json' }],
+      '*IDN?': [{ commandId: '*IDN?', sourceFile: 'mso_4_5_6_7.json' }],
+      '*IDN': [{ commandId: '*IDN?', sourceFile: 'mso_4_5_6_7.json' }],
     });
     const result = await validateStepsJson(
       {

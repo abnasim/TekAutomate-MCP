@@ -24,8 +24,13 @@ async function fetchJsonSafe(path: string): Promise<any | null> {
 }
 
 async function loadCommandLibrary(modelFamily: string): Promise<any[]> {
-  const isDPO = /DPO|dpo|5k|7k|70k/.test(modelFamily || '');
-  const file = isDPO ? '/commands/MSO_DPO_5k_7k_70K.json' : '/commands/mso_2_4_5_6_7.json';
+  const isMSO2 = /MSO2|2\s*[Ss]eries|2Series/.test(modelFamily || '');
+  const isDPO  = /DPO|dpo|5k|7k|70k/.test(modelFamily || '');
+  const file = isMSO2
+    ? '/commands/mso2.json'
+    : isDPO
+      ? '/commands/MSO_DPO_5k_7k_70K.json'
+      : '/commands/mso_4_5_6_7.json';
 
   if (!libraries[file]) {
     const collected: any[] = [];

@@ -17,7 +17,8 @@ export const COMMAND_JSON_FILES = [
   'awg.json',
   'smu.json',
   'MSO_DPO_5k_7k_70K.json',
-  'mso_2_4_5_6_7.json',
+  'mso2.json',
+  'mso_4_5_6_7.json',
   'rsa.json',
 ];
 /** Skip these in CI (large or different schema). */
