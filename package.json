@@ -57,6 +57,7 @@
   "overrides": {
     "axios": ">=1.15.0",
     "nth-check": ">=2.0.1",
+    "css-select": ">=5.1.0",
     "serialize-javascript": ">=6.0.2"
   },
   "scripts": {
